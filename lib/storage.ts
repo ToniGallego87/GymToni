@@ -1,11 +1,30 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 import { WorkoutLog } from '@types/index';
 
 const LOGS_STORAGE_KEY = 'gymtrack_logs';
 
+async function setStorageItem(key: string, value: string): Promise<void> {
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    localStorage.setItem(key, value);
+    return;
+  }
+
+  await AsyncStorage.setItem(key, value);
+}
+
+async function getStorageItem(key: string): Promise<string | null> {
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    return localStorage.getItem(key);
+  }
+
+  return AsyncStorage.getItem(key);
+}
+
 export async function saveLogs(logs: WorkoutLog[]): Promise<void> {
   try {
     const jsonString = JSON.stringify(logs);
-    localStorage.setItem(LOGS_STORAGE_KEY, jsonString);
+    await setStorageItem(LOGS_STORAGE_KEY, jsonString);
   } catch (error) {
     console.error('Error saving logs:', error);
     throw error;
@@ -14,7 +33,7 @@ export async function saveLogs(logs: WorkoutLog[]): Promise<void> {
 
 export async function loadLogs(): Promise<WorkoutLog[]> {
   try {
-    const jsonString = localStorage.getItem(LOGS_STORAGE_KEY);
+    const jsonString = await getStorageItem(LOGS_STORAGE_KEY);
     if (!jsonString) return [];
     return JSON.parse(jsonString);
   } catch (error) {

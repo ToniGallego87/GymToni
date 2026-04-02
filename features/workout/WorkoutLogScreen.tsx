@@ -125,7 +125,6 @@ export function WorkoutLogScreen({
 
       setTimeout(() => {
         onSave();
-        onBack();
       }, 1500);
     } catch (error) {
       setToast({

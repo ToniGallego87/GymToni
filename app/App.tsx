@@ -44,7 +44,13 @@ function AppContent() {
   }, [state.logs]);
 
   const getCurrentDayForLog = (log: WorkoutLog): WorkoutDay | undefined => {
-    return state.days.find(d => d.id === log.dayId);
+    for (const routine of state.routines) {
+      const day = routine.days.find(d => d.id === log.dayId);
+      if (day) {
+        return day;
+      }
+    }
+    return undefined;
   };
 
   return (
@@ -52,6 +58,7 @@ function AppContent() {
       {screen.type === 'home' && (
         <HomeScreen
           onSelectDay={day => setScreen({ type: 'workout-log', day })}
+          onSelectLog={(log, day) => setScreen({ type: 'detail', log, day })}
         />
       )}
 

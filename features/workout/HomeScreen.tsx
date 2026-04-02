@@ -7,6 +7,7 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
+  Pressable,
   useWindowDimensions,
 } from 'react-native';
 import { useWorkout } from '@hooks/useWorkout';
@@ -16,6 +17,7 @@ import { theme } from '@lib/theme';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
+  onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
 }
 
 interface WeekProgressPoint {
@@ -318,16 +320,23 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
   );
 }
 
-export function HomeScreen({ onSelectDay }: HomeScreenProps) {
+export function HomeScreen({ onSelectDay, onSelectLog }: HomeScreenProps) {
   const { state, dispatch } = useWorkout();
   const [showRoutineSelector, setShowRoutineSelector] = useState(false);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
+  const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<Record<number, boolean>>({});
   const { width: windowWidth } = useWindowDimensions();
 
   const activeRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
   );
   const activeDays = activeRoutine?.days || [];
+  const routineLogs = useMemo(
+    () => state.logs
+      .filter((log: WorkoutLog) => !state.activeRoutineId || log.routineId === state.activeRoutineId)
+      .sort((a: WorkoutLog, b: WorkoutLog) => b.createdAt - a.createdAt),
+    [state.activeRoutineId, state.logs]
+  );
   const weeklyProgress = useMemo(
     () => buildWeekProgress(state.logs, state.activeRoutineId, activeDays),
     [activeDays, state.logs, state.activeRoutineId]
@@ -337,6 +346,166 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
     250,
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
   );
+
+  const getDay = (dayId: string): WorkoutDay | undefined => {
+    for (const routine of state.routines) {
+      const day = routine.days.find((d: WorkoutDay) => d.id === dayId);
+      if (day) return day;
+    }
+    return undefined;
+  };
+
+  const getLogTimestamp = (log: WorkoutLog) => {
+    if (typeof log.createdAt === 'number') return log.createdAt;
+    if (log.date) return new Date(`${log.date}T00:00:00`).getTime();
+    return 0;
+  };
+
+  const buildWeekDataForLogs = (sourceLogs: WorkoutLog[]) => {
+    const sortedByDateAsc = [...sourceLogs].sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b));
+    const groupedByBlock: Record<number, WorkoutLog[]> = {};
+
+    let block = 1;
+    let currentWeekLogs: WorkoutLog[] = [];
+    let seenDays: Record<number, boolean> = {};
+
+    sortedByDateAsc.forEach(log => {
+      const dayNumber = getDay(log.dayId)?.dayNumber;
+
+      if (dayNumber && seenDays[dayNumber] && currentWeekLogs.length > 0) {
+        groupedByBlock[block] = currentWeekLogs;
+        block += 1;
+        currentWeekLogs = [];
+        seenDays = {};
+      }
+
+      currentWeekLogs.push(log);
+      if (dayNumber) {
+        seenDays[dayNumber] = true;
+      }
+    });
+
+    if (currentWeekLogs.length > 0) {
+      groupedByBlock[block] = currentWeekLogs;
+    }
+
+    return { groupedByBlock };
+  };
+
+  const getPreviousFilledLogForSameDay = (currentLog: WorkoutLog) => {
+    const currentTs = getLogTimestamp(currentLog);
+    return routineLogs
+      .filter((log: WorkoutLog) => log.dayId === currentLog.dayId && log.id !== currentLog.id)
+      .filter((log: WorkoutLog) => getLogTimestamp(log) < currentTs)
+      .sort((a: WorkoutLog, b: WorkoutLog) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
+  };
+
+  const getLogImprovement = (currentLog: WorkoutLog) => {
+    const previousLog = getPreviousFilledLogForSameDay(currentLog);
+    if (!previousLog) return null;
+
+    return buildImprovementFromScores(
+      getWorkoutVolumeScore(currentLog),
+      getWorkoutVolumeScore(previousLog),
+      getWorkoutRepsScore(currentLog),
+      getWorkoutRepsScore(previousLog)
+    );
+  };
+
+  const getWeekScores = (
+    weekLogs: WorkoutLog[],
+    options: { restrictToDayIds?: string[]; applyMissingPenalty?: boolean } = {}
+  ) => {
+    const { restrictToDayIds, applyMissingPenalty = true } = options;
+    if (weekLogs.length === 0) {
+      return { volume: 0, reps: 0 };
+    }
+
+    const latestByDayId: Record<string, WorkoutLog> = {};
+    [...weekLogs]
+      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
+      .forEach(log => {
+        if (!latestByDayId[log.dayId]) {
+          latestByDayId[log.dayId] = log;
+        }
+      });
+
+    const selectedLogs: WorkoutLog[] = [];
+    Object.keys(latestByDayId).forEach(dayId => {
+      const log = latestByDayId[dayId];
+      if (!restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1) {
+        selectedLogs.push(log);
+      }
+    });
+
+    const rawVolume = selectedLogs.reduce((sum, log) => sum + getWorkoutVolumeScore(log), 0);
+    const rawReps = selectedLogs.reduce((sum, log) => sum + getWorkoutRepsScore(log), 0);
+
+    if (!applyMissingPenalty) {
+      return { volume: rawVolume, reps: rawReps };
+    }
+
+    const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
+    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
+    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
+
+    return {
+      volume: rawVolume * penaltyFactor,
+      reps: rawReps * penaltyFactor,
+    };
+  };
+
+  const getWeekImprovement = (groupedByBlock: Record<number, WorkoutLog[]>, blockNumber: number, latestBlockNumber: number) => {
+    const previousBlockNumber = blockNumber - 1;
+    const currentWeekLogs = groupedByBlock[blockNumber] || [];
+    const previousWeekLogs = groupedByBlock[previousBlockNumber] || [];
+
+    if (!currentWeekLogs.length || !previousWeekLogs.length) return null;
+
+    if (blockNumber === latestBlockNumber) {
+      const completedDayIds = currentWeekLogs
+        .map(log => log.dayId)
+        .filter((dayId, index, array) => !!dayId && array.indexOf(dayId) === index);
+
+      const currentScores = getWeekScores(currentWeekLogs, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: false,
+      });
+      const previousScores = getWeekScores(previousWeekLogs, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: true,
+      });
+
+      return buildImprovementFromScores(
+        currentScores.volume,
+        previousScores.volume,
+        currentScores.reps,
+        previousScores.reps
+      );
+    }
+
+    const currentScores = getWeekScores(currentWeekLogs, { applyMissingPenalty: true });
+    const previousScores = getWeekScores(previousWeekLogs, { applyMissingPenalty: true });
+
+    return buildImprovementFromScores(
+      currentScores.volume,
+      previousScores.volume,
+      currentScores.reps,
+      previousScores.reps
+    );
+  };
+
+  const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
+    const { groupedByBlock } = buildWeekDataForLogs(routineLogs);
+    const blocks = Object.keys(groupedByBlock)
+      .map(Number)
+      .sort((a, b) => b - a);
+    return {
+      groupedByBlock,
+      blocks,
+      currentWeekBlock: blocks[0],
+    };
+  }, [routineLogs]);
 
   const handleSelectRoutine = (routineId: string) => {
     dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
@@ -429,6 +598,93 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
         </View>
         <Text style={styles.heroTitle}>Empezar entrenamiento</Text>
         <Text style={styles.heroSubtitle}>Elige una sesión y registra tu progreso de hoy</Text>
+      </View>
+
+      <View style={styles.homeHistorySection}>
+        <View style={styles.homeHistoryHeaderRow}>
+          <Text style={styles.homeHistoryTitle}>Historial de la rutina</Text>
+          <Text style={styles.homeHistoryCount}>{routineLogs.length} sesiones</Text>
+        </View>
+
+        {routineLogs.length === 0 ? (
+          <View style={styles.emptyHistoryBox}>
+            <Text style={styles.emptyHistoryText}>Sin entrenamientos aún en esta rutina</Text>
+          </View>
+        ) : (
+          <ScrollView style={styles.homeHistoryScroll} nestedScrollEnabled>
+            {blocks.map((block: number) => {
+              const weekLogs = groupedByBlock[block].slice().reverse();
+              const isExpanded = expandedWeekBlocks[block] ?? (block === currentWeekBlock);
+              const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
+
+              return (
+                <View key={block}>
+                  <Pressable
+                    style={styles.weekHeaderButton}
+                    onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}
+                  >
+                    <View style={styles.weekTitleRow}>
+                      <Text style={styles.weekTitle}>Semana {block}</Text>
+                      {!!weekImprovement && (
+                        <Text
+                          style={[
+                            styles.weekImprovementText,
+                            weekImprovement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                          ]}
+                        >
+                          {weekImprovement.isImproved ? '↑' : '↓'} {weekImprovement.percent.toFixed(1)}%
+                        </Text>
+                      )}
+                    </View>
+                    <Text style={styles.weekHeaderMeta}>
+                      {weekLogs.length} día{weekLogs.length === 1 ? '' : 's'} {isExpanded ? '▲' : '▼'}
+                    </Text>
+                  </Pressable>
+
+                  {isExpanded && weekLogs.map((log: WorkoutLog) => {
+                    const day = getDay(log.dayId);
+                    const improvement = getLogImprovement(log);
+                    if (!day) return null;
+
+                    return (
+                      <Pressable
+                        key={log.id}
+                        style={({ pressed }: { pressed: boolean }) => [
+                          styles.historyLogCard,
+                          pressed && styles.historyLogCardPressed,
+                        ]}
+                        onPress={() => onSelectLog?.(log, day)}
+                      >
+                        <View style={styles.historyLogHeader}>
+                          <View style={styles.historyLogLeft}>
+                            <Text style={styles.historyLogEmoji}>{day.emoji}</Text>
+                            <View>
+                              <View style={styles.historyLogNameRow}>
+                                <Text style={styles.historyLogDayName}>{day.name}</Text>
+                                {!!improvement && (
+                                  <Text
+                                    style={[
+                                      styles.historyLogImprovementText,
+                                      improvement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                                    ]}
+                                  >
+                                    {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
+                                  </Text>
+                                )}
+                              </View>
+                              <Text style={styles.historyLogDate}>{new Date(log.createdAt).toLocaleDateString('es-ES')}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.historyLogBadge}>Día {day.dayNumber}</Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              );
+            })}
+          </ScrollView>
+        )}
       </View>
 
       <FlatList
@@ -634,6 +890,140 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     opacity: 0.72,
+    textAlign: 'center',
+  },
+  homeHistorySection: {
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  homeHistoryHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  homeHistoryTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  homeHistoryCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.primaryLight,
+    backgroundColor: theme.colors.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.pill,
+  },
+  homeHistoryScroll: {
+    maxHeight: 300,
+  },
+  weekHeaderButton: {
+    marginTop: 10,
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: theme.borderRadius.sm,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  weekTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  weekTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.primary,
+  },
+  weekImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  weekImprovementUp: {
+    color: theme.colors.success,
+  },
+  weekImprovementDown: {
+    color: theme.colors.error,
+  },
+  weekHeaderMeta: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+  },
+  historyLogCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadow.soft,
+  },
+  historyLogCardPressed: {
+    opacity: 0.8,
+  },
+  historyLogHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: 8,
+  },
+  historyLogLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  historyLogEmoji: {
+    fontSize: 20,
+    marginRight: 10,
+  },
+  historyLogNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  historyLogDayName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  historyLogImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  historyLogDate: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
+  },
+  historyLogBadge: {
+    color: theme.colors.primaryLight,
+    backgroundColor: theme.colors.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: theme.borderRadius.pill,
+    fontSize: 10,
+    fontWeight: '700',
+    overflow: 'hidden',
+  },
+  emptyHistoryBox: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  emptyHistoryText: {
+    color: theme.colors.textSecondary,
+    fontSize: 13,
     textAlign: 'center',
   },
   list: {

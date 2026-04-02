@@ -19,6 +19,80 @@ interface DetailScreenProps {
   onBack: () => void;
 }
 
+interface ImprovementResult {
+  isImproved: boolean;
+  percent: number;
+}
+
+function getLogTimestamp(log: WorkoutLog | null): number {
+  if (!log) return 0;
+  if (typeof log.createdAt === 'number') return log.createdAt;
+  if (log.date) return new Date(`${log.date}T00:00:00`).getTime();
+  return 0;
+}
+
+function getWorkoutVolumeScore(sourceLog: WorkoutLog | null): number {
+  if (!sourceLog) return 0;
+  return sourceLog.exercises.reduce((exerciseAcc, exercise) => {
+    const exerciseVolume = exercise.parsedSets.reduce(
+      (setAcc, setItem) => setAcc + setItem.weight * setItem.reps,
+      0
+    );
+    return exerciseAcc + exerciseVolume;
+  }, 0);
+}
+
+function getWorkoutRepsScore(sourceLog: WorkoutLog | null): number {
+  if (!sourceLog) return 0;
+  return sourceLog.exercises.reduce((exerciseAcc, exercise) => {
+    const repsScore = exercise.parsedSets.reduce(
+      (setAcc, setItem) => setAcc + setItem.reps,
+      0
+    );
+    return exerciseAcc + repsScore;
+  }, 0);
+}
+
+function getExerciseVolumeScore(exerciseLog: ExerciseLog | null): number {
+  if (!exerciseLog) return 0;
+  return exerciseLog.parsedSets.reduce(
+    (setAcc, setItem) => setAcc + setItem.weight * setItem.reps,
+    0
+  );
+}
+
+function getExerciseRepsScore(exerciseLog: ExerciseLog | null): number {
+  if (!exerciseLog) return 0;
+  return exerciseLog.parsedSets.reduce((setAcc, setItem) => setAcc + setItem.reps, 0);
+}
+
+function buildImprovementFromScores(
+  currentScore: number,
+  previousScore: number,
+  currentRepsScore = 0,
+  previousRepsScore = 0
+): ImprovementResult | null {
+  if (!isFinite(currentScore) || !isFinite(previousScore)) return null;
+
+  if (previousScore <= 0 && currentScore > 0) {
+    return { isImproved: true, percent: 30 };
+  }
+
+  if (previousScore <= 0 && currentScore <= 0) {
+    if (!isFinite(currentRepsScore) || !isFinite(previousRepsScore)) return null;
+    if (previousRepsScore <= 0 && currentRepsScore > 0) {
+      return { isImproved: true, percent: 30 };
+    }
+    if (previousRepsScore <= 0 && currentRepsScore <= 0) return null;
+
+    const repsDeltaPct = ((currentRepsScore - previousRepsScore) / previousRepsScore) * 100;
+    return { isImproved: repsDeltaPct > 0, percent: Math.abs(repsDeltaPct) };
+  }
+
+  const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
+  return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
+}
+
 export function DetailScreen({
   log,
   day,
@@ -35,15 +109,18 @@ export function DetailScreen({
       }).replace(/^[a-z]/, c => c.toUpperCase())
     : formatDate(log.createdAt);
 
-  // Obtener el entrenamiento anterior del mismo dayId (bloque previo)
-  const getPreviousWorkout = () => {
-    const sameDayLogs = state.logs
-      .filter(l => l.dayId === log.dayId && l.createdAt < log.createdAt)
-      .sort((a, b) => b.createdAt - a.createdAt);
-    return sameDayLogs[0] || null;
-  };
+  const previousLog = [...state.logs]
+    .filter(l => l.dayId === log.dayId && getLogTimestamp(l) < getLogTimestamp(log))
+    .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
 
-  const previousLog = getPreviousWorkout();
+  const detailImprovement = previousLog
+    ? buildImprovementFromScores(
+        getWorkoutVolumeScore(log),
+        getWorkoutVolumeScore(previousLog),
+        getWorkoutRepsScore(log),
+        getWorkoutRepsScore(previousLog)
+      )
+    : null;
 
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
@@ -62,9 +139,23 @@ export function DetailScreen({
         <Pressable onPress={onBack}>
           <Text style={styles.backButton}>← Volver</Text>
         </Pressable>
-        <Text style={styles.headerTitle}>
-          {day.emoji} {day.name}
-        </Text>
+        <View style={styles.detailTitleRow}>
+          <Text style={styles.headerTitle}>
+            {day.emoji} {day.name}
+          </Text>
+          {!!detailImprovement && (
+            <Text
+              style={[
+                styles.detailImprovementText,
+                detailImprovement.isImproved
+                  ? styles.detailImprovementUp
+                  : styles.detailImprovementDown,
+              ]}
+            >
+              {detailImprovement.isImproved ? '↑' : '↓'} {detailImprovement.percent.toFixed(1)}%
+            </Text>
+          )}
+        </View>
         <Text style={styles.date}>{displayedDate}</Text>
       </View>
 
@@ -77,6 +168,14 @@ export function DetailScreen({
         {day.exercises.map(exercise => {
           const currentExercise = getExerciseFromLog(log, exercise.id, exercise.name);
           const prevExercise = getExerciseFromLog(previousLog, exercise.id, exercise.name);
+          const exerciseImprovement = currentExercise && prevExercise
+            ? buildImprovementFromScores(
+                getExerciseVolumeScore(currentExercise),
+                getExerciseVolumeScore(prevExercise),
+                getExerciseRepsScore(currentExercise),
+                getExerciseRepsScore(prevExercise)
+              )
+            : null;
 
           return (
             <ExerciseResultDisplay
@@ -86,6 +185,8 @@ export function DetailScreen({
               parsedSets={currentExercise?.parsedSets || []}
               notes={currentExercise?.notes}
               previousSets={prevExercise?.parsedSets}
+              improvementText={exerciseImprovement ? `${exerciseImprovement.isImproved ? '↑' : '↓'} ${exerciseImprovement.percent.toFixed(1)}%` : undefined}
+              improvementPositive={exerciseImprovement ? exerciseImprovement.isImproved : true}
             />
           );
         })}
@@ -146,6 +247,23 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: theme.colors.text,
+    flex: 1,
+  },
+  detailTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  detailImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  detailImprovementUp: {
+    color: theme.colors.success,
+  },
+  detailImprovementDown: {
+    color: theme.colors.error,
   },
   date: {
     fontSize: 12,

@@ -10,6 +10,8 @@ interface ExerciseResultDisplayProps {
   parsedSets: ParsedSet[];
   notes?: string;
   previousSets?: ParsedSet[];
+  improvementText?: string;
+  improvementPositive?: boolean;
 }
 
 export function ExerciseResultDisplay({
@@ -18,6 +20,8 @@ export function ExerciseResultDisplay({
   parsedSets,
   notes,
   previousSets,
+  improvementText,
+  improvementPositive = true,
 }: ExerciseResultDisplayProps) {
   const currentValue = parsedSets.length > 0 ? formatSets(parsedSets) : '-';
   const previousValue = previousSets && previousSets.length > 0
@@ -28,6 +32,16 @@ export function ExerciseResultDisplay({
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.exerciseName}>{exerciseName}</Text>
+        {!!improvementText && (
+          <Text
+            style={[
+              styles.improvementText,
+              improvementPositive ? styles.improvementUp : styles.improvementDown,
+            ]}
+          >
+            {improvementText}
+          </Text>
+        )}
       </View>
 
       <View style={styles.resultsContainer}>
@@ -74,11 +88,26 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: theme.spacing.md,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: theme.spacing.sm,
   },
   exerciseName: {
     fontSize: 15,
     fontWeight: '700',
     color: theme.colors.text,
+    flex: 1,
+  },
+  improvementText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  improvementUp: {
+    color: theme.colors.success,
+  },
+  improvementDown: {
+    color: theme.colors.error,
   },
   resultsContainer: {
     marginVertical: theme.spacing.sm,
@@ -108,7 +137,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   currentResult: {
-    color: theme.colors.current,
+    color: theme.colors.push,
   },
   previousResult: {
     color: theme.colors.previous,
