@@ -951,6 +951,7 @@ export default function App() {
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
   const [previousScreen, setPreviousScreen] = useState('home');
   const [detailBackScreen, setDetailBackScreen] = useState('home');
+  const [expandedWeekBlocks, setExpandedWeekBlocks] = useState({});
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content');
@@ -1240,6 +1241,232 @@ export default function App() {
     day.title.trim().length > 0 && day.exercisesText.trim().length > 0
   ));
 
+  const getLogTimestamp = (workoutLog) => {
+    if (!workoutLog) return 0;
+    if (typeof workoutLog.createdAt === 'number') return workoutLog.createdAt;
+    if (workoutLog.date) return new Date(`${workoutLog.date}T00:00:00Z`).getTime();
+    return 0;
+  };
+
+  const getWorkoutVolumeScore = (workoutLog) => {
+    if (!workoutLog?.exercises?.length) return 0;
+
+    return workoutLog.exercises.reduce((total, exercise) => {
+      const parsedSets = Array.isArray(exercise?.parsedSets) && exercise.parsedSets.length > 0
+        ? exercise.parsedSets
+        : parseSeriesString(exercise?.rawInput || '');
+
+      const exerciseScore = parsedSets.reduce((sum, set) => {
+        const weight = Number(set?.weight);
+        const reps = Number(set?.reps);
+        if (!Number.isFinite(weight) || !Number.isFinite(reps)) return sum;
+        if (weight <= 0 || reps <= 0) return sum;
+        return sum + (weight * reps);
+      }, 0);
+
+      return total + exerciseScore;
+    }, 0);
+  };
+
+  const getExerciseVolumeScore = (exerciseLog) => {
+    if (!exerciseLog) return 0;
+    const parsedSets = Array.isArray(exerciseLog?.parsedSets) && exerciseLog.parsedSets.length > 0
+      ? exerciseLog.parsedSets
+      : parseSeriesString(exerciseLog?.rawInput || '');
+
+    return parsedSets.reduce((sum, set) => {
+      const weight = Number(set?.weight);
+      const reps = Number(set?.reps);
+      if (!Number.isFinite(weight) || !Number.isFinite(reps)) return sum;
+      if (weight <= 0 || reps <= 0) return sum;
+      return sum + (weight * reps);
+    }, 0);
+  };
+
+  const getWorkoutRepsScore = (workoutLog) => {
+    if (!workoutLog?.exercises?.length) return 0;
+
+    return workoutLog.exercises.reduce((total, exercise) => {
+      const parsedSets = Array.isArray(exercise?.parsedSets) && exercise.parsedSets.length > 0
+        ? exercise.parsedSets
+        : parseSeriesString(exercise?.rawInput || '');
+
+      const repsScore = parsedSets.reduce((sum, set) => {
+        const reps = Number(set?.reps);
+        if (!Number.isFinite(reps) || reps <= 0) return sum;
+        return sum + reps;
+      }, 0);
+
+      return total + repsScore;
+    }, 0);
+  };
+
+  const getExerciseRepsScore = (exerciseLog) => {
+    if (!exerciseLog) return 0;
+    const parsedSets = Array.isArray(exerciseLog?.parsedSets) && exerciseLog.parsedSets.length > 0
+      ? exerciseLog.parsedSets
+      : parseSeriesString(exerciseLog?.rawInput || '');
+
+    return parsedSets.reduce((sum, set) => {
+      const reps = Number(set?.reps);
+      if (!Number.isFinite(reps) || reps <= 0) return sum;
+      return sum + reps;
+    }, 0);
+  };
+
+  const buildImprovementFromScores = (currentScore, previousScore, currentRepsScore = 0, previousRepsScore = 0) => {
+    if (!Number.isFinite(currentScore) || !Number.isFinite(previousScore)) return null;
+
+    if (previousScore <= 0 && currentScore > 0) {
+      return {
+        isImproved: true,
+        percent: 30,
+      };
+    }
+
+    if (previousScore <= 0 && currentScore <= 0) {
+      if (!Number.isFinite(currentRepsScore) || !Number.isFinite(previousRepsScore)) return null;
+
+      if (previousRepsScore <= 0 && currentRepsScore > 0) {
+        return {
+          isImproved: true,
+          percent: 30,
+        };
+      }
+
+      if (previousRepsScore <= 0 && currentRepsScore <= 0) return null;
+
+      const repsDeltaPct = ((currentRepsScore - previousRepsScore) / previousRepsScore) * 100;
+      return {
+        isImproved: repsDeltaPct > 0,
+        percent: Math.abs(repsDeltaPct),
+      };
+    }
+
+    const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
+    return {
+      isImproved: deltaPct > 0,
+      percent: Math.abs(deltaPct),
+    };
+  };
+
+  const getPreviousFilledLogForSameDay = (currentLog) => {
+    const currentTs = getLogTimestamp(currentLog);
+    if (!currentLog?.dayId || currentTs <= 0) return null;
+
+    const previousLogs = routineLogs
+      .filter((log) => log.dayId === currentLog.dayId && log.id !== currentLog.id)
+      .filter((log) => {
+        const logTs = getLogTimestamp(log);
+        return logTs > 0 && logTs < currentTs;
+      })
+      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a));
+
+    return previousLogs[0] || null;
+  };
+
+  const getLogImprovement = (currentLog) => {
+    const currentScore = getWorkoutVolumeScore(currentLog);
+    const previousLog = getPreviousFilledLogForSameDay(currentLog);
+    if (!previousLog) return null;
+
+    const previousScore = getWorkoutVolumeScore(previousLog);
+    const currentRepsScore = getWorkoutRepsScore(currentLog);
+    const previousRepsScore = getWorkoutRepsScore(previousLog);
+    return buildImprovementFromScores(currentScore, previousScore, currentRepsScore, previousRepsScore);
+  };
+
+  const getWeekScores = (weekLogs, options = {}) => {
+    const { restrictToDayIds = null, applyMissingPenalty = true } = options;
+    if (!Array.isArray(weekLogs) || weekLogs.length === 0) {
+      return { volume: 0, reps: 0 };
+    }
+
+    const latestByDayId = {};
+    [...weekLogs]
+      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
+      .forEach((log) => {
+        if (!log?.dayId) return;
+        if (!latestByDayId[log.dayId]) {
+          latestByDayId[log.dayId] = log;
+        }
+      });
+
+    const selectedDayIds = restrictToDayIds ? new Set(restrictToDayIds) : null;
+    const selectedLogs = Object.values(latestByDayId).filter((log) => (
+      !selectedDayIds || selectedDayIds.has(log.dayId)
+    ));
+
+    const rawVolume = selectedLogs.reduce((sum, log) => sum + getWorkoutVolumeScore(log), 0);
+    const rawReps = selectedLogs.reduce((sum, log) => sum + getWorkoutRepsScore(log), 0);
+
+    if (!applyMissingPenalty) {
+      return { volume: rawVolume, reps: rawReps };
+    }
+
+    const expectedCount = selectedDayIds
+      ? selectedDayIds.size
+      : Math.max(1, activeDays.length || 5);
+    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
+    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
+
+    return {
+      volume: rawVolume * penaltyFactor,
+      reps: rawReps * penaltyFactor,
+    };
+  };
+
+  const getWeekImprovement = (groupedByBlock, blockNumber, latestBlockNumber) => {
+    const previousBlockNumber = blockNumber - 1;
+    const currentWeekLogs = groupedByBlock[blockNumber] || [];
+    const previousWeekLogs = groupedByBlock[previousBlockNumber] || [];
+
+    if (!currentWeekLogs.length || !previousWeekLogs.length) return null;
+
+    if (blockNumber === latestBlockNumber) {
+      const completedDayIds = new Set(
+        currentWeekLogs
+          .map((log) => log?.dayId)
+          .filter(Boolean)
+      );
+
+      if (completedDayIds.size === 0) return null;
+
+      const currentScores = getWeekScores(currentWeekLogs, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: false,
+      });
+      const previousScores = getWeekScores(previousWeekLogs, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: true,
+      });
+
+      return buildImprovementFromScores(
+        currentScores.volume,
+        previousScores.volume,
+        currentScores.reps,
+        previousScores.reps,
+      );
+    }
+
+    const currentScores = getWeekScores(currentWeekLogs, { applyMissingPenalty: true });
+    const previousScores = getWeekScores(previousWeekLogs, { applyMissingPenalty: true });
+
+    return buildImprovementFromScores(
+      currentScores.volume,
+      previousScores.volume,
+      currentScores.reps,
+      previousScores.reps,
+    );
+  };
+
+  const toggleWeekBlock = (blockId) => {
+    setExpandedWeekBlocks((prev) => ({
+      ...prev,
+      [blockId]: !prev[blockId],
+    }));
+  };
+
   const restoreUiAfterDataLoad = () => {
     setScreen('home');
     setShowRoutineSelector(false);
@@ -1250,6 +1477,7 @@ export default function App() {
     setLogToDelete(null);
     setShowDeleteRoutineModal(false);
     setShowClearDataModal(false);
+    setExpandedWeekBlocks({});
   };
 
   const applyImportedData = (payload) => {
@@ -1778,53 +2006,95 @@ export default function App() {
                 {(() => {
                   const { groupedByBlock } = buildWeekDataForLogs(routineLogs);
 
-                  const blocks = Object.keys(groupedByBlock).sort((a, b) => b - a);
+                  const blocks = Object.keys(groupedByBlock)
+                    .map(Number)
+                    .sort((a, b) => b - a);
                   const currentWeekBlock = blocks[0];
-                  return blocks.map(block => (
-                    <View key={block}>
-                      <Text style={styles.weekTitle}>Semana {block}</Text>
-                      {groupedByBlock[block].reverse().map((log) => {
-                        const day = getDay(log.dayId);
-                        const isCurrentWeek = block === currentWeekBlock;
-                        return (
-                          <Pressable
-                            key={log.id}
-                            style={({ pressed }) => [
-                              styles.historialCard,
-                              pressed && styles.historialCardPressed,
-                            ]}
-                            onPress={() => {
-                              setSelectedDay(day);
-                              setSelectedLog(log);
-                              setDetailBackScreen('home');
-                              setScreen('detail');
-                            }}
-                            onLongPress={() => {
-                              if (isCurrentWeek) {
-                                setLogToDelete(log);
-                              }
-                            }}
-                            delayLongPress={2000}
-                          >
-                            <View style={styles.historialCardTop}>
-                              <View style={styles.historialCardLeft}>
-                                <Text style={styles.historialEmoji}>{day?.emoji}</Text>
-                                <View>
-                                  <Text style={styles.historialDayName}>
-                                    {getDisplayDayName(day?.name)}
-                                  </Text>
-                                  <Text style={styles.historialDate}>{formatDateWithDay(log.date)}</Text>
-                                </View>
-                              </View>
-                              <Text style={styles.historialExCount}>
-                                Día {day?.dayNumber}
+                  return blocks.map((block) => {
+                    const weekLogs = groupedByBlock[block].slice().reverse();
+                    const isExpanded = (expandedWeekBlocks[block] ?? (block === currentWeekBlock));
+                    const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
+
+                    return (
+                      <View key={block}>
+                        <Pressable
+                          style={styles.weekHeaderButton}
+                          onPress={() => toggleWeekBlock(block)}
+                        >
+                          <View style={styles.weekTitleRow}>
+                            <Text style={styles.weekTitle}>Semana {block}</Text>
+                            {!!weekImprovement && (
+                              <Text
+                                style={[
+                                  styles.weekImprovementText,
+                                  weekImprovement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                                ]}
+                              >
+                                {weekImprovement.isImproved ? '↑' : '↓'} {weekImprovement.percent.toFixed(1)}%
                               </Text>
-                            </View>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                  ));
+                            )}
+                          </View>
+                          <Text style={styles.weekHeaderMeta}>
+                            {weekLogs.length} día{weekLogs.length === 1 ? '' : 's'} {isExpanded ? '▲' : '▼'}
+                          </Text>
+                        </Pressable>
+
+                        {isExpanded && weekLogs.map((log) => {
+                          const day = getDay(log.dayId);
+                          const isCurrentWeek = block === currentWeekBlock;
+                          const improvement = getLogImprovement(log);
+                          return (
+                            <Pressable
+                              key={log.id}
+                              style={({ pressed }) => [
+                                styles.historialCard,
+                                pressed && styles.historialCardPressed,
+                              ]}
+                              onPress={() => {
+                                setSelectedDay(day);
+                                setSelectedLog(log);
+                                setDetailBackScreen('home');
+                                setScreen('detail');
+                              }}
+                              onLongPress={() => {
+                                if (isCurrentWeek) {
+                                  setLogToDelete(log);
+                                }
+                              }}
+                              delayLongPress={2000}
+                            >
+                              <View style={styles.historialCardTop}>
+                                <View style={styles.historialCardLeft}>
+                                  <Text style={styles.historialEmoji}>{day?.emoji}</Text>
+                                  <View>
+                                    <View style={styles.historialNameRow}>
+                                      <Text style={styles.historialDayName}>
+                                        {getDisplayDayName(day?.name)}
+                                      </Text>
+                                      {!!improvement && (
+                                        <Text
+                                          style={[
+                                            styles.historialImprovementText,
+                                            improvement.isImproved ? styles.historialImprovementUp : styles.historialImprovementDown,
+                                          ]}
+                                        >
+                                          {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
+                                        </Text>
+                                      )}
+                                    </View>
+                                    <Text style={styles.historialDate}>{formatDateWithDay(log.date)}</Text>
+                                  </View>
+                                </View>
+                                <Text style={styles.historialExCount}>
+                                  Día {day?.dayNumber}
+                                </Text>
+                              </View>
+                            </Pressable>
+                          );
+                        })}
+                      </View>
+                    );
+                  });
                 })()}
                 </ScrollView>
               )}
@@ -2240,9 +2510,18 @@ export default function App() {
         currentLog &&
         log.dayId === selectedDay.id &&
         log.routineId === currentLog.routineId &&
-        log.createdAt < currentLog.createdAt
+        getLogTimestamp(log) < getLogTimestamp(currentLog)
       )
-      .sort((a, b) => b.createdAt - a.createdAt)[0];
+      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0];
+
+    const detailImprovement = (() => {
+      if (!currentLog || !previousLog) return null;
+      const currentScore = getWorkoutVolumeScore(currentLog);
+      const previousScore = getWorkoutVolumeScore(previousLog);
+      const currentRepsScore = getWorkoutRepsScore(currentLog);
+      const previousRepsScore = getWorkoutRepsScore(previousLog);
+      return buildImprovementFromScores(currentScore, previousScore, currentRepsScore, previousRepsScore);
+    })();
 
     const formatSets = (parsedSets) => {
       if (!parsedSets || parsedSets.length === 0) return '-';
@@ -2262,9 +2541,21 @@ export default function App() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>
-            {selectedDay.emoji} {getDisplayDayName(selectedDay.name)} - Día {selectedDay.dayNumber}
-          </Text>
+          <View style={styles.detailTitleRow}>
+            <Text style={styles.headerTitle}>
+              {selectedDay.emoji} {getDisplayDayName(selectedDay.name)} - Día {selectedDay.dayNumber}
+            </Text>
+            {!!detailImprovement && (
+              <Text
+                style={[
+                  styles.detailImprovementText,
+                  detailImprovement.isImproved ? styles.detailImprovementUp : styles.detailImprovementDown,
+                ]}
+              >
+                {detailImprovement.isImproved ? '↑' : '↓'} {detailImprovement.percent.toFixed(1)}%
+              </Text>
+            )}
+          </View>
           <Text style={styles.subtitle}>
             {currentLog ? formatDateWithDay(currentLog.date) : ''}
           </Text>
@@ -2275,11 +2566,29 @@ export default function App() {
             const prevEx = getExerciseFromLog(previousLog, exercise);
             const currentNote = currentEx?.notes?.trim() || '-';
             const previousNote = prevEx?.notes?.trim() || '-';
+            const exerciseImprovement = (() => {
+              if (!currentEx || !prevEx) return null;
+              const currentScore = getExerciseVolumeScore(currentEx);
+              const previousScore = getExerciseVolumeScore(prevEx);
+              const currentRepsScore = getExerciseRepsScore(currentEx);
+              const previousRepsScore = getExerciseRepsScore(prevEx);
+              return buildImprovementFromScores(currentScore, previousScore, currentRepsScore, previousRepsScore);
+            })();
 
             return (
               <View key={exercise.id} style={styles.resultBox}>
                 <View style={styles.resultHeader}>
                   <Text style={styles.resultName}>{exercise.name} - {exercise.targetSets || '-'}x{exercise.targetReps || '-'}</Text>
+                  {!!exerciseImprovement && (
+                    <Text
+                      style={[
+                        styles.resultImprovementText,
+                        exerciseImprovement.isImproved ? styles.resultImprovementUp : styles.resultImprovementDown,
+                      ]}
+                    >
+                      {exerciseImprovement.isImproved ? '↑' : '↓'} {exerciseImprovement.percent.toFixed(1)}%
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.resultRow}>
                   <View style={styles.resultItem}>
@@ -2417,6 +2726,23 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     color: theme.colors.text,
   },
+  detailTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  detailImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+    flexShrink: 0,
+  },
+  detailImprovementUp: {
+    color: theme.colors.success,
+  },
+  detailImprovementDown: {
+    color: theme.colors.error,
+  },
   // ===== BOTÓN PRINCIPAL =====
   startButton: {
     backgroundColor: theme.colors.primary,
@@ -2515,6 +2841,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: theme.colors.text,
+    flexShrink: 1,
   },
   daySelectExercises: {
     fontSize: 12,
@@ -2683,6 +3010,22 @@ const styles = StyleSheet.create({
     color: '#F2F5FA',
     letterSpacing: -0.2,
   },
+  historialNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  historialImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  historialImprovementUp: {
+    color: theme.colors.success,
+  },
+  historialImprovementDown: {
+    color: theme.colors.error,
+  },
   historialDate: {
     fontSize: 11,
     color: '#7D8594',
@@ -2705,13 +3048,51 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.sm,
     paddingBottom: theme.spacing.xl,
   },
+  weekHeaderButton: {
+    marginHorizontal: theme.spacing.md,
+    marginTop: 18,
+    marginBottom: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: theme.radius.sm,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderWidth: 1,
+    borderColor: theme.colors.mediumGray,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  weekHeaderRight: {
+    alignItems: 'flex-end',
+  },
+  weekTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  weekImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 0,
+  },
+  weekImprovementUp: {
+    color: theme.colors.success,
+  },
+  weekImprovementDown: {
+    color: theme.colors.error,
+  },
+  weekHeaderMeta: {
+    fontSize: 11,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+  },
   weekTitle: {
     fontSize: 15,
     fontWeight: '800',
     color: theme.colors.primary,
-    marginHorizontal: theme.spacing.md,
-    marginTop: 18,
-    marginBottom: 12,
+    marginHorizontal: 0,
+    marginTop: 0,
+    marginBottom: 0,
   },
   routineListContainer: {
     paddingHorizontal: theme.spacing.md,
@@ -3495,6 +3876,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     flex: 1,
   },
+  resultImprovementText: {
+    fontSize: 12,
+    fontWeight: '800',
+    marginLeft: 8,
+    flexShrink: 0,
+  },
+  resultImprovementUp: {
+    color: theme.colors.success,
+  },
+  resultImprovementDown: {
+    color: theme.colors.error,
+  },
   resultNotes: {
     fontSize: 10,
     color: theme.colors.textSecondary,
@@ -3554,7 +3947,7 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
   },
   currentResult: {
-    color: theme.colors.current,
+    color: theme.colors.push,
   },
   previousResult: {
     color: theme.colors.previous,
