@@ -949,6 +949,7 @@ export default function App() {
   const [logToDelete, setLogToDelete] = useState(null);
   const [showDeleteRoutineModal, setShowDeleteRoutineModal] = useState(false);
   const [showClearDataModal, setShowClearDataModal] = useState(false);
+  const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [calendarMonthOffset, setCalendarMonthOffset] = useState(0);
   const [previousScreen, setPreviousScreen] = useState('home');
   const [detailBackScreen, setDetailBackScreen] = useState('home');
@@ -2162,22 +2163,27 @@ export default function App() {
 
               {weeklyProgressPoints.length > 0 && (
                 <View style={styles.progressCard}>
-                  <View style={styles.progressHeaderRow}>
-                    <Text style={styles.progressTitle}>Progreso entre semanas</Text>
-                    <Text
-                      style={[
-                        styles.progressLatest,
-                        latestWeeklyProgress && latestWeeklyProgress.value >= 0
-                          ? styles.progressLatestUp
-                          : styles.progressLatestDown,
-                      ]}
-                    >
-                      {latestWeeklyProgress
-                        ? `${latestWeeklyProgress.value >= 0 ? '↑' : '↓'} ${Math.abs(latestWeeklyProgress.value).toFixed(1)}%`
-                        : '0%'}
-                    </Text>
-                  </View>
-                  {renderWeeklyProgressChart(weeklyProgressPoints, progressChartWidth)}
+                  <Pressable
+                    style={styles.progressToggleButton}
+                    onPress={() => setShowWeeklyProgressChart((prev) => !prev)}
+                  >
+                    <View style={styles.progressHeaderRow}>
+                      <Text style={styles.progressTitle}>Progreso entre semanas {showWeeklyProgressChart ? '▲' : '▼'}</Text>
+                      <Text
+                        style={[
+                          styles.progressLatest,
+                          latestWeeklyProgress && latestWeeklyProgress.value >= 0
+                            ? styles.progressLatestUp
+                            : styles.progressLatestDown,
+                        ]}
+                      >
+                        {latestWeeklyProgress
+                          ? `${latestWeeklyProgress.value >= 0 ? '↑' : '↓'} ${Math.abs(latestWeeklyProgress.value).toFixed(1)}%`
+                          : '0%'}
+                      </Text>
+                    </View>
+                  </Pressable>
+                  {showWeeklyProgressChart && renderWeeklyProgressChart(weeklyProgressPoints, progressChartWidth)}
                 </View>
               )}
 
@@ -3153,7 +3159,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+  },
+  progressToggleButton: {
+    paddingVertical: 2,
   },
   progressTitle: {
     fontSize: 14,

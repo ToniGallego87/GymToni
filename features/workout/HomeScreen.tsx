@@ -194,6 +194,7 @@ function ProgressLineChart({ points, width }: { points: WeekProgressPoint[]; wid
 export function HomeScreen({ onSelectDay }: HomeScreenProps) {
   const { state, dispatch } = useWorkout();
   const [showRoutineSelector, setShowRoutineSelector] = useState(false);
+  const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const { width: windowWidth } = useWindowDimensions();
 
   const activeRoutine = state.routines.find(
@@ -267,20 +268,29 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
 
         {weeklyProgress.length > 0 && (
           <View style={styles.progressCard}>
-            <View style={styles.progressHeaderRow}>
-              <Text style={styles.progressTitle}>Progreso entre semanas</Text>
-              <Text
-                style={[
-                  styles.progressLatest,
-                  latestPoint && latestPoint.improvement >= 0
-                    ? styles.progressLatestUp
-                    : styles.progressLatestDown,
-                ]}
-              >
-                {latestPoint ? `${latestPoint.improvement >= 0 ? '↑' : '↓'} ${Math.abs(latestPoint.improvement).toFixed(1)}%` : '0%'}
-              </Text>
-            </View>
-            <ProgressLineChart points={weeklyProgress} width={chartWidth} />
+            <TouchableOpacity
+              style={styles.progressToggleButton}
+              onPress={() => setShowWeeklyProgressChart(prev => !prev)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.progressHeaderRow}>
+                <Text style={styles.progressTitle}>Progreso entre semanas {showWeeklyProgressChart ? '▲' : '▼'}</Text>
+                <Text
+                  style={[
+                    styles.progressLatest,
+                    latestPoint && latestPoint.improvement >= 0
+                      ? styles.progressLatestUp
+                      : styles.progressLatestDown,
+                  ]}
+                >
+                  {latestPoint ? `${latestPoint.improvement >= 0 ? '↑' : '↓'} ${Math.abs(latestPoint.improvement).toFixed(1)}%` : '0%'}
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            {showWeeklyProgressChart && (
+              <ProgressLineChart points={weeklyProgress} width={chartWidth} />
+            )}
           </View>
         )}
       </View>
@@ -377,7 +387,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 4,
+  },
+  progressToggleButton: {
+    paddingVertical: 2,
   },
   progressTitle: {
     fontSize: 14,
