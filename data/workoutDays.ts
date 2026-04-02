@@ -1,111 +1,34 @@
 import { WorkoutRoutine } from '@types/index';
 
+const JAN_01_2026 = new Date('2026-01-01T08:00:00').getTime();
+const FEB_01_2026 = new Date('2026-02-01T08:00:00').getTime();
+
 export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
   {
-    id: 'routine1',
-    name: 'Rutina 1',
-    description: '5 días Push/Pull/Legs clásico',
-    isActive: false,
-    createdAt: Date.now() - 90 * 24 * 60 * 60 * 1000,
-    days: [
-      {
-        id: 'r1-day1',
-        dayNumber: 1,
-        name: 'Lunes – Push (Pesado)',
-        emoji: '🔴',
-        exercises: [
-          { id: 'r1-d1-ex1', name: 'Press banca plano con barra', order: 1, targetReps: '6-8', targetSets: 4 },
-          { id: 'r1-d1-ex2', name: 'Press militar con mancuernas', order: 2, targetReps: '6-8', targetSets: 4 },
-          { id: 'r1-d1-ex3', name: 'Aperturas inclinadas con mancuernas', order: 3, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d1-ex4', name: 'Elevaciones frontales con mancuernas', order: 4, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d1-ex5', name: 'Extensión de tríceps en polea con cuerda', order: 5, targetReps: '12-15', targetSets: 2 },
-          { id: 'r1-d1-ex6', name: 'Press francés con barra Z', order: 6, targetReps: '10-12', targetSets: 3 },
-        ],
-      },
-      {
-        id: 'r1-day2',
-        dayNumber: 2,
-        name: 'Martes – Pull (Pesado)',
-        emoji: '🔵',
-        exercises: [
-          { id: 'r1-d2-ex1', name: 'Dominadas pronas', order: 1, targetReps: '6-8', targetSets: 4 },
-          { id: 'r1-d2-ex2', name: 'Remo Pendlay con barra', order: 2, targetReps: '6-8', targetSets: 4 },
-          { id: 'r1-d2-ex3', name: 'Pull-over con mancuerna en banco plano', order: 3, targetReps: '8-10', targetSets: 3 },
-          { id: 'r1-d2-ex4', name: 'Curl bíceps barra Z agarre supino', order: 4, targetReps: '8-10', targetSets: 3 },
-          { id: 'r1-d2-ex5', name: 'Curl inclinado con mancuernas', order: 5, targetReps: '12-15', targetSets: 3 },
-        ],
-      },
-      {
-        id: 'r1-day3',
-        dayNumber: 3,
-        name: 'Miércoles – Pierna + Core',
-        emoji: '🟢',
-        exercises: [
-          { id: 'r1-d3-ex1', name: 'Sentadilla frontal con barra', order: 1, targetReps: '6-8', targetSets: 4 },
-          { id: 'r1-d3-ex2', name: 'Peso muerto rumano con barra', order: 2, targetReps: '8-10', targetSets: 3 },
-          { id: 'r1-d3-ex3', name: 'Hip Thrust con barra', order: 3, targetReps: '10-12', targetSets: 3 },
-          { id: 'r1-d3-ex4', name: 'Zancadas caminando con mancuernas', order: 4, targetReps: '12 pasos/pierna', targetSets: 3 },
-          { id: 'r1-d3-ex5', name: 'Gemelos sentado en máquina', order: 5, targetReps: '15-20', targetSets: 3 },
-          { id: 'r1-d3-ex6', name: 'Ab wheel', order: 6, targetReps: '10-15', targetSets: 3 },
-          { id: 'r1-d3-ex7', name: 'Plancha con lastre', order: 7, targetReps: '30-60s', targetSets: 3 },
-        ],
-      },
-      {
-        id: 'r1-day4',
-        dayNumber: 4,
-        name: 'Jueves – Push (Ligero/Bombeo)',
-        emoji: '🔴',
-        exercises: [
-          { id: 'r1-d4-ex1', name: 'Press inclinado con mancuernas', order: 1, targetReps: '10-12', targetSets: 3 },
-          { id: 'r1-d4-ex2', name: 'Aperturas en máquina/Pec Deck', order: 2, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d4-ex3', name: 'Press militar en máquina', order: 3, targetReps: '10-12', targetSets: 3 },
-          { id: 'r1-d4-ex4', name: 'Pájaros con mancuernas', order: 4, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d4-ex5', name: 'Patada de tríceps con mancuerna', order: 5, targetReps: '12-15', targetSets: 3 },
-        ],
-      },
-      {
-        id: 'r1-day5',
-        dayNumber: 5,
-        name: 'Viernes – Pull (Ligero/Bombeo) + Core',
-        emoji: '🔵',
-        exercises: [
-          { id: 'r1-d5-ex1', name: 'Jalón agarre invertido en polea', order: 1, targetReps: '10-12', targetSets: 3 },
-          { id: 'r1-d5-ex2', name: 'Remo sentado agarre ancho', order: 2, targetReps: '10-12', targetSets: 3 },
-          { id: 'r1-d5-ex3', name: 'Remo con mancuerna a una mano', order: 3, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d5-ex4', name: 'Curl martillo con cuerda', order: 4, targetReps: '10-12', targetSets: 3 },
-          { id: 'r1-d5-ex5', name: 'Curl spider en banco inclinado', order: 5, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d5-ex6', name: 'Crunch oblicuo en polea alta', order: 6, targetReps: '12-15', targetSets: 3 },
-          { id: 'r1-d5-ex7', name: 'Encogimientos en banco declinado', order: 7, targetReps: '15-20', targetSets: 3 },
-        ],
-      },
-    ],
-  },
-  {
     id: 'routine2',
-    name: 'Rutina 2',
-    description: '5 días Push/Pull/Legs con variantes',
+    name: 'Rutina 1',
+    description: 'Push/Pull/Legs con variantes',
     isActive: false,
-    createdAt: Date.now() - 60 * 24 * 60 * 60 * 1000,
+    createdAt: JAN_01_2026,
     days: [
       {
         id: 'r2-day1',
         dayNumber: 1,
-        name: 'Día 1 – Push (Pesado)',
-        emoji: '🔴',
+        name: 'Día 1 - Push (Pesado)',
+        emoji: '🔵',
         exercises: [
           { id: 'r2-d1-ex1', name: 'Press banca declinado con barra', order: 1, targetReps: '6-8', targetSets: 4 },
           { id: 'r2-d1-ex2', name: 'Press militar multipower', order: 2, targetReps: '6-8', targetSets: 4 },
           { id: 'r2-d1-ex3', name: 'Aperturas planas con mancuernas', order: 3, targetReps: '12-15', targetSets: 3 },
-          { id: 'r2-d1-ex4', name: 'Elevaciones frontales declinada neutro con mancuernas', order: 4, targetReps: '12-15', targetSets: 3 },
+          { id: 'r2-d1-ex4', name: 'Elevaciones frontales con mancuernas', order: 4, targetReps: '12-15', targetSets: 3 },
           { id: 'r2-d1-ex5', name: 'Extensión polea barra V', order: 5, targetReps: '12-15', targetSets: 2 },
-          { id: 'r2-d1-ex6', name: 'Extensión tras nuca cuerda', order: 6, targetReps: '10-12', targetSets: 3 },
         ],
       },
       {
         id: 'r2-day2',
         dayNumber: 2,
-        name: 'Día 2 – Pull (Pesado)',
-        emoji: '🔵',
+        name: 'Día 2 - Pull (Pesado)',
+        emoji: '🔴',
         exercises: [
           { id: 'r2-d2-ex1', name: 'Dominadas supinas', order: 1, targetReps: '6-8', targetSets: 4 },
           { id: 'r2-d2-ex2', name: 'Tirón bajo sentado agarre estrecho', order: 2, targetReps: '6-8', targetSets: 4 },
@@ -117,7 +40,7 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
       {
         id: 'r2-day3',
         dayNumber: 3,
-        name: 'Día 3 – Pierna + Core',
+        name: 'Día 3 - Pierna + Core',
         emoji: '🟢',
         exercises: [
           { id: 'r2-d3-ex1', name: 'Sentadilla en multipower', order: 1, targetReps: '8', targetSets: 4 },
@@ -132,8 +55,8 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
       {
         id: 'r2-day4',
         dayNumber: 4,
-        name: 'Día 4 – Push (Ligero/Bombeo)',
-        emoji: '🔴',
+        name: 'Día 4 - Push (Ligero/Bombeo)',
+        emoji: '🔵',
         exercises: [
           { id: 'r2-d4-ex1', name: 'Press plano con mancuernas', order: 1, targetReps: '10-12', targetSets: 3 },
           { id: 'r2-d4-ex2', name: 'Aperturas inclinadas en máquina', order: 2, targetReps: '12-15', targetSets: 3 },
@@ -146,8 +69,8 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
       {
         id: 'r2-day5',
         dayNumber: 5,
-        name: 'Día 5 – Pull (Ligero/Bombeo) + Core',
-        emoji: '🔵',
+        name: 'Día 5 - Pull (Ligero/Bombeo) + Core',
+        emoji: '🔴',
         exercises: [
           { id: 'r2-d5-ex1', name: 'Jalón agarre neutro con agarre supino', order: 1, targetReps: '10-12', targetSets: 3 },
           { id: 'r2-d5-ex2', name: 'Remo sentado en hammer', order: 2, targetReps: '10-12', targetSets: 3 },
@@ -162,16 +85,16 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
   },
   {
     id: 'routine3',
-    name: 'Rutina 3 (Activa)',
-    description: '5 días Push/Pull/Legs con piernas en f2',
+    name: 'Rutina 2',
+    description: 'Push/Pull/Legs con piernas en frecuencia 2',
     isActive: true,
-    createdAt: Date.now() - 30 * 24 * 60 * 60 * 1000,
+    createdAt: FEB_01_2026,
     days: [
       {
         id: 'day1',
         dayNumber: 1,
-        name: 'Día 1 — Push pesado',
-        emoji: '🔴',
+        name: 'Día 1 - Push pesado',
+        emoji: '🔵',
         exercises: [
           { id: 'day1-ex1', name: 'Press banca plano con barra', order: 1, targetReps: '5-8', targetSets: 3 },
           { id: 'day1-ex2', name: 'Aperturas declinadas en polea', order: 2, targetReps: '12-15', targetSets: 2 },
@@ -185,21 +108,21 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
       {
         id: 'day2',
         dayNumber: 2,
-        name: 'Día 2 — Pull pesado',
-        emoji: '🔵',
+        name: 'Día 2 - Pull pesado',
+        emoji: '🔴',
         exercises: [
           { id: 'day2-ex1', name: 'Dominadas prono', order: 1, targetReps: '6-8', targetSets: 4 },
-          { id: 'day2-ex2', name: 'Remo con barra o T-bar', order: 2, targetReps: '6-8', targetSets: 4 },
+          { id: 'day2-ex2', name: 'Remo con barra', order: 2, targetReps: '6-8', targetSets: 4 },
           { id: 'day2-ex3', name: 'Pullover polea alta', order: 3, targetReps: '10-12', targetSets: 3 },
           { id: 'day2-ex4', name: 'Face pull pesado', order: 4, targetReps: '12-15', targetSets: 3 },
-          { id: 'day2-ex5', name: 'Curl barra recta o EZ', order: 5, targetReps: '8-10', targetSets: 3 },
+          { id: 'day2-ex5', name: 'Curl barra recta', order: 5, targetReps: '8-10', targetSets: 3 },
           { id: 'day2-ex6', name: 'Curl martillo alterno', order: 6, targetReps: '12', targetSets: 3 },
         ],
       },
       {
         id: 'day3',
         dayNumber: 3,
-        name: 'Día 3 — Pierna A',
+        name: 'Día 3 - Pierna A',
         emoji: '🟢',
         exercises: [
           { id: 'day3-ex1', name: 'Sentadilla libre o hack', order: 1, targetReps: '6-8', targetSets: 4 },
@@ -213,8 +136,8 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
       {
         id: 'day4',
         dayNumber: 4,
-        name: 'Día 4 — Torso mixto',
-        emoji: '🔴🔵',
+        name: 'Día 4 - Torso mixto',
+        emoji: '🔵🔴',
         exercises: [
           { id: 'day4-ex1', name: 'Press pecho en máquina convergente', order: 1, targetReps: '10-12', targetSets: 3 },
           { id: 'day4-ex2', name: 'Remo hammer o pecho apoyado', order: 2, targetReps: '10-12', targetSets: 3 },
@@ -227,7 +150,7 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
       {
         id: 'day5',
         dayNumber: 5,
-        name: 'Día 5 — Pierna B',
+        name: 'Día 5 - Pierna B',
         emoji: '🟢',
         exercises: [
           { id: 'day5-ex1', name: 'Peso muerto rumano', order: 1, targetReps: '6-8', targetSets: 4 },

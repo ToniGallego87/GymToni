@@ -1,10 +1,10 @@
 // Configuración de tema GymToni
 export const theme = {
   colors: {
-    primary: '#FFD43B',
-    primaryDark: '#F0BE26',
-    primaryLight: '#FFE27A',
-    primaryMuted: 'rgba(255, 212, 59, 0.14)',
+    primary: '#F7CC3D',
+    primaryDark: '#E5B82C',
+    primaryLight: '#F9D85A',
+    primaryMuted: 'rgba(247, 204, 61, 0.14)',
     darkGray: '#101318',
     gray: '#1E232D',
     mediumGray: '#232734',
@@ -26,11 +26,11 @@ export const theme = {
     warning: '#FFB347',
     current: '#52C878',
     previous: '#FFB347',
-    accent: '#FFD43B',
+    accent: '#F7CC3D',
     overlay: 'rgba(6, 8, 12, 0.72)',
-    push: '#5F8CFF',
-    pull: '#F36B7F',
-    legs: '#5FCB8B',
+    push: '#6F8FDF',
+    pull: '#CE7686',
+    legs: '#67B58C',
   },
 
   typography: {
@@ -101,12 +101,12 @@ type DayAccentTarget = {
 } | null | undefined;
 
 export function getDisplayDayName(name?: string | null) {
-  return name ? name.replace(/^Día\s+\d+\s*-\s*/i, '') : '';
+  return name ? name.replace(/^Día\s+\d+\s*[-–—]\s*/i, '') : '';
 }
 
 export function getTrainingAccent(target?: DayAccentTarget) {
   if (!target) return theme.colors.primary;
-  if (target.emoji === '🔵🔴') return theme.colors.primary;
+  if (target.emoji === '🔵🔴' || target.emoji === '🔴🔵') return theme.colors.primary;
   if (target.emoji?.includes('🔵') || /push/i.test(target.name || '')) return theme.colors.push;
   if (target.emoji?.includes('🔴') || /pull/i.test(target.name || '')) return theme.colors.pull;
   if (target.emoji?.includes('🟢') || /pierna|leg/i.test(target.name || '')) return theme.colors.legs;

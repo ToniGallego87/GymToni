@@ -1,6 +1,8 @@
 {
   "compilerOptions": {
     "strict": true,
+    "target": "es2017",
+    "lib": ["es2017", "dom"],
     "jsx": "react-native",
     "esModuleInterop": true,
     "skipLibCheck": true,

@@ -37,7 +37,6 @@ export function WorkoutLogScreen({
   );
   
   const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
-  const [finishedExercises, setFinishedExercises] = useState<Set<string>>(new Set());
   const [cardioInput, setCardioInput] = useState('');
   const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
@@ -76,9 +75,7 @@ export function WorkoutLogScreen({
     }));
   };
 
-  const handleFinishExercise = (exerciseId: string) => {
-    setFinishedExercises((prev) => new Set([...prev, exerciseId]));
-  };
+  const handleFinishExercise = () => undefined;
 
   const handleSaveWorkout = () => {
     try {

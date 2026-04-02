@@ -18,6 +18,11 @@ import { theme } from '@lib/theme';
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
+  onOpenDaySelector?: () => void;
+  onOpenRoutineDetails?: (routine: WorkoutRoutine) => void;
+  onCreateRoutine?: () => void;
+  onDeleteCurrentRoutine?: () => void;
+  canDeleteCurrentRoutine?: boolean;
 }
 
 interface WeekProgressPoint {
@@ -320,7 +325,15 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
   );
 }
 
-export function HomeScreen({ onSelectDay, onSelectLog }: HomeScreenProps) {
+export function HomeScreen({
+  onSelectDay,
+  onSelectLog,
+  onOpenDaySelector,
+  onOpenRoutineDetails,
+  onCreateRoutine,
+  onDeleteCurrentRoutine,
+  canDeleteCurrentRoutine = false,
+}: HomeScreenProps) {
   const { state, dispatch } = useWorkout();
   const [showRoutineSelector, setShowRoutineSelector] = useState(false);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
@@ -346,6 +359,24 @@ export function HomeScreen({ onSelectDay, onSelectLog }: HomeScreenProps) {
     250,
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
   );
+  const hasNoRoutines = activeDays.length === 0;
+
+  const handleStartPress = () => {
+    if (hasNoRoutines) {
+      onCreateRoutine?.();
+      return;
+    }
+
+    if (onOpenDaySelector) {
+      onOpenDaySelector();
+      return;
+    }
+
+    const firstDay = activeDays[0];
+    if (firstDay) {
+      onSelectDay(firstDay);
+    }
+  };
 
   const getDay = (dayId: string): WorkoutDay | undefined => {
     for (const routine of state.routines) {
@@ -532,6 +563,18 @@ export function HomeScreen({ onSelectDay, onSelectLog }: HomeScreenProps) {
               onPress={() => handleSelectRoutine(routine.id)}
             />
           ))}
+
+          {onCreateRoutine && (
+            <TouchableOpacity
+              style={styles.newRoutineCard}
+              onPress={() => {
+                setShowRoutineSelector(false);
+                onCreateRoutine();
+              }}
+            >
+              <Text style={styles.newRoutineCardText}>+ Nueva rutina</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
 
         <TouchableOpacity
@@ -591,20 +634,51 @@ export function HomeScreen({ onSelectDay, onSelectLog }: HomeScreenProps) {
         )}
       </View>
 
-      <View style={styles.heroCard}>
+      <Pressable
+        style={({ pressed }) => [styles.heroCard, pressed && styles.heroCardPressed]}
+        onPress={handleStartPress}
+      >
         <View style={styles.heroGlow} />
         <View style={styles.heroIconWrap}>
-          <Text style={styles.heroIcon}>🏋️</Text>
+          <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : '🏋️'}</Text>
         </View>
-        <Text style={styles.heroTitle}>Empezar entrenamiento</Text>
-        <Text style={styles.heroSubtitle}>Elige una sesión y registra tu progreso de hoy</Text>
-      </View>
+        <Text style={styles.heroTitle}>
+          {hasNoRoutines ? 'Añade una rutina' : 'Empezar entrenamiento'}
+        </Text>
+        <Text style={styles.heroSubtitle}>
+          {hasNoRoutines
+            ? 'Crea una rutina personalizada para comenzar'
+            : 'Elige una sesión y registra tu progreso de hoy'}
+        </Text>
+      </Pressable>
 
       <View style={styles.homeHistorySection}>
         <View style={styles.homeHistoryHeaderRow}>
           <Text style={styles.homeHistoryTitle}>Historial de la rutina</Text>
           <Text style={styles.homeHistoryCount}>{routineLogs.length} sesiones</Text>
         </View>
+
+        {(!!activeRoutine && !!onOpenRoutineDetails) || (canDeleteCurrentRoutine && !!onDeleteCurrentRoutine) ? (
+          <View style={styles.homeActionsRow}>
+            {!!activeRoutine && !!onOpenRoutineDetails && (
+              <Pressable
+                style={styles.actionChip}
+                onPress={() => onOpenRoutineDetails(activeRoutine)}
+              >
+                <Text style={styles.actionChipText}>Consultar ejercicios</Text>
+              </Pressable>
+            )}
+
+            {canDeleteCurrentRoutine && !!onDeleteCurrentRoutine && (
+              <Pressable
+                style={[styles.actionChip, styles.actionChipDanger]}
+                onPress={onDeleteCurrentRoutine}
+              >
+                <Text style={styles.actionChipDangerText}>Borrar rutina</Text>
+              </Pressable>
+            )}
+          </View>
+        ) : null}
 
         {routineLogs.length === 0 ? (
           <View style={styles.emptyHistoryBox}>
@@ -857,6 +931,10 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...theme.shadow.card,
   },
+  heroCardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.995 }],
+  },
   heroGlow: {
     position: 'absolute',
     top: -30,
@@ -901,6 +979,34 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+  },
+  homeActionsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  actionChip: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  actionChipText: {
+    color: theme.colors.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  actionChipDanger: {
+    borderColor: 'rgba(240, 106, 106, 0.4)',
+    backgroundColor: 'rgba(240, 106, 106, 0.08)',
+  },
+  actionChipDangerText: {
+    color: theme.colors.error,
+    fontSize: 12,
+    fontWeight: '700',
   },
   homeHistoryTitle: {
     fontSize: 15,
@@ -1077,6 +1183,19 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,
     overflow: 'hidden',
+  },
+  newRoutineCard: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    paddingVertical: 18,
+    alignItems: 'center',
+  },
+  newRoutineCardText: {
+    color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: '800',
   },
   backButton: {
     marginHorizontal: theme.spacing.md,

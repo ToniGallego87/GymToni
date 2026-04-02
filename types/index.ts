@@ -8,7 +8,7 @@ export interface WorkoutExercise {
 
 export interface WorkoutDay {
   id: string;
-  dayNumber: 1 | 2 | 3 | 4 | 5;
+  dayNumber: number;
   name: string;
   emoji: string;
   description?: string;
@@ -20,6 +20,7 @@ export interface WorkoutRoutine {
   name: string;
   description?: string;
   isActive: boolean;
+  isCustom?: boolean;
   days: WorkoutDay[];
   createdAt: number;
 }
@@ -61,18 +62,25 @@ export interface WorkoutLog {
   updatedAt: number;
 }
 
-export interface WorkoutState {
+export interface WorkoutAppData {
   routines: WorkoutRoutine[];
   activeRoutineId?: string;
   logs: WorkoutLog[];
+}
+
+export interface WorkoutState extends WorkoutAppData {
   currentDay?: WorkoutDay;
 }
 
 export type WorkoutAction =
+  | { type: 'SET_APP_DATA'; payload: WorkoutAppData }
   | { type: 'SET_ROUTINES'; payload: WorkoutRoutine[] }
+  | { type: 'ADD_ROUTINE'; payload: WorkoutRoutine }
+  | { type: 'DELETE_ROUTINE'; payload: string }
   | { type: 'SET_ACTIVE_ROUTINE'; payload: string }
   | { type: 'ADD_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'DELETE_WORKOUT_LOG'; payload: string }
   | { type: 'SET_LOGS'; payload: WorkoutLog[] }
+  | { type: 'CLEAR_DATA' }
   | { type: 'SET_CURRENT_DAY'; payload: WorkoutDay | undefined };

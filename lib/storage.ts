@@ -1,8 +1,19 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
-import { WorkoutLog } from '@types/index';
+import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
+import { WORKOUT_ROUTINES } from '@data/workoutDays';
+import { WorkoutAppData, WorkoutRoutine } from '@types/index';
 
+const APP_STORAGE_KEY = 'gymtrack_app_data';
 const LOGS_STORAGE_KEY = 'gymtrack_logs';
+
+function getDefaultAppData(): WorkoutAppData {
+  return {
+    routines: WORKOUT_ROUTINES,
+    activeRoutineId: DEFAULT_ACTIVE_ROUTINE_ID,
+    logs: INITIAL_LOGS,
+  };
+}
 
 async function setStorageItem(key: string, value: string): Promise<void> {
   if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
@@ -21,25 +32,70 @@ async function getStorageItem(key: string): Promise<string | null> {
   return AsyncStorage.getItem(key);
 }
 
-export async function saveLogs(logs: WorkoutLog[]): Promise<void> {
+async function removeStorageItem(key: string): Promise<void> {
+  if (Platform.OS === 'web' && typeof localStorage !== 'undefined') {
+    localStorage.removeItem(key);
+    return;
+  }
+
+  await AsyncStorage.removeItem(key);
+}
+
+function normalizeRoutines(routines: WorkoutRoutine[], activeRoutineId?: string) {
+  return routines.map(routine => ({
+    ...routine,
+    isActive: routine.id === activeRoutineId,
+  }));
+}
+
+function normalizeAppData(payload?: Partial<WorkoutAppData> | null): WorkoutAppData {
+  const fallback = getDefaultAppData();
+  const routines = Array.isArray(payload?.routines) ? payload.routines : fallback.routines;
+  const logs = Array.isArray(payload?.logs) ? payload.logs : fallback.logs;
+  const activeRoutineId = payload?.activeRoutineId
+    || routines.find(routine => routine.isActive)?.id
+    || routines[0]?.id
+    || undefined;
+
+  return {
+    routines: normalizeRoutines(routines, activeRoutineId),
+    activeRoutineId,
+    logs,
+  };
+}
+
+export async function saveAppData(data: WorkoutAppData): Promise<void> {
+  const normalized = normalizeAppData(data);
+  const jsonString = JSON.stringify(normalized);
+  await setStorageItem(APP_STORAGE_KEY, jsonString);
+  await setStorageItem(LOGS_STORAGE_KEY, JSON.stringify(normalized.logs));
+}
+
+export async function loadAppData(): Promise<WorkoutAppData | null> {
   try {
-    const jsonString = JSON.stringify(logs);
-    await setStorageItem(LOGS_STORAGE_KEY, jsonString);
+    const appJson = await getStorageItem(APP_STORAGE_KEY);
+    if (appJson) {
+      return normalizeAppData(JSON.parse(appJson));
+    }
+
+    const legacyLogsJson = await getStorageItem(LOGS_STORAGE_KEY);
+    if (legacyLogsJson) {
+      return normalizeAppData({
+        ...getDefaultAppData(),
+        logs: JSON.parse(legacyLogsJson),
+      });
+    }
+
+    return null;
   } catch (error) {
-    console.error('Error saving logs:', error);
-    throw error;
+    console.error('Error loading app data:', error);
+    return null;
   }
 }
 
-export async function loadLogs(): Promise<WorkoutLog[]> {
-  try {
-    const jsonString = await getStorageItem(LOGS_STORAGE_KEY);
-    if (!jsonString) return [];
-    return JSON.parse(jsonString);
-  } catch (error) {
-    console.error('Error loading logs:', error);
-    return [];
-  }
+export async function clearAppData(): Promise<void> {
+  await removeStorageItem(APP_STORAGE_KEY);
+  await removeStorageItem(LOGS_STORAGE_KEY);
 }
 
 export function generateId(): string {
@@ -48,9 +104,6 @@ export function generateId(): string {
 
 export function formatDate(timestamp: number): string {
   const date = new Date(timestamp);
-  const dayName = date.toLocaleDateString('es-ES', { weekday: 'long' });
-  const capitalizedDay = dayName.charAt(0).toUpperCase() + dayName.slice(1);
-  
   return date.toLocaleDateString('es-ES', {
     weekday: 'long',
     year: 'numeric',
@@ -59,27 +112,6 @@ export function formatDate(timestamp: number): string {
   }).replace(/^[a-z]/, c => c.toUpperCase());
 }
 
-export function formatDateTime(timestamp: number): string {
-  const date = new Date(timestamp);
-  return date.toLocaleDateString('es-ES', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
 export function getToday(): string {
-  const today = new Date();
-  return today.toISOString().split('T')[0];
-}
-
-export function getWeekNumber(timestamp: number): number {
-  const date = new Date(timestamp);
-  const start = new Date(date.getFullYear(), 0, 1);
-  const diff = date.getTime() - start.getTime();
-  const oneDay = 1000 * 60 * 60 * 24;
-  const day = Math.floor(diff / oneDay);
-  return Math.ceil((day + start.getDay() + 1) / 7);
+  return new Date().toISOString().split('T')[0];
 }
