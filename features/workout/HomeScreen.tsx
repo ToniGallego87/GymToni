@@ -13,7 +13,6 @@ import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
 import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '@types/index';
 import { theme } from '@lib/theme';
-import { getWeekNumber } from '@lib/storage';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
@@ -22,6 +21,11 @@ interface HomeScreenProps {
 interface WeekProgressPoint {
   week: number;
   improvement: number;
+}
+
+interface ImprovementResult {
+  isImproved: boolean;
+  percent: number;
 }
 
 function getWorkoutVolumeScore(log: WorkoutLog): number {
@@ -34,9 +38,47 @@ function getWorkoutVolumeScore(log: WorkoutLog): number {
   }, 0);
 }
 
+function getWorkoutRepsScore(log: WorkoutLog): number {
+  return log.exercises.reduce((exerciseAcc, exercise) => {
+    const repsScore = exercise.parsedSets.reduce(
+      (setAcc, setItem) => setAcc + setItem.reps,
+      0
+    );
+    return exerciseAcc + repsScore;
+  }, 0);
+}
+
+function buildImprovementFromScores(
+  currentScore: number,
+  previousScore: number,
+  currentRepsScore = 0,
+  previousRepsScore = 0
+): ImprovementResult | null {
+  if (!isFinite(currentScore) || !isFinite(previousScore)) return null;
+
+  if (previousScore <= 0 && currentScore > 0) {
+    return { isImproved: true, percent: 30 };
+  }
+
+  if (previousScore <= 0 && currentScore <= 0) {
+    if (!isFinite(currentRepsScore) || !isFinite(previousRepsScore)) return null;
+    if (previousRepsScore <= 0 && currentRepsScore > 0) {
+      return { isImproved: true, percent: 30 };
+    }
+    if (previousRepsScore <= 0 && currentRepsScore <= 0) return null;
+
+    const repsDeltaPct = ((currentRepsScore - previousRepsScore) / previousRepsScore) * 100;
+    return { isImproved: repsDeltaPct > 0, percent: Math.abs(repsDeltaPct) };
+  }
+
+  const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
+  return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
+}
+
 function buildWeekProgress(
   logs: WorkoutLog[],
-  activeRoutineId?: string
+  activeRoutineId?: string,
+  activeDays: WorkoutDay[] = []
 ): WeekProgressPoint[] {
   if (!activeRoutineId) return [];
 
@@ -44,39 +86,145 @@ function buildWeekProgress(
   const routineLogs = logs.filter(log => log.routineId === activeRoutineId);
   if (routineLogs.length === 0) return [];
 
-  const weeklyScores = routineLogs.reduce((acc: Record<number, number>, log) => {
-    const week = getWeekNumber(log.createdAt);
-    const score = getWorkoutVolumeScore(log);
-    acc[week] = (acc[week] || 0) + score;
-    return acc;
-  }, {});
+  const dayIdToDayNumber: Record<string, number> = {};
+  activeDays.forEach(day => {
+    dayIdToDayNumber[day.id] = day.dayNumber;
+  });
+  const sortedByDateAsc = [...routineLogs].sort((a, b) => a.createdAt - b.createdAt);
+  const groupedByBlock: Record<number, WorkoutLog[]> = {};
 
-  const orderedWeeks = Object.keys(weeklyScores)
+  let block = 1;
+  let currentWeekLogs: WorkoutLog[] = [];
+  let seenDays: Record<number, boolean> = {};
+
+  sortedByDateAsc.forEach(log => {
+    const dayNumber = dayIdToDayNumber[log.dayId];
+
+    if (dayNumber && seenDays[dayNumber] && currentWeekLogs.length > 0) {
+      groupedByBlock[block] = currentWeekLogs;
+      block += 1;
+      currentWeekLogs = [];
+      seenDays = {};
+    }
+
+    currentWeekLogs.push(log);
+    if (dayNumber) {
+      seenDays[dayNumber] = true;
+    }
+  });
+
+  if (currentWeekLogs.length > 0) {
+    groupedByBlock[block] = currentWeekLogs;
+  }
+
+  const orderedBlocks = Object.keys(groupedByBlock)
     .map(Number)
     .sort((a, b) => a - b);
 
-  return orderedWeeks.map((week, index) => {
+  const getWeekScores = (
+    weekLogs: WorkoutLog[],
+    options: { restrictToDayIds?: string[]; applyMissingPenalty?: boolean } = {}
+  ) => {
+    const { restrictToDayIds, applyMissingPenalty = true } = options;
+    if (weekLogs.length === 0) {
+      return { volume: 0, reps: 0 };
+    }
+
+    const latestByDayId: Record<string, WorkoutLog> = {};
+    [...weekLogs]
+      .sort((a, b) => b.createdAt - a.createdAt)
+      .forEach(log => {
+        if (!log.dayId) return;
+        if (!latestByDayId[log.dayId]) {
+          latestByDayId[log.dayId] = log;
+        }
+      });
+
+    const selectedLogs: WorkoutLog[] = [];
+    Object.keys(latestByDayId).forEach(dayId => {
+      const log = latestByDayId[dayId];
+      if (!restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1) {
+        selectedLogs.push(log);
+      }
+    });
+
+    const rawVolume = selectedLogs.reduce((sum: number, log: WorkoutLog) => sum + getWorkoutVolumeScore(log), 0);
+    const rawReps = selectedLogs.reduce((sum: number, log: WorkoutLog) => sum + getWorkoutRepsScore(log), 0);
+
+    if (!applyMissingPenalty) {
+      return { volume: rawVolume, reps: rawReps };
+    }
+
+    const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
+    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
+    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
+
+    return {
+      volume: rawVolume * penaltyFactor,
+      reps: rawReps * penaltyFactor,
+    };
+  };
+
+  const latestBlockNumber = orderedBlocks[orderedBlocks.length - 1];
+  let cumulativeFactor = 1;
+
+  return orderedBlocks.map((blockNumber, index) => {
     if (index === 0) {
-      return { week, improvement: 0 };
+      return { week: 1, improvement: 0 };
     }
 
-    const current = weeklyScores[week] || 0;
-    const previous = weeklyScores[orderedWeeks[index - 1]] || 0;
+    const previousBlockNumber = blockNumber - 1;
+    const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
+    const previousWeekLogsForBlock = groupedByBlock[previousBlockNumber] || [];
 
-    if (previous <= 0 && current <= 0) {
-      return { week, improvement: 0 };
+    if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
+      return { week: index + 1, improvement: Math.round((cumulativeFactor - 1) * 1000) / 10 };
     }
 
-    if (previous <= 0 && current > 0) {
-      return { week, improvement: 30 };
+    let improvement: ImprovementResult | null;
+
+    if (blockNumber === latestBlockNumber) {
+      const completedDayIds = currentWeekLogsForBlock
+        .map(log => log.dayId)
+        .filter((dayId, index, array) => !!dayId && array.indexOf(dayId) === index);
+      const currentScores = getWeekScores(currentWeekLogsForBlock, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: false,
+      });
+      const previousScores = getWeekScores(previousWeekLogsForBlock, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: true,
+      });
+      improvement = buildImprovementFromScores(
+        currentScores.volume,
+        previousScores.volume,
+        currentScores.reps,
+        previousScores.reps
+      );
+    } else {
+      const currentScores = getWeekScores(currentWeekLogsForBlock, { applyMissingPenalty: true });
+      const previousScores = getWeekScores(previousWeekLogsForBlock, { applyMissingPenalty: true });
+      improvement = buildImprovementFromScores(
+        currentScores.volume,
+        previousScores.volume,
+        currentScores.reps,
+        previousScores.reps
+      );
     }
 
-    const improvement = ((current - previous) / previous) * 100;
-    return { week, improvement: Math.round(improvement * 10) / 10 };
+    if (improvement) {
+      const signedDelta = improvement.isImproved ? improvement.percent : -improvement.percent;
+      cumulativeFactor = Math.max(0, cumulativeFactor * (1 + signedDelta / 100));
+    }
+
+    return {
+      week: index + 1,
+      improvement: Math.round(((cumulativeFactor - 1) * 100) * 10) / 10,
+    };
   });
 }
 
-function ProgressLineChart({ points, width }: { points: WeekProgressPoint[]; width: number }) {
+function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; width: number }) {
   const chartPadding = { top: 16, right: 12, bottom: 28, left: 38 };
   const chartHeight = 170;
   const chartWidth = width;
@@ -91,9 +239,10 @@ function ProgressLineChart({ points, width }: { points: WeekProgressPoint[]; wid
   const domainMin = Math.min(minValue - domainPadding, 0);
   const domainMax = Math.max(maxValue + domainPadding, 0);
 
-  const getX = (index: number) => {
-    if (points.length <= 1) return chartPadding.left;
-    return chartPadding.left + (index / (points.length - 1)) * plotWidth;
+  const barSlotWidth = points.length > 0 ? plotWidth / points.length : plotWidth;
+  const barWidth = Math.max(18, Math.min(barSlotWidth * 0.55, 34));
+  const getBarX = (index: number) => {
+    return chartPadding.left + (index * barSlotWidth) + ((barSlotWidth - barWidth) / 2);
   };
 
   const getY = (value: number) => {
@@ -127,53 +276,31 @@ function ProgressLineChart({ points, width }: { points: WeekProgressPoint[]; wid
           ]}
         />
 
-        {points.slice(1).map((point, index) => {
-          const prevPoint = points[index];
-          const x1 = getX(index);
-          const y1 = getY(prevPoint.improvement);
-          const x2 = getX(index + 1);
-          const y2 = getY(point.improvement);
-          const lineLength = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
-          const angleDeg = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
-          const lineColor = point.improvement >= prevPoint.improvement
-            ? theme.colors.success
-            : theme.colors.error;
-
-          return (
-            <View
-              key={`line-${index}`}
-              style={[
-                styles.chartLineSegment,
-                {
-                  width: lineLength,
-                  backgroundColor: lineColor,
-                  left: x1,
-                  top: y1,
-                  transform: [{ rotate: `${angleDeg}deg` }],
-                },
-              ]}
-            />
-          );
-        })}
-
         {points.map((point, index) => {
-          const x = getX(index);
+          const x = getBarX(index);
           const y = getY(point.improvement);
+          const barTop = point.improvement >= 0 ? y : zeroAxisY;
+          const barHeight = Math.max(Math.abs(zeroAxisY - y), 4);
           const isPositive = point.improvement >= 0;
+          const shouldRenderBar = index > 0;
 
           return (
             <React.Fragment key={`point-${point.week}-${index}`}>
-              <View
-                style={[
-                  styles.chartDot,
-                  {
-                    left: x - 4,
-                    top: y - 4,
-                    backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
-                  },
-                ]}
-              />
-              <Text style={[styles.chartXLabel, { left: x - 16, top: chartHeight - 20 }]}>S{point.week}</Text>
+              {shouldRenderBar && (
+                <View
+                  style={[
+                    styles.chartBar,
+                    {
+                      left: x,
+                      top: barTop,
+                      height: barHeight,
+                      width: barWidth,
+                      backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
+                    },
+                  ]}
+                />
+              )}
+              <Text style={[styles.chartXLabel, { left: x + (barWidth / 2) - 16, top: chartHeight - 20 }]}>S{point.week}</Text>
             </React.Fragment>
           );
         })}
@@ -202,8 +329,8 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
   );
   const activeDays = activeRoutine?.days || [];
   const weeklyProgress = useMemo(
-    () => buildWeekProgress(state.logs, state.activeRoutineId),
-    [state.logs, state.activeRoutineId]
+    () => buildWeekProgress(state.logs, state.activeRoutineId, activeDays),
+    [activeDays, state.logs, state.activeRoutineId]
   );
   const latestPoint = weeklyProgress[weeklyProgress.length - 1];
   const chartWidth = Math.max(
@@ -270,7 +397,7 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
           <View style={styles.progressCard}>
             <TouchableOpacity
               style={styles.progressToggleButton}
-              onPress={() => setShowWeeklyProgressChart(prev => !prev)}
+              onPress={() => setShowWeeklyProgressChart((prev: boolean) => !prev)}
               activeOpacity={0.85}
             >
               <View style={styles.progressHeaderRow}>
@@ -289,7 +416,7 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
             </TouchableOpacity>
 
             {showWeeklyProgressChart && (
-              <ProgressLineChart points={weeklyProgress} width={chartWidth} />
+              <ProgressBarChart points={weeklyProgress} width={chartWidth} />
             )}
           </View>
         )}
@@ -311,7 +438,7 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
           <DayCard
             emoji={item.emoji}
             name={item.name}
-            description={item.description}
+            description={item.description || ''}
             onPress={() => onSelectDay(item)}
           />
         )}
@@ -425,16 +552,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.veryLightGray,
     opacity: 0.65,
   },
-  chartLineSegment: {
+  chartBar: {
     position: 'absolute',
-    height: 2,
-    borderRadius: 2,
-  },
-  chartDot: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: theme.colors.surface,
   },

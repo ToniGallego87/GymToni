@@ -215,6 +215,9 @@ COPY_TO_SNACK.md           ← Código JavaScript completo (v1.1)
 
 No es una "tarea pendiente" ni "algo que hacer después". Es una obligación.
 
+Además, esta sincronización debe ocurrir **en la misma intervención y en el mismo commit** donde se cambió el código fuente.
+No se considera completado un cambio de UI/lógica hasta que `COPY_TO_SNACK.md` refleje ese cambio.
+
 Cualquier cambio en:
 - UI/Estilos
 - Funcionalidad
@@ -319,11 +322,16 @@ Cuando hagas CUALQUIERA de los cambios de arriba:
    - Sin errores de sintaxis
    - Temas importados correctamente
    - Todas las funciones presentes
+5. **Cerrar la tarea solo cuando ambas versiones estén alineadas**
+   - Código fuente (`features/*`, `components/*`, `lib/*`, etc.) actualizado
+   - `COPY_TO_SNACK.md` actualizado con la misma funcionalidad
+   - No dejar la sincronización para "después"
 
 ## Checklist antes de terminar
 
 - [ ] Código compilado localmente sin errores
 - [ ] COPY_TO_SNACK.md tiene el código actualizado
+- [ ] COPY_TO_SNACK.md refleja exactamente los últimos cambios de UI/lógica
 - [ ] COPY_TO_SNACK.md es JavaScript válido (no TypeScript)
 - [ ] EXPO_SNACK_SETUP.md referencias están OK
 - [ ] La aplicación Snack funcionaría con este código

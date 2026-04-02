@@ -1469,48 +1469,37 @@ export default function App() {
       .filter((log) => log.routineId === selectedRoutineId);
     if (routineOnlyLogs.length === 0) return [];
 
-    const sortedByDateAsc = [...routineOnlyLogs].sort(
-      (a, b) => getLogTimestamp(a) - getLogTimestamp(b)
-    );
-    const weeklyScores = {};
-
-    sortedByDateAsc.forEach((log) => {
-      const week = getWeekNumber(log.date);
-      if (!weeklyScores[week]) {
-        weeklyScores[week] = { volume: 0, reps: 0 };
-      }
-
-      weeklyScores[week].volume += getWorkoutVolumeScore(log);
-      weeklyScores[week].reps += getWorkoutRepsScore(log);
-    });
-
-    const orderedWeeks = Object.keys(weeklyScores)
+    const { groupedByBlock } = buildWeekDataForLogs(routineOnlyLogs);
+    const orderedBlocks = Object.keys(groupedByBlock)
       .map(Number)
       .sort((a, b) => a - b);
+    const latestBlockNumber = orderedBlocks[orderedBlocks.length - 1];
+    let cumulativeFactor = 1;
 
-    return orderedWeeks.map((week, index) => {
+    return orderedBlocks.map((blockNumber, index) => {
       if (index === 0) {
-        return { week, value: 0 };
+        return { week: index + 1, value: 0 };
       }
 
-      const previousWeek = orderedWeeks[index - 1];
-      const currentScores = weeklyScores[week];
-      const previousScores = weeklyScores[previousWeek];
-
-      const improvement = buildImprovementFromScores(
-        currentScores.volume,
-        previousScores.volume,
-        currentScores.reps,
-        previousScores.reps,
+      const improvement = getWeekImprovement(
+        groupedByBlock,
+        blockNumber,
+        latestBlockNumber,
       );
 
       if (!improvement) {
-        return { week, value: 0 };
+        return {
+          week: index + 1,
+          value: Math.round(((cumulativeFactor - 1) * 100) * 10) / 10,
+        };
       }
 
+      const signedDelta = improvement.isImproved ? improvement.percent : -improvement.percent;
+      cumulativeFactor = Math.max(0, cumulativeFactor * (1 + (signedDelta / 100)));
+
       return {
-        week,
-        value: improvement.isImproved ? improvement.percent : -improvement.percent,
+        week: index + 1,
+        value: Math.round(((cumulativeFactor - 1) * 100) * 10) / 10,
       };
     });
   };
@@ -1538,9 +1527,10 @@ export default function App() {
     const domainMin = Math.min(minValue - domainPadding, 0);
     const domainMax = Math.max(maxValue + domainPadding, 0);
 
-    const getX = (index) => {
-      if (points.length <= 1) return chartPadding.left;
-      return chartPadding.left + ((index / (points.length - 1)) * plotWidth);
+    const barSlotWidth = points.length > 0 ? plotWidth / points.length : plotWidth;
+    const barWidth = Math.max(18, Math.min(barSlotWidth * 0.55, 34));
+    const getBarX = (index) => {
+      return chartPadding.left + (index * barSlotWidth) + ((barSlotWidth - barWidth) / 2);
     };
 
     const getY = (value) => {
@@ -1574,51 +1564,31 @@ export default function App() {
             ]}
           />
 
-          {points.slice(1).map((point, index) => {
-            const prevPoint = points[index];
-            const x1 = getX(index);
-            const y1 = getY(prevPoint.value);
-            const x2 = getX(index + 1);
-            const y2 = getY(point.value);
-            const lineLength = Math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2));
-            const angleDeg = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
-            const lineColor = point.value >= prevPoint.value ? theme.colors.success : theme.colors.error;
-
-            return (
-              <View
-                key={`line-${index}`}
-                style={[
-                  styles.chartLineSegment,
-                  {
-                    width: lineLength,
-                    backgroundColor: lineColor,
-                    left: x1,
-                    top: y1,
-                    transform: [{ rotate: `${angleDeg}deg` }],
-                  },
-                ]}
-              />
-            );
-          })}
-
           {points.map((point, index) => {
-            const x = getX(index);
+            const x = getBarX(index);
             const y = getY(point.value);
+            const barTop = point.value >= 0 ? y : zeroAxisY;
+            const barHeight = Math.max(Math.abs(zeroAxisY - y), 4);
             const isPositive = point.value >= 0;
+            const shouldRenderBar = index > 0;
 
             return (
               <React.Fragment key={`point-${point.week}-${index}`}>
-                <View
-                  style={[
-                    styles.chartDot,
-                    {
-                      left: x - 4,
-                      top: y - 4,
-                      backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
-                    },
-                  ]}
-                />
-                <Text style={[styles.chartXLabel, { left: x - 16, top: chartHeight - 20 }]}>
+                {shouldRenderBar && (
+                  <View
+                    style={[
+                      styles.chartBar,
+                      {
+                        left: x,
+                        top: barTop,
+                        width: barWidth,
+                        height: barHeight,
+                        backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
+                      },
+                    ]}
+                  />
+                )}
+                <Text style={[styles.chartXLabel, { left: x + (barWidth / 2) - 16, top: chartHeight - 20 }]}>
                   S{point.week}
                 </Text>
               </React.Fragment>
@@ -3197,16 +3167,9 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.text,
     opacity: 0.55,
   },
-  chartLineSegment: {
+  chartBar: {
     position: 'absolute',
-    height: 2,
-    borderRadius: 2,
-  },
-  chartDot: {
-    position: 'absolute',
-    width: 8,
-    height: 8,
-    borderRadius: 4,
+    borderRadius: 6,
     borderWidth: 1,
     borderColor: theme.colors.surface,
   },
