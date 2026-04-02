@@ -69,19 +69,86 @@ export function WorkoutLogScreen({
   };
 
   const handleRemoveLastSet = (exerciseId: string) => {
-    setExerciseSets((prev) => ({
-      ...prev,
-      [exerciseId]: prev[exerciseId].slice(0, -1),
-    }));
+    setExerciseSets((prev) => {
+      let updatedSets = prev[exerciseId].slice(0, -1);
+      // Borrar todos los vacíos (guiones) del final
+      while (updatedSets.length > 0) {
+        const lastSet = updatedSets[updatedSets.length - 1];
+        if (lastSet.weight === -1 || lastSet.reps === -1) {
+          updatedSets = updatedSets.slice(0, -1);
+        } else {
+          break;
+        }
+      }
+      return {
+        ...prev,
+        [exerciseId]: updatedSets,
+      };
+    });
   };
 
-  const handleFinishExercise = () => undefined;
+  const getPreviousExerciseLog = (exerciseId: string) => {
+    console.log(`[getPreviousExerciseLog] START - Looking for exerciseId: ${exerciseId}, dayId: ${selectedDay.id}`);
+    console.log(`[getPreviousExerciseLog] Total logs in state: ${state.logs.length}`);
+    
+    // Obtener todos los logs del mismo día, sin filtrar por fecha
+    const logsForDay = state.logs.filter((log) => log.dayId === selectedDay.id);
+    console.log(`[getPreviousExerciseLog] Logs for this day: ${logsForDay.length}`);
+    
+    // Obtener todos los ejercicios de esos logs
+    const allExercisesForDay = logsForDay.flatMap((log) =>
+      log.exercises.map((ex) => ({ ...ex, logDate: log.createdAt, logId: log.id }))
+    );
+    console.log(`[getPreviousExerciseLog] All exercises for this day: ${allExercisesForDay.length}`);
+    
+    // Filtrar por exerciseId
+    const matchingExercises = allExercisesForDay.filter((ex) => ex.exerciseId === exerciseId);
+    console.log(`[getPreviousExerciseLog] Exercises matching ID ${exerciseId}: ${matchingExercises.length}`);
+    
+    if (matchingExercises.length === 0) {
+      console.log(`[getPreviousExerciseLog] No exercises found - returning null`);
+      return null;
+    }
+    
+    // Ordenar por fecha descendente
+    matchingExercises.sort((a, b) => b.logDate - a.logDate);
+    
+    // Retornar el más reciente que no sea de hoy
+    const today = new Date().toLocaleDateString('es-ES');
+    for (const exercise of matchingExercises) {
+      const logDate = new Date(exercise.logDate).toLocaleDateString('es-ES');
+      console.log(`[getPreviousExerciseLog] Checking exercise from ${logDate}`);
+      if (logDate !== today) {
+        console.log(`[getPreviousExerciseLog] FOUND - Returning exercise with rawInput: ${exercise.rawInput}`);
+        return exercise;
+      }
+    }
+    
+    console.log(`[getPreviousExerciseLog] All exercises are from today - returning null`);
+    return null;
+  };
+
+  const handleFinishExercise = (exerciseId: string) => {
+    const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
+    if (targetSets > 0) {
+      // Llenar con guiones para cada serie faltante
+      const currentSets = exerciseSets[exerciseId] || [];
+      const setsToAdd = targetSets - currentSets.length;
+      
+      for (let i = 0; i < setsToAdd; i++) {
+        setExerciseSets((prev) => ({
+          ...prev,
+          [exerciseId]: [...(prev[exerciseId] || []), { weight: -1, reps: -1 }],
+        }));
+      }
+    }
+  };
 
   const handleSaveWorkout = () => {
     try {
       const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
         const sets = exerciseSets[ex.id] || [];
-        const rawInput = sets.map(s => `${s.weight}x${s.reps}`).join(', ');
+        const rawInput = sets.map(s => s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`).join(', ');
         
         return {
           id: generateId(),
@@ -154,51 +221,34 @@ export function WorkoutLogScreen({
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <Pressable onPress={onBack}>
-            <Text style={styles.backButton}>← Volver</Text>
-          </Pressable>
-          <Text style={styles.headerTitle}>
-            {selectedDay.emoji} {selectedDay.name}
-          </Text>
-          <Pressable
-            style={({ pressed }) => [
-              styles.changeButton,
-              pressed && styles.changeButtonPressed,
-            ]}
-            onPress={() => setShowDaySelector(true)}
-          >
-            <Text style={styles.changeButtonText}>⇆</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.date}>{new Date().toLocaleDateString('es-ES')}</Text>
+        <Text style={styles.headerTitle}>
+          {selectedDay.emoji} {selectedDay.name}
+        </Text>
+        <Text style={styles.headerSubtitle}>Rellena los ejercicios</Text>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
-        <Text style={styles.sectionTitle}>Ejercicios</Text>
-
         {selectedDay.exercises.map((exercise: any) => (
           <ExerciseInputField
             key={exercise.id}
             order={exercise.order}
             exerciseName={exercise.name}
-            repetitions={exercise.targetReps}
+            target={{
+              sets: exercise.targetSets,
+              reps: exercise.targetReps,
+            }}
             addedSets={exerciseSets[exercise.id] || []}
-            targetSets={exercise.targetSets}
             onAddSet={(set) => handleAddSet(exercise.id, set)}
             onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
             onFinishExercise={() => handleFinishExercise(exercise.id)}
             onNotesPress={() => handleExerciseNotesPress(exercise.id)}
-            notesCount={exerciseNotes[exercise.id] ? 1 : 0}
+            notes={exerciseNotes[exercise.id]}
+            previousLog={getPreviousExerciseLog(exercise.id)}
           />
         ))}
-
-        <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
-          Cardio
-        </Text>
 
         <CardioInputField
           value={cardioInput}
@@ -208,20 +258,17 @@ export function WorkoutLogScreen({
 
         <View style={styles.buttonContainer}>
           <Button
-            title={hasExerciseInput ? '💾 Guardar' : '⏭️  Saltar'}
+            title="🎯 Guardar"
             onPress={handleSaveWorkout}
             variant="primary"
-            size="large"
-            style={styles.saveButton}
-          />
-          <Button
-            title="Cancelar"
-            onPress={onBack}
-            variant="secondary"
             size="large"
           />
         </View>
       </ScrollView>
+
+      <Pressable style={styles.backButton} onPress={onBack}>
+        <Text style={styles.backButtonText}>← Volver</Text>
+      </Pressable>
 
       {toast && (
         <Toast
@@ -317,48 +364,19 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  backButton: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     color: theme.colors.text,
-    flex: 1,
-    textAlign: 'center',
   },
-  changeButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  changeButtonPressed: {
-    opacity: 0.7,
-  },
-  changeButtonText: {
-    color: theme.colors.primary,
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  date: {
-    fontSize: 12,
+  headerSubtitle: {
+    marginTop: 4,
     color: theme.colors.textSecondary,
+    fontSize: 13,
   },
   scrollView: {
     flex: 1,
@@ -367,16 +385,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
+  buttonContainer: {
+    marginTop: 24,
+    marginBottom: 16,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
     color: theme.colors.primary,
     marginVertical: 12,
   },
-  buttonContainer: {
-    gap: 8,
-    marginVertical: 20,
-    marginBottom: 40,
+  backButton: {
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+    fontSize: 14,
   },
   saveButton: {
     marginBottom: 8,

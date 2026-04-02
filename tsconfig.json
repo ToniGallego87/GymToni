@@ -2,7 +2,10 @@
   "compilerOptions": {
     "strict": true,
     "target": "es2017",
-    "lib": ["es2017", "dom"],
+    "lib": [
+      "es2017",
+      "dom"
+    ],
     "jsx": "react-native",
     "esModuleInterop": true,
     "skipLibCheck": true,
@@ -12,12 +15,25 @@
     "allowSyntheticDefaultImports": true,
     "baseUrl": ".",
     "paths": {
-      "@components/*": ["components/*"],
-      "@features/*": ["features/*"],
-      "@lib/*": ["lib/*"],
-      "@hooks/*": ["hooks/*"],
-      "@types/*": ["types/*"],
-      "@data/*": ["data/*"]
+      "@components/*": [
+        "components/*"
+      ],
+      "@features/*": [
+        "features/*"
+      ],
+      "@lib/*": [
+        "lib/*"
+      ],
+      "@hooks/*": [
+        "hooks/*"
+      ],
+      "@types/*": [
+        "types/*"
+      ],
+      "@data/*": [
+        "data/*"
+      ]
     }
-  }
+  },
+  "extends": "expo/tsconfig.base"
 }

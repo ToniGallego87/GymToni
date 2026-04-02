@@ -13,14 +13,12 @@ import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
 
 interface DataScreenProps {
-  onBack: () => void;
   onImportData: () => Promise<void>;
   onExportData: () => Promise<void>;
   onClearData: () => Promise<void> | void;
 }
 
 export function DataScreen({
-  onBack,
   onImportData,
   onExportData,
   onClearData,
@@ -125,10 +123,6 @@ export function DataScreen({
           </>
         )}
       </ScrollView>
-
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </Pressable>
 
       <Modal visible={showClearModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
@@ -262,21 +256,6 @@ const styles = StyleSheet.create({
   },
   dangerSubtitle: {
     color: theme.colors.errorLight,
-  },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 14,
   },
   modalOverlay: {
     flex: 1,

@@ -13,7 +13,6 @@ import { theme } from '@lib/theme';
 
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
-  onBack: () => void;
 }
 
 const MONTH_NAMES = [
@@ -52,7 +51,7 @@ function getWeekColor(blockNumber: number) {
   return WEEK_COLORS[(Math.max(1, blockNumber) - 1) % WEEK_COLORS.length];
 }
 
-export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
+export function CalendarScreen({ onSelectLog }: CalendarScreenProps) {
   const { state } = useWorkout();
   const [monthOffset, setMonthOffset] = useState(0);
 
@@ -147,10 +146,6 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
             Guarda una sesión para verla reflejada en el calendario.
           </Text>
         </View>
-
-        <Pressable style={styles.backButton} onPress={onBack}>
-          <Text style={styles.backButtonText}>← Volver</Text>
-        </Pressable>
       </SafeAreaView>
     );
   }
@@ -240,10 +235,6 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
           })}
         </View>
       </ScrollView>
-
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </Pressable>
     </SafeAreaView>
   );
 }
@@ -311,7 +302,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    justifyContent: 'space-between',
+    justifyContent: 'flex-start',
   },
   dayCell: {
     width: '13.4%',
@@ -373,20 +364,5 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     textAlign: 'center',
     lineHeight: 18,
-  },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 14,
   },
 });

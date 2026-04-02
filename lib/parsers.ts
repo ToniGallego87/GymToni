@@ -76,6 +76,9 @@ export function parseCardioString(input: string): ParsedCardio {
  * Formatea un set parseado a string legible
  */
 export function formatParsedSet(set: ParsedSet): string {
+  if (set.weight === -1 || set.reps === -1) {
+    return '—';
+  }
   return `${set.weight}x${set.reps}`;
 }
 

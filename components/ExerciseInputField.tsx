@@ -8,33 +8,37 @@ import {
   GestureResponderEvent,
   ScrollView,
 } from 'react-native';
-import { ParsedSet } from '@types/index';
+import { ParsedSet, ExerciseLog } from '@types/index';
 import { theme } from '@lib/theme';
+import { parseSeriesString } from '@lib/parsers';
 
 interface ExerciseInputFieldProps {
   order: number;
   exerciseName: string;
-  repetitions?: string;
+  target?: {
+    sets?: number;
+    reps?: string;
+  };
   addedSets: ParsedSet[];
-  targetSets?: number;
   onAddSet: (set: ParsedSet) => void;
   onRemoveLastSet: () => void;
   onFinishExercise: () => void;
   onNotesPress: (event: GestureResponderEvent) => void;
-  notesCount?: number;
+  notes?: string;
+  previousLog?: ExerciseLog | null;
 }
 
 export function ExerciseInputField({
   order,
   exerciseName,
-  repetitions,
+  target,
   addedSets,
-  targetSets,
   onAddSet,
   onRemoveLastSet,
   onFinishExercise,
   onNotesPress,
-  notesCount = 0,
+  notes,
+  previousLog,
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
@@ -50,8 +54,32 @@ export function ExerciseInputField({
     }
   };
 
-  const isMaxSetsReached = targetSets ? addedSets.length >= targetSets : false;
+  const isMaxSetsReached = target?.sets ? addedSets.length >= target.sets : false;
   const hasAddedSets = addedSets.length > 0;
+
+  const getPreviousSetsSummary = () => {
+    if (!previousLog) return '';
+    
+    // Si tiene parsedSets poblados, usa eso
+    if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
+      return previousLog.parsedSets.map(s => {
+        if (s.weight === -1 || s.reps === -1) return '—';
+        return `${s.weight}x${s.reps}`;
+      }).join(', ');
+    }
+    
+    // Si no, intenta parsear rawInput
+    if (previousLog.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+      const parsed = parseSeriesString(previousLog.rawInput);
+      if (parsed.length > 0) {
+        return parsed.map(s => `${s.weight}x${s.reps}`).join(', ');
+      }
+      // Si no se puede parsear, retorna el rawInput tal como está
+      return previousLog.rawInput;
+    }
+    
+    return '';
+  };
 
   return (
     <View style={styles.container}>
@@ -60,17 +88,7 @@ export function ExerciseInputField({
           <View style={styles.orderBadge}>
             <Text style={styles.order}>{order}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.exerciseName}>{exerciseName}</Text>
-            {repetitions && (
-              <Text style={styles.repetitions}>Objetivo: {repetitions}</Text>
-            )}
-            {targetSets && (
-              <Text style={styles.serieCount}>
-                Series: {addedSets.length}/{targetSets}
-              </Text>
-            )}
-          </View>
+          <Text style={styles.exerciseName}>{exerciseName}</Text>
         </View>
         <Pressable
           style={({ pressed }) => [
@@ -80,10 +98,28 @@ export function ExerciseInputField({
           onPress={onNotesPress}
         >
           <Text style={styles.notesButtonText}>
-            ✏️ {notesCount > 0 ? notesCount : ''}
+            ✏️
           </Text>
         </Pressable>
       </View>
+
+      {target?.sets && target?.reps && (
+        <Text style={styles.targetRow}>
+          Objetivo: {target.sets}x{target.reps}
+        </Text>
+      )}
+
+      {previousLog && (
+        <Text style={styles.previousRow}>
+          Anterior {getPreviousSetsSummary() || '-'}
+        </Text>
+      )}
+
+      {notes && (
+        <Text style={styles.notesRow}>
+          Nota: {notes}
+        </Text>
+      )}
 
       {hasAddedSets && (
         <View style={styles.seriesContainer}>
@@ -95,7 +131,7 @@ export function ExerciseInputField({
             {addedSets.map((set, idx) => (
               <View key={idx} style={styles.serieTag}>
                 <Text style={styles.serieTagText}>
-                  {set.weight}x{set.reps}
+                  {set.weight === -1 || set.reps === -1 ? '—' : `${set.weight}x${set.reps}`}
                 </Text>
               </View>
             ))}
@@ -122,7 +158,7 @@ export function ExerciseInputField({
             <Text style={styles.separator}>×</Text>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Reps</Text>
+              <Text style={styles.inputLabel}>Repeticiones</Text>
               <TextInput
                 style={styles.splitInput}
                 placeholder="0"
@@ -165,7 +201,7 @@ export function ExerciseInputField({
               ]}
               onPress={onFinishExercise}
             >
-              <Text style={styles.buttonText}>✓ Fin</Text>
+              <Text style={styles.buttonText}>✓ Terminar</Text>
             </Pressable>
           </View>
         </View>
@@ -174,16 +210,16 @@ export function ExerciseInputField({
       {isMaxSetsReached && (
         <View style={styles.maxReachedContainer}>
           <Text style={styles.maxReachedText}>
-            ✓ Series completadas ({addedSets.length}/{targetSets})
+            ✓ Completado ({addedSets.length}/{target?.sets})
           </Text>
           <Pressable
             style={({ pressed }) => [
-              styles.finishButtonSmall,
+              styles.deleteLastButton,
               pressed && styles.buttonPressed,
             ]}
-            onPress={onFinishExercise}
+            onPress={onRemoveLastSet}
           >
-            <Text style={styles.buttonText}>✓ Continuar</Text>
+            <Text style={styles.buttonText}>— Borrar</Text>
           </Pressable>
         </View>
       )}
@@ -232,6 +268,23 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.text,
     flexShrink: 1,
+  },
+  targetRow: {
+    fontSize: 14,
+    fontWeight: '900',
+    color: '#FFD400',
+    marginBottom: 8,
+  },
+  previousRow: {
+    fontSize: 13,
+    color: '#FF8C00',
+    fontStyle: 'italic',
+    marginBottom: 8,
+  },
+  notesRow: {
+    fontSize: 13,
+    color: '#FFD400',
+    marginBottom: 8,
   },
   repetitions: {
     fontSize: 12,
@@ -346,6 +399,14 @@ const styles = StyleSheet.create({
   },
   finishButtonSmall: {
     backgroundColor: theme.colors.success,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+    marginTop: 10,
+    alignSelf: 'stretch',
+  },
+  deleteLastButton: {
+    backgroundColor: theme.colors.error,
     paddingVertical: 12,
     borderRadius: theme.borderRadius.sm,
     alignItems: 'center',

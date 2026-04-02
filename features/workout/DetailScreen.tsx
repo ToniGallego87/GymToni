@@ -125,65 +125,67 @@ export function DetailScreen({
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
     exerciseId: string,
-    exerciseName: string
+    exerciseName: string,
+    order?: number
   ): ExerciseLog | null => {
-    if (!sourceLog) return null;
-    return sourceLog.exercises.find(
-      e => e.exerciseId === exerciseId || e.exerciseName === exerciseName
-    ) || null;
+    if (!sourceLog || !sourceLog.exercises) return null;
+    
+    // Buscar por ID de ejercicio
+    let found = sourceLog.exercises.find(e => e.exerciseId === exerciseId);
+    if (found) return found;
+    
+    // Buscar por nombre
+    found = sourceLog.exercises.find(e => e.exerciseName === exerciseName);
+    if (found) return found;
+    
+    // Buscar por orden si todo lo demás falla
+    if (order !== undefined) {
+      found = sourceLog.exercises.find(e => e.order === order);
+      if (found) return found;
+    }
+    
+    return null;
   };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={onBack}>
-          <Text style={styles.backButton}>← Volver</Text>
-        </Pressable>
-        <View style={styles.detailTitleRow}>
-          <Text style={styles.headerTitle}>
-            {day.emoji} {day.name}
-          </Text>
-          {!!detailImprovement && (
-            <Text
-              style={[
-                styles.detailImprovementText,
-                detailImprovement.isImproved
-                  ? styles.detailImprovementUp
-                  : styles.detailImprovementDown,
-              ]}
-            >
-              {detailImprovement.isImproved ? '↑' : '↓'} {detailImprovement.percent.toFixed(1)}%
-            </Text>
-          )}
-        </View>
-        <Text style={styles.date}>{displayedDate}</Text>
+        <Text style={styles.headerTitle}>
+          {day.emoji} {day.name}
+        </Text>
+        <Text style={styles.headerSubtitle}>{displayedDate}</Text>
       </View>
 
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
-        <Text style={styles.sectionTitle}>Fuerza</Text>
 
-        {day.exercises.map(exercise => {
-          const currentExercise = getExerciseFromLog(log, exercise.id, exercise.name);
-          const prevExercise = getExerciseFromLog(previousLog, exercise.id, exercise.name);
-          const exerciseImprovement = currentExercise && prevExercise
+        {day.exercises.map((exercise, exerciseIndex) => {
+          const currentExercise = getExerciseFromLog(log, exercise.id, exercise.name, exercise.order);
+          
+          // Si no encuentra el ejercicio por ID/nombre/order, intenta por índice
+          const fallbackExercise = !currentExercise && log.exercises && log.exercises[exerciseIndex] ? log.exercises[exerciseIndex] : currentExercise;
+          
+          const prevExercise = getExerciseFromLog(previousLog, exercise.id, exercise.name, exercise.order);
+          const exerciseImprovement = (fallbackExercise || currentExercise) && prevExercise
             ? buildImprovementFromScores(
-                getExerciseVolumeScore(currentExercise),
+                getExerciseVolumeScore(fallbackExercise || currentExercise),
                 getExerciseVolumeScore(prevExercise),
-                getExerciseRepsScore(currentExercise),
+                getExerciseRepsScore(fallbackExercise || currentExercise),
                 getExerciseRepsScore(prevExercise)
               )
             : null;
+
+          const selectedExercise = fallbackExercise || currentExercise;
 
           return (
             <ExerciseResultDisplay
               key={exercise.id}
               exerciseName={`${exercise.name} - ${exercise.targetSets || '-'}x${exercise.targetReps || '-'}`}
-              rawInput={currentExercise?.rawInput || '-'}
-              parsedSets={currentExercise?.parsedSets || []}
-              notes={currentExercise?.notes}
+              rawInput={selectedExercise?.rawInput || '-'}
+              parsedSets={selectedExercise?.parsedSets || []}
+              notes={selectedExercise?.notes}
               previousSets={prevExercise?.parsedSets}
               improvementText={exerciseImprovement ? `${exerciseImprovement.isImproved ? '↑' : '↓'} ${exerciseImprovement.percent.toFixed(1)}%` : undefined}
               improvementPositive={exerciseImprovement ? exerciseImprovement.isImproved : true}
@@ -221,6 +223,10 @@ export function DetailScreen({
           </Text>
         </View>
       </ScrollView>
+
+      <Pressable style={styles.backButton} onPress={onBack}>
+        <Text style={styles.backButtonText}>← Volver</Text>
+      </Pressable>
     </SafeAreaView>
   );
 }
@@ -231,23 +237,34 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.background,
   },
   header: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  backButton: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 26,
+    fontWeight: '800',
     color: theme.colors.text,
-    flex: 1,
+  },
+  headerSubtitle: {
+    marginTop: 4,
+    color: theme.colors.textSecondary,
+    fontSize: 13,
+  },
+  backButton: {
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: theme.colors.primary,
+    fontWeight: '700',
+    fontSize: 14,
   },
   detailTitleRow: {
     flexDirection: 'row',

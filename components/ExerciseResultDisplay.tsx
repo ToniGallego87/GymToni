@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ParsedSet } from '@types/index';
-import { formatSets } from '@lib/parsers';
+import { formatSets, parseSeriesString } from '@lib/parsers';
 import { theme } from '@lib/theme';
 
 interface ExerciseResultDisplayProps {
@@ -23,8 +23,16 @@ export function ExerciseResultDisplay({
   improvementText,
   improvementPositive = true,
 }: ExerciseResultDisplayProps) {
-  const currentValue = parsedSets.length > 0 ? formatSets(parsedSets) : '-';
-  const previousValue = previousSets && previousSets.length > 0
+  // Si parsedSets está vacío pero tenemos rawInput, intentar parsear
+  const effectiveParsedSets = (parsedSets && parsedSets.length > 0) 
+    ? parsedSets 
+    : (rawInput && rawInput !== '-' && rawInput.trim() ? parseSeriesString(rawInput) : []);
+
+  // Mostrar parsedSets si existen, sino usar rawInput, sino mostrar guión
+  const currentValue = (effectiveParsedSets && effectiveParsedSets.length > 0) 
+    ? formatSets(effectiveParsedSets) 
+    : (rawInput && rawInput !== '-' && rawInput.trim() ? rawInput : 'No realizado');
+  const previousValue = (previousSets && previousSets.length > 0)
     ? formatSets(previousSets)
     : '-';
 

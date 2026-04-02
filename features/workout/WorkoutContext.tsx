@@ -2,6 +2,7 @@ import React, { createContext, ReactNode, useReducer } from 'react';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
 import { WorkoutAction, WorkoutRoutine, WorkoutState } from '@types/index';
+import { parseSeriesString } from '@lib/parsers';
 
 const syncActiveRoutine = (routines: WorkoutRoutine[], activeRoutineId?: string) => {
   return routines.map(routine => ({
@@ -10,10 +11,23 @@ const syncActiveRoutine = (routines: WorkoutRoutine[], activeRoutineId?: string)
   }));
 };
 
+// Ensure all logs have parsedSets properly populated
+const ensureParsedSets = (logs: typeof INITIAL_LOGS) => {
+  return logs.map(log => ({
+    ...log,
+    exercises: (log.exercises || []).map(exercise => ({
+      ...exercise,
+      parsedSets: (exercise.parsedSets && exercise.parsedSets.length > 0)
+        ? exercise.parsedSets
+        : parseSeriesString(exercise.rawInput || ''),
+    })),
+  }));
+};
+
 const initialState: WorkoutState = {
-  routines: syncActiveRoutine(WORKOUT_ROUTINES, DEFAULT_ACTIVE_ROUTINE_ID),
-  activeRoutineId: DEFAULT_ACTIVE_ROUTINE_ID,
-  logs: INITIAL_LOGS,
+  routines: syncActiveRoutine(WORKOUT_ROUTINES, DEFAULT_ACTIVE_ROUTINE_ID || WORKOUT_ROUTINES[WORKOUT_ROUTINES.length - 1]?.id),
+  activeRoutineId: DEFAULT_ACTIVE_ROUTINE_ID || WORKOUT_ROUTINES[WORKOUT_ROUTINES.length - 1]?.id,
+  logs: ensureParsedSets(INITIAL_LOGS),
 };
 
 function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutState {
@@ -21,7 +35,7 @@ function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutStat
     case 'SET_APP_DATA': {
       const activeRoutineId = action.payload.activeRoutineId
         || action.payload.routines.find(routine => routine.isActive)?.id
-        || action.payload.routines[0]?.id
+        || action.payload.routines[action.payload.routines.length - 1]?.id
         || undefined;
 
       return {
@@ -45,7 +59,7 @@ function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutStat
     case 'DELETE_ROUTINE': {
       const nextRoutines = state.routines.filter(routine => routine.id !== action.payload);
       const nextActiveRoutineId = state.activeRoutineId === action.payload
-        ? nextRoutines[0]?.id
+        ? nextRoutines[nextRoutines.length - 1]?.id
         : state.activeRoutineId;
 
       return {

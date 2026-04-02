@@ -254,7 +254,6 @@ function AppContent() {
 
       {screen.type === 'data' && (
         <DataScreen
-          onBack={() => setScreen({ type: 'home' })}
           onImportData={handleImportData}
           onExportData={handleExportData}
           onClearData={handleClearData}

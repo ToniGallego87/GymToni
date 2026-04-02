@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
 import { WorkoutAppData, WorkoutRoutine } from '@types/index';
+import { parseSeriesString } from './parsers';
 
 const APP_STORAGE_KEY = 'gymtrack_app_data';
 const LOGS_STORAGE_KEY = 'gymtrack_logs';
@@ -51,7 +52,19 @@ function normalizeRoutines(routines: WorkoutRoutine[], activeRoutineId?: string)
 function normalizeAppData(payload?: Partial<WorkoutAppData> | null): WorkoutAppData {
   const fallback = getDefaultAppData();
   const routines = Array.isArray(payload?.routines) ? payload.routines : fallback.routines;
-  const logs = Array.isArray(payload?.logs) ? payload.logs : fallback.logs;
+  let logs = Array.isArray(payload?.logs) ? payload.logs : fallback.logs;
+  
+  // Ensure all logs have parsedSets properly populated
+  logs = logs.map(log => ({
+    ...log,
+    exercises: (log.exercises || []).map(exercise => ({
+      ...exercise,
+      parsedSets: (exercise.parsedSets && exercise.parsedSets.length > 0)
+        ? exercise.parsedSets
+        : parseSeriesString(exercise.rawInput || ''),
+    })),
+  }));
+
   const activeRoutineId = payload?.activeRoutineId
     || routines.find(routine => routine.isActive)?.id
     || routines[0]?.id

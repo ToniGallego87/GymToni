@@ -9,6 +9,8 @@ import {
   ScrollView,
   Pressable,
   useWindowDimensions,
+  Modal,
+  Alert,
 } from 'react-native';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
@@ -265,7 +267,7 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
 
   return (
     <View style={styles.progressChartWrapper}>
-      <View style={styles.progressChart}>
+      <View style={[styles.progressChart, { width: chartWidth }]}>
         {yTicks.map((tick, idx) => {
           const y = getY(tick);
           return (
@@ -338,21 +340,38 @@ export function HomeScreen({
   const [showRoutineSelector, setShowRoutineSelector] = useState(false);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<Record<number, boolean>>({});
+  const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(undefined);
+  const [routineToDeleteId, setRoutineToDeleteId] = useState<string | undefined>(undefined);
+  const [logToDeleteId, setLogToDeleteId] = useState<string | undefined>(undefined);
   const { width: windowWidth } = useWindowDimensions();
 
   const activeRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
   );
-  const activeDays = activeRoutine?.days || [];
-  const routineLogs = useMemo(
+  
+  // Determine qué rutina se está visualizando (puede ser diferente a la activa)
+  const displayedRoutineId = viewedRoutineId || state.activeRoutineId;
+  const displayedRoutine = state.routines.find(
+    (routine: WorkoutRoutine) => routine.id === displayedRoutineId
+  );
+  
+  // Detectar si la rutina visualizada es la activa
+  const isDisplayedRoutineActive = displayedRoutineId === state.activeRoutineId;
+  
+  // Detectar si la rutina visualizada es una vieja (tiene logs)
+  const isRoutineOld = displayedRoutineId && state.logs.some(log => log.routineId === displayedRoutineId);
+  
+  // Usar la rutina visualizada para mostrar datos
+  const activeDays = displayedRoutine?.days || [];
+  const displayedRoutineLogs = useMemo(
     () => state.logs
-      .filter((log: WorkoutLog) => !state.activeRoutineId || log.routineId === state.activeRoutineId)
+      .filter((log: WorkoutLog) => !displayedRoutineId || log.routineId === displayedRoutineId)
       .sort((a: WorkoutLog, b: WorkoutLog) => b.createdAt - a.createdAt),
-    [state.activeRoutineId, state.logs]
+    [displayedRoutineId, state.logs]
   );
   const weeklyProgress = useMemo(
-    () => buildWeekProgress(state.logs, state.activeRoutineId, activeDays),
-    [activeDays, state.logs, state.activeRoutineId]
+    () => buildWeekProgress(state.logs, displayedRoutineId, activeDays),
+    [activeDays, state.logs, displayedRoutineId]
   );
   const latestPoint = weeklyProgress[weeklyProgress.length - 1];
   const chartWidth = Math.max(
@@ -364,6 +383,11 @@ export function HomeScreen({
   const handleStartPress = () => {
     if (hasNoRoutines) {
       onCreateRoutine?.();
+      return;
+    }
+
+    // No permitir iniciar entrenamiento con rutina vieja que NO sea la activa
+    if (isRoutineOld && !isDisplayedRoutineActive) {
       return;
     }
 
@@ -425,7 +449,7 @@ export function HomeScreen({
 
   const getPreviousFilledLogForSameDay = (currentLog: WorkoutLog) => {
     const currentTs = getLogTimestamp(currentLog);
-    return routineLogs
+    return displayedRoutineLogs
       .filter((log: WorkoutLog) => log.dayId === currentLog.dayId && log.id !== currentLog.id)
       .filter((log: WorkoutLog) => getLogTimestamp(log) < currentTs)
       .sort((a: WorkoutLog, b: WorkoutLog) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
@@ -527,7 +551,7 @@ export function HomeScreen({
   };
 
   const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
-    const { groupedByBlock } = buildWeekDataForLogs(routineLogs);
+    const { groupedByBlock } = buildWeekDataForLogs(displayedRoutineLogs);
     const blocks = Object.keys(groupedByBlock)
       .map(Number)
       .sort((a, b) => b - a);
@@ -536,11 +560,53 @@ export function HomeScreen({
       blocks,
       currentWeekBlock: blocks[0],
     };
-  }, [routineLogs]);
+  }, [displayedRoutineLogs]);
 
   const handleSelectRoutine = (routineId: string) => {
-    dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
+    // Verificar si la rutina tiene logs (es vieja)
+    const routineHasLogs = state.logs.some(log => log.routineId === routineId);
+    
+    // Siempre establecer como rutina visualizada
+    setViewedRoutineId(routineId);
+    
+    // Si la rutina no es vieja, activarla
+    if (!routineHasLogs) {
+      dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
+    }
+    
+    // Siempre cerrar el selector (permite ver rutinas viejas sin activarlas)
     setShowRoutineSelector(false);
+  };
+
+  const handleDeleteRoutine = () => {
+    if (!routineToDeleteId) return;
+    
+    const routine = state.routines.find(r => r.id === routineToDeleteId);
+    if (!routine) return;
+    
+    dispatch({ type: 'DELETE_ROUTINE', payload: routineToDeleteId });
+    
+    // Si se borra la rutina visualizada, limpiar viewedRoutineId
+    if (viewedRoutineId === routineToDeleteId) {
+      setViewedRoutineId(undefined);
+    }
+    
+    setRoutineToDeleteId(undefined);
+    setShowRoutineSelector(false);
+  };
+
+  const isLogFromToday = (log: WorkoutLog): boolean => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const logDate = new Date(log.createdAt);
+    logDate.setHours(0, 0, 0, 0);
+    return today.getTime() === logDate.getTime();
+  };
+
+  const handleDeleteLog = () => {
+    if (!logToDeleteId) return;
+    dispatch({ type: 'DELETE_WORKOUT_LOG', payload: logToDeleteId });
+    setLogToDeleteId(undefined);
   };
 
   if (showRoutineSelector) {
@@ -555,14 +621,20 @@ export function HomeScreen({
           contentContainerStyle={styles.routineListContainer}
           scrollEnabled={true}
         >
-          {state.routines.map((routine: WorkoutRoutine) => (
+          {state.routines.map((routine: WorkoutRoutine) => {
+            const routineHasLogs = state.logs.some(log => log.routineId === routine.id);
+            const canDelete = !routineHasLogs;
+            
+            return (
             <RoutineCard
               key={routine.id}
               routine={routine}
               isActive={routine.id === state.activeRoutineId}
               onPress={() => handleSelectRoutine(routine.id)}
+              onLongPress={canDelete ? () => setRoutineToDeleteId(routine.id) : undefined}
             />
-          ))}
+            );
+          })}
 
           {onCreateRoutine && (
             <TouchableOpacity
@@ -577,33 +649,119 @@ export function HomeScreen({
           )}
         </ScrollView>
 
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => setShowRoutineSelector(false)}
+        <Modal
+          visible={!!routineToDeleteId}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setRoutineToDeleteId(undefined)}
         >
-          <Text style={styles.backButtonText}>← Volver a los días</Text>
-        </TouchableOpacity>
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>¿Eliminar rutina?</Text>
+              <Text style={styles.modalMessage}>
+                Esta acción no se puede deshacer. ¿Estás seguro?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonCancel}
+                  onPress={() => setRoutineToDeleteId(undefined)}
+                >
+                  <Text style={styles.modalButtonCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalButtonDelete}
+                  onPress={handleDeleteRoutine}
+                >
+                  <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={!!logToDeleteId}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setLogToDeleteId(undefined)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>¿Eliminar entrenamiento?</Text>
+              <Text style={styles.modalMessage}>
+                Esta acción no se puede deshacer. ¿Estás seguro?
+              </Text>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonCancel}
+                  onPress={() => setLogToDeleteId(undefined)}
+                >
+                  <Text style={styles.modalButtonCancelText}>Cancelar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalButtonDelete}
+                  onPress={handleDeleteLog}
+                >
+                  <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1 }} nestedScrollEnabled>
+        <View style={styles.header}>
           <Text style={styles.title}>💪 GymToni</Text>
+          <Text style={styles.subtitle}>Tu rutina optimizada</Text>
+        </View>
+
+        <Pressable
+          style={({ pressed }) => [
+            hasNoRoutines ? styles.heroCardWarning : (isRoutineOld && !isDisplayedRoutineActive ? styles.heroCardClosed : styles.heroCard),
+            pressed && styles.heroCardPressed
+          ]}
+          onPress={handleStartPress}
+        >
+          <View style={styles.heroGlow} />
+          <View style={styles.heroIconWrap}>
+            <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : isRoutineOld && !isDisplayedRoutineActive ? '🔒' : '🏋️'}</Text>
+          </View>
+          <Text style={styles.heroTitle}>
+            {hasNoRoutines ? 'Añade una rutina' : isRoutineOld && !isDisplayedRoutineActive ? 'Rutina Cerrada' : 'Empezar entrenamiento'}
+          </Text>
+          <Text style={styles.heroSubtitle}>
+            {hasNoRoutines
+              ? 'Crea una rutina personalizada para comenzar'
+              : ''}
+          </Text>
+        </Pressable>
+
+        {!hasNoRoutines && (
+        <View style={styles.buttonsRow}>
           <TouchableOpacity
-            style={styles.routineButton}
+            style={styles.buttonRowItem}
             onPress={() => setShowRoutineSelector(true)}
           >
-            <Text style={styles.routineButtonText}>
-              {activeRoutine?.name || 'Sin rutina'}
+            <Text style={styles.buttonRowLabel}>
+              {displayedRoutine ? `Rutina ${state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1}` : 'Rutinas'} ▼
             </Text>
           </TouchableOpacity>
+
+          {!!activeRoutine && !!onOpenRoutineDetails && (
+            <TouchableOpacity
+              style={styles.buttonRowItem}
+              onPress={() => onOpenRoutineDetails(activeRoutine)}
+            >
+              <Text style={styles.buttonRowLabel}>Consultar ejercicios</Text>
+            </TouchableOpacity>
+          )}
         </View>
-        <Text style={styles.subtitle}>
-          {activeRoutine?.description || 'Tu rutina semanal'}
-        </Text>
+        )}
 
         {weeklyProgress.length > 0 && (
           <View style={styles.progressCard}>
@@ -632,149 +790,121 @@ export function HomeScreen({
             )}
           </View>
         )}
-      </View>
 
-      <Pressable
-        style={({ pressed }) => [styles.heroCard, pressed && styles.heroCardPressed]}
-        onPress={handleStartPress}
-      >
-        <View style={styles.heroGlow} />
-        <View style={styles.heroIconWrap}>
-          <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : '🏋️'}</Text>
-        </View>
-        <Text style={styles.heroTitle}>
-          {hasNoRoutines ? 'Añade una rutina' : 'Empezar entrenamiento'}
-        </Text>
-        <Text style={styles.heroSubtitle}>
-          {hasNoRoutines
-            ? 'Crea una rutina personalizada para comenzar'
-            : 'Elige una sesión y registra tu progreso de hoy'}
-        </Text>
-      </Pressable>
+        {displayedRoutineLogs.length > 0 && (
+          <View style={[styles.weeksSection, { flex: 1 }]}>
+            <ScrollView nestedScrollEnabled style={{ flex: 1 }}>
+              {blocks.map((block: number) => {
+                const weekLogs = groupedByBlock[block].slice().reverse();
+                const isExpanded = expandedWeekBlocks[block] ?? (block === currentWeekBlock);
+                const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
 
-      <View style={styles.homeHistorySection}>
-        <View style={styles.homeHistoryHeaderRow}>
-          <Text style={styles.homeHistoryTitle}>Historial de la rutina</Text>
-          <Text style={styles.homeHistoryCount}>{routineLogs.length} sesiones</Text>
-        </View>
+                return (
+                  <View key={block}>
+                    <Pressable
+                      style={styles.weekHeaderButton}
+                      onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}
+                    >
+                      <View style={styles.weekTitleRow}>
+                        <Text style={styles.weekTitle}>Semana {block}</Text>
+                        {!!weekImprovement && (
+                          <Text
+                            style={[
+                              styles.weekImprovementText,
+                              weekImprovement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                            ]}
+                          >
+                            {weekImprovement.isImproved ? '↑' : '↓'} {weekImprovement.percent.toFixed(1)}%
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={styles.weekHeaderMeta}>
+                        {weekLogs.length} día{weekLogs.length === 1 ? '' : 's'} {isExpanded ? '▲' : '▼'}
+                      </Text>
+                    </Pressable>
 
-        {(!!activeRoutine && !!onOpenRoutineDetails) || (canDeleteCurrentRoutine && !!onDeleteCurrentRoutine) ? (
-          <View style={styles.homeActionsRow}>
-            {!!activeRoutine && !!onOpenRoutineDetails && (
-              <Pressable
-                style={styles.actionChip}
-                onPress={() => onOpenRoutineDetails(activeRoutine)}
-              >
-                <Text style={styles.actionChipText}>Consultar ejercicios</Text>
-              </Pressable>
-            )}
+                    {isExpanded && weekLogs.map((log: WorkoutLog) => {
+                      const day = getDay(log.dayId);
+                      const improvement = getLogImprovement(log);
+                      if (!day) return null;
 
-            {canDeleteCurrentRoutine && !!onDeleteCurrentRoutine && (
-              <Pressable
-                style={[styles.actionChip, styles.actionChipDanger]}
-                onPress={onDeleteCurrentRoutine}
-              >
-                <Text style={styles.actionChipDangerText}>Borrar rutina</Text>
-              </Pressable>
-            )}
-          </View>
-        ) : null}
-
-        {routineLogs.length === 0 ? (
-          <View style={styles.emptyHistoryBox}>
-            <Text style={styles.emptyHistoryText}>Sin entrenamientos aún en esta rutina</Text>
-          </View>
-        ) : (
-          <ScrollView style={styles.homeHistoryScroll} nestedScrollEnabled>
-            {blocks.map((block: number) => {
-              const weekLogs = groupedByBlock[block].slice().reverse();
-              const isExpanded = expandedWeekBlocks[block] ?? (block === currentWeekBlock);
-              const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
-
-              return (
-                <View key={block}>
-                  <Pressable
-                    style={styles.weekHeaderButton}
-                    onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}
-                  >
-                    <View style={styles.weekTitleRow}>
-                      <Text style={styles.weekTitle}>Semana {block}</Text>
-                      {!!weekImprovement && (
-                        <Text
-                          style={[
-                            styles.weekImprovementText,
-                            weekImprovement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                      return (
+                        <Pressable
+                          key={log.id}
+                          style={({ pressed }: { pressed: boolean }) => [
+                            styles.historyLogCard,
+                            pressed && styles.historyLogCardPressed,
                           ]}
+                          onPress={() => onSelectLog?.(log, day)}
+                          onLongPress={() => {
+                            if (isLogFromToday(log)) {
+                              setLogToDeleteId(log.id);
+                            }
+                          }}
+                          delayLongPress={2000}
                         >
-                          {weekImprovement.isImproved ? '↑' : '↓'} {weekImprovement.percent.toFixed(1)}%
-                        </Text>
-                      )}
-                    </View>
-                    <Text style={styles.weekHeaderMeta}>
-                      {weekLogs.length} día{weekLogs.length === 1 ? '' : 's'} {isExpanded ? '▲' : '▼'}
-                    </Text>
-                  </Pressable>
-
-                  {isExpanded && weekLogs.map((log: WorkoutLog) => {
-                    const day = getDay(log.dayId);
-                    const improvement = getLogImprovement(log);
-                    if (!day) return null;
-
-                    return (
-                      <Pressable
-                        key={log.id}
-                        style={({ pressed }: { pressed: boolean }) => [
-                          styles.historyLogCard,
-                          pressed && styles.historyLogCardPressed,
-                        ]}
-                        onPress={() => onSelectLog?.(log, day)}
-                      >
-                        <View style={styles.historyLogHeader}>
-                          <View style={styles.historyLogLeft}>
-                            <Text style={styles.historyLogEmoji}>{day.emoji}</Text>
-                            <View>
-                              <View style={styles.historyLogNameRow}>
-                                <Text style={styles.historyLogDayName}>{day.name}</Text>
-                                {!!improvement && (
-                                  <Text
-                                    style={[
-                                      styles.historyLogImprovementText,
-                                      improvement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
-                                    ]}
-                                  >
-                                    {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
-                                  </Text>
-                                )}
+                          <View style={styles.historyLogHeader}>
+                            <View style={styles.historyLogLeft}>
+                              <Text style={styles.historyLogEmoji}>{day.emoji}</Text>
+                              <View>
+                                <View style={styles.historyLogNameRow}>
+                                  <Text style={styles.historyLogDayName}>{day.name}</Text>
+                                  {!!improvement && (
+                                    <Text
+                                      style={[
+                                        styles.historyLogImprovementText,
+                                        improvement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                                      ]}
+                                    >
+                                      {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
+                                    </Text>
+                                  )}
+                                </View>
+                                <Text style={styles.historyLogDate}>{new Date(log.createdAt).toLocaleDateString('es-ES')}</Text>
                               </View>
-                              <Text style={styles.historyLogDate}>{new Date(log.createdAt).toLocaleDateString('es-ES')}</Text>
                             </View>
+                            <Text style={styles.historyLogBadge}>Día {day.dayNumber}</Text>
                           </View>
-                          <Text style={styles.historyLogBadge}>Día {day.dayNumber}</Text>
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              );
-            })}
-          </ScrollView>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                );
+              })}
+            </ScrollView>
+          </View>
         )}
-      </View>
+      </ScrollView>
 
-      <FlatList
-        data={activeDays}
-        keyExtractor={(day: WorkoutDay) => day.id}
-        renderItem={({ item }: { item: WorkoutDay }) => (
-          <DayCard
-            emoji={item.emoji}
-            name={item.name}
-            description={item.description || ''}
-            onPress={() => onSelectDay(item)}
-          />
-        )}
-        contentContainerStyle={styles.list}
-        scrollEnabled={true}
-      />
+      <Modal
+        visible={!!logToDeleteId}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLogToDeleteId(undefined)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>¿Eliminar entrenamiento?</Text>
+            <Text style={styles.modalMessage}>
+              Esta acción no se puede deshacer. ¿Estás seguro?
+            </Text>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={styles.modalButtonCancel}
+                onPress={() => setLogToDeleteId(undefined)}
+              >
+                <Text style={styles.modalButtonCancelText}>Cancelar</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalButtonDelete}
+                onPress={handleDeleteLog}
+              >
+                <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -783,13 +913,16 @@ interface RoutineCardProps {
   routine: WorkoutRoutine;
   isActive: boolean;
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
-function RoutineCard({ routine, isActive, onPress }: RoutineCardProps) {
+function RoutineCard({ routine, isActive, onPress, onLongPress }: RoutineCardProps) {
   return (
     <TouchableOpacity
       style={[styles.routineCard, isActive && styles.routineCardActive]}
       onPress={onPress}
+      onLongPress={onLongPress}
+      delayLongPress={2000}
     >
       <View style={styles.routineCardContent}>
         <Text style={styles.routineCardName}>{routine.name}</Text>
@@ -827,18 +960,22 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   subtitle: {
+    marginTop: 4,
     fontSize: 13,
     color: theme.colors.textSecondary,
     lineHeight: 18,
   },
   progressCard: {
-    marginTop: theme.spacing.md,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
     paddingVertical: 12,
-    paddingHorizontal: 10,
+    paddingHorizontal: 0,
+    overflow: 'hidden',
+    alignItems: 'center',
   },
   progressHeaderRow: {
     flexDirection: 'row',
@@ -847,6 +984,8 @@ const styles = StyleSheet.create({
   },
   progressToggleButton: {
     paddingVertical: 2,
+    paddingHorizontal: 10,
+    width: '100%',
   },
   progressTitle: {
     fontSize: 14,
@@ -865,6 +1004,10 @@ const styles = StyleSheet.create({
   },
   progressChartWrapper: {
     alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+    overflow: 'hidden',
+    flexDirection: 'row',
   },
   progressChart: {
     height: 170,
@@ -935,6 +1078,30 @@ const styles = StyleSheet.create({
     opacity: 0.92,
     transform: [{ scale: 0.995 }],
   },
+  heroCardClosed: {
+    backgroundColor: theme.colors.error,
+    borderRadius: theme.borderRadius.lg,
+    marginHorizontal: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    paddingVertical: 24,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    overflow: 'hidden',
+    ...theme.shadow.card,
+  },
+  heroCardWarning: {
+    backgroundColor: theme.colors.warning,
+    borderRadius: theme.borderRadius.lg,
+    marginHorizontal: theme.spacing.md,
+    marginTop: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+    paddingVertical: 24,
+    paddingHorizontal: 22,
+    alignItems: 'center',
+    overflow: 'hidden',
+    ...theme.shadow.card,
+  },
   heroGlow: {
     position: 'absolute',
     top: -30,
@@ -969,6 +1136,32 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     opacity: 0.72,
     textAlign: 'center',
+  },
+  buttonsRow: {
+    flexDirection: 'row',
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    gap: 12,
+  },
+  buttonRowItem: {
+    flex: 1,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buttonRowLabel: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  weeksSection: {
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.md,
   },
   homeHistorySection: {
     marginHorizontal: theme.spacing.md,
@@ -1212,6 +1405,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: theme.colors.primary,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: theme.spacing.md,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: theme.spacing.lg,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    ...theme.shadow.card,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+    marginBottom: theme.spacing.sm,
+  },
+  modalMessage: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    marginBottom: theme.spacing.md,
+    lineHeight: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  modalButtonCancel: {
+    flex: 1,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  modalButtonCancelText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  modalButtonDelete: {
+    flex: 1,
+    backgroundColor: theme.colors.error,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  modalButtonDeleteText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
 });
 
