@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   FlatList,
@@ -7,24 +7,207 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
+  useWindowDimensions,
 } from 'react-native';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
-import { WorkoutDay, WorkoutRoutine } from '@types/index';
+import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '@types/index';
 import { theme } from '@lib/theme';
+import { getWeekNumber } from '@lib/storage';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
 }
 
+interface WeekProgressPoint {
+  week: number;
+  improvement: number;
+}
+
+function getWorkoutVolumeScore(log: WorkoutLog): number {
+  return log.exercises.reduce((exerciseAcc, exercise) => {
+    const exerciseVolume = exercise.parsedSets.reduce(
+      (setAcc, setItem) => setAcc + setItem.weight * setItem.reps,
+      0
+    );
+    return exerciseAcc + exerciseVolume;
+  }, 0);
+}
+
+function buildWeekProgress(
+  logs: WorkoutLog[],
+  activeRoutineId?: string
+): WeekProgressPoint[] {
+  if (!activeRoutineId) return [];
+
+  const routineLogs = logs.filter(log => log.routineId === activeRoutineId);
+  if (routineLogs.length === 0) return [];
+
+  const weeklyScores = routineLogs.reduce((acc: Record<number, number>, log) => {
+    const week = getWeekNumber(log.createdAt);
+    const score = getWorkoutVolumeScore(log);
+    acc[week] = (acc[week] || 0) + score;
+    return acc;
+  }, {});
+
+  const orderedWeeks = Object.keys(weeklyScores)
+    .map(Number)
+    .sort((a, b) => a - b);
+
+  return orderedWeeks.map((week, index) => {
+    if (index === 0) {
+      return { week, improvement: 0 };
+    }
+
+    const current = weeklyScores[week] || 0;
+    const previous = weeklyScores[orderedWeeks[index - 1]] || 0;
+
+    if (previous <= 0 && current <= 0) {
+      return { week, improvement: 0 };
+    }
+
+    if (previous <= 0 && current > 0) {
+      return { week, improvement: 30 };
+    }
+
+    const improvement = ((current - previous) / previous) * 100;
+    return { week, improvement: Math.round(improvement * 10) / 10 };
+  });
+}
+
+function ProgressLineChart({ points, width }: { points: WeekProgressPoint[]; width: number }) {
+  const chartPadding = { top: 16, right: 12, bottom: 28, left: 38 };
+  const chartHeight = 170;
+  const chartWidth = width;
+  const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
+  const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+
+  const values = points.map(point => point.improvement);
+  const minValue = Math.min(...values, 0);
+  const maxValue = Math.max(...values, 0);
+  const sameValueRange = minValue === maxValue;
+  const domainPadding = sameValueRange ? 10 : Math.max((maxValue - minValue) * 0.15, 5);
+  const domainMin = Math.min(minValue - domainPadding, 0);
+  const domainMax = Math.max(maxValue + domainPadding, 0);
+
+  const getX = (index: number) => {
+    if (points.length <= 1) return chartPadding.left;
+    return chartPadding.left + (index / (points.length - 1)) * plotWidth;
+  };
+
+  const getY = (value: number) => {
+    if (domainMax === domainMin) return chartPadding.top + plotHeight / 2;
+    return (
+      chartPadding.top +
+      ((domainMax - value) / (domainMax - domainMin)) * plotHeight
+    );
+  };
+
+  const zeroAxisY = getY(0);
+  const yTicks = [domainMax, (domainMax + domainMin) / 2, domainMin];
+
+  return (
+    <View style={styles.progressChartWrapper}>
+      <View style={styles.progressChart}>
+        {yTicks.map((tick, idx) => {
+          const y = getY(tick);
+          return (
+            <View
+              key={`grid-${idx}`}
+              style={[styles.chartGridLine, { top: y, left: chartPadding.left, width: plotWidth }]}
+            />
+          );
+        })}
+
+        <View
+          style={[
+            styles.chartAxisLine,
+            { top: zeroAxisY, left: chartPadding.left, width: plotWidth },
+          ]}
+        />
+
+        {points.slice(1).map((point, index) => {
+          const prevPoint = points[index];
+          const x1 = getX(index);
+          const y1 = getY(prevPoint.improvement);
+          const x2 = getX(index + 1);
+          const y2 = getY(point.improvement);
+          const lineLength = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+          const angleDeg = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+          const lineColor = point.improvement >= prevPoint.improvement
+            ? theme.colors.success
+            : theme.colors.error;
+
+          return (
+            <View
+              key={`line-${index}`}
+              style={[
+                styles.chartLineSegment,
+                {
+                  width: lineLength,
+                  backgroundColor: lineColor,
+                  left: x1,
+                  top: y1,
+                  transform: [{ rotate: `${angleDeg}deg` }],
+                },
+              ]}
+            />
+          );
+        })}
+
+        {points.map((point, index) => {
+          const x = getX(index);
+          const y = getY(point.improvement);
+          const isPositive = point.improvement >= 0;
+
+          return (
+            <React.Fragment key={`point-${point.week}-${index}`}>
+              <View
+                style={[
+                  styles.chartDot,
+                  {
+                    left: x - 4,
+                    top: y - 4,
+                    backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
+                  },
+                ]}
+              />
+              <Text style={[styles.chartXLabel, { left: x - 16, top: chartHeight - 20 }]}>S{point.week}</Text>
+            </React.Fragment>
+          );
+        })}
+
+        {yTicks.map((tick, idx) => {
+          const y = getY(tick);
+          return (
+            <Text key={`y-label-${idx}`} style={[styles.chartYLabel, { top: y - 8 }]}>
+              {`${Math.round(tick)}%`}
+            </Text>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
 export function HomeScreen({ onSelectDay }: HomeScreenProps) {
   const { state, dispatch } = useWorkout();
   const [showRoutineSelector, setShowRoutineSelector] = useState(false);
+  const { width: windowWidth } = useWindowDimensions();
 
   const activeRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
   );
   const activeDays = activeRoutine?.days || [];
+  const weeklyProgress = useMemo(
+    () => buildWeekProgress(state.logs, state.activeRoutineId),
+    [state.logs, state.activeRoutineId]
+  );
+  const latestPoint = weeklyProgress[weeklyProgress.length - 1];
+  const chartWidth = Math.max(
+    250,
+    Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
+  );
 
   const handleSelectRoutine = (routineId: string) => {
     dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
@@ -80,6 +263,26 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
         <Text style={styles.subtitle}>
           {activeRoutine?.description || 'Tu rutina semanal'}
         </Text>
+
+        {weeklyProgress.length > 0 && (
+          <View style={styles.progressCard}>
+            <View style={styles.progressHeaderRow}>
+              <Text style={styles.progressTitle}>Progreso entre semanas</Text>
+              <Text
+                style={[
+                  styles.progressLatest,
+                  latestPoint && latestPoint.improvement >= 0
+                    ? styles.progressLatestUp
+                    : styles.progressLatestDown,
+                ]}
+              >
+                {latestPoint ? `${latestPoint.improvement >= 0 ? '↑' : '↓'} ${Math.abs(latestPoint.improvement).toFixed(1)}%` : '0%'}
+              </Text>
+            </View>
+            <Text style={styles.progressSubtitle}>Semana inicial en 0% y evolución semanal en el eje vertical</Text>
+            <ProgressLineChart points={weeklyProgress} width={chartWidth} />
+          </View>
+        )}
       </View>
 
       <View style={styles.heroCard}>
@@ -160,6 +363,90 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textSecondary,
     lineHeight: 18,
+  },
+  progressCard: {
+    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  progressHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  progressTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  progressLatest: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  progressLatestUp: {
+    color: theme.colors.success,
+  },
+  progressLatestDown: {
+    color: theme.colors.error,
+  },
+  progressSubtitle: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    marginBottom: 10,
+  },
+  progressChartWrapper: {
+    alignItems: 'center',
+  },
+  progressChart: {
+    height: 170,
+    position: 'relative',
+  },
+  chartGridLine: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: theme.colors.border,
+    opacity: 0.8,
+  },
+  chartAxisLine: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: theme.colors.veryLightGray,
+    opacity: 0.65,
+  },
+  chartLineSegment: {
+    position: 'absolute',
+    height: 2,
+    borderRadius: 2,
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.surface,
+  },
+  chartXLabel: {
+    position: 'absolute',
+    width: 32,
+    textAlign: 'center',
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+  },
+  chartYLabel: {
+    position: 'absolute',
+    left: 0,
+    width: 36,
+    textAlign: 'right',
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    paddingRight: 6,
   },
   routineButton: {
     backgroundColor: theme.colors.surface,
