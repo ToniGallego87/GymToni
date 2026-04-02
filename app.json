@@ -22,7 +22,6 @@
         {
           "origin": false,
           "asyncRoutes": true,
-          "ignoreEntryPoint": true,
           "root": "./app"
         }
       ]
