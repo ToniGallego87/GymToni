@@ -9,7 +9,7 @@
       "**/*"
     ],
     "ios": {
-      "supportsTabletMode": true,
+      "supportsTablet": true,
       "bundleIdentifier": "com.gymtrack.app"
     },
     "android": {
