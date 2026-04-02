@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useReducer } from 'react';
+import React, { useState, useEffect, useMemo, useReducer } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import {
   TextInput,
   ScrollView,
   Modal,
+  useWindowDimensions,
 } from 'react-native';
 
 // ============= TEMA =============
@@ -952,6 +953,7 @@ export default function App() {
   const [previousScreen, setPreviousScreen] = useState('home');
   const [detailBackScreen, setDetailBackScreen] = useState('home');
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState({});
+  const { width: windowWidth } = useWindowDimensions();
 
   useEffect(() => {
     StatusBar.setBarStyle('light-content');
@@ -1457,6 +1459,178 @@ export default function App() {
       previousScores.volume,
       currentScores.reps,
       previousScores.reps,
+    );
+  };
+
+  const buildWeeklyProgressPoints = (allLogs, selectedRoutineId) => {
+    if (!selectedRoutineId) return [];
+    const routineOnlyLogs = (Array.isArray(allLogs) ? allLogs : [])
+      .filter((log) => log.routineId === selectedRoutineId);
+    if (routineOnlyLogs.length === 0) return [];
+
+    const sortedByDateAsc = [...routineOnlyLogs].sort(
+      (a, b) => getLogTimestamp(a) - getLogTimestamp(b)
+    );
+    const weeklyScores = {};
+
+    sortedByDateAsc.forEach((log) => {
+      const week = getWeekNumber(log.date);
+      if (!weeklyScores[week]) {
+        weeklyScores[week] = { volume: 0, reps: 0 };
+      }
+
+      weeklyScores[week].volume += getWorkoutVolumeScore(log);
+      weeklyScores[week].reps += getWorkoutRepsScore(log);
+    });
+
+    const orderedWeeks = Object.keys(weeklyScores)
+      .map(Number)
+      .sort((a, b) => a - b);
+
+    return orderedWeeks.map((week, index) => {
+      if (index === 0) {
+        return { week, value: 0 };
+      }
+
+      const previousWeek = orderedWeeks[index - 1];
+      const currentScores = weeklyScores[week];
+      const previousScores = weeklyScores[previousWeek];
+
+      const improvement = buildImprovementFromScores(
+        currentScores.volume,
+        previousScores.volume,
+        currentScores.reps,
+        previousScores.reps,
+      );
+
+      if (!improvement) {
+        return { week, value: 0 };
+      }
+
+      return {
+        week,
+        value: improvement.isImproved ? improvement.percent : -improvement.percent,
+      };
+    });
+  };
+
+  const weeklyProgressPoints = useMemo(
+    () => buildWeeklyProgressPoints(logs, activeRoutineId),
+    [logs, activeRoutineId]
+  );
+  const latestWeeklyProgress = weeklyProgressPoints[weeklyProgressPoints.length - 1] || null;
+  const progressChartWidth = Math.max(250, Math.min(windowWidth - (theme.spacing.md * 2) - 20, 420));
+
+  const renderWeeklyProgressChart = (points, chartWidth) => {
+    if (!points.length) return null;
+
+    const chartPadding = { top: 16, right: 12, bottom: 28, left: 38 };
+    const chartHeight = 170;
+    const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
+    const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
+
+    const values = points.map((point) => point.value);
+    const minValue = Math.min(...values, 0);
+    const maxValue = Math.max(...values, 0);
+    const sameRange = minValue === maxValue;
+    const domainPadding = sameRange ? 10 : Math.max((maxValue - minValue) * 0.15, 5);
+    const domainMin = Math.min(minValue - domainPadding, 0);
+    const domainMax = Math.max(maxValue + domainPadding, 0);
+
+    const getX = (index) => {
+      if (points.length <= 1) return chartPadding.left;
+      return chartPadding.left + ((index / (points.length - 1)) * plotWidth);
+    };
+
+    const getY = (value) => {
+      if (domainMax === domainMin) return chartPadding.top + (plotHeight / 2);
+      return chartPadding.top + (((domainMax - value) / (domainMax - domainMin)) * plotHeight);
+    };
+
+    const zeroAxisY = getY(0);
+    const yTicks = [domainMax, (domainMax + domainMin) / 2, domainMin];
+
+    return (
+      <View style={styles.progressChartWrapper}>
+        <View style={[styles.progressChart, { width: chartWidth }]}>
+          {yTicks.map((tick, idx) => {
+            const y = getY(tick);
+            return (
+              <View
+                key={`grid-${idx}`}
+                style={[
+                  styles.chartGridLine,
+                  { top: y, left: chartPadding.left, width: plotWidth },
+                ]}
+              />
+            );
+          })}
+
+          <View
+            style={[
+              styles.chartAxisLine,
+              { top: zeroAxisY, left: chartPadding.left, width: plotWidth },
+            ]}
+          />
+
+          {points.slice(1).map((point, index) => {
+            const prevPoint = points[index];
+            const x1 = getX(index);
+            const y1 = getY(prevPoint.value);
+            const x2 = getX(index + 1);
+            const y2 = getY(point.value);
+            const lineLength = Math.sqrt(((x2 - x1) ** 2) + ((y2 - y1) ** 2));
+            const angleDeg = (Math.atan2(y2 - y1, x2 - x1) * 180) / Math.PI;
+            const lineColor = point.value >= prevPoint.value ? theme.colors.success : theme.colors.error;
+
+            return (
+              <View
+                key={`line-${index}`}
+                style={[
+                  styles.chartLineSegment,
+                  {
+                    width: lineLength,
+                    backgroundColor: lineColor,
+                    left: x1,
+                    top: y1,
+                    transform: [{ rotate: `${angleDeg}deg` }],
+                  },
+                ]}
+              />
+            );
+          })}
+
+          {points.map((point, index) => {
+            const x = getX(index);
+            const y = getY(point.value);
+            const isPositive = point.value >= 0;
+
+            return (
+              <React.Fragment key={`point-${point.week}-${index}`}>
+                <View
+                  style={[
+                    styles.chartDot,
+                    {
+                      left: x - 4,
+                      top: y - 4,
+                      backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
+                    },
+                  ]}
+                />
+                <Text style={[styles.chartXLabel, { left: x - 16, top: chartHeight - 20 }]}>
+                  S{point.week}
+                </Text>
+              </React.Fragment>
+            );
+          })}
+
+          {yTicks.map((tick, idx) => (
+            <Text key={`y-label-${idx}`} style={[styles.chartYLabel, { top: getY(tick) - 8 }]}>
+              {`${Math.round(tick)}%`}
+            </Text>
+          ))}
+        </View>
+      </View>
     );
   };
 
@@ -1985,6 +2159,27 @@ export default function App() {
               <Text style={styles.homeRoutineDescription}>
                 {activeRoutine?.description || ''}
               </Text>
+
+              {weeklyProgressPoints.length > 0 && (
+                <View style={styles.progressCard}>
+                  <View style={styles.progressHeaderRow}>
+                    <Text style={styles.progressTitle}>Progreso entre semanas</Text>
+                    <Text
+                      style={[
+                        styles.progressLatest,
+                        latestWeeklyProgress && latestWeeklyProgress.value >= 0
+                          ? styles.progressLatestUp
+                          : styles.progressLatestDown,
+                      ]}
+                    >
+                      {latestWeeklyProgress
+                        ? `${latestWeeklyProgress.value >= 0 ? '↑' : '↓'} ${Math.abs(latestWeeklyProgress.value).toFixed(1)}%`
+                        : '0%'}
+                    </Text>
+                  </View>
+                  {renderWeeklyProgressChart(weeklyProgressPoints, progressChartWidth)}
+                </View>
+              )}
 
               {canDeleteCurrentRoutine && (
                 <Pressable
@@ -2944,6 +3139,85 @@ const styles = StyleSheet.create({
     color: '#9098A8',
     marginTop: 2,
     marginBottom: 14,
+  },
+  progressCard: {
+    marginBottom: 14,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.mediumGray,
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+  },
+  progressHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 4,
+  },
+  progressTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  progressLatest: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  progressLatestUp: {
+    color: theme.colors.success,
+  },
+  progressLatestDown: {
+    color: theme.colors.error,
+  },
+  progressChartWrapper: {
+    alignItems: 'center',
+  },
+  progressChart: {
+    height: 170,
+    position: 'relative',
+  },
+  chartGridLine: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: theme.colors.mediumGray,
+    opacity: 0.8,
+  },
+  chartAxisLine: {
+    position: 'absolute',
+    height: 1,
+    backgroundColor: theme.colors.text,
+    opacity: 0.55,
+  },
+  chartLineSegment: {
+    position: 'absolute',
+    height: 2,
+    borderRadius: 2,
+  },
+  chartDot: {
+    position: 'absolute',
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: theme.colors.surface,
+  },
+  chartXLabel: {
+    position: 'absolute',
+    width: 32,
+    textAlign: 'center',
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+  },
+  chartYLabel: {
+    position: 'absolute',
+    left: 0,
+    width: 36,
+    textAlign: 'right',
+    fontSize: 10,
+    color: theme.colors.textSecondary,
+    paddingRight: 6,
   },
   deleteRoutineButton: {
     alignSelf: 'center',

@@ -40,6 +40,7 @@ function buildWeekProgress(
 ): WeekProgressPoint[] {
   if (!activeRoutineId) return [];
 
+  // El progreso solo se calcula con la rutina actualmente seleccionada en Inicio.
   const routineLogs = logs.filter(log => log.routineId === activeRoutineId);
   if (routineLogs.length === 0) return [];
 
@@ -279,7 +280,6 @@ export function HomeScreen({ onSelectDay }: HomeScreenProps) {
                 {latestPoint ? `${latestPoint.improvement >= 0 ? '↑' : '↓'} ${Math.abs(latestPoint.improvement).toFixed(1)}%` : '0%'}
               </Text>
             </View>
-            <Text style={styles.progressSubtitle}>Semana inicial en 0% y evolución semanal en el eje vertical</Text>
             <ProgressLineChart points={weeklyProgress} width={chartWidth} />
           </View>
         )}
@@ -393,11 +393,6 @@ const styles = StyleSheet.create({
   },
   progressLatestDown: {
     color: theme.colors.error,
-  },
-  progressSubtitle: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginBottom: 10,
   },
   progressChartWrapper: {
     alignItems: 'center',
