@@ -90,7 +90,7 @@ export function DataScreen({
           <View style={styles.actionCard}>
             <Text style={styles.actionTitle}>📤 Exportar datos</Text>
             <Text style={styles.actionSubtitle}>
-              Descarga un fichero con todas las rutinas y ejercicios.
+              Guarda o comparte un fichero con todas las rutinas y ejercicios.
             </Text>
             <Button
               title={busyAction === 'export' ? 'Exportando…' : '📤 Exportar'}
@@ -104,7 +104,7 @@ export function DataScreen({
         <View style={styles.actionCard}>
           <Text style={styles.actionTitle}>📥 Importar datos</Text>
           <Text style={styles.actionSubtitle}>
-            Carga un fichero exportado previamente.
+            Carga un backup JSON exportado previamente desde web o Android.
           </Text>
           <Button
             title={busyAction === 'import' ? 'Importando…' : '📥 Importar'}
