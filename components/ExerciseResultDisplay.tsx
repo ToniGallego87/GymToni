@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ParsedSet } from '@types/index';
-import { formatSets, parseSeriesString } from '@lib/parsers';
+import { formatSets, parseSeriesString, formatParsedSet } from '@lib/parsers';
 import { theme } from '@lib/theme';
 
 interface ExerciseResultDisplayProps {
@@ -12,6 +12,14 @@ interface ExerciseResultDisplayProps {
   previousSets?: ParsedSet[];
   improvementText?: string;
   improvementPositive?: boolean;
+  targetSets?: number;
+  targetReps?: string | number;
+  isDetail?: boolean;
+}
+
+// Formatea sets con saltos de carro para vista detalle
+function formatSetsWithLineBreaks(sets: ParsedSet[]): string {
+  return sets.map(s => formatParsedSet(s)).join('\n');
 }
 
 export function ExerciseResultDisplay({
@@ -22,6 +30,9 @@ export function ExerciseResultDisplay({
   previousSets,
   improvementText,
   improvementPositive = true,
+  targetSets,
+  targetReps,
+  isDetail = false,
 }: ExerciseResultDisplayProps) {
   // Si parsedSets está vacío pero tenemos rawInput, intentar parsear
   const effectiveParsedSets = (parsedSets && parsedSets.length > 0) 
@@ -30,20 +41,34 @@ export function ExerciseResultDisplay({
 
   // Mostrar parsedSets si existen, sino usar rawInput, sino mostrar guión
   const currentValue = (effectiveParsedSets && effectiveParsedSets.length > 0) 
-    ? formatSets(effectiveParsedSets) 
+    ? (isDetail ? formatSetsWithLineBreaks(effectiveParsedSets) : formatSets(effectiveParsedSets))
     : (rawInput && rawInput !== '-' && rawInput.trim() ? rawInput : 'No realizado');
   const previousValue = (previousSets && previousSets.length > 0)
-    ? formatSets(previousSets)
+    ? (isDetail ? formatSetsWithLineBreaks(previousSets) : formatSets(previousSets))
     : '-';
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.exerciseName}>{exerciseName}</Text>
+    <View style={[styles.container, isDetail && styles.containerDetail]}>
+      <View style={[styles.header, isDetail && styles.headerDetail]}>
+        {isDetail && (targetSets !== undefined && targetReps !== undefined) ? (
+          <View style={styles.exerciseNameContainer}>
+            <Text style={[styles.exerciseName, styles.exerciseNameDetail]}>
+              {exerciseName}
+            </Text>
+            <Text style={[styles.exerciseTarget, isDetail && styles.exerciseTargetDetail]}>
+              {targetSets || '-'}x{targetReps || '-'}
+            </Text>
+          </View>
+        ) : (
+          <Text style={[styles.exerciseName, isDetail && styles.exerciseNameDetail]}>
+            {exerciseName}
+          </Text>
+        )}
         {!!improvementText && (
           <Text
             style={[
               styles.improvementText,
+              isDetail && styles.improvementTextDetail,
               improvementPositive ? styles.improvementUp : styles.improvementDown,
             ]}
           >
@@ -56,13 +81,13 @@ export function ExerciseResultDisplay({
         <View style={styles.resultRow}>
           <View style={styles.resultItem}>
             <Text style={styles.resultLabel}>Realizado</Text>
-            <Text style={[styles.resultValue, styles.currentResult]}>
+            <Text style={[styles.resultValue, isDetail && styles.resultValueDetail, styles.currentResult]}>
               {currentValue}
             </Text>
           </View>
           <View style={styles.resultItem}>
             <Text style={styles.resultLabel}>Anterior</Text>
-            <Text style={[styles.resultValue, styles.previousResult]}>
+            <Text style={[styles.resultValue, isDetail && styles.resultValueDetail, styles.previousResult]}>
               {previousValue}
             </Text>
           </View>
@@ -77,7 +102,7 @@ export function ExerciseResultDisplay({
 
       {notes && (
         <View style={styles.notesContainer}>
-          <Text style={styles.notes}>{notes}</Text>
+          <Text style={[styles.notes, isDetail && styles.notesDetail]}>{notes}</Text>
         </View>
       )}
     </View>
@@ -94,6 +119,10 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     ...theme.shadow.soft,
   },
+  containerDetail: {
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.push,
+  },
   header: {
     marginBottom: theme.spacing.md,
     flexDirection: 'row',
@@ -101,15 +130,36 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: theme.spacing.sm,
   },
+  headerDetail: {
+    alignItems: 'flex-start',
+  },
+  exerciseNameContainer: {
+    flex: 1,
+  },
   exerciseName: {
     fontSize: 17,
     fontWeight: '700',
     color: theme.colors.text,
     flex: 1,
   },
+  exerciseNameDetail: {
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  exerciseTarget: {
+    fontSize: 14,
+    fontWeight: '400',
+    color: theme.colors.textSecondary,
+  },
+  exerciseTargetDetail: {
+    fontSize: 14,
+  },
   improvementText: {
     fontSize: 13,
     fontWeight: '800',
+  },
+  improvementTextDetail: {
+    fontSize: 16,
   },
   improvementUp: {
     color: theme.colors.success,
@@ -146,6 +196,10 @@ const styles = StyleSheet.create({
     fontFamily: 'monospace',
     lineHeight: 24,
   },
+  resultValueDetail: {
+    fontWeight: '400',
+    lineHeight: 20,
+  },
   currentResult: {
     color: theme.colors.push,
   },
@@ -175,5 +229,8 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     lineHeight: 18,
     fontStyle: 'italic',
+  },
+  notesDetail: {
+    fontSize: 15,
   },
 });

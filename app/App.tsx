@@ -304,7 +304,22 @@ function AppContent() {
       {screen.type === 'day-selector' && (
         <DaySelectorScreen
           routine={activeRoutine}
-          onSelectDay={day => setScreen({ type: 'workout-log', day })}
+          onSelectDay={day => {
+            // Si la rutina activa ya tiene un log de hoy para este día, volver a home
+            const today = new Date().toISOString().split('T')[0];
+            const hasLogToday = state.logs.some(
+              log => log.dayId === day.id && 
+                     log.routineId === state.activeRoutineId &&
+                     (log.date === today || 
+                      new Date(log.createdAt).toISOString().split('T')[0] === today)
+            );
+            
+            if (hasLogToday) {
+              setScreen({ type: 'home' });
+            } else {
+              setScreen({ type: 'workout-log', day });
+            }
+          }}
           onBack={() => setScreen({ type: 'home' })}
         />
       )}

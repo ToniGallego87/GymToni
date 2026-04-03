@@ -582,6 +582,11 @@ export function HomeScreen({
     
     // Siempre cerrar el selector (permite ver rutinas viejas sin activarlas)
     setShowRoutineSelector(false);
+    
+    // Si la rutina seleccionada es la activa, volver a home
+    if (routineId === state.activeRoutineId && onCloseRoutineSelector) {
+      onCloseRoutineSelector();
+    }
   };
 
   const handleDeleteRoutine = () => {
@@ -823,7 +828,11 @@ export function HomeScreen({
             <ScrollView nestedScrollEnabled style={{ flex: 1 }}>
               {blocks.map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
-                const isExpanded = expandedWeekBlocks[block] ?? (block === currentWeekBlock);
+                // Si la rutina no es activa, todas las semanas están colapsadas
+                // Si es activa, la última semana está expandida por defecto
+                const isExpanded = isDisplayedRoutineActive 
+                  ? (expandedWeekBlocks[block] ?? (block === currentWeekBlock))
+                  : (expandedWeekBlocks[block] ?? false);
                 const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
 
                 return (

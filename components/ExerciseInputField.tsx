@@ -191,7 +191,7 @@ export function ExerciseInputField({
                 ]}
                 onPress={onRemoveLastSet}
               >
-                <Text style={styles.buttonText}>− Borrar</Text>
+                <Text style={styles.buttonText}>➖ Borrar</Text>
               </Pressable>
             )}
 
@@ -202,7 +202,7 @@ export function ExerciseInputField({
               ]}
               onPress={onFinishExercise}
             >
-              <Text style={styles.buttonText}>✓ Terminar</Text>
+              <Text style={styles.buttonText}>✔️ Terminar</Text>
             </Pressable>
           </View>
         </View>
@@ -220,7 +220,7 @@ export function ExerciseInputField({
             ]}
             onPress={onRemoveLastSet}
           >
-            <Text style={styles.buttonText}>− Borrar</Text>
+            <Text style={styles.buttonText}>➖ Borrar</Text>
           </Pressable>
         </View>
       )}

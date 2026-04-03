@@ -93,6 +93,20 @@ function buildImprovementFromScores(
   return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
 }
 
+function extractIncline(rawInput: string): string | null {
+  if (!rawInput) return null;
+  // Buscar patrón "10p", "5.5p", etc.
+  const match = rawInput.match(/(\d+(?:\.\d+)?)\s*p(?:\s|,|$)/i);
+  return match ? `${match[1]}%` : null;
+}
+
+function extractPaceNumber(pace: string): string {
+  if (!pace) return '';
+  // Extraer solo el número (ej: "11.5kmh" -> "11.5")
+  const match = pace.match(/(\d+(?:\.\d+)?)/);
+  return match ? match[1] : pace;
+}
+
 export function DetailScreen({
   log,
   day,
@@ -160,6 +174,11 @@ export function DetailScreen({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
+        {day.exercises.length > 0 && (
+          <Text style={styles.sectionTitle}>
+            Ejercicios
+          </Text>
+        )}
 
         {day.exercises.map((exercise, exerciseIndex) => {
           const currentExercise = getExerciseFromLog(log, exercise.id, exercise.name, exercise.order);
@@ -182,25 +201,27 @@ export function DetailScreen({
           return (
             <ExerciseResultDisplay
               key={exercise.id}
-              exerciseName={`${exercise.name} - ${exercise.targetSets || '-'}x${exercise.targetReps || '-'}`}
+              exerciseName={exercise.name}
+              targetSets={exercise.targetSets}
+              targetReps={exercise.targetReps as string | number | undefined}
               rawInput={selectedExercise?.rawInput || '-'}
               parsedSets={selectedExercise?.parsedSets || []}
               notes={selectedExercise?.notes}
               previousSets={prevExercise?.parsedSets}
               improvementText={exerciseImprovement ? `${exerciseImprovement.isImproved ? '↑' : '↓'} ${exerciseImprovement.percent.toFixed(1)}%` : undefined}
               improvementPositive={exerciseImprovement ? exerciseImprovement.isImproved : true}
+              isDetail={true}
             />
           );
         })}
 
         {log.cardio && (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: 24 }]}>
+            <Text style={[styles.sectionTitle, { marginTop: theme.spacing.xl, color: theme.colors.primary }]}>
               Cardio
             </Text>
             <View style={styles.cardioBox}>
-              <Text style={styles.cardioLabel}>{log.cardio.type}</Text>
-              <Text style={styles.cardioRaw}>{log.cardio.rawInput}</Text>
+              <Text style={styles.cardioLabel}>{log.cardio.type?.toUpperCase()}</Text>
               <View style={styles.cardioDetails}>
                 {log.cardio.duration && (
                   <Text style={styles.cardioDetail}>
@@ -209,19 +230,18 @@ export function DetailScreen({
                 )}
                 {log.cardio.pace && (
                   <Text style={styles.cardioDetail}>
-                    📍 {log.cardio.pace}
+                    📍 {extractPaceNumber(log.cardio.pace)} km/h
+                  </Text>
+                )}
+                {log.cardio.rawInput && extractIncline(log.cardio.rawInput) && (
+                  <Text style={styles.cardioDetail}>
+                    📈 {extractIncline(log.cardio.rawInput)}
                   </Text>
                 )}
               </View>
             </View>
           </>
         )}
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            Guardado: {new Date(log.createdAt).toLocaleTimeString('es-ES')}
-          </Text>
-        </View>
       </ScrollView>
 
       <Pressable style={styles.backButton} onPress={onBack}>
@@ -298,13 +318,14 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    marginTop: theme.spacing.md,
+    paddingTop: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: theme.colors.primary,
-    marginVertical: 12,
+    color: theme.colors.push,
+    marginBottom: theme.spacing.xs,
     lineHeight: 22,
   },
   cardioBox: {
@@ -316,11 +337,12 @@ const styles = StyleSheet.create({
     borderLeftColor: theme.colors.primary,
   },
   cardioLabel: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.primary,
+    color: theme.colors.textSecondary,
     marginBottom: 6,
-    lineHeight: 20,
+    textTransform: 'uppercase',
+    lineHeight: 16,
   },
   cardioRaw: {
     fontSize: 14,
@@ -334,8 +356,9 @@ const styles = StyleSheet.create({
   },
   cardioDetails: {
     flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
+    gap: 16,
+    alignItems: 'center',
+    marginTop: 8,
   },
   cardioDetail: {
     fontSize: 13,

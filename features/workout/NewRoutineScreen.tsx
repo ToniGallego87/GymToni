@@ -164,7 +164,7 @@ export function NewRoutineScreen({
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>➕ Nueva rutina</Text>
-        <Text style={styles.subtitle}>Define cada día y sus ejercicios</Text>
+        <Text style={styles.subtitle}>Define los ejercicios que realizarás cada día</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
@@ -194,7 +194,7 @@ export function NewRoutineScreen({
 
         <View style={styles.rowButtons}>
           <Button
-            title="+ Añadir día"
+            title="➕ Añadir día"
             onPress={() => {
               if (days.length >= 7) {
                 setToast({ message: '⚠️ Máximo 7 días', type: 'error' });
@@ -213,7 +213,7 @@ export function NewRoutineScreen({
           />
 
           <Button
-            title="- Quitar día"
+            title="➖ Quitar día"
             onPress={() => setDays((previous: NewRoutineDayForm[]) => previous.slice(0, -1))}
             variant="secondary"
             disabled={days.length <= 1}
