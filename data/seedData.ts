@@ -516,6 +516,17 @@ const ROUTINE_3_LOGS = [
       { exerciseId: 'day3-ex6', exerciseName: 'Plancha lateral', order: 6, rawInput: '0x45, 0x35, 0x35' },
     ],
   },
+  {
+    id: 'log034', routineId: 'routine3', dayId: 'day4', date: '2026-04-02', cardio: 'Cinta: 20mins 10p 5kmh',
+    exercises: [
+      { exerciseId: 'day4-ex1', exerciseName: 'Press pecho en máquina convergente', order: 1, rawInput: '45x12, 47.5x12, 50x12', notes: 'Kg por brazo' },
+      { exerciseId: 'day4-ex2', exerciseName: 'Remo hammer o pecho apoyado', order: 2, rawInput: '50x12, 52.5x12, 55x12', notes: 'Kg por brazo' },
+      { exerciseId: 'day4-ex3', exerciseName: 'Arnold press', order: 3, rawInput: '16x10, 16x10, 16x9' },
+      { exerciseId: 'day4-ex4', exerciseName: 'Pájaros en peck-deck', order: 4, rawInput: '20x15, 22.5x12, 22.5x11' },
+      { exerciseId: 'day4-ex5', exerciseName: 'Curl inclinado mancuernas', order: 5, rawInput: '16x12, 18x11' },
+      { exerciseId: 'day4-ex6', exerciseName: 'Fondos máquina o polea tríceps', order: 6, rawInput: '130x12, 140x12' },
+    ],
+  },
 ];
 
 export const INITIAL_LOGS: WorkoutLog[] = [
