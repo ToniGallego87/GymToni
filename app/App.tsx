@@ -364,9 +364,10 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   navLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: theme.colors.textSecondary,
     fontWeight: '700',
+    lineHeight: 16,
   },
   navLabelActive: {
     color: theme.colors.text,

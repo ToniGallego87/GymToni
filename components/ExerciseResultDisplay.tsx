@@ -102,13 +102,13 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   exerciseName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: theme.colors.text,
     flex: 1,
   },
   improvementText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
   },
   improvementUp: {
@@ -133,16 +133,18 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   resultLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: theme.colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: 6,
     textTransform: 'uppercase',
+    lineHeight: 16,
   },
   resultValue: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     fontFamily: 'monospace',
+    lineHeight: 24,
   },
   currentResult: {
     color: theme.colors.push,

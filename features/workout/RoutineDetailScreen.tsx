@@ -79,12 +79,15 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 19,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    marginTop: theme.spacing.md,
   },
   dayBlock: {
     backgroundColor: theme.colors.surface,
@@ -112,10 +115,11 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   dayName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: theme.colors.text,
     flexShrink: 1,
+    lineHeight: 22,
   },
   dayBadge: {
     color: theme.colors.primaryLight,
@@ -123,9 +127,10 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.pill,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     overflow: 'hidden',
+    lineHeight: 16,
   },
   exerciseList: {
     gap: 8,
@@ -160,6 +165,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: theme.colors.primary,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 20,
   },
 });

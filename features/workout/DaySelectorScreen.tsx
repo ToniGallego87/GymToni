@@ -88,7 +88,9 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 4,
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
+    fontStyle: 'italic',
+    lineHeight: 19,
   },
   badge: {
     backgroundColor: theme.colors.primaryMuted,
@@ -104,6 +106,7 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    marginTop: theme.spacing.md,
   },
   dayCard: {
     backgroundColor: theme.colors.surface,
@@ -129,14 +132,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   dayName: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '800',
     color: theme.colors.text,
+    lineHeight: 22,
   },
   dayMeta: {
     marginTop: 2,
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSecondary,
+    lineHeight: 18,
   },
   dayBadge: {
     color: theme.colors.primaryLight,
@@ -144,9 +149,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: theme.borderRadius.pill,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '700',
     overflow: 'hidden',
+    lineHeight: 16,
   },
   backButton: {
     marginHorizontal: theme.spacing.md,
@@ -161,6 +167,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: theme.colors.primary,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 20,
   },
 });

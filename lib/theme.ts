@@ -35,28 +35,39 @@ export const theme = {
 
   typography: {
     h1: {
-      fontSize: 30,
+      fontSize: 28,
       fontWeight: '800' as const,
+      lineHeight: 32,
     },
     h2: {
-      fontSize: 24,
+      fontSize: 22,
       fontWeight: '800' as const,
+      lineHeight: 28,
     },
     h3: {
       fontSize: 18,
       fontWeight: '700' as const,
+      lineHeight: 24,
     },
     body: {
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '400' as const,
+      lineHeight: 22,
     },
     bodySmall: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '400' as const,
+      lineHeight: 18,
     },
     label: {
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '700' as const,
+      lineHeight: 18,
+    },
+    caption: {
+      fontSize: 12,
+      fontWeight: '600' as const,
+      lineHeight: 16,
     },
   },
 

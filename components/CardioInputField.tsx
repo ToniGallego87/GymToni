@@ -72,9 +72,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   title: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: theme.colors.text,
+    lineHeight: 22,
   },
   toggleButton: {
     paddingHorizontal: 8,
@@ -84,20 +85,22 @@ const styles = StyleSheet.create({
     opacity: 0.6,
   },
   toggleText: {
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSecondary,
+    lineHeight: 18,
   },
   input: {
     backgroundColor: theme.colors.darkGray,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
-    padding: 14,
-    fontSize: 13,
+    padding: 16,
+    fontSize: 15,
     fontFamily: 'monospace',
-    minHeight: 52,
+    minHeight: 56,
     color: theme.colors.text,
     marginTop: 10,
     textAlignVertical: 'top',
+    lineHeight: 22,
   },
 });

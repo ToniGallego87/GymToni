@@ -24,6 +24,7 @@ export function DataScreen({
   onClearData,
 }: DataScreenProps) {
   const { state } = useWorkout();
+  const [showImportModal, setShowImportModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [busyAction, setBusyAction] = useState<'import' | 'export' | null>(null);
   const [toast, setToast] = useState<{
@@ -55,6 +56,11 @@ export function DataScreen({
     }
   };
 
+  const handleImportPress = async () => {
+    setShowImportModal(false);
+    await handleAction('import', onImportData);
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -65,7 +71,7 @@ export function DataScreen({
       <ScrollView contentContainerStyle={styles.content}>
         {!hasNoData && (
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>Resumen actual</Text>
+            <Text style={styles.summaryTitle}>📊 Resumen actual</Text>
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{state.routines.length}</Text>
@@ -80,49 +86,78 @@ export function DataScreen({
           </View>
         )}
 
+        {!hasNoData && (
+          <View style={styles.actionCard}>
+            <Text style={styles.actionTitle}>📤 Exportar datos</Text>
+            <Text style={styles.actionSubtitle}>
+              Descarga un fichero con todas las rutinas y ejercicios.
+            </Text>
+            <Button
+              title={busyAction === 'export' ? 'Exportando…' : '📤 Exportar'}
+              onPress={() => handleAction('export', onExportData)}
+              disabled={busyAction !== null}
+              size="large"
+            />
+          </View>
+        )}
+
         <View style={styles.actionCard}>
-          <Text style={styles.actionTitle}>Importar</Text>
+          <Text style={styles.actionTitle}>📥 Importar datos</Text>
           <Text style={styles.actionSubtitle}>
-            Carga un backup JSON exportado previamente.
+            Carga un fichero exportado previamente.
           </Text>
           <Button
-            title={busyAction === 'import' ? 'Importando…' : 'Importar'}
-            onPress={() => handleAction('import', onImportData)}
+            title={busyAction === 'import' ? 'Importando…' : '📥 Importar'}
+            onPress={() => setShowImportModal(true)}
             disabled={busyAction !== null}
+            variant="primary"
             size="large"
           />
         </View>
 
         {!hasNoData && (
-          <>
-            <View style={styles.actionCard}>
-              <Text style={styles.actionTitle}>Exportar</Text>
-              <Text style={styles.actionSubtitle}>
-                Descarga un fichero con rutinas e historial.
-              </Text>
-              <Button
-                title={busyAction === 'export' ? 'Exportando…' : 'Exportar'}
-                onPress={() => handleAction('export', onExportData)}
-                disabled={busyAction !== null}
-                size="large"
-              />
-            </View>
-
-            <View style={[styles.actionCard, styles.dangerCard]}>
-              <Text style={[styles.actionTitle, styles.dangerTitle]}>Limpiar datos</Text>
-              <Text style={[styles.actionSubtitle, styles.dangerSubtitle]}>
-                Elimina todas las rutinas y entrenamientos guardados.
-              </Text>
-              <Button
-                title="Limpiar"
-                onPress={() => setShowClearModal(true)}
-                variant="danger"
-                size="large"
-              />
-            </View>
-          </>
+          <View style={[styles.actionCard, styles.dangerCard]}>
+            <Text style={[styles.actionTitle, styles.dangerTitle]}>🗑️ Limpiar datos</Text>
+            <Text style={[styles.actionSubtitle, styles.dangerSubtitle]}>
+              Elimina todas las rutinas y entrenamientos guardados.
+            </Text>
+            <Button
+              title="🗑️ Limpiar"
+              onPress={() => setShowClearModal(true)}
+              variant="danger"
+              size="large"
+            />
+          </View>
         )}
       </ScrollView>
+
+      <Modal visible={showImportModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>⚠️ Importar datos</Text>
+            <Text style={styles.modalText}>
+              Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?
+            </Text>
+
+            <View style={styles.modalButtons}>
+              <Button
+                title="Cancelar"
+                onPress={() => setShowImportModal(false)}
+                variant="secondary"
+                size="medium"
+                style={styles.modalButton}
+              />
+              <Button
+                title="Importar"
+                onPress={handleImportPress}
+                disabled={busyAction === 'import'}
+                size="medium"
+                style={styles.modalButton}
+              />
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showClearModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
@@ -185,11 +220,14 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 4,
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
+    fontStyle: 'italic',
+    lineHeight: 19,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    marginTop: theme.spacing.md,
     gap: 12,
   },
   summaryCard: {
@@ -201,10 +239,11 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   summaryTitle: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
     color: theme.colors.text,
     marginBottom: 12,
+    lineHeight: 24,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -221,8 +260,9 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     marginTop: 4,
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.textSecondary,
+    lineHeight: 19,
   },
   summaryDivider: {
     width: 1,
@@ -239,13 +279,14 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   actionTitle: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
     color: theme.colors.text,
+    lineHeight: 24,
   },
   actionSubtitle: {
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 14,
+    lineHeight: 19,
     color: theme.colors.textSecondary,
   },
   dangerCard: {
@@ -275,6 +316,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: theme.colors.text,
     marginBottom: 8,
+    lineHeight: 24,
   },
   modalText: {
     color: theme.colors.textSecondary,

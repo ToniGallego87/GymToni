@@ -292,10 +292,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   serieCount: {
-    fontSize: 11,
+    fontSize: 12,
     color: theme.colors.primaryLight,
     fontWeight: '700',
     marginTop: 2,
+    lineHeight: 16,
   },
   notesButton: {
     paddingHorizontal: 12,
@@ -334,7 +335,7 @@ const styles = StyleSheet.create({
   serieTagText: {
     color: theme.colors.primaryLight,
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
   inputRow: {
     flexDirection: 'row',
@@ -347,10 +348,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   inputLabel: {
-    fontSize: 11,
+    fontSize: 13,
     fontWeight: '700',
     color: theme.colors.textSecondary,
-    marginBottom: 4,
+    marginBottom: 6,
     textTransform: 'uppercase',
   },
   splitInput: {
@@ -358,8 +359,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.sm,
-    padding: 12,
-    fontSize: 16,
+    minHeight: 54,
+    padding: 14,
+    fontSize: 18,
     textAlign: 'center',
     color: theme.colors.text,
     fontWeight: '600',
@@ -416,7 +418,7 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.darkGray,
     fontWeight: '800',
-    fontSize: 12,
+    fontSize: 15,
   },
   buttonPressed: {
     opacity: 0.92,

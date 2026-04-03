@@ -249,7 +249,9 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 4,
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
+    fontStyle: 'italic',
+    lineHeight: 19,
   },
   backButton: {
     marginHorizontal: theme.spacing.md,
@@ -264,7 +266,8 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: theme.colors.primary,
     fontWeight: '700',
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 20,
   },
   detailTitleRow: {
     flexDirection: 'row',
@@ -273,8 +276,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   detailImprovementText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
+    lineHeight: 18,
   },
   detailImprovementUp: {
     color: theme.colors.success,
@@ -283,9 +287,10 @@ const styles = StyleSheet.create({
     color: theme.colors.error,
   },
   date: {
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSecondary,
     marginTop: 4,
+    lineHeight: 18,
   },
   scrollView: {
     flex: 1,
@@ -293,12 +298,14 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
+    marginTop: theme.spacing.md,
   },
   sectionTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: 'bold',
     color: theme.colors.primary,
     marginVertical: 12,
+    lineHeight: 22,
   },
   cardioBox: {
     backgroundColor: theme.colors.surface,
@@ -309,19 +316,21 @@ const styles = StyleSheet.create({
     borderLeftColor: theme.colors.primary,
   },
   cardioLabel: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '600',
     color: theme.colors.primary,
     marginBottom: 6,
+    lineHeight: 20,
   },
   cardioRaw: {
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.text,
     fontFamily: 'monospace',
     backgroundColor: theme.colors.darkGray,
     padding: 8,
     borderRadius: 4,
     marginBottom: 8,
+    lineHeight: 20,
   },
   cardioDetails: {
     flexDirection: 'row',
@@ -329,9 +338,10 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
   },
   cardioDetail: {
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.primary,
     fontWeight: '500',
+    lineHeight: 18,
   },
   footer: {
     marginTop: 32,
@@ -341,7 +351,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   footerText: {
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSecondary,
+    lineHeight: 18,
   },
 });

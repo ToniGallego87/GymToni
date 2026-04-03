@@ -376,7 +376,9 @@ const styles = StyleSheet.create({
   headerSubtitle: {
     marginTop: 4,
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 14,
+    fontStyle: 'italic',
+    lineHeight: 19,
   },
   scrollView: {
     flex: 1,
@@ -384,6 +386,7 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
+    marginTop: theme.spacing.md,
   },
   buttonContainer: {
     marginTop: 24,
@@ -433,21 +436,23 @@ const styles = StyleSheet.create({
     maxHeight: '80%',
   },
   modalTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
     color: theme.colors.text,
     marginBottom: 12,
+    lineHeight: 24,
   },
   notesInput: {
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    minHeight: 80,
+    padding: 14,
+    fontSize: 16,
+    minHeight: 88,
     color: theme.colors.text,
     backgroundColor: theme.colors.darkGray,
     marginBottom: 16,
+    lineHeight: 22,
   },
   modalButtons: {
     flexDirection: 'row',

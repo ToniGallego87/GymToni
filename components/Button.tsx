@@ -79,7 +79,8 @@ export function Button({
           styles.text,
           {
             color: getTextColor(),
-            fontSize: size === 'small' ? 12 : size === 'large' ? 16 : 14,
+            fontSize: size === 'small' ? 13 : size === 'large' ? 17 : 15,
+            lineHeight: size === 'small' ? 18 : size === 'large' ? 24 : 20,
           },
         ]}
       >

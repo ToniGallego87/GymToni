@@ -266,12 +266,15 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 4,
-    fontSize: 13,
+    fontSize: 14,
     color: theme.colors.textSecondary,
+    fontStyle: 'italic',
+    lineHeight: 19,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
+    marginTop: theme.spacing.md,
     gap: 12,
   },
   dayCard: {
@@ -284,15 +287,17 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   dayTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: theme.colors.primary,
+    lineHeight: 22,
   },
   label: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '700',
     color: theme.colors.textSecondary,
     textTransform: 'uppercase',
+    lineHeight: 18,
   },
   input: {
     backgroundColor: theme.colors.darkGray,
@@ -302,7 +307,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 20,
   },
   exercisesInput: {
     backgroundColor: theme.colors.darkGray,

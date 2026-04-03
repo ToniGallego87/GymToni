@@ -76,14 +76,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '700',
     color: theme.colors.text,
     marginBottom: 4,
   },
   description: {
-    fontSize: 12,
+    fontSize: 13,
     color: theme.colors.textSecondary,
+    lineHeight: 18,
   },
   badgeWrap: {
     marginLeft: 12,
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '700',
     overflow: 'hidden',
   },
