@@ -15,7 +15,7 @@ import {
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
 import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '@types/index';
-import { theme } from '@lib/theme';
+import { getDisplayDayName, theme } from '@lib/theme';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
@@ -595,12 +595,17 @@ export function HomeScreen({
     setShowRoutineSelector(false);
   };
 
+  const getExecutionDateLabel = (log: WorkoutLog): string => {
+    if (log.date) {
+      return new Date(`${log.date}T00:00:00`).toLocaleDateString('es-ES');
+    }
+
+    return new Date(log.createdAt).toLocaleDateString('es-ES');
+  };
+
   const isLogFromToday = (log: WorkoutLog): boolean => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const logDate = new Date(log.createdAt);
-    logDate.setHours(0, 0, 0, 0);
-    return today.getTime() === logDate.getTime();
+    const todayKey = new Date().toISOString().split('T')[0];
+    return log.date ? log.date === todayKey : getExecutionDateLabel(log) === new Date().toLocaleDateString('es-ES');
   };
 
   const handleDeleteLog = () => {
@@ -848,7 +853,7 @@ export function HomeScreen({
                               <Text style={styles.historyLogEmoji}>{day.emoji}</Text>
                               <View>
                                 <View style={styles.historyLogNameRow}>
-                                  <Text style={styles.historyLogDayName}>{day.name}</Text>
+                                  <Text style={styles.historyLogDayName}>{getDisplayDayName(day.name)}</Text>
                                   {!!improvement && (
                                     <Text
                                       style={[
@@ -860,7 +865,7 @@ export function HomeScreen({
                                     </Text>
                                   )}
                                 </View>
-                                <Text style={styles.historyLogDate}>{new Date(log.createdAt).toLocaleDateString('es-ES')}</Text>
+                                <Text style={styles.historyLogDate}>{getExecutionDateLabel(log)}</Text>
                               </View>
                             </View>
                             <Text style={styles.historyLogBadge}>Día {day.dayNumber}</Text>
