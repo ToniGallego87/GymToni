@@ -70,7 +70,7 @@ export function ExerciseResultDisplay({
 
         {!rawInput.trim() && (
           <View style={styles.emptySet}>
-            <Text style={styles.emptySetText}>No realizado</Text>
+            <Text style={styles.emptySetText}>-</Text>
           </View>
         )}
       </View>

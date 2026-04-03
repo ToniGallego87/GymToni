@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
     marginRight: 10,
   },
   dayName: {
-    fontSize: 16,
+    fontSize: 19,
     fontWeight: '800',
     color: theme.colors.text,
     flexShrink: 1,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.pill,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '700',
     overflow: 'hidden',
     lineHeight: 16,
@@ -148,12 +148,13 @@ const styles = StyleSheet.create({
   },
   exerciseText: {
     flex: 1,
-    fontSize: 13,
+    fontSize: 16,
     lineHeight: 18,
     color: theme.colors.textSecondary,
   },
   backButton: {
     marginHorizontal: theme.spacing.md,
+    marginTop: 16,
     marginBottom: theme.spacing.md,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,

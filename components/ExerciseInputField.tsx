@@ -47,7 +47,8 @@ export function ExerciseInputField({
     const weight = parseFloat(weightValue.trim());
     const reps = parseFloat(repsValue.trim());
 
-    if (!isNaN(weight) && !isNaN(reps) && weight > 0 && reps > 0) {
+    // Permitir peso 0 pero reps debe ser > 0
+    if (!isNaN(weight) && !isNaN(reps) && weight >= 0 && reps > 0) {
       onAddSet({ weight, reps });
       setWeightValue('');
       setRepsValue('');
@@ -190,7 +191,7 @@ export function ExerciseInputField({
                 ]}
                 onPress={onRemoveLastSet}
               >
-                <Text style={styles.buttonText}>➖ Borrar</Text>
+                <Text style={styles.buttonText}>− Borrar</Text>
               </Pressable>
             )}
 
@@ -219,7 +220,7 @@ export function ExerciseInputField({
             ]}
             onPress={onRemoveLastSet}
           >
-            <Text style={styles.buttonText}>— Borrar</Text>
+            <Text style={styles.buttonText}>− Borrar</Text>
           </Pressable>
         </View>
       )}
@@ -231,7 +232,8 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    marginVertical: 8,
+    marginTop: 16,
+    marginBottom: 8,
     padding: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -241,7 +243,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   titleSection: {
     flexDirection: 'row',
@@ -363,6 +365,7 @@ const styles = StyleSheet.create({
     padding: 14,
     fontSize: 18,
     textAlign: 'center',
+    textAlignVertical: 'center',
     color: theme.colors.text,
     fontWeight: '600',
   },
@@ -379,7 +382,7 @@ const styles = StyleSheet.create({
   },
   addButton: {
     flex: 1,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.success,
     paddingVertical: 12,
     borderRadius: theme.borderRadius.sm,
     alignItems: 'center',
@@ -394,7 +397,7 @@ const styles = StyleSheet.create({
   },
   finishButton: {
     flex: 1,
-    backgroundColor: theme.colors.success,
+    backgroundColor: theme.colors.warning,
     paddingVertical: 12,
     borderRadius: theme.borderRadius.sm,
     alignItems: 'center',

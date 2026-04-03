@@ -31,13 +31,49 @@ export function WorkoutLogScreen({
   const [selectedDay, setSelectedDay] = useState(day);
   const [showDaySelector, setShowDaySelector] = useState(false);
   
-  // Estado para almacenar las series agregadas por cada ejercicio
-  const [exerciseSets, setExerciseSets] = useState<Record<string, ParsedSet[]>>(
-    selectedDay.exercises.reduce((acc, ex) => ({ ...acc, [ex.id]: [] }), {})
-  );
+  // Función para obtener el último log de hoy para este día
+  const getLatestTodayLog = () => {
+    const today = getToday();
+    const logsForDayToday = state.logs.filter(
+      log => log.dayId === selectedDay.id && log.date === today
+    );
+    if (logsForDayToday.length === 0) return null;
+    
+    // Retornar el más reciente (createdAt más alto)
+    return logsForDayToday.reduce((latest, current) => 
+      current.createdAt > latest.createdAt ? current : latest
+    );
+  };
+
+  // Cargar datos iniciales del último log si existe
+  const latestTodayLog = getLatestTodayLog();
+  const initialExerciseSets = selectedDay.exercises.reduce((acc, ex) => {
+    if (latestTodayLog) {
+      const exerciseLog = latestTodayLog.exercises.find(e => e.exerciseId === ex.id);
+      if (exerciseLog && exerciseLog.parsedSets) {
+        return { ...acc, [ex.id]: exerciseLog.parsedSets };
+      }
+    }
+    return { ...acc, [ex.id]: [] };
+  }, {} as Record<string, ParsedSet[]>);
+
+  const initialNotes = selectedDay.exercises.reduce((acc, ex) => {
+    if (latestTodayLog) {
+      const exerciseLog = latestTodayLog.exercises.find(e => e.exerciseId === ex.id);
+      if (exerciseLog && exerciseLog.notes) {
+        return { ...acc, [ex.id]: exerciseLog.notes };
+      }
+    }
+    return acc;
+  }, {} as Record<string, string>);
+
+  const initialCardioInput = latestTodayLog?.cardio?.rawInput || '';
   
-  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>({});
-  const [cardioInput, setCardioInput] = useState('');
+  // Estado para almacenar las series agregadas por cada ejercicio
+  const [exerciseSets, setExerciseSets] = useState<Record<string, ParsedSet[]>>(initialExerciseSets);
+  
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(initialNotes);
+  const [cardioInput, setCardioInput] = useState(initialCardioInput);
   const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
   const [toast, setToast] = useState<{
@@ -62,10 +98,17 @@ export function WorkoutLogScreen({
   };
 
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
-    setExerciseSets((prev) => ({
-      ...prev,
-      [exerciseId]: [...prev[exerciseId], set],
-    }));
+    setExerciseSets((prev) => {
+      const updated = {
+        ...prev,
+        [exerciseId]: [...prev[exerciseId], set],
+      };
+      // Auto-guardar después de actualizar el estado
+      setTimeout(() => {
+        autoSaveWorkout(updated);
+      }, 0);
+      return updated;
+    });
   };
 
   const handleRemoveLastSet = (exerciseId: string) => {
@@ -96,9 +139,12 @@ export function WorkoutLogScreen({
     console.log(`[getPreviousExerciseLog] Logs for this day: ${logsForDay.length}`);
     
     // Obtener todos los ejercicios de esos logs
-    const allExercisesForDay = logsForDay.flatMap((log) =>
-      log.exercises.map((ex) => ({ ...ex, logDate: log.createdAt, logId: log.id }))
-    );
+    const allExercisesForDay: (ExerciseLog & { logDate: number; logId: string })[] = [];
+    logsForDay.forEach((log) => {
+      log.exercises.forEach((ex) => {
+        allExercisesForDay.push({ ...ex, logDate: log.createdAt, logId: log.id });
+      });
+    });
     console.log(`[getPreviousExerciseLog] All exercises for this day: ${allExercisesForDay.length}`);
     
     // Filtrar por exerciseId
@@ -144,6 +190,58 @@ export function WorkoutLogScreen({
     }
   };
 
+  const autoSaveWorkout = (sets: Record<string, ParsedSet[]>) => {
+    try {
+      const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
+        const exSets = sets[ex.id] || [];
+        const rawInput = exSets.map(s => s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`).join(', ');
+        
+        return {
+          id: generateId(),
+          exerciseId: ex.id,
+          exerciseName: ex.name,
+          order: ex.order,
+          rawInput,
+          parsedSets: exSets,
+          notes: exerciseNotes[ex.id],
+          timestamp: Date.now(),
+        };
+      });
+
+      const cardioLog: CardioLog | undefined = cardioInput.trim()
+        ? {
+            id: generateId(),
+            ...(parseCardioString(cardioInput) as Omit<CardioLog, 'id'>),
+          }
+        : undefined;
+
+      const workoutLog: WorkoutLog = {
+        id: generateId(),
+        routineId: getRoutineIdForDay(),
+        dayId: selectedDay.id,
+        date: getToday(),
+        exercises: exerciseLogs,
+        cardio: cardioLog,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
+
+      // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
+      const today = getToday();
+      const existingLogOfToday = state.logs.find(
+        log => log.dayId === selectedDay.id && log.date === today
+      );
+      
+      if (existingLogOfToday) {
+        dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+      }
+      
+      dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
+    } catch (error) {
+      console.error('Error auto-saving workout:', error);
+    }
+  };
+
   const handleSaveWorkout = () => {
     try {
       const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
@@ -180,6 +278,16 @@ export function WorkoutLogScreen({
         updatedAt: Date.now(),
       };
 
+      // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
+      const today = getToday();
+      const existingLogOfToday = state.logs.find(
+        log => log.dayId === selectedDay.id && log.date === today
+      );
+      
+      if (existingLogOfToday) {
+        dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+      }
+      
       dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
 
       setToast({
@@ -385,12 +493,12 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: 16,
-    paddingVertical: 16,
-    marginTop: theme.spacing.md,
+    paddingTop: 0,
+    paddingBottom: 16,
   },
   buttonContainer: {
     marginTop: 24,
-    marginBottom: 16,
+    marginBottom: 24,
   },
   sectionTitle: {
     fontSize: 16,
@@ -400,6 +508,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginHorizontal: theme.spacing.md,
+    marginTop: 16,
     marginBottom: theme.spacing.md,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,

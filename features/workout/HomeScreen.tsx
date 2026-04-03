@@ -21,10 +21,13 @@ interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onOpenDaySelector?: () => void;
+  onOpenRoutineSelector?: () => void;
   onOpenRoutineDetails?: (routine: WorkoutRoutine) => void;
   onCreateRoutine?: () => void;
   onDeleteCurrentRoutine?: () => void;
   canDeleteCurrentRoutine?: boolean;
+  initialShowRoutineSelector?: boolean;
+  onCloseRoutineSelector?: () => void;
 }
 
 interface WeekProgressPoint {
@@ -331,13 +334,16 @@ export function HomeScreen({
   onSelectDay,
   onSelectLog,
   onOpenDaySelector,
+  onOpenRoutineSelector,
   onOpenRoutineDetails,
   onCreateRoutine,
   onDeleteCurrentRoutine,
   canDeleteCurrentRoutine = false,
+  initialShowRoutineSelector = false,
+  onCloseRoutineSelector,
 }: HomeScreenProps) {
   const { state, dispatch } = useWorkout();
-  const [showRoutineSelector, setShowRoutineSelector] = useState(false);
+  const [showRoutineSelector, setShowRoutineSelector] = useState(initialShowRoutineSelector);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<Record<number, boolean>>({});
   const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(undefined);
@@ -634,7 +640,7 @@ export function HomeScreen({
             <RoutineCard
               key={routine.id}
               routine={routine}
-              isActive={routine.id === state.activeRoutineId}
+              isActive={routine.id === (viewedRoutineId || state.activeRoutineId)}
               onPress={() => handleSelectRoutine(routine.id)}
               onLongPress={canDelete ? () => setRoutineToDeleteId(routine.id) : undefined}
             />
@@ -653,6 +659,16 @@ export function HomeScreen({
             </TouchableOpacity>
           )}
         </ScrollView>
+
+        <Pressable style={styles.backButton} onPress={() => {
+          if (onCloseRoutineSelector) {
+            onCloseRoutineSelector();
+          } else {
+            setShowRoutineSelector(false);
+          }
+        }}>
+          <Text style={styles.backButtonText}>← Volver</Text>
+        </Pressable>
 
         <Modal
           visible={!!routineToDeleteId}
@@ -750,7 +766,13 @@ export function HomeScreen({
         <View style={styles.buttonsRow}>
           <TouchableOpacity
             style={styles.buttonRowItem}
-            onPress={() => setShowRoutineSelector(true)}
+            onPress={() => {
+              if (onOpenRoutineSelector) {
+                onOpenRoutineSelector();
+              } else {
+                setShowRoutineSelector(true);
+              }
+            }}
           >
             <Text style={styles.buttonRowLabel}>
               {displayedRoutine ? `Rutina ${state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1}` : 'Rutinas'} ▼
@@ -840,7 +862,14 @@ export function HomeScreen({
                             styles.historyLogCard,
                             pressed && styles.historyLogCardPressed,
                           ]}
-                          onPress={() => onSelectLog?.(log, day)}
+                          onPress={() => {
+                            // Si el log es de hoy (último insertado), ir a edición en lugar de detalle
+                            if (isLogFromToday(log)) {
+                              onSelectDay?.(day);
+                            } else {
+                              onSelectLog?.(log, day);
+                            }
+                          }}
                           onLongPress={() => {
                             if (isLogFromToday(log)) {
                               setLogToDeleteId(log.id);
@@ -974,7 +1003,7 @@ const styles = StyleSheet.create({
   progressCard: {
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.sm,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
@@ -995,13 +1024,13 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   progressTitle: {
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: '800',
     color: theme.colors.text,
     lineHeight: 22,
   },
   progressLatest: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
     lineHeight: 20,
   },
@@ -1044,7 +1073,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 32,
     textAlign: 'center',
-    fontSize: 11,
+    fontSize: 13,
     color: theme.colors.textSecondary,
     fontWeight: '700',
     lineHeight: 16,
@@ -1054,7 +1083,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 36,
     textAlign: 'right',
-    fontSize: 11,
+    fontSize: 13,
     color: theme.colors.textSecondary,
     paddingRight: 6,
     lineHeight: 16,
@@ -1070,7 +1099,7 @@ const styles = StyleSheet.create({
   },
   routineButtonText: {
     color: theme.colors.text,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
     lineHeight: 18,
   },
@@ -1079,7 +1108,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.lg,
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     paddingVertical: 32,
     paddingHorizontal: 24,
     alignItems: 'center',
@@ -1153,8 +1182,8 @@ const styles = StyleSheet.create({
   buttonsRow: {
     flexDirection: 'row',
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.lg,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.md,
     gap: 12,
   },
   buttonRowItem: {
@@ -1174,10 +1203,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 20,
+    textAlign: 'center',
   },
   weeksSection: {
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.md,
   },
   homeHistorySection: {
@@ -1257,13 +1287,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   weekTitle: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
     color: theme.colors.primary,
     lineHeight: 22,
   },
   weekImprovementText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
     lineHeight: 18,
   },
@@ -1274,7 +1304,7 @@ const styles = StyleSheet.create({
     color: theme.colors.error,
   },
   weekHeaderMeta: {
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.textSecondary,
     fontWeight: '700',
     lineHeight: 16,
@@ -1316,18 +1346,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   historyLogDayName: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '700',
     color: theme.colors.text,
     lineHeight: 20,
   },
   historyLogImprovementText: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '800',
     lineHeight: 18,
   },
   historyLogDate: {
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.primaryLight,
     marginTop: 4,
     lineHeight: 16,
@@ -1339,7 +1369,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '700',
     overflow: 'hidden',
     lineHeight: 16,
@@ -1356,7 +1386,7 @@ const styles = StyleSheet.create({
   },
   emptyHistoryText: {
     color: theme.colors.textSecondary,
-    fontSize: 13,
+    fontSize: 15,
     textAlign: 'center',
   },
   list: {
@@ -1381,24 +1411,25 @@ const styles = StyleSheet.create({
   },
   routineCardActive: {
     borderColor: theme.colors.primary,
+    borderWidth: 3,
     backgroundColor: theme.colors.surfaceAlt,
   },
   routineCardContent: {
     flex: 1,
   },
   routineCardName: {
-    fontSize: 17,
+    fontSize: 19,
     fontWeight: '800',
     color: theme.colors.text,
     marginBottom: 4,
   },
   routineCardDesc: {
-    fontSize: 13,
+    fontSize: 15,
     color: theme.colors.textSecondary,
     marginBottom: 4,
   },
   routineCardDays: {
-    fontSize: 12,
+    fontSize: 14,
     color: theme.colors.lightGray,
   },
   routineCardActiveIndicator: {
@@ -1421,7 +1452,7 @@ const styles = StyleSheet.create({
   },
   newRoutineCardText: {
     color: theme.colors.primary,
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
   },
   backButton: {
@@ -1436,7 +1467,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
   },
   backButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: theme.colors.primary,
   },
@@ -1458,13 +1489,13 @@ const styles = StyleSheet.create({
     ...theme.shadow.card,
   },
   modalTitle: {
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: '800',
     color: theme.colors.text,
     marginBottom: theme.spacing.sm,
   },
   modalMessage: {
-    fontSize: 14,
+    fontSize: 16,
     color: theme.colors.textSecondary,
     marginBottom: theme.spacing.md,
     lineHeight: 20,
@@ -1485,7 +1516,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonCancelText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: theme.colors.text,
   },
@@ -1498,7 +1529,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalButtonDeleteText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: '#fff',
   },

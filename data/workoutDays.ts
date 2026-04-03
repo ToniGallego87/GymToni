@@ -137,7 +137,7 @@ export const WORKOUT_ROUTINES: WorkoutRoutine[] = [
         id: 'day4',
         dayNumber: 4,
         name: 'Día 4 - Torso mixto',
-        emoji: '🔵🔴',
+        emoji: '🟡',
         exercises: [
           { id: 'day4-ex1', name: 'Press pecho en máquina convergente', order: 1, targetReps: '10-12', targetSets: 3 },
           { id: 'day4-ex2', name: 'Remo hammer o pecho apoyado', order: 2, targetReps: '10-12', targetSets: 3 },

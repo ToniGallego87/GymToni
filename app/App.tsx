@@ -2,7 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   CalendarScreen,
   DataScreen,
@@ -21,6 +21,7 @@ import { WorkoutAppData, WorkoutDay, WorkoutLog, WorkoutRoutine } from '@types/i
 
 type Screen =
   | { type: 'home' }
+  | { type: 'routine-selector' }
   | { type: 'day-selector' }
   | { type: 'workout-log'; day: WorkoutDay }
   | { type: 'detail'; log: WorkoutLog; day: WorkoutDay; origin: 'home' | 'calendar' }
@@ -166,6 +167,24 @@ function AppContent() {
     persistState();
   }, [hasHydrated, state.activeRoutineId, state.logs, state.routines]);
 
+  // Manejar botón atrás en móvil
+  useEffect(() => {
+    if (Platform.OS === 'android' || Platform.OS === 'ios') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (screen.type === 'home') {
+          // Permitir que salga de la app desde la pantalla de inicio
+          return false;
+        } else {
+          // En cualquier otra pantalla, volver a inicio
+          setScreen({ type: 'home' });
+          return true;
+        }
+      });
+
+      return () => backHandler.remove();
+    }
+  }, [screen.type]);
+
   const activeRoutine = useMemo(
     () => state.routines.find(routine => routine.id === state.activeRoutineId),
     [state.activeRoutineId, state.routines]
@@ -243,6 +262,26 @@ function AppContent() {
 
   return (
     <View style={styles.container}>
+      {screen.type === 'routine-selector' && (
+        <HomeScreen
+          onSelectDay={day => setScreen({ type: 'workout-log', day })}
+          onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onOpenDaySelector={() => {
+            if (activeRoutine?.days.length) {
+              setScreen({ type: 'day-selector' });
+            } else {
+              setScreen({ type: 'new-routine' });
+            }
+          }}
+          onOpenRoutineDetails={routine => setScreen({ type: 'routine-details', routine })}
+          onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+          onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
+          canDeleteCurrentRoutine={canDeleteCurrentRoutine}
+          initialShowRoutineSelector={true}
+          onCloseRoutineSelector={() => setScreen({ type: 'home' })}
+        />
+      )}
+
       {screen.type === 'home' && (
         <HomeScreen
           onSelectDay={day => setScreen({ type: 'workout-log', day })}
@@ -254,6 +293,7 @@ function AppContent() {
               setScreen({ type: 'new-routine' });
             }
           }}
+          onOpenRoutineSelector={() => setScreen({ type: 'routine-selector' })}
           onOpenRoutineDetails={routine => setScreen({ type: 'routine-details', routine })}
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
