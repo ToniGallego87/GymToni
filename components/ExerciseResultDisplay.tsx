@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ParsedSet } from '@types/index';
-import { formatSets, parseSeriesString, formatParsedSet } from '@lib/parsers';
+import { parseSeriesString, formatParsedSet } from '@lib/parsers';
 import { theme } from '@lib/theme';
 
 interface ExerciseResultDisplayProps {
@@ -17,9 +17,34 @@ interface ExerciseResultDisplayProps {
   isDetail?: boolean;
 }
 
-// Formatea sets con saltos de carro para vista detalle
-function formatSetsWithLineBreaks(sets: ParsedSet[]): string {
-  return sets.map(s => formatParsedSet(s)).join('\n');
+type ComparisonStatus = 'up' | 'same' | 'down' | 'missing';
+
+function compareSetPerformance(
+  current?: ParsedSet,
+  previous?: ParsedSet
+): ComparisonStatus {
+  if (!current || !previous) return 'missing';
+
+  if (current.weight > previous.weight) return 'up';
+  if (current.weight < previous.weight) return 'down';
+
+  if (current.reps > previous.reps) return 'up';
+  if (current.reps < previous.reps) return 'down';
+
+  return 'same';
+}
+
+function getStatusSymbol(status: ComparisonStatus): string {
+  switch (status) {
+    case 'up':
+      return '↑';
+    case 'down':
+      return '↓';
+    case 'same':
+      return '=';
+    default:
+      return '—';
+  }
 }
 
 export function ExerciseResultDisplay({
@@ -34,42 +59,56 @@ export function ExerciseResultDisplay({
   targetReps,
   isDetail = false,
 }: ExerciseResultDisplayProps) {
-  // Si parsedSets está vacío pero tenemos rawInput, intentar parsear
-  const effectiveParsedSets = (parsedSets && parsedSets.length > 0) 
-    ? parsedSets 
-    : (rawInput && rawInput !== '-' && rawInput.trim() ? parseSeriesString(rawInput) : []);
 
-  // Mostrar parsedSets si existen, sino usar rawInput, sino mostrar guión
-  const currentValue = (effectiveParsedSets && effectiveParsedSets.length > 0) 
-    ? (isDetail ? formatSetsWithLineBreaks(effectiveParsedSets) : formatSets(effectiveParsedSets))
-    : (rawInput && rawInput !== '-' && rawInput.trim() ? rawInput : 'No realizado');
-  const previousValue = (previousSets && previousSets.length > 0)
-    ? (isDetail ? formatSetsWithLineBreaks(previousSets) : formatSets(previousSets))
-    : '-';
+  const effectiveParsedSets =
+    parsedSets && parsedSets.length > 0
+      ? parsedSets
+      : rawInput && rawInput !== '-' && rawInput.trim()
+      ? parseSeriesString(rawInput)
+      : [];
+
+  const maxRows = Math.max(
+    effectiveParsedSets.length,
+    previousSets?.length ?? 0
+  );
+
+  const rows = Array.from({ length: maxRows }).map((_, i) => {
+    const current = effectiveParsedSets[i];
+    const previous = previousSets?.[i];
+
+    const status = compareSetPerformance(current, previous);
+
+    return {
+      currentText: current ? formatParsedSet(current) : '—',
+      previousText: previous ? formatParsedSet(previous) : '—',
+      status,
+    };
+  });
 
   return (
     <View style={[styles.container, isDetail && styles.containerDetail]}>
+
+      {/* Header */}
       <View style={[styles.header, isDetail && styles.headerDetail]}>
-        {isDetail && (targetSets !== undefined && targetReps !== undefined) ? (
-          <View style={styles.exerciseNameContainer}>
-            <Text style={[styles.exerciseName, styles.exerciseNameDetail]}>
-              {exerciseName}
-            </Text>
-            <Text style={[styles.exerciseTarget, isDetail && styles.exerciseTargetDetail]}>
-              {targetSets || '-'}x{targetReps || '-'}
-            </Text>
-          </View>
-        ) : (
+        <View style={styles.exerciseNameContainer}>
           <Text style={[styles.exerciseName, isDetail && styles.exerciseNameDetail]}>
             {exerciseName}
           </Text>
-        )}
+
+          {isDetail && (
+            <Text style={styles.exerciseTarget}>
+              {targetSets || '-'}x{targetReps || '-'}
+            </Text>
+          )}
+        </View>
+
         {!!improvementText && (
           <Text
             style={[
               styles.improvementText,
-              isDetail && styles.improvementTextDetail,
-              improvementPositive ? styles.improvementUp : styles.improvementDown,
+              improvementPositive
+                ? styles.improvementUp
+                : styles.improvementDown,
             ]}
           >
             {improvementText}
@@ -77,39 +116,57 @@ export function ExerciseResultDisplay({
         )}
       </View>
 
+      {/* Comparison */}
       <View style={styles.resultsContainer}>
-        <View style={styles.resultRow}>
-          <View style={styles.resultItem}>
-            <Text style={styles.resultLabel}>Realizado</Text>
-            <Text style={[styles.resultValue, isDetail && styles.resultValueDetail, styles.currentResult]}>
-              {currentValue}
-            </Text>
-          </View>
-          <View style={styles.resultItem}>
-            <Text style={styles.resultLabel}>Anterior</Text>
-            <Text style={[styles.resultValue, isDetail && styles.resultValueDetail, styles.previousResult]}>
-              {previousValue}
-            </Text>
-          </View>
+
+        <View style={styles.columnHeader}>
+          <Text style={styles.columnLabel}>Actual</Text>
+          <View style={{ width: 32 }} />
+          <Text style={styles.columnLabel}>Anterior</Text>
         </View>
 
-        {!rawInput.trim() && (
-          <View style={styles.emptySet}>
-            <Text style={styles.emptySetText}>-</Text>
+        {rows.map((row, index) => (
+          <View key={index} style={styles.row}>
+
+            <Text style={styles.currentValue}>
+              {row.currentText}
+            </Text>
+
+            <View style={[
+              styles.badge,
+              row.status === 'up' && styles.badgeUp,
+              row.status === 'down' && styles.badgeDown,
+              row.status === 'same' && styles.badgeSame,
+              row.status === 'missing' && styles.badgeMissing,
+            ]}>
+              <Text style={styles.badgeText}>
+                {getStatusSymbol(row.status)}
+              </Text>
+            </View>
+
+            <Text style={styles.previousValue}>
+              {row.previousText}
+            </Text>
+
           </View>
-        )}
+        ))}
+
       </View>
 
       {notes && (
         <View style={styles.notesContainer}>
-          <Text style={[styles.notes, isDetail && styles.notesDetail]}>{notes}</Text>
+          <Text style={styles.notes}>
+            {notes}
+          </Text>
         </View>
       )}
+
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
@@ -119,118 +176,143 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     ...theme.shadow.soft,
   },
+
   containerDetail: {
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.push,
   },
+
   header: {
     marginBottom: theme.spacing.md,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    gap: theme.spacing.sm,
   },
+
   headerDetail: {
     alignItems: 'flex-start',
   },
+
   exerciseNameContainer: {
     flex: 1,
   },
+
   exerciseName: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: theme.colors.text,
-    flex: 1,
   },
+
   exerciseNameDetail: {
     fontSize: 16,
     marginBottom: 4,
   },
+
   exerciseTarget: {
-    fontSize: 14,
-    fontWeight: '400',
+    fontSize: 13,
     color: theme.colors.textSecondary,
   },
-  exerciseTargetDetail: {
-    fontSize: 14,
-  },
+
   improvementText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '800',
   },
-  improvementTextDetail: {
-    fontSize: 16,
-  },
+
   improvementUp: {
     color: theme.colors.success,
   },
+
   improvementDown: {
     color: theme.colors.error,
   },
+
   resultsContainer: {
-    marginVertical: theme.spacing.sm,
+    marginTop: theme.spacing.sm,
   },
-  resultRow: {
+
+  columnHeader: {
     flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  resultItem: {
-    flex: 1,
-    backgroundColor: theme.colors.darkGray,
-    borderRadius: theme.borderRadius.sm,
-    padding: theme.spacing.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  resultLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
+    justifyContent: 'space-between',
     marginBottom: 6,
-    textTransform: 'uppercase',
-    lineHeight: 16,
+    paddingHorizontal: 4,
   },
-  resultValue: {
-    fontSize: 17,
-    fontWeight: '700',
-    fontFamily: 'monospace',
-    lineHeight: 24,
-  },
-  resultValueDetail: {
-    fontWeight: '400',
-    lineHeight: 20,
-  },
-  currentResult: {
-    color: theme.colors.push,
-  },
-  previousResult: {
-    color: theme.colors.previous,
-  },
-  emptySet: {
-    backgroundColor: theme.colors.darkGray,
-    borderRadius: theme.borderRadius.sm,
-    padding: theme.spacing.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  emptySetText: {
+
+  columnLabel: {
+    fontSize: 11,
     color: theme.colors.textSecondary,
-    fontStyle: 'italic',
+    textTransform: 'uppercase',
+    fontWeight: '600',
+    letterSpacing: 0.5,
   },
+
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border,
+  },
+
+  currentValue: {
+    flex: 1,
+    fontFamily: 'monospace',
+    color: theme.colors.push,
+    fontSize: 15,
+  },
+
+  previousValue: {
+    flex: 1,
+    textAlign: 'right',
+    fontFamily: 'monospace',
+    color: theme.colors.previous,
+    fontSize: 15,
+  },
+
+  badge: {
+    width: 28,
+    height: 20,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 8,
+  },
+
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  badgeUp: {
+    backgroundColor: 'rgb(80,200,120)',
+  },
+
+  badgeDown: {
+    backgroundColor: 'rgb(255,90,90)',
+  },
+
+  badgeSame: {
+    backgroundColor: 'rgb(180,180,180)',
+  },
+
+  badgeMissing: {
+    backgroundColor: 'rgb(120,120,120)',
+  },
+
   notesContainer: {
     marginTop: theme.spacing.md,
     paddingTop: theme.spacing.md,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
   },
+
   notes: {
     fontSize: 13,
     color: theme.colors.textSecondary,
-    lineHeight: 18,
     fontStyle: 'italic',
   },
-  notesDetail: {
-    fontSize: 15,
-  },
+
 });

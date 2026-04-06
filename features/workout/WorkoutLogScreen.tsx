@@ -174,6 +174,31 @@ export function WorkoutLogScreen({
     return null;
   };
 
+  const getExerciseVolumeScore = (parsedSets: ParsedSet[]): number => {
+    return parsedSets.reduce((sum, set) => {
+      if (set.weight === -1 || set.reps === -1) return sum;
+      return sum + set.weight * set.reps;
+    }, 0);
+  };
+
+  const buildExerciseImprovement = (
+    currentSets: ParsedSet[],
+    previousLog: ExerciseLog | null
+  ): { isImproved: boolean; percent: number } | null => {
+    if (!previousLog) return null;
+
+    const currentScore = getExerciseVolumeScore(currentSets);
+    const previousScore = getExerciseVolumeScore(previousLog.parsedSets || []);
+
+    if (previousScore <= 0 && currentScore <= 0) return null;
+    if (previousScore <= 0 && currentScore > 0) {
+      return { isImproved: true, percent: 30 };
+    }
+
+    const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
+    return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
+  };
+
   const handleFinishExercise = (exerciseId: string) => {
     const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
     if (targetSets > 0) {
@@ -339,7 +364,12 @@ export function WorkoutLogScreen({
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
       >
-        {selectedDay.exercises.map((exercise: any) => (
+        {selectedDay.exercises.map((exercise: any) => {
+          const previousLog = getPreviousExerciseLog(exercise.id);
+          const currentSets = exerciseSets[exercise.id] || [];
+          const improvement = buildExerciseImprovement(currentSets, previousLog);
+
+          return (
           <ExerciseInputField
             key={exercise.id}
             order={exercise.order}
@@ -348,15 +378,17 @@ export function WorkoutLogScreen({
               sets: exercise.targetSets,
               reps: exercise.targetReps,
             }}
-            addedSets={exerciseSets[exercise.id] || []}
+            addedSets={currentSets}
             onAddSet={(set) => handleAddSet(exercise.id, set)}
             onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
             onFinishExercise={() => handleFinishExercise(exercise.id)}
             onNotesPress={() => handleExerciseNotesPress(exercise.id)}
             notes={exerciseNotes[exercise.id]}
-            previousLog={getPreviousExerciseLog(exercise.id)}
+            previousLog={previousLog}
+            improvement={improvement}
           />
-        ))}
+          );
+        })}
 
         <CardioInputField
           value={cardioInput}

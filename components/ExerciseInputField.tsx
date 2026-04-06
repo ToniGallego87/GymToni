@@ -26,6 +26,7 @@ interface ExerciseInputFieldProps {
   onNotesPress: (event: GestureResponderEvent) => void;
   notes?: string;
   previousLog?: ExerciseLog | null;
+  improvement?: { isImproved: boolean; percent: number } | null;
 }
 
 export function ExerciseInputField({
@@ -39,6 +40,7 @@ export function ExerciseInputField({
   onNotesPress,
   notes,
   previousLog,
+  improvement,
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
@@ -57,6 +59,48 @@ export function ExerciseInputField({
 
   const isMaxSetsReached = target?.sets ? addedSets.length >= target.sets : false;
   const hasAddedSets = addedSets.length > 0;
+
+  const getWeightPlaceholder = () => {
+    if (addedSets.length > 0) {
+      return String(addedSets[addedSets.length - 1].weight);
+    }
+    
+    if (previousLog) {
+      if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
+        return String(previousLog.parsedSets[0].weight);
+      }
+      
+      if (previousLog.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+        const parsed = parseSeriesString(previousLog.rawInput);
+        if (parsed.length > 0) {
+          return String(parsed[0].weight);
+        }
+      }
+    }
+    
+    return '0';
+  };
+
+  const getRepPlaceholder = () => {
+    if (addedSets.length > 0) {
+      return String(addedSets[addedSets.length - 1].reps);
+    }
+    
+    if (previousLog) {
+      if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
+        return String(previousLog.parsedSets[0].reps);
+      }
+      
+      if (previousLog.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+        const parsed = parseSeriesString(previousLog.rawInput);
+        if (parsed.length > 0) {
+          return String(parsed[0].reps);
+        }
+      }
+    }
+    
+    return '0';
+  };
 
   const getPreviousSetsSummary = () => {
     if (!previousLog) return '';
@@ -86,10 +130,7 @@ export function ExerciseInputField({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.titleSection}>
-          <View style={styles.orderBadge}>
-            <Text style={styles.order}>{order}</Text>
-          </View>
-          <Text style={styles.exerciseName}>{exerciseName}</Text>
+          <Text style={styles.exerciseName}>{order}.- {exerciseName}</Text>
         </View>
         <Pressable
           style={({ pressed }) => [
@@ -105,14 +146,26 @@ export function ExerciseInputField({
       </View>
 
       {target?.sets && target?.reps && (
-        <Text style={styles.targetRow}>
-          Objetivo: {target.sets}x{target.reps}
-        </Text>
+        <View style={styles.targetRowContainer}>
+          <Text style={styles.targetRow}>
+            Objetivo: {target.sets}x{target.reps}
+          </Text>
+          {improvement && addedSets.length > 0 && (
+            <Text
+              style={[
+                styles.improvementText,
+                improvement.isImproved ? styles.improvementUp : styles.improvementDown,
+              ]}
+            >
+              {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
+            </Text>
+          )}
+        </View>
       )}
 
       {previousLog && (
         <Text style={styles.previousRow}>
-          Anterior {getPreviousSetsSummary() || '-'}
+          Anterior: {getPreviousSetsSummary() || '-'}
         </Text>
       )}
 
@@ -147,7 +200,7 @@ export function ExerciseInputField({
               <Text style={styles.inputLabel}>Peso (kg)</Text>
               <TextInput
                 style={styles.splitInput}
-                placeholder="0"
+                placeholder={getWeightPlaceholder()}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={weightValue}
                 onChangeText={setWeightValue}
@@ -162,7 +215,7 @@ export function ExerciseInputField({
               <Text style={styles.inputLabel}>Repeticiones</Text>
               <TextInput
                 style={styles.splitInput}
-                placeholder="0"
+                placeholder={getRepPlaceholder()}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={repsValue}
                 onChangeText={setRepsValue}
@@ -250,32 +303,33 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
   },
-  orderBadge: {
-    minWidth: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: theme.colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  order: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.primaryLight,
-    textAlign: 'center',
-  },
   exerciseName: {
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '700',
     color: theme.colors.text,
     flexShrink: 1,
+  },
+  targetRowContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   targetRow: {
     fontSize: 14,
     fontWeight: '900',
     color: '#FFD400',
-    marginBottom: 8,
+  },
+  improvementText: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  improvementUp: {
+    color: theme.colors.success,
+  },
+  improvementDown: {
+    color: theme.colors.error,
   },
   previousRow: {
     fontSize: 13,

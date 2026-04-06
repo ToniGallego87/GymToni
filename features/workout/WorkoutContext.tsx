@@ -91,6 +91,25 @@ function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutStat
       };
     case 'SET_LOGS':
       return { ...state, logs: action.payload };
+    case 'UPDATE_DAY': {
+      return {
+        ...state,
+        routines: state.routines.map(routine => {
+          if (routine.id === action.payload.routineId) {
+            return {
+              ...routine,
+              days: routine.days.map(day => {
+                if (day.id === action.payload.dayId) {
+                  return action.payload.day;
+                }
+                return day;
+              }),
+            };
+          }
+          return routine;
+        }),
+      };
+    }
     case 'CLEAR_DATA':
       return {
         ...state,

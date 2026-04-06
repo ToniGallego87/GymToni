@@ -392,6 +392,11 @@ export function HomeScreen({
       return;
     }
 
+    // Si el entrenamiento de hoy ya está completado, no hacer nada
+    if (isTodayWorkoutCompleted()) {
+      return;
+    }
+
     // No permitir iniciar entrenamiento con rutina vieja que NO sea la activa
     if (isRoutineOld && !isDisplayedRoutineActive) {
       return;
@@ -414,6 +419,24 @@ export function HomeScreen({
       if (day) return day;
     }
     return undefined;
+  };
+
+  const isTodayWorkoutCompleted = (): boolean => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    return displayedRoutineLogs.some(log => {
+      if (log.date) {
+        return log.date === todayKey;
+      }
+      return new Date(log.createdAt).toISOString().split('T')[0] === todayKey;
+    });
+  };
+
+  const isWeekCompleted = (weekLogs: WorkoutLog[]): boolean => {
+    if (weekLogs.length === 0) return false;
+    if (activeDays.length === 0) return false;
+    
+    const daysWithLogs = new Set(weekLogs.map(log => log.dayId));
+    return activeDays.every(day => daysWithLogs.has(day.id));
   };
 
   const getLogTimestamp = (log: WorkoutLog) => {
@@ -630,7 +653,7 @@ export function HomeScreen({
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>📚 Selecciona una rutina</Text>
-          <Text style={styles.subtitle}>Elige cuál deseas trabajar hoy</Text>
+          <Text style={styles.subtitle}>Consulta la que desees o crea una nueva</Text>
         </View>
 
         <ScrollView
@@ -748,23 +771,23 @@ export function HomeScreen({
 
         <Pressable
           style={({ pressed }) => [
-            hasNoRoutines ? styles.heroCardWarning : (isRoutineOld && !isDisplayedRoutineActive ? styles.heroCardClosed : styles.heroCard),
+            hasNoRoutines ? styles.heroCardWarning : (isRoutineOld && !isDisplayedRoutineActive ? styles.heroCardClosed : (isTodayWorkoutCompleted() ? styles.heroCardCompleted : styles.heroCard)),
             pressed && styles.heroCardPressed
           ]}
           onPress={handleStartPress}
         >
           <View style={styles.heroGlow} />
           <View style={styles.heroIconWrap}>
-            <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : isRoutineOld && !isDisplayedRoutineActive ? '🔒' : '🏋️'}</Text>
+            <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : isRoutineOld && !isDisplayedRoutineActive ? '🔒' : (isTodayWorkoutCompleted() ? '✔️' : '🏋️')}</Text>
           </View>
-          <Text style={styles.heroTitle}>
-            {hasNoRoutines ? 'Añade una rutina' : isRoutineOld && !isDisplayedRoutineActive ? 'Rutina Cerrada' : 'Empezar entrenamiento'}
-          </Text>
-          <Text style={styles.heroSubtitle}>
-            {hasNoRoutines
-              ? 'Crea una rutina personalizada para comenzar'
-              : ''}
-          </Text>
+          <View style={styles.heroTitleWrapper}>
+            <Text 
+              style={styles.heroTitle}
+              numberOfLines={1}
+            >
+              {hasNoRoutines ? 'Añade una rutina' : isRoutineOld && !isDisplayedRoutineActive ? 'Rutina Cerrada' : (isTodayWorkoutCompleted() ? 'Entrenamiento completado' : 'Empezar entrenamiento')}
+            </Text>
+          </View>
         </Pressable>
 
         {!hasNoRoutines && (
@@ -828,9 +851,12 @@ export function HomeScreen({
             <ScrollView nestedScrollEnabled style={{ flex: 1 }}>
               {blocks.map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
+                const weekLogsFull = groupedByBlock[block];
+                const weekCompleted = isWeekCompleted(weekLogsFull);
                 // Si la rutina no es activa, todas las semanas están colapsadas
-                // Si es activa, la última semana está expandida por defecto
-                const isExpanded = isDisplayedRoutineActive 
+                // Si es activa y la semana no está completada, la última semana está expandida por defecto
+                // Las semanas completadas están colapsadas por defecto, pero se pueden expandir/colapsar manualmente
+                const isExpanded = isDisplayedRoutineActive && !weekCompleted
                   ? (expandedWeekBlocks[block] ?? (block === currentWeekBlock))
                   : (expandedWeekBlocks[block] ?? false);
                 const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
@@ -1118,10 +1144,10 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.md,
-    paddingVertical: 32,
+    paddingVertical: 25,
     paddingHorizontal: 24,
     alignItems: 'center',
-    overflow: 'hidden',
+    overflow: 'visible',
     ...theme.shadow.card,
   },
   heroCardPressed: {
@@ -1152,6 +1178,18 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...theme.shadow.card,
   },
+  heroCardCompleted: {
+    backgroundColor: theme.colors.success,
+    borderRadius: theme.borderRadius.lg,
+    marginHorizontal: theme.spacing.md,
+    marginTop: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    paddingVertical: 25,
+    paddingHorizontal: 24,
+    alignItems: 'center',
+    overflow: 'visible',
+    ...theme.shadow.card,
+  },
   heroGlow: {
     position: 'absolute',
     top: -30,
@@ -1171,22 +1209,20 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   heroIcon: {
-    fontSize: 36,
+    fontSize: 40,
+  },
+  heroTitleWrapper: {
+    width: '100%',
+    paddingHorizontal: theme.spacing.md,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroTitle: {
     color: theme.colors.darkGray,
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.8,
-    marginBottom: 8,
-  },
-  heroSubtitle: {
-    color: theme.colors.darkGray,
-    fontSize: 15,
-    fontWeight: '600',
-    opacity: 0.78,
     textAlign: 'center',
-    lineHeight: 21,
   },
   buttonsRow: {
     flexDirection: 'row',

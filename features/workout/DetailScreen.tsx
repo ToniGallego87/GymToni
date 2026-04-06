@@ -275,6 +275,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     marginHorizontal: theme.spacing.md,
+    marginTop: 16,
     marginBottom: theme.spacing.md,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
