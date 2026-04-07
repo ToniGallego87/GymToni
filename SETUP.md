@@ -14,20 +14,7 @@
 
 ## 🎯 Requisitos
 
-### **OPCIÓN 1: Expo Snack (SIN INSTALAR NADA) ⭐ RECOMENDADO**
-
-✅ **Solo necesitas:**
-- Navegador web (Chrome, Firefox, Safari, Edge)
-- Conexión a internet
-- **Nada más** - Sin Node.js, npm, ni instalaciones
-
-📖 **Ver instrucciones completas**: [`EXPO_SNACK_SETUP.md`](EXPO_SNACK_SETUP.md)
-
----
-
-### **OPCIÓN 2: Instalación Local (Con Node.js)**
-
-⚠️ **Solo si quieres persistencia de datos o desarrollo avanzado**
+**Instalación Local (Con Node.js)**
 
 **Requisitos:**
 - Node.js 16+ (https://nodejs.org)
@@ -36,37 +23,7 @@
 
 ---
 
-## 📱 ¿CUÁL OPCIÓN ELEGIR?
-
-| Característica | Expo Snack | Local |
-|---|---|---|
-| **Instalación** | ❌ Ninguna | ✅ Node.js + npm |
-| **Persistencia** | ⚠️ Solo sesión | ✅ Permanente (AsyncStorage) |
-| **Velocidad iniciar** | ⭐⭐⭐⭐⭐ | ⭐⭐ |
-| **Ideal para** | Testing, Demo, Uso simple | Desarrollo, Larga duración |
-| **Compartir** | Fácil (link) | Difícil |
-
----
-
-## 🌐 OPCIÓN 1: Expo Snack (Recomendado)
-
-### Pasos:
-
-1. **Abre** https://snack.expo.dev
-2. **Copia TODO el código** de la sección "Código" en `EXPO_SNACK_SETUP.md`
-3. **Pega** en el editor de Expo Snack (Ctrl+A, luego Ctrl+V)
-4. **Espera** a que compile (15-30 segundos)
-5. **Prueba:**
-   - **Web**: Click en "Web" (arriba derecha)
-   - **Móvil**: Descarga "Expo Go", escanea QR
-
-**✅ ¡Listo! Ya puedes usar GymTrack sin instalar nada.**
-
-👉 **[Ver todas las instrucciones de Expo Snack](EXPO_SNACK_SETUP.md)**
-
----
-
-## 💻 OPCIÓN 2: Instalación Local
+## � Instalación Local
 
 ### 1️⃣ Instalar Dependencias
 
@@ -123,7 +80,6 @@ GymTrack/
 │
 ├── 📄 SETUP.md                    ← Estás aquí
 ├── 📄 README.md                   ← Documentación completa
-├── 📄 EXPO_SNACK_SETUP.md         ← Guía Expo Snack + Código
 ├── 📄 ROADMAP.md                  ← Próximas features
 ├── 📄 app.json                    ← Config de Expo
 ├── 📄 package.json                ← Dependencias
@@ -314,10 +270,6 @@ Elíptica: 20mins, 8.5kmh
 - ✅ 25-30 ejercicios por rutina
 - ✅ Descripción y emojis para cada día
 
-### **Expo Snack**
-- ✅ Código single-file funcional en Expo Snack (~1200 líneas)
-- ✅ Sin persistencia (limitación Snack), pero funcionalidad completa
-- ✅ Instrucciones paso a paso en `EXPO_SNACK_SETUP.md`
 
 ---
 
@@ -607,7 +559,6 @@ parseSeriesString('')
 
 ## 📚 Documentación Adicional
 
-- **[EXPO_SNACK_SETUP.md](EXPO_SNACK_SETUP.md)** - Completa guía sin Node.js + Código
 - **[README.md](README.md)** - Overview del proyecto
 - **[ROADMAP.md](ROADMAP.md)** - Features futuras
 
@@ -615,9 +566,8 @@ parseSeriesString('')
 
 ## ✅ Checklist de Setup
 
-- [ ] Elegiste **Expo Snack** o **Instalación Local**
-- [ ] Para Snack: Copiaste código de `EXPO_SNACK_SETUP.md`
-- [ ] Para Local: Ejecutaste `npm install` y `npm run web`
+- [ ] Ejecutaste `npm install`
+- [ ] Ejecutaste `npm run web` o `npm start`
 - [ ] La app está corriendo
 - [ ] Probaste registrar un entrenamiento
 - [ ] Probaste cambiar de rutina
@@ -627,14 +577,9 @@ parseSeriesString('')
 
 ## 🎯 Próximos Pasos
 
-1. **Para testing rápido**: Usa Expo Snack (0 instalaciones)
-2. **Para persistencia**: Usa versión local con AsyncStorage
-3. **Para compartir**: Usa Expo Snack (solo comparte el link)
-4. **Para deployment**: Consulta [README.md](README.md) y [ROADMAP.md](ROADMAP.md)
-
----
-
-**¿Dudas? 👉 Consulta [EXPO_SNACK_SETUP.md](EXPO_SNACK_SETUP.md) para instrucciones detalladas.**
+1. **Instalación local**: Ejecuta `npm install` y `npm run web`
+2. **Desarrollo**: Usa `npm start` para Expo Go o `npm run web` para web
+3. **Para deployment**: Consulta [README.md](README.md) y [ROADMAP.md](ROADMAP.md)
 
 ### 2️⃣ Ejecutar la App
 
@@ -843,14 +788,14 @@ npm run type-check
 
 ## ✨ Resumen Final
 
-**GymTrack MVP está 100% listo para:**
-- ✅ Ejecutar localmente
+**GymToni MVP está 100% listo para:**
+- ✅ Ejecutar localmente con persistencia de datos
 - ✅ Registrar y guardar entrenamientos
 - ✅ Ver historial completo
 - ✅ Estudiar el código (TypeScript, componentes, state)
 - ✅ Extender con nuevas features
 
-**Sin dependencias complejas. Sin configuración complicada. Puro React Native.**
+**Sin dependencias complejas. Sin configuración complicada. Puro React Native con AsyncStorage.**
 
 ---
 

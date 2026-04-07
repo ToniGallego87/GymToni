@@ -24,13 +24,14 @@ export const theme = {
     error: '#F06A6A',
     errorLight: '#F59898',
     warning: '#FFB347',
-    current: '#52C878',
+    current: '#6F8FDF',
     previous: '#FFB347',
     accent: '#F7CC3D',
     overlay: 'rgba(6, 8, 12, 0.72)',
-    push: '#6F8FDF',
-    pull: '#CE7686',
-    legs: '#67B58C',
+    emoji_blue: '#6F8FDF',
+    emoji_purple: '#784c9a',
+    emoji_green: '#67B58C',
+    emoji_orange: '#FF9500'
   },
 
   typography: {
@@ -116,10 +117,17 @@ export function getDisplayDayName(name?: string | null) {
 }
 
 export function getTrainingAccent(target?: DayAccentTarget) {
-  if (!target) return theme.colors.primary;
-  if (target.emoji === '🔵🔴' || target.emoji === '🔴🔵') return theme.colors.primary;
-  if (target.emoji?.includes('🔵') || /push/i.test(target.name || '')) return theme.colors.push;
-  if (target.emoji?.includes('🔴') || /pull/i.test(target.name || '')) return theme.colors.pull;
-  if (target.emoji?.includes('🟢') || /pierna|leg/i.test(target.name || '')) return theme.colors.legs;
-  return theme.colors.primary;
+  if (!target?.emoji) return theme.colors.primary;
+  
+  // Map all available emojis to accent colors
+  const emojiColorMap: Record<string, string> = {
+    '🔴': theme.colors.error,              // Rojo
+    '🟠': theme.colors.emoji_orange,       // Naranja
+    '🟡': theme.colors.primary,            // Amarillo
+    '🟢': theme.colors.emoji_green,        // Verde
+    '🔵': theme.colors.emoji_blue,         // Azul
+    '🟣': theme.colors.emoji_purple,       // Púrpura
+  };
+  
+  return emojiColorMap[target.emoji] || theme.colors.primary;
 }

@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
 
   containerDetail: {
     borderLeftWidth: 4,
-    borderLeftColor: theme.colors.push,
+    borderLeftColor: theme.colors.current,
   },
 
   header: {
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   currentValue: {
     flex: 1,
     fontFamily: 'monospace',
-    color: theme.colors.push,
+    color: theme.colors.current,
     fontSize: 15,
   },
 

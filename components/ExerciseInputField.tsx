@@ -150,7 +150,7 @@ export function ExerciseInputField({
           <Text style={styles.targetRow}>
             Objetivo: {target.sets}x{target.reps}
           </Text>
-          {improvement && addedSets.length > 0 && (
+          {improvement && addedSets.length > 0 && isMaxSetsReached && (
             <Text
               style={[
                 styles.improvementText,
@@ -166,6 +166,12 @@ export function ExerciseInputField({
       {previousLog && (
         <Text style={styles.previousRow}>
           Anterior: {getPreviousSetsSummary() || '-'}
+          <br></br>
+          {previousLog?.notes && (
+            <Text style={styles.previousNotesRow}>
+               -{previousLog.notes}-
+            </Text>
+          )}
         </Text>
       )}
 

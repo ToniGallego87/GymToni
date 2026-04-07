@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   ScrollView,
@@ -8,6 +8,7 @@ import {
   Modal,
   TextInput,
   Pressable,
+  Vibration,
 } from 'react-native';
 import { useWorkout } from '@hooks/useWorkout';
 import { ExerciseInputField, CardioInputField, Button, Toast } from '@components';
@@ -15,6 +16,7 @@ import { parseCardioString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
 import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '@types/index';
 import { theme } from '@lib/theme';
+import { buildImprovementFromStrengthScores, getBestSetStrengthScore } from '@lib/progress';
 
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
@@ -30,6 +32,25 @@ export function WorkoutLogScreen({
   const { state, dispatch } = useWorkout();
   const [selectedDay, setSelectedDay] = useState(day);
   const [showDaySelector, setShowDaySelector] = useState(false);
+  const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  
+  useEffect(() => {
+    if (!activeTimerId || timerSeconds <= 0) return;
+
+    const interval = setInterval(() => {
+      setTimerSeconds(prev => {
+        if (prev <= 1) {
+          setActiveTimerId(null);
+          Vibration.vibrate(500);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [activeTimerId, timerSeconds]);
   
   // Función para obtener el último log de hoy para este día
   const getLatestTodayLog = () => {
@@ -97,6 +118,12 @@ export function WorkoutLogScreen({
     return activeRoutine?.days || [];
   };
 
+  const getTimerDurationFromRoutine = (): number => {
+    const routineId = getRoutineIdForDay();
+    const routine = state.routines.find(r => r.id === routineId) as any;
+    return routine?.timerDuration || 150;
+  };
+
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     setExerciseSets((prev) => {
       const updated = {
@@ -109,6 +136,9 @@ export function WorkoutLogScreen({
       }, 0);
       return updated;
     });
+    // Activar cronómetro
+    setActiveTimerId(exerciseId);
+    setTimerSeconds(getTimerDurationFromRoutine());
   };
 
   const handleRemoveLastSet = (exerciseId: string) => {
@@ -174,29 +204,15 @@ export function WorkoutLogScreen({
     return null;
   };
 
-  const getExerciseVolumeScore = (parsedSets: ParsedSet[]): number => {
-    return parsedSets.reduce((sum, set) => {
-      if (set.weight === -1 || set.reps === -1) return sum;
-      return sum + set.weight * set.reps;
-    }, 0);
-  };
-
   const buildExerciseImprovement = (
     currentSets: ParsedSet[],
     previousLog: ExerciseLog | null
   ): { isImproved: boolean; percent: number } | null => {
     if (!previousLog) return null;
 
-    const currentScore = getExerciseVolumeScore(currentSets);
-    const previousScore = getExerciseVolumeScore(previousLog.parsedSets || []);
-
-    if (previousScore <= 0 && currentScore <= 0) return null;
-    if (previousScore <= 0 && currentScore > 0) {
-      return { isImproved: true, percent: 30 };
-    }
-
-    const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
-    return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
+    const currentScore = getBestSetStrengthScore(currentSets);
+    const previousScore = getBestSetStrengthScore(previousLog.parsedSets || []);
+    return buildImprovementFromStrengthScores(currentScore, previousScore);
   };
 
   const handleFinishExercise = (exerciseId: string) => {
@@ -370,23 +386,40 @@ export function WorkoutLogScreen({
           const improvement = buildExerciseImprovement(currentSets, previousLog);
 
           return (
-          <ExerciseInputField
-            key={exercise.id}
-            order={exercise.order}
-            exerciseName={exercise.name}
-            target={{
-              sets: exercise.targetSets,
-              reps: exercise.targetReps,
-            }}
-            addedSets={currentSets}
-            onAddSet={(set) => handleAddSet(exercise.id, set)}
-            onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
-            onFinishExercise={() => handleFinishExercise(exercise.id)}
-            onNotesPress={() => handleExerciseNotesPress(exercise.id)}
-            notes={exerciseNotes[exercise.id]}
-            previousLog={previousLog}
-            improvement={improvement}
-          />
+          <>
+            <ExerciseInputField
+              key={exercise.id}
+              order={exercise.order}
+              exerciseName={exercise.name}
+              target={{
+                sets: exercise.targetSets,
+                reps: exercise.targetReps,
+              }}
+              addedSets={currentSets}
+              onAddSet={(set) => handleAddSet(exercise.id, set)}
+              onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
+              onFinishExercise={() => handleFinishExercise(exercise.id)}
+              onNotesPress={() => handleExerciseNotesPress(exercise.id)}
+              notes={exerciseNotes[exercise.id]}
+              previousLog={previousLog}
+              improvement={improvement}
+            />
+            {activeTimerId === exercise.id && timerSeconds > 0 && (
+              <Pressable 
+                style={styles.timerContainer}
+                onPress={() => setTimerSeconds(prev => prev + 30)}
+                onLongPress={() => setTimerSeconds(0)}
+                delayLongPress={2000}
+                disabled={false}
+              >
+                <Text style={styles.timerLabel}>Tiempo hasta la siguiente serie</Text>
+                <Text style={styles.timerText}>
+                  {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
+                </Text>
+                <Text style={styles.timerHint}>Pulsa para +30s, mantén 2s para eliminar</Text>
+              </Pressable>
+            )}
+          </>
           );
         })}
 
@@ -529,8 +562,7 @@ const styles = StyleSheet.create({
     paddingBottom: 16,
   },
   buttonContainer: {
-    marginTop: 24,
-    marginBottom: 24,
+    marginTop: 15,
   },
   sectionTitle: {
     fontSize: 16,
@@ -620,5 +652,32 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: theme.colors.text,
     fontWeight: '500',
+  },
+  timerContainer: {
+    marginVertical: 16,
+    marginHorizontal: 20,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.lg,
+    padding: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timerText: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: theme.colors.darkGray,
+  },
+  timerLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: theme.colors.darkGray,
+    marginBottom: 12,
+  },
+  timerHint: {
+    fontSize: 12,
+    fontStyle: 'italic',
+    color: theme.colors.darkGray,
+    marginTop: 12,
+    opacity: 0.8,
   },
 });

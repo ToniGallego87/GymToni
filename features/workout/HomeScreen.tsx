@@ -16,6 +16,7 @@ import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
 import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '@types/index';
 import { getDisplayDayName, theme } from '@lib/theme';
+import { buildImprovementFromStrengthScores, getWorkoutStrengthScore } from '@lib/progress';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
@@ -38,53 +39,6 @@ interface WeekProgressPoint {
 interface ImprovementResult {
   isImproved: boolean;
   percent: number;
-}
-
-function getWorkoutVolumeScore(log: WorkoutLog): number {
-  return log.exercises.reduce((exerciseAcc, exercise) => {
-    const exerciseVolume = exercise.parsedSets.reduce(
-      (setAcc, setItem) => setAcc + setItem.weight * setItem.reps,
-      0
-    );
-    return exerciseAcc + exerciseVolume;
-  }, 0);
-}
-
-function getWorkoutRepsScore(log: WorkoutLog): number {
-  return log.exercises.reduce((exerciseAcc, exercise) => {
-    const repsScore = exercise.parsedSets.reduce(
-      (setAcc, setItem) => setAcc + setItem.reps,
-      0
-    );
-    return exerciseAcc + repsScore;
-  }, 0);
-}
-
-function buildImprovementFromScores(
-  currentScore: number,
-  previousScore: number,
-  currentRepsScore = 0,
-  previousRepsScore = 0
-): ImprovementResult | null {
-  if (!isFinite(currentScore) || !isFinite(previousScore)) return null;
-
-  if (previousScore <= 0 && currentScore > 0) {
-    return { isImproved: true, percent: 30 };
-  }
-
-  if (previousScore <= 0 && currentScore <= 0) {
-    if (!isFinite(currentRepsScore) || !isFinite(previousRepsScore)) return null;
-    if (previousRepsScore <= 0 && currentRepsScore > 0) {
-      return { isImproved: true, percent: 30 };
-    }
-    if (previousRepsScore <= 0 && currentRepsScore <= 0) return null;
-
-    const repsDeltaPct = ((currentRepsScore - previousRepsScore) / previousRepsScore) * 100;
-    return { isImproved: repsDeltaPct > 0, percent: Math.abs(repsDeltaPct) };
-  }
-
-  const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
-  return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
 }
 
 function buildWeekProgress(
@@ -139,7 +93,7 @@ function buildWeekProgress(
   ) => {
     const { restrictToDayIds, applyMissingPenalty = true } = options;
     if (weekLogs.length === 0) {
-      return { volume: 0, reps: 0 };
+      return { strength: 0 };
     }
 
     const latestByDayId: Record<string, WorkoutLog> = {};
@@ -160,11 +114,10 @@ function buildWeekProgress(
       }
     });
 
-    const rawVolume = selectedLogs.reduce((sum: number, log: WorkoutLog) => sum + getWorkoutVolumeScore(log), 0);
-    const rawReps = selectedLogs.reduce((sum: number, log: WorkoutLog) => sum + getWorkoutRepsScore(log), 0);
+    const rawStrength = selectedLogs.reduce((sum: number, log: WorkoutLog) => sum + getWorkoutStrengthScore(log), 0);
 
     if (!applyMissingPenalty) {
-      return { volume: rawVolume, reps: rawReps };
+      return { strength: rawStrength };
     }
 
     const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
@@ -172,8 +125,7 @@ function buildWeekProgress(
     const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
 
     return {
-      volume: rawVolume * penaltyFactor,
-      reps: rawReps * penaltyFactor,
+      strength: rawStrength * penaltyFactor,
     };
   };
 
@@ -207,20 +159,16 @@ function buildWeekProgress(
         restrictToDayIds: completedDayIds,
         applyMissingPenalty: true,
       });
-      improvement = buildImprovementFromScores(
-        currentScores.volume,
-        previousScores.volume,
-        currentScores.reps,
-        previousScores.reps
+      improvement = buildImprovementFromStrengthScores(
+        currentScores.strength,
+        previousScores.strength
       );
     } else {
       const currentScores = getWeekScores(currentWeekLogsForBlock, { applyMissingPenalty: true });
       const previousScores = getWeekScores(previousWeekLogsForBlock, { applyMissingPenalty: true });
-      improvement = buildImprovementFromScores(
-        currentScores.volume,
-        previousScores.volume,
-        currentScores.reps,
-        previousScores.reps
+      improvement = buildImprovementFromStrengthScores(
+        currentScores.strength,
+        previousScores.strength
       );
     }
 
@@ -349,6 +297,8 @@ export function HomeScreen({
   const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(undefined);
   const [routineToDeleteId, setRoutineToDeleteId] = useState<string | undefined>(undefined);
   const [logToDeleteId, setLogToDeleteId] = useState<string | undefined>(undefined);
+  const [logWithOptionsId, setLogWithOptionsId] = useState<string | undefined>(undefined);
+  const [selectedLogDayForOptions, setSelectedLogDayForOptions] = useState<WorkoutDay | undefined>(undefined);
   const { width: windowWidth } = useWindowDimensions();
 
   const activeRoutine = state.routines.find(
@@ -488,11 +438,9 @@ export function HomeScreen({
     const previousLog = getPreviousFilledLogForSameDay(currentLog);
     if (!previousLog) return null;
 
-    return buildImprovementFromScores(
-      getWorkoutVolumeScore(currentLog),
-      getWorkoutVolumeScore(previousLog),
-      getWorkoutRepsScore(currentLog),
-      getWorkoutRepsScore(previousLog)
+    return buildImprovementFromStrengthScores(
+      getWorkoutStrengthScore(currentLog),
+      getWorkoutStrengthScore(previousLog)
     );
   };
 
@@ -502,7 +450,7 @@ export function HomeScreen({
   ) => {
     const { restrictToDayIds, applyMissingPenalty = true } = options;
     if (weekLogs.length === 0) {
-      return { volume: 0, reps: 0 };
+      return { strength: 0 };
     }
 
     const latestByDayId: Record<string, WorkoutLog> = {};
@@ -522,11 +470,10 @@ export function HomeScreen({
       }
     });
 
-    const rawVolume = selectedLogs.reduce((sum, log) => sum + getWorkoutVolumeScore(log), 0);
-    const rawReps = selectedLogs.reduce((sum, log) => sum + getWorkoutRepsScore(log), 0);
+    const rawStrength = selectedLogs.reduce((sum, log) => sum + getWorkoutStrengthScore(log), 0);
 
     if (!applyMissingPenalty) {
-      return { volume: rawVolume, reps: rawReps };
+      return { strength: rawStrength };
     }
 
     const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
@@ -534,8 +481,7 @@ export function HomeScreen({
     const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
 
     return {
-      volume: rawVolume * penaltyFactor,
-      reps: rawReps * penaltyFactor,
+      strength: rawStrength * penaltyFactor,
     };
   };
 
@@ -560,22 +506,18 @@ export function HomeScreen({
         applyMissingPenalty: true,
       });
 
-      return buildImprovementFromScores(
-        currentScores.volume,
-        previousScores.volume,
-        currentScores.reps,
-        previousScores.reps
+      return buildImprovementFromStrengthScores(
+        currentScores.strength,
+        previousScores.strength
       );
     }
 
     const currentScores = getWeekScores(currentWeekLogs, { applyMissingPenalty: true });
     const previousScores = getWeekScores(previousWeekLogs, { applyMissingPenalty: true });
 
-    return buildImprovementFromScores(
-      currentScores.volume,
-      previousScores.volume,
-      currentScores.reps,
-      previousScores.reps
+    return buildImprovementFromStrengthScores(
+      currentScores.strength,
+      previousScores.strength
     );
   };
 
@@ -776,7 +718,6 @@ export function HomeScreen({
           ]}
           onPress={handleStartPress}
         >
-          <View style={styles.heroGlow} />
           <View style={styles.heroIconWrap}>
             <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : isRoutineOld && !isDisplayedRoutineActive ? '🔒' : (isTodayWorkoutCompleted() ? '✔️' : '🏋️')}</Text>
           </View>
@@ -812,7 +753,7 @@ export function HomeScreen({
               style={styles.buttonRowItem}
               onPress={() => onOpenRoutineDetails(activeRoutine)}
             >
-              <Text style={styles.buttonRowLabel}>Consultar ejercicios</Text>
+              <Text style={styles.buttonRowLabel}>Consultar detalles</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -888,6 +829,7 @@ export function HomeScreen({
                     {isExpanded && weekLogs.map((log: WorkoutLog) => {
                       const day = getDay(log.dayId);
                       const improvement = getLogImprovement(log);
+                      const isToday = isLogFromToday(log);
                       if (!day) return null;
 
                       return (
@@ -895,18 +837,20 @@ export function HomeScreen({
                           key={log.id}
                           style={({ pressed }: { pressed: boolean }) => [
                             styles.historyLogCard,
+                            isToday && styles.historyLogCardToday,
                             pressed && styles.historyLogCardPressed,
                           ]}
                           onPress={() => {
-                            // Si el log es de hoy (último insertado), ir a edición en lugar de detalle
-                            if (isLogFromToday(log)) {
-                              onSelectDay?.(day);
+                            // Si el log es de hoy, mostrar modal con opciones
+                            if (isToday) {
+                              setLogWithOptionsId(log.id);
+                              setSelectedLogDayForOptions(day);
                             } else {
                               onSelectLog?.(log, day);
                             }
                           }}
                           onLongPress={() => {
-                            if (isLogFromToday(log)) {
+                            if (isToday) {
                               setLogToDeleteId(log.id);
                             }
                           }}
@@ -944,6 +888,60 @@ export function HomeScreen({
           </View>
         )}
       </ScrollView>
+
+      <Modal
+        visible={!!logWithOptionsId}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setLogWithOptionsId(undefined);
+          setSelectedLogDayForOptions(undefined);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>¿Qué deseas hacer?</Text>
+            <Text style={styles.modalMessage}>
+              Puedes editar o eliminar el registro
+            </Text>
+            <View style={styles.modalButtonsContainer}>
+              <View style={styles.modalButtons}>
+                <TouchableOpacity
+                  style={styles.modalButtonEdit}
+                  onPress={() => {
+                    if (selectedLogDayForOptions) {
+                      onSelectDay?.(selectedLogDayForOptions);
+                    }
+                    setLogWithOptionsId(undefined);
+                    setSelectedLogDayForOptions(undefined);
+                  }}
+                >
+                  <Text style={styles.modalButtonEditText}>✏️ Editar</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalButtonDelete}
+                  onPress={() => {
+                    setLogToDeleteId(logWithOptionsId);
+                    setLogWithOptionsId(undefined);
+                    setSelectedLogDayForOptions(undefined);
+                  }}
+                >
+                  <Text style={styles.modalButtonDeleteText}>🗑️ Eliminar</Text>
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity
+                style={styles.modalButtonCancel}
+                onPress={() => {
+                  setLogWithOptionsId(undefined);
+                  setSelectedLogDayForOptions(undefined);
+                }}
+              >
+                <Text style={styles.modalButtonCancelText}>← Volver</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={!!logToDeleteId}
@@ -1190,15 +1188,6 @@ const styles = StyleSheet.create({
     overflow: 'visible',
     ...theme.shadow.card,
   },
-  heroGlow: {
-    position: 'absolute',
-    top: -30,
-    right: -8,
-    width: 140,
-    height: 140,
-    borderRadius: 70,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-  },
   heroIconWrap: {
     width: 72,
     height: 72,
@@ -1364,6 +1353,11 @@ const styles = StyleSheet.create({
     minHeight: 72,
     justifyContent: 'center',
     ...theme.shadow.soft,
+  },
+  historyLogCardToday: {
+    borderColor: theme.colors.warning,
+    borderWidth: 2.5,
+    backgroundColor: 'rgba(255, 193, 7, 0.05)',
   },
   historyLogCardPressed: {
     opacity: 0.8,
@@ -1545,10 +1539,14 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     lineHeight: 20,
   },
+  modalButtonsContainer: {
+    flexDirection: 'column',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
   modalButtons: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
   },
   modalButtonCancel: {
     flex: 1,
@@ -1576,7 +1574,20 @@ const styles = StyleSheet.create({
   modalButtonDeleteText: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#fff',
+    color: theme.colors.darkGray,
+  },
+  modalButtonEdit: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+  },
+  modalButtonEditText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.darkGray,
   },
 });
 

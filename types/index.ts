@@ -23,6 +23,7 @@ export interface WorkoutRoutine {
   isCustom?: boolean;
   days: WorkoutDay[];
   createdAt: number;
+  timerDuration?: number;
 }
 
 export interface ParsedSet {
@@ -77,6 +78,7 @@ export type WorkoutAction =
   | { type: 'SET_ROUTINES'; payload: WorkoutRoutine[] }
   | { type: 'ADD_ROUTINE'; payload: WorkoutRoutine }
   | { type: 'DELETE_ROUTINE'; payload: string }
+  | { type: 'UPDATE_ROUTINE'; payload: WorkoutRoutine }
   | { type: 'SET_ACTIVE_ROUTINE'; payload: string }
   | { type: 'ADD_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog }

@@ -12,6 +12,11 @@ import { formatDate } from '@lib/storage';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '@types/index';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
+import {
+  buildImprovementFromStrengthScores,
+  getExerciseStrengthScore,
+  getWorkoutStrengthScore,
+} from '@lib/progress';
 
 interface DetailScreenProps {
   log: WorkoutLog;
@@ -31,67 +36,6 @@ function getLogTimestamp(log: WorkoutLog | null): number {
   return 0;
 }
 
-function getWorkoutVolumeScore(sourceLog: WorkoutLog | null): number {
-  if (!sourceLog) return 0;
-  return sourceLog.exercises.reduce((exerciseAcc, exercise) => {
-    const exerciseVolume = exercise.parsedSets.reduce(
-      (setAcc, setItem) => setAcc + setItem.weight * setItem.reps,
-      0
-    );
-    return exerciseAcc + exerciseVolume;
-  }, 0);
-}
-
-function getWorkoutRepsScore(sourceLog: WorkoutLog | null): number {
-  if (!sourceLog) return 0;
-  return sourceLog.exercises.reduce((exerciseAcc, exercise) => {
-    const repsScore = exercise.parsedSets.reduce(
-      (setAcc, setItem) => setAcc + setItem.reps,
-      0
-    );
-    return exerciseAcc + repsScore;
-  }, 0);
-}
-
-function getExerciseVolumeScore(exerciseLog: ExerciseLog | null): number {
-  if (!exerciseLog) return 0;
-  return exerciseLog.parsedSets.reduce(
-    (setAcc, setItem) => setAcc + setItem.weight * setItem.reps,
-    0
-  );
-}
-
-function getExerciseRepsScore(exerciseLog: ExerciseLog | null): number {
-  if (!exerciseLog) return 0;
-  return exerciseLog.parsedSets.reduce((setAcc, setItem) => setAcc + setItem.reps, 0);
-}
-
-function buildImprovementFromScores(
-  currentScore: number,
-  previousScore: number,
-  currentRepsScore = 0,
-  previousRepsScore = 0
-): ImprovementResult | null {
-  if (!isFinite(currentScore) || !isFinite(previousScore)) return null;
-
-  if (previousScore <= 0 && currentScore > 0) {
-    return { isImproved: true, percent: 30 };
-  }
-
-  if (previousScore <= 0 && currentScore <= 0) {
-    if (!isFinite(currentRepsScore) || !isFinite(previousRepsScore)) return null;
-    if (previousRepsScore <= 0 && currentRepsScore > 0) {
-      return { isImproved: true, percent: 30 };
-    }
-    if (previousRepsScore <= 0 && currentRepsScore <= 0) return null;
-
-    const repsDeltaPct = ((currentRepsScore - previousRepsScore) / previousRepsScore) * 100;
-    return { isImproved: repsDeltaPct > 0, percent: Math.abs(repsDeltaPct) };
-  }
-
-  const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
-  return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
-}
 
 function extractIncline(rawInput: string): string | null {
   if (!rawInput) return null;
@@ -128,11 +72,9 @@ export function DetailScreen({
     .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
 
   const detailImprovement = previousLog
-    ? buildImprovementFromScores(
-        getWorkoutVolumeScore(log),
-        getWorkoutVolumeScore(previousLog),
-        getWorkoutRepsScore(log),
-        getWorkoutRepsScore(previousLog)
+    ? buildImprovementFromStrengthScores(
+        getWorkoutStrengthScore(log),
+        getWorkoutStrengthScore(previousLog)
       )
     : null;
 
@@ -188,11 +130,9 @@ export function DetailScreen({
           
           const prevExercise = getExerciseFromLog(previousLog, exercise.id, exercise.name, exercise.order);
           const exerciseImprovement = (fallbackExercise || currentExercise) && prevExercise
-            ? buildImprovementFromScores(
-                getExerciseVolumeScore(fallbackExercise || currentExercise),
-                getExerciseVolumeScore(prevExercise),
-                getExerciseRepsScore(fallbackExercise || currentExercise),
-                getExerciseRepsScore(prevExercise)
+            ? buildImprovementFromStrengthScores(
+                getExerciseStrengthScore(fallbackExercise || currentExercise),
+                getExerciseStrengthScore(prevExercise)
               )
             : null;
 
@@ -325,7 +265,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 17,
     fontWeight: 'bold',
-    color: theme.colors.push,
+    color: theme.colors.current,
     marginBottom: theme.spacing.xs,
     lineHeight: 22,
   },

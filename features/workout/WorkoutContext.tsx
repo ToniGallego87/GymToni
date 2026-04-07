@@ -69,6 +69,16 @@ function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutStat
         logs: state.logs.filter(log => log.routineId !== action.payload),
       };
     }
+    case 'UPDATE_ROUTINE':
+      return {
+        ...state,
+        routines: syncActiveRoutine(
+          state.routines.map(routine =>
+            routine.id === action.payload.id ? action.payload : routine
+          ),
+          state.activeRoutineId
+        ),
+      };
     case 'SET_ACTIVE_ROUTINE':
       return {
         ...state,
