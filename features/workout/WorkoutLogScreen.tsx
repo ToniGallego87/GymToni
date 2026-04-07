@@ -16,7 +16,7 @@ import { parseCardioString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
 import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '@types/index';
 import { theme } from '@lib/theme';
-import { buildImprovementFromStrengthScores, getBestSetStrengthScore } from '@lib/progress';
+import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@lib/progress';
 
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
@@ -210,8 +210,8 @@ export function WorkoutLogScreen({
   ): { isImproved: boolean; percent: number } | null => {
     if (!previousLog) return null;
 
-    const currentScore = getBestSetStrengthScore(currentSets);
-    const previousScore = getBestSetStrengthScore(previousLog.parsedSets || []);
+    const currentScore = getTotalSetsStrengthScore(currentSets);
+    const previousScore = getTotalSetsStrengthScore(previousLog.parsedSets || []);
     return buildImprovementFromStrengthScores(currentScore, previousScore);
   };
 
@@ -386,9 +386,8 @@ export function WorkoutLogScreen({
           const improvement = buildExerciseImprovement(currentSets, previousLog);
 
           return (
-          <>
+          <React.Fragment key={exercise.id}>
             <ExerciseInputField
-              key={exercise.id}
               order={exercise.order}
               exerciseName={exercise.name}
               target={{
@@ -419,7 +418,7 @@ export function WorkoutLogScreen({
                 <Text style={styles.timerHint}>Pulsa para +30s, mantén 2s para eliminar</Text>
               </Pressable>
             )}
-          </>
+          </React.Fragment>
           );
         })}
 

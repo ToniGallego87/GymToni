@@ -4,7 +4,7 @@
 
 ### Nuevas funcionalidades
 - Resaltado del entrenamiento de hoy y nuevo modal de acciones (editar/eliminar).
-- Cronometro de descanso interactivo al anadir series (+30s, eliminar con pulsacion larga, vibracion al finalizar).
+- Cronometro de descanso interactivo al añadir series (+30s, eliminar con pulsacion larga, vibracion al finalizar).
 - Configuracion del cronometro por rutina integrada en el flujo de registro.
 
 ### Cambios

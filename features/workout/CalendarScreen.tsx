@@ -33,9 +33,9 @@ const MONTH_NAMES = [
 const WEEK_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 const WEEK_COLORS = [
   theme.colors.primary,
-  theme.colors.push,
-  theme.colors.pull,
-  theme.colors.legs,
+  theme.colors.emoji_green,
+  theme.colors.emoji_blue,
+  theme.colors.error,
   theme.colors.warning,
 ];
 

@@ -166,7 +166,7 @@ export function ExerciseInputField({
       {previousLog && (
         <Text style={styles.previousRow}>
           Anterior: {getPreviousSetsSummary() || '-'}
-          <br></br>
+          {'\n'}
           {previousLog?.notes && (
             <Text style={styles.previousNotesRow}>
                -{previousLog.notes}-
