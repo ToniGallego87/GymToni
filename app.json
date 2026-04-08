@@ -20,10 +20,9 @@
     "web": {
       "favicon": "./assets/icon.png"
     },
-    "splash": {
-      "image": "./assets/splash.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+    "notification": {
+      "icon": "./assets/notification-icon.png",
+      "color": "#F9A825"
     },
     "plugins": [
       "expo-notifications",

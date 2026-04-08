@@ -126,9 +126,10 @@ export function WorkoutLogScreen({
         if (Platform.OS === 'android') {
           await Notifications.setNotificationChannelAsync('rest-timer', {
             name: 'Rest Timer',
-            importance: Notifications.AndroidImportance.HIGH,
+            importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 300, 150, 300, 150, 300],
             lightColor: '#F9A825',
+            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
           });
         }
       } catch (error) {
@@ -174,7 +175,6 @@ export function WorkoutLogScreen({
         setTimerSeconds(0);
         setTimerNotificationId(null);
         void clearTimerNotification();
-        Vibration.vibrate([0, 300, 150, 300, 150, 300]);
         return;
       }
 

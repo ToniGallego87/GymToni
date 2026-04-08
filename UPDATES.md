@@ -1,16 +1,13 @@
 # UPDATES
 
-## Version 0.4.1 - 2026-04-07
-
-### Nuevas funcionalidades
-- Resaltado del entrenamiento de hoy y nuevo modal de acciones (editar/eliminar).
-- Cronometro de descanso interactivo al añadir series (+30s, eliminar con pulsacion larga, vibracion al finalizar).
-- Configuracion del cronometro por rutina integrada en el flujo de registro.
+## Version 0.4.3 - 2026-04-08
 
 ### Cambios
-- Mapeo de colores por emoji ampliado y ajuste visual del bloque de cronometro.
-- Tipos, estado global y reducer actualizados para guardar la duracion por rutina.
-- Calculo de progreso unificado con formula e1RM (Epley) sobre mejor serie.
+- Penalizacion por faltas al gym ajustada a 10% por dia no entrenado en el calculo semanal.
+- Unificacion del calculo de mejora semanal entre grafica y listado en Home (misma formula y mismos criterios).
+- La grafica semanal ahora muestra delta semanal directo (semana vs semana anterior) en lugar de progreso acumulado.
+- En semanas cerradas (cuando ya arranco la siguiente), el porcentaje aplica penalizacion por dias no entrenados segun la misma regla del listado.
+- APK de release regenerada localmente tras los cambios: app-release.apk.
 
 ## Version 0.4.2 - 2026-04-08
 
@@ -36,3 +33,15 @@
 - Ajuste del calculo de mejora semanal para promediar mejoras por dia a partir del ultimo log por dia.
 - En detalle de rutina, los dias usan borde lateral por tipo de entrenamiento y el bloque de cronometro se mueve al final de la lista.
 - Mejoras visuales en tarjetas de ejercicios/cardio e historial (bordes laterales/acento de color).
+
+## Version 0.4.1 - 2026-04-07
+
+### Nuevas funcionalidades
+- Resaltado del entrenamiento de hoy y nuevo modal de acciones (editar/eliminar).
+- Cronometro de descanso interactivo al añadir series (+30s, eliminar con pulsacion larga, vibracion al finalizar).
+- Configuracion del cronometro por rutina integrada en el flujo de registro.
+
+### Cambios
+- Mapeo de colores por emoji ampliado y ajuste visual del bloque de cronometro.
+- Tipos, estado global y reducer actualizados para guardar la duracion por rutina.
+- Calculo de progreso unificado con formula e1RM (Epley) sobre mejor serie.

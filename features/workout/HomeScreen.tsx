@@ -123,7 +123,7 @@ function buildWeekProgress(
 
     const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
     const missingDays = Math.max(0, expectedCount - selectedLogs.length);
-    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
+    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.1));
 
     return {
       strength: rawStrength * penaltyFactor,
@@ -131,7 +131,6 @@ function buildWeekProgress(
   };
 
   const latestBlockNumber = orderedBlocks[orderedBlocks.length - 1];
-  let cumulativeFactor = 1;
 
   return orderedBlocks.map((blockNumber, index) => {
     if (index === 0) {
@@ -143,7 +142,7 @@ function buildWeekProgress(
     const previousWeekLogsForBlock = groupedByBlock[previousBlockNumber] || [];
 
     if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
-      return { week: index + 1, improvement: Math.round((cumulativeFactor - 1) * 1000) / 10 };
+      return { week: index + 1, improvement: 0 };
     }
 
     let improvement: ImprovementResult | null;
@@ -173,14 +172,13 @@ function buildWeekProgress(
       );
     }
 
-    if (improvement) {
-      const signedDelta = improvement.isImproved ? improvement.percent : -improvement.percent;
-      cumulativeFactor = Math.max(0, cumulativeFactor * (1 + signedDelta / 100));
-    }
+    const signedDelta = improvement
+      ? (improvement.isImproved ? improvement.percent : -improvement.percent)
+      : 0;
 
     return {
       week: index + 1,
-      improvement: Math.round(((cumulativeFactor - 1) * 100) * 10) / 10,
+      improvement: Math.round(signedDelta * 10) / 10,
     };
   });
 }
@@ -479,7 +477,7 @@ export function HomeScreen({
 
     const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
     const missingDays = Math.max(0, expectedCount - selectedLogs.length);
-    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.2));
+    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.1));
 
     return {
       strength: rawStrength * penaltyFactor,
@@ -488,43 +486,31 @@ export function HomeScreen({
 
   const getWeekImprovement = (groupedByBlock: Record<number, WorkoutLog[]>, blockNumber: number, latestBlockNumber: number) => {
     const currentWeekLogs = groupedByBlock[blockNumber] || [];
+    const previousWeekLogs = groupedByBlock[blockNumber - 1] || [];
 
-    if (!currentWeekLogs.length) return null;
+    if (!currentWeekLogs.length || !previousWeekLogs.length) return null;
 
-    // Calcular el porcentaje de mejora como el promedio de los improvements de cada día
-    const dayImprovements: number[] = [];
-    const logsByDay: Record<string, WorkoutLog[]> = {};
+    if (blockNumber === latestBlockNumber) {
+      const completedDayIds = currentWeekLogs
+        .map(log => log.dayId)
+        .filter((dayId, index, array) => !!dayId && array.indexOf(dayId) === index);
 
-    // Agrupar logs por día
-    currentWeekLogs.forEach(log => {
-      if (!logsByDay[log.dayId]) {
-        logsByDay[log.dayId] = [];
-      }
-      logsByDay[log.dayId].push(log);
-    });
+      const currentScores = getWeekScores(currentWeekLogs, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: false,
+      });
+      const previousScores = getWeekScores(previousWeekLogs, {
+        restrictToDayIds: completedDayIds,
+        applyMissingPenalty: true,
+      });
 
-    // Para cada día, tomar el último log y calcular su improvement
-    Object.keys(logsByDay).forEach(dayId => {
-      const logsForDay = logsByDay[dayId];
-      const latestLogForDay = logsForDay.sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0];
-      
-      const improvement = getLogImprovement(latestLogForDay);
-      if (improvement) {
-        const signedPercent = improvement.isImproved ? improvement.percent : -improvement.percent;
-        dayImprovements.push(signedPercent);
-      }
-    });
+      return buildImprovementFromStrengthScores(currentScores.strength, previousScores.strength);
+    }
 
-    if (dayImprovements.length === 0) return null;
+    const currentScores = getWeekScores(currentWeekLogs, { applyMissingPenalty: true });
+    const previousScores = getWeekScores(previousWeekLogs, { applyMissingPenalty: true });
 
-    // Calcular el promedio
-    const averagePercent = dayImprovements.reduce((sum, p) => sum + p, 0) / dayImprovements.length;
-    const isImproved = averagePercent >= 0;
-
-    return {
-      isImproved,
-      percent: Math.abs(averagePercent),
-    };
+    return buildImprovementFromStrengthScores(currentScores.strength, previousScores.strength);
   };
 
   const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
