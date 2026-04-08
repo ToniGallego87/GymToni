@@ -11,6 +11,7 @@ import {
   useWindowDimensions,
   Modal,
   Alert,
+  Image,
 } from 'react-native';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
@@ -713,7 +714,11 @@ export function HomeScreen({
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ flexGrow: 1 }} nestedScrollEnabled>
         <View style={styles.header}>
-          <Text style={styles.title}>💪 GymToni</Text>
+          <Image
+            source={require('../../assets/title.png')}
+            style={styles.titleImage}
+            resizeMode="contain"
+          />
           <Text style={styles.subtitle}>Tu rutina optimizada</Text>
         </View>
 
@@ -1049,12 +1054,18 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     letterSpacing: -0.8,
   },
+  titleImage: {
+    width: 220,
+    height: 52,
+    alignSelf: 'center',
+  },
   subtitle: {
     marginTop: 4,
     fontSize: 14,
     color: theme.colors.textSecondary,
     lineHeight: 19,
     fontStyle: 'italic',
+    alignSelf: 'center'
   },
   progressCard: {
     marginHorizontal: theme.spacing.md,
