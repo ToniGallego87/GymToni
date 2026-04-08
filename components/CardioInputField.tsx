@@ -64,6 +64,8 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
     ...theme.shadow.soft,
   },
   header: {

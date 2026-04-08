@@ -3,7 +3,7 @@
     "name": "GymToni",
     "slug": "gymtoni",
     "icon": "./assets/icon.png",
-    "version": "0.2.0",
+    "version": "0.4.2",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -20,7 +20,13 @@
     "web": {
       "favicon": "./assets/icon.png"
     },
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
     "plugins": [
+      "expo-notifications",
       [
         "expo-router",
         {

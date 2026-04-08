@@ -3,6 +3,9 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Alert, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+// expo-notifications does not support web; load it only on native platforms
+const Notifications: typeof import('expo-notifications') | null =
+  Platform.OS !== 'web' ? require('expo-notifications') : null;
 import {
   CalendarScreen,
   DataScreen,
@@ -198,6 +201,66 @@ function AppContent() {
   const canDeleteCurrentRoutine = !!activeRoutine?.isCustom
     && activeRoutineLogs.length === 0
     && state.routines.length > 1;
+
+  const openWorkoutFromNotificationData = (data: Record<string, unknown> | undefined) => {
+    if (!data || data.source !== 'rest-timer') return;
+
+    const dayId = typeof data.dayId === 'string' ? data.dayId : undefined;
+    const routineId = typeof data.routineId === 'string' ? data.routineId : undefined;
+
+    if (routineId && routineId !== state.activeRoutineId) {
+      const exists = state.routines.some(routine => routine.id === routineId);
+      if (exists) {
+        dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
+      }
+    }
+
+    const routineCandidates = routineId
+      ? state.routines.filter(routine => routine.id === routineId)
+      : state.routines;
+
+    const dayFromNotification = routineCandidates
+      .flatMap(routine => routine.days)
+      .find(day => day.id === dayId);
+
+    if (dayFromNotification) {
+      setScreen({ type: 'workout-log', day: dayFromNotification });
+      return;
+    }
+
+    const fallbackRoutine = state.routines.find(routine => routine.id === state.activeRoutineId)
+      || state.routines[0];
+    const fallbackDay = fallbackRoutine?.days?.[0];
+
+    if (fallbackDay) {
+      setScreen({ type: 'workout-log', day: fallbackDay });
+    } else {
+      setScreen({ type: 'home' });
+    }
+  };
+
+  useEffect(() => {
+    if (!Notifications) return;
+
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      openWorkoutFromNotificationData(response.notification.request.content.data as Record<string, unknown>);
+    });
+
+    const consumeInitialNotificationTap = async () => {
+      try {
+        const response = await Notifications!.getLastNotificationResponseAsync();
+        if (response) {
+          openWorkoutFromNotificationData(response.notification.request.content.data as Record<string, unknown>);
+        }
+      } catch (error) {
+        console.error('Error reading notification response:', error);
+      }
+    };
+
+    consumeInitialNotificationTap();
+
+    return () => subscription.remove();
+  }, [dispatch, state.activeRoutineId, state.routines]);
 
   const handleCreateRoutine = (routine: WorkoutRoutine) => {
     dispatch({ type: 'ADD_ROUTINE', payload: routine });

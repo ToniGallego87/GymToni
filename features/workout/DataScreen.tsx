@@ -90,7 +90,7 @@ export function DataScreen({
           <View style={styles.actionCard}>
             <Text style={styles.actionTitle}>📤 Exportar datos</Text>
             <Text style={styles.actionSubtitle}>
-              Guarda o comparte un fichero con todas las rutinas y ejercicios.
+              Descarga un fichero con todas las rutinas y entrenamientos.
             </Text>
             <Button
               title={busyAction === 'export' ? 'Exportando…' : '📤 Exportar'}
@@ -104,7 +104,7 @@ export function DataScreen({
         <View style={styles.actionCard}>
           <Text style={styles.actionTitle}>📥 Importar datos</Text>
           <Text style={styles.actionSubtitle}>
-            Carga un backup JSON exportado previamente desde web o Android.
+            Carga un fichero exportado con rutinas y entrenamientos.
           </Text>
           <Button
             title={busyAction === 'import' ? 'Importando…' : '📥 Importar'}
@@ -233,8 +233,8 @@ const styles = StyleSheet.create({
   summaryCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
     padding: theme.spacing.md,
     ...theme.shadow.soft,
   },
@@ -274,6 +274,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
     padding: theme.spacing.md,
     gap: 10,
     ...theme.shadow.soft,
@@ -290,7 +292,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   dangerCard: {
-    borderColor: 'rgba(240, 106, 106, 0.35)',
+    borderLeftColor: theme.colors.error,
   },
   dangerTitle: {
     color: theme.colors.error,

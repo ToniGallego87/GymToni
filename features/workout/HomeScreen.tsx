@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import {
   View,
   FlatList,
@@ -294,7 +294,7 @@ export function HomeScreen({
   const [showRoutineSelector, setShowRoutineSelector] = useState(initialShowRoutineSelector);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<Record<number, boolean>>({});
-  const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(undefined);
+  const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(state.activeRoutineId);
   const [routineToDeleteId, setRoutineToDeleteId] = useState<string | undefined>(undefined);
   const [logToDeleteId, setLogToDeleteId] = useState<string | undefined>(undefined);
   const [logWithOptionsId, setLogWithOptionsId] = useState<string | undefined>(undefined);
@@ -486,39 +486,44 @@ export function HomeScreen({
   };
 
   const getWeekImprovement = (groupedByBlock: Record<number, WorkoutLog[]>, blockNumber: number, latestBlockNumber: number) => {
-    const previousBlockNumber = blockNumber - 1;
     const currentWeekLogs = groupedByBlock[blockNumber] || [];
-    const previousWeekLogs = groupedByBlock[previousBlockNumber] || [];
 
-    if (!currentWeekLogs.length || !previousWeekLogs.length) return null;
+    if (!currentWeekLogs.length) return null;
 
-    if (blockNumber === latestBlockNumber) {
-      const completedDayIds = currentWeekLogs
-        .map(log => log.dayId)
-        .filter((dayId, index, array) => !!dayId && array.indexOf(dayId) === index);
+    // Calcular el porcentaje de mejora como el promedio de los improvements de cada día
+    const dayImprovements: number[] = [];
+    const logsByDay: Record<string, WorkoutLog[]> = {};
 
-      const currentScores = getWeekScores(currentWeekLogs, {
-        restrictToDayIds: completedDayIds,
-        applyMissingPenalty: false,
-      });
-      const previousScores = getWeekScores(previousWeekLogs, {
-        restrictToDayIds: completedDayIds,
-        applyMissingPenalty: true,
-      });
+    // Agrupar logs por día
+    currentWeekLogs.forEach(log => {
+      if (!logsByDay[log.dayId]) {
+        logsByDay[log.dayId] = [];
+      }
+      logsByDay[log.dayId].push(log);
+    });
 
-      return buildImprovementFromStrengthScores(
-        currentScores.strength,
-        previousScores.strength
-      );
-    }
+    // Para cada día, tomar el último log y calcular su improvement
+    Object.keys(logsByDay).forEach(dayId => {
+      const logsForDay = logsByDay[dayId];
+      const latestLogForDay = logsForDay.sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0];
+      
+      const improvement = getLogImprovement(latestLogForDay);
+      if (improvement) {
+        const signedPercent = improvement.isImproved ? improvement.percent : -improvement.percent;
+        dayImprovements.push(signedPercent);
+      }
+    });
 
-    const currentScores = getWeekScores(currentWeekLogs, { applyMissingPenalty: true });
-    const previousScores = getWeekScores(previousWeekLogs, { applyMissingPenalty: true });
+    if (dayImprovements.length === 0) return null;
 
-    return buildImprovementFromStrengthScores(
-      currentScores.strength,
-      previousScores.strength
-    );
+    // Calcular el promedio
+    const averagePercent = dayImprovements.reduce((sum, p) => sum + p, 0) / dayImprovements.length;
+    const isImproved = averagePercent >= 0;
+
+    return {
+      isImproved,
+      percent: Math.abs(averagePercent),
+    };
   };
 
   const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
@@ -610,7 +615,8 @@ export function HomeScreen({
             <RoutineCard
               key={routine.id}
               routine={routine}
-              isActive={routine.id === (viewedRoutineId || state.activeRoutineId)}
+              isViewed={routine.id === viewedRoutineId}
+              isActive={routine.id === state.activeRoutineId}
               onPress={() => handleSelectRoutine(routine.id)}
               onLongPress={canDelete ? () => setRoutineToDeleteId(routine.id) : undefined}
             />
@@ -760,7 +766,15 @@ export function HomeScreen({
         )}
 
         {weeklyProgress.length > 0 && (
-          <View style={styles.progressCard}>
+          <View style={[
+            styles.progressCard,
+            { borderColor: latestPoint
+              ? latestPoint.improvement >= 0
+                ? theme.colors.success
+                : theme.colors.error
+              : theme.colors.primary
+            },
+          ]}>
             <TouchableOpacity
               style={styles.progressToggleButton}
               onPress={() => setShowWeeklyProgressChart((prev: boolean) => !prev)}
@@ -805,9 +819,17 @@ export function HomeScreen({
                 return (
                   <View key={block}>
                     <Pressable
-                      style={styles.weekHeaderButton}
-                      onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}
-                    >
+                      style={[
+                        styles.weekHeaderButton,
+                        { borderColor: weekImprovement
+                          ? weekImprovement.isImproved
+                            ? theme.colors.success
+                            : theme.colors.error
+                          : theme.colors.primary
+                        },
+                      ]}
+                      onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}>
+
                       <View style={styles.weekTitleRow}>
                         <Text style={styles.weekTitle}>Semana {block}</Text>
                         {!!weekImprovement && (
@@ -930,7 +952,7 @@ export function HomeScreen({
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
-                style={styles.modalButtonCancel}
+                style={[styles.modalButtonCancel, styles.modalButtonCancelFullWidth]}
                 onPress={() => {
                   setLogWithOptionsId(undefined);
                   setSelectedLogDayForOptions(undefined);
@@ -978,15 +1000,16 @@ export function HomeScreen({
 
 interface RoutineCardProps {
   routine: WorkoutRoutine;
-  isActive: boolean;
+  isViewed: boolean;  // Para el borde grueso
+  isActive: boolean;  // Para el check "Activa"
   onPress: () => void;
   onLongPress?: () => void;
 }
 
-function RoutineCard({ routine, isActive, onPress, onLongPress }: RoutineCardProps) {
+function RoutineCard({ routine, isViewed, isActive, onPress, onLongPress }: RoutineCardProps) {
   return (
     <TouchableOpacity
-      style={[styles.routineCard, isActive && styles.routineCardActive]}
+      style={[styles.routineCard, isViewed && styles.routineCardActive]}
       onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={2000}
@@ -1039,8 +1062,8 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.sm,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
     paddingVertical: 16,
     paddingHorizontal: 0,
     overflow: 'hidden',
@@ -1158,7 +1181,7 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
-    paddingVertical: 32,
+    paddingVertical: 25,
     paddingHorizontal: 24,
     alignItems: 'center',
     overflow: 'hidden',
@@ -1170,7 +1193,7 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
-    paddingVertical: 32,
+    paddingVertical: 25,
     paddingHorizontal: 24,
     alignItems: 'center',
     overflow: 'hidden',
@@ -1224,8 +1247,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
     paddingVertical: 16,
     paddingHorizontal: 16,
     minHeight: 52,
@@ -1309,8 +1332,8 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: theme.borderRadius.sm,
     backgroundColor: theme.colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderLeftWidth: 4,
+    borderColor: theme.colors.primary,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -1350,6 +1373,8 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderLeftWidth: 3,
+    borderLeftColor: theme.colors.primary,
     minHeight: 72,
     justifyContent: 'center',
     ...theme.shadow.soft,
@@ -1357,6 +1382,8 @@ const styles = StyleSheet.create({
   historyLogCardToday: {
     borderColor: theme.colors.warning,
     borderWidth: 2.5,
+    borderLeftWidth: 2.5,
+    borderLeftColor: theme.colors.warning,
     backgroundColor: 'rgba(255, 193, 7, 0.05)',
   },
   historyLogCardPressed: {
@@ -1445,7 +1472,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primary,
     ...theme.shadow.soft,
   },
   routineCardActive: {
@@ -1556,12 +1583,19 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     paddingVertical: 10,
     paddingHorizontal: 12,
+    minHeight: 44,
     alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalButtonCancelFullWidth: {
+    flex: 0,
+    width: '100%',
   },
   modalButtonCancelText: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.text,
+    lineHeight: 20,
+    color: theme.colors.primary,
   },
   modalButtonDelete: {
     flex: 1,

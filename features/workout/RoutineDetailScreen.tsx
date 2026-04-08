@@ -91,22 +91,14 @@ export function RoutineDetailScreen({
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <Pressable
-          style={styles.timerBlock}
-          onPress={handleOpenTimerModal}
-        >
-          <Text style={styles.timerBlockLabel}>⏱️ Cronómetro de Descanso</Text>
-          <Text style={styles.timerBlockValue}>{formatTime(getTimerDurationSeconds())}</Text>
-          <Text style={styles.timerBlockHint}>Toca para editar</Text>
-        </Pressable>
-
+        
         {currentRoutine.days.map(day => {
           const accent = getTrainingAccent(day);
 
           return (
             <Pressable
               key={day.id}
-              style={styles.dayBlock}
+              style={[styles.dayBlock, { borderColor: accent }]}
               onPress={() => handleSelectDay(day.id)}
             >
               <View style={styles.dayHeader}>
@@ -130,6 +122,16 @@ export function RoutineDetailScreen({
             </Pressable>
           );
         })}
+
+        <Pressable
+          style={styles.timerBlock}
+          onPress={handleOpenTimerModal}
+        >
+          <Text style={styles.timerBlockLabel}>⏱️ Cronómetro de Descanso</Text>
+          <Text style={styles.timerBlockValue}>{formatTime(getTimerDurationSeconds())}</Text>
+          <Text style={styles.timerBlockHint}>Toca para editar</Text>
+        </Pressable>
+        
       </ScrollView>
 
       <Pressable style={styles.backButton} onPress={onBack}>
@@ -235,7 +237,7 @@ const styles = StyleSheet.create({
   dayBlock: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
+    borderLeftWidth: 4,
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
     marginBottom: 12,
@@ -381,7 +383,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    marginTop: theme.spacing.md,
     alignItems: 'center',
     ...theme.shadow.soft,
   },

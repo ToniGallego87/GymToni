@@ -9,8 +9,13 @@ import {
   TextInput,
   Pressable,
   Vibration,
+  AppState,
+  Platform,
 } from 'react-native';
 import { useWorkout } from '@hooks/useWorkout';
+// expo-notifications does not support web; load it only on native platforms
+const Notifications: typeof import('expo-notifications') | null =
+  Platform.OS !== 'web' ? require('expo-notifications') : null;
 import { ExerciseInputField, CardioInputField, Button, Toast } from '@components';
 import { parseCardioString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
@@ -34,23 +39,158 @@ export function WorkoutLogScreen({
   const [showDaySelector, setShowDaySelector] = useState(false);
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [timerEndAt, setTimerEndAt] = useState<number | null>(null);
+  const [timerNotificationId, setTimerNotificationId] = useState<string | null>(null);
+
+  const clearTimerNotification = async () => {
+    if (!timerNotificationId || !Notifications) return;
+    try {
+      await Notifications.cancelScheduledNotificationAsync(timerNotificationId);
+    } catch (error) {
+      console.error('Error canceling timer notification:', error);
+    } finally {
+      setTimerNotificationId(null);
+    }
+  };
+
+  const scheduleTimerNotification = async (seconds: number) => {
+    if (!Notifications || seconds <= 0) return;
+
+    try {
+      if (timerNotificationId) {
+        await Notifications.cancelScheduledNotificationAsync(timerNotificationId);
+      }
+
+      const notificationId = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'Descanso finalizado',
+          body: 'Es hora de tu siguiente serie',
+          sound: true,
+          data: {
+            source: 'rest-timer',
+            dayId: selectedDay.id,
+            routineId: getRoutineIdForDay(),
+          },
+        },
+        trigger: {
+          seconds,
+          channelId: 'rest-timer',
+        } as any,
+      });
+
+      setTimerNotificationId(notificationId);
+    } catch (error) {
+      console.error('Error scheduling timer notification:', error);
+    }
+  };
+
+  const stopTimer = async () => {
+    setActiveTimerId(null);
+    setTimerSeconds(0);
+    setTimerEndAt(null);
+    await clearTimerNotification();
+  };
+
+  const startOrResetTimer = async (exerciseId: string, durationSeconds: number) => {
+    const safeDuration = Math.max(1, durationSeconds);
+    const endAt = Date.now() + safeDuration * 1000;
+
+    setActiveTimerId(exerciseId);
+    setTimerEndAt(endAt);
+    setTimerSeconds(safeDuration);
+
+    await scheduleTimerNotification(safeDuration);
+  };
+
+  const extendTimerBy = async (extraSeconds: number) => {
+    if (!activeTimerId || !timerEndAt) return;
+
+    const newEndAt = timerEndAt + extraSeconds * 1000;
+    const remainingSeconds = Math.max(1, Math.ceil((newEndAt - Date.now()) / 1000));
+
+    setTimerEndAt(newEndAt);
+    setTimerSeconds(remainingSeconds);
+    await scheduleTimerNotification(remainingSeconds);
+  };
+
+  useEffect(() => {
+    if (!Notifications) return;
+
+    const configureNotifications = async () => {
+      try {
+        const permissions = await Notifications.getPermissionsAsync();
+        if (permissions.status !== 'granted') {
+          await Notifications.requestPermissionsAsync();
+        }
+
+        if (Platform.OS === 'android') {
+          await Notifications.setNotificationChannelAsync('rest-timer', {
+            name: 'Rest Timer',
+            importance: Notifications.AndroidImportance.HIGH,
+            vibrationPattern: [0, 300, 150, 300, 150, 300],
+            lightColor: '#F9A825',
+          });
+        }
+      } catch (error) {
+        console.error('Error configuring notifications:', error);
+      }
+    };
+
+    configureNotifications();
+  }, []);
   
   useEffect(() => {
-    if (!activeTimerId || timerSeconds <= 0) return;
+    if (!activeTimerId || !timerEndAt) return;
 
-    const interval = setInterval(() => {
-      setTimerSeconds(prev => {
-        if (prev <= 1) {
-          setActiveTimerId(null);
-          Vibration.vibrate(500);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    const updateRemaining = () => {
+      const remainingMs = timerEndAt - Date.now();
+      if (remainingMs <= 0) {
+        setActiveTimerId(null);
+        setTimerEndAt(null);
+        setTimerSeconds(0);
+        setTimerNotificationId(null);
+        void clearTimerNotification();
+        Vibration.vibrate([0, 300, 150, 300, 150, 300]);
+        return;
+      }
+
+      setTimerSeconds(Math.ceil(remainingMs / 1000));
+    };
+
+    updateRemaining();
+    const interval = setInterval(updateRemaining, 1000);
 
     return () => clearInterval(interval);
-  }, [activeTimerId, timerSeconds]);
+  }, [activeTimerId, timerEndAt]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' || !activeTimerId || !timerEndAt) return;
+
+      const remainingMs = timerEndAt - Date.now();
+      if (remainingMs <= 0) {
+        setActiveTimerId(null);
+        setTimerEndAt(null);
+        setTimerSeconds(0);
+        setTimerNotificationId(null);
+        void clearTimerNotification();
+        Vibration.vibrate([0, 300, 150, 300, 150, 300]);
+        return;
+      }
+
+      setTimerSeconds(Math.ceil(remainingMs / 1000));
+    });
+
+    return () => subscription.remove();
+  }, [activeTimerId, timerEndAt]);
+
+  useEffect(() => {
+    return () => {
+      if (timerNotificationId && Notifications) {
+        Notifications.cancelScheduledNotificationAsync(timerNotificationId).catch(() => undefined);
+      }
+    };
+  }, [timerNotificationId]);
   
   // Función para obtener el último log de hoy para este día
   const getLatestTodayLog = () => {
@@ -125,10 +265,13 @@ export function WorkoutLogScreen({
   };
 
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
+    const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
+
     setExerciseSets((prev) => {
+      const updatedSets = [...(prev[exerciseId] || []), set];
       const updated = {
         ...prev,
-        [exerciseId]: [...prev[exerciseId], set],
+        [exerciseId]: updatedSets,
       };
       // Auto-guardar después de actualizar el estado
       setTimeout(() => {
@@ -136,9 +279,17 @@ export function WorkoutLogScreen({
       }, 0);
       return updated;
     });
-    // Activar cronómetro
-    setActiveTimerId(exerciseId);
-    setTimerSeconds(getTimerDurationFromRoutine());
+
+    const currentSetsCount = exerciseSets[exerciseId]?.length || 0;
+    const willReachTarget = targetSets > 0 && currentSetsCount + 1 >= targetSets;
+
+    if (willReachTarget) {
+      void stopTimer();
+      return;
+    }
+
+    // Activar cronómetro solo si aún faltan series por completar.
+    void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
   };
 
   const handleRemoveLastSet = (exerciseId: string) => {
@@ -228,6 +379,8 @@ export function WorkoutLogScreen({
           [exerciseId]: [...(prev[exerciseId] || []), { weight: -1, reps: -1 }],
         }));
       }
+
+      void stopTimer();
     }
   };
 
@@ -384,6 +537,8 @@ export function WorkoutLogScreen({
           const previousLog = getPreviousExerciseLog(exercise.id);
           const currentSets = exerciseSets[exercise.id] || [];
           const improvement = buildExerciseImprovement(currentSets, previousLog);
+          const isTargetCompleted =
+            exercise.targetSets > 0 && currentSets.length >= exercise.targetSets;
 
           return (
           <React.Fragment key={exercise.id}>
@@ -403,20 +558,27 @@ export function WorkoutLogScreen({
               previousLog={previousLog}
               improvement={improvement}
             />
-            {activeTimerId === exercise.id && timerSeconds > 0 && (
-              <Pressable 
-                style={styles.timerContainer}
-                onPress={() => setTimerSeconds(prev => prev + 30)}
-                onLongPress={() => setTimerSeconds(0)}
+            {activeTimerId === exercise.id && timerSeconds > 0 && !isTargetCompleted && (
+                <Pressable 
+                style={({ pressed }) => [
+                  styles.timerContainer,
+                  pressed && styles.timerContainerPressed,
+                ]}
+                onPress={() => {
+                  void extendTimerBy(30);
+                }}
+                onLongPress={() => {
+                  void stopTimer();
+                }}
                 delayLongPress={2000}
                 disabled={false}
-              >
+                >
                 <Text style={styles.timerLabel}>Tiempo hasta la siguiente serie</Text>
                 <Text style={styles.timerText}>
                   {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
                 </Text>
                 <Text style={styles.timerHint}>Pulsa para +30s, mantén 2s para eliminar</Text>
-              </Pressable>
+                </Pressable>
             )}
           </React.Fragment>
           );
@@ -660,6 +822,15 @@ const styles = StyleSheet.create({
     padding: 20,
     alignItems: 'center',
     justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  timerContainerPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.995 }],
   },
   timerText: {
     fontSize: 48,
