@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
-  FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  FloatingPrimaryNav,
+  FLOATING_GLASS_BAR_HEIGHT,
+  FLOATING_GLASS_BAR_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   Toast,
@@ -24,14 +25,20 @@ interface DataScreenProps {
   onImportData: () => Promise<void>;
   onExportData: () => Promise<void>;
   onClearData: () => Promise<void> | void;
-  onBack?: () => void;
+  onNavigateHome?: () => void;
+  onNavigateRoutines?: () => void;
+  onNavigateCalendar?: () => void;
+  onNavigateData?: () => void;
 }
 
 export function DataScreen({
   onImportData,
   onExportData,
   onClearData,
-  onBack,
+  onNavigateHome,
+  onNavigateRoutines,
+  onNavigateCalendar,
+  onNavigateData,
 }: DataScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -43,8 +50,8 @@ export function DataScreen({
     type: 'success' | 'error';
   } | null>(null);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingNavBottom = Math.max(insets.bottom, 10) + FLOATING_GLASS_BAR_MARGIN;
+  const scrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
 
   const hasNoData = state.routines.length === 0 && state.logs.length === 0;
 
@@ -56,13 +63,13 @@ export function DataScreen({
       setBusyAction(action);
       await callback();
       setToast({
-        message: action === 'import' ? '✅ Datos importados' : '✅ Datos exportados',
+        message: action === 'import' ? 'Datos importados' : 'Datos exportados',
         type: 'success',
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo completar la acción';
       setToast({
-        message: `❌ ${message}`,
+        message,
         type: 'error',
       });
     } finally {
@@ -92,7 +99,10 @@ export function DataScreen({
       >
         {!hasNoData && (
           <View style={styles.summaryCard}>
-            <Text style={styles.summaryTitle}>📊 Resumen actual</Text>
+            <View style={styles.titleRow}>
+              <MaterialCommunityIcons name="chart-box-outline" size={18} color={theme.colors.text} />
+              <Text style={styles.summaryTitle}>Resumen actual</Text>
+            </View>
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{state.routines.length}</Text>
@@ -109,12 +119,15 @@ export function DataScreen({
 
         {!hasNoData && (
           <View style={styles.actionCard}>
-            <Text style={styles.actionTitle}>📤 Exportar datos</Text>
+            <View style={styles.titleRow}>
+              <MaterialCommunityIcons name="export-variant" size={18} color={theme.colors.text} />
+              <Text style={styles.actionTitle}>Exportar datos</Text>
+            </View>
             <Text style={styles.actionSubtitle}>
               Descarga un fichero con todas las rutinas y entrenamientos.
             </Text>
             <Button
-              title={busyAction === 'export' ? 'Exportando…' : '📤 Exportar'}
+              title={busyAction === 'export' ? 'Exportando…' : 'Exportar'}
               onPress={() => handleAction('export', onExportData)}
               disabled={busyAction !== null}
               size="large"
@@ -123,12 +136,15 @@ export function DataScreen({
         )}
 
         <View style={styles.actionCard}>
-          <Text style={styles.actionTitle}>📥 Importar datos</Text>
+          <View style={styles.titleRow}>
+            <MaterialCommunityIcons name="import" size={18} color={theme.colors.text} />
+            <Text style={styles.actionTitle}>Importar datos</Text>
+          </View>
           <Text style={styles.actionSubtitle}>
             Carga un fichero exportado con rutinas y entrenamientos.
           </Text>
           <Button
-            title={busyAction === 'import' ? 'Importando…' : '📥 Importar'}
+            title={busyAction === 'import' ? 'Importando…' : 'Importar'}
             onPress={() => setShowImportModal(true)}
             disabled={busyAction !== null}
             variant="primary"
@@ -138,12 +154,15 @@ export function DataScreen({
 
         {!hasNoData && (
           <View style={[styles.actionCard, styles.dangerCard]}>
-            <Text style={[styles.actionTitle, styles.dangerTitle]}>🗑️ Limpiar datos</Text>
+            <View style={styles.titleRow}>
+              <MaterialCommunityIcons name="delete-outline" size={18} color={theme.colors.error} />
+              <Text style={[styles.actionTitle, styles.dangerTitle]}>Limpiar datos</Text>
+            </View>
             <Text style={[styles.actionSubtitle, styles.dangerSubtitle]}>
               Elimina todas las rutinas y entrenamientos guardados.
             </Text>
             <Button
-              title="🗑️ Limpiar"
+              title="Limpiar"
               onPress={() => setShowClearModal(true)}
               variant="danger"
               size="large"
@@ -153,17 +172,33 @@ export function DataScreen({
       </ScrollView>
 
       <GlassTopBar
-        title="🗂️ Datos"
+        title="Datos"
+        titleElement={(
+          <View style={styles.titleRow}>
+            <MaterialCommunityIcons name="folder-cog-outline" size={18} color={theme.colors.text} />
+            <Text style={styles.topBarTitle}>Datos</Text>
+          </View>
+        )}
         subtitle="Importa, exporta o limpia la información"
         topInset={insets.top}
       />
 
-      {!!onBack && <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />}
+      <FloatingPrimaryNav
+        bottom={floatingNavBottom}
+        activeTab="data"
+        onPressHome={onNavigateHome}
+        onPressRoutines={onNavigateRoutines}
+        onPressCalendar={onNavigateCalendar}
+        onPressData={onNavigateData}
+      />
 
       <Modal visible={showImportModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>⚠️ Importar datos</Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name="alert-outline" size={18} color={theme.colors.text} />
+              <Text style={styles.modalTitle}>Importar datos</Text>
+            </View>
             <Text style={styles.modalText}>
               Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?
             </Text>
@@ -191,7 +226,10 @@ export function DataScreen({
       <Modal visible={showClearModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>⚠️ Limpiar datos</Text>
+            <View style={styles.modalTitleRow}>
+              <MaterialCommunityIcons name="alert-outline" size={18} color={theme.colors.text} />
+              <Text style={styles.modalTitle}>Limpiar datos</Text>
+            </View>
             <Text style={styles.modalText}>
               Esta acción borrará toda la información guardada en la app.
             </Text>
@@ -209,7 +247,7 @@ export function DataScreen({
                 onPress={async () => {
                   setShowClearModal(false);
                   await onClearData();
-                  setToast({ message: '✅ Datos eliminados', type: 'success' });
+                  setToast({ message: 'Datos eliminados', type: 'success' });
                 }}
                 variant="danger"
                 size="medium"
@@ -257,7 +295,18 @@ const styles = StyleSheet.create({
     fontSize: 19,
     fontWeight: '800',
     color: theme.colors.text,
+    lineHeight: 24,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     marginBottom: 12,
+  },
+  topBarTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
     lineHeight: 24,
   },
   summaryRow: {
@@ -332,8 +381,15 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '800',
     color: theme.colors.text,
-    marginBottom: 8,
+    marginBottom: 0,
     lineHeight: 24,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 10,
   },
   modalText: {
     color: theme.colors.textSecondary,

@@ -10,7 +10,7 @@ import {
 
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
 
-export const GLASS_TOP_BAR_BASE_HEIGHT = 92;
+export const GLASS_TOP_BAR_BASE_HEIGHT = 50;
 
 interface GlassTopBarProps {
   title: string;
@@ -36,12 +36,13 @@ export function GlassTopBar({
   titleStyle,
 }: GlassTopBarProps) {
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + topInset;
+  const topBarPaddingTop = Math.max(topInset - 16, 0);
 
   return (
     <View
       style={[
         styles.topBar,
-        { height: topBarHeight, paddingTop: topInset + 8 },
+        { height: topBarHeight, paddingTop: topBarPaddingTop },
         containerStyle,
       ]}
     >
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
   },
   topBarContent: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   topBarRow: {
     flexDirection: 'row',

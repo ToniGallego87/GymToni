@@ -1,7 +1,7 @@
 import React, { createContext, ReactNode, useReducer } from 'react';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
-import { WorkoutAction, WorkoutRoutine, WorkoutState } from '@types/index';
+import { WorkoutAction, WorkoutRoutine, WorkoutState } from '../../types';
 import { parseSeriesString } from '@lib/parsers';
 
 const syncActiveRoutine = (routines: WorkoutRoutine[], activeRoutineId?: string) => {

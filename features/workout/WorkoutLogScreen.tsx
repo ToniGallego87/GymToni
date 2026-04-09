@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   ScrollView,
@@ -31,7 +32,7 @@ import {
 import { parseCardioString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
 import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '../../types';
-import { theme } from '@lib/theme';
+import { getTrainingAccent, theme } from '@lib/theme';
 import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@lib/progress';
 
 interface WorkoutLogScreenProps {
@@ -41,6 +42,16 @@ interface WorkoutLogScreenProps {
 }
 
 const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
+
+function renderDayAccentIcon(day: WorkoutDay, size: number) {
+  return (
+    <MaterialCommunityIcons
+      name="circle"
+      size={size}
+      color={getTrainingAccent(day)}
+    />
+  );
+}
 
 export function WorkoutLogScreen({
   day,
@@ -522,7 +533,7 @@ export function WorkoutLogScreen({
       dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
 
       setToast({
-        message: '✅ Entrenamiento guardado, ¡excelente!',
+        message: 'Entrenamiento guardado, excelente.',
         type: 'success',
       });
 
@@ -531,7 +542,7 @@ export function WorkoutLogScreen({
       }, 1500);
     } catch (error) {
       setToast({
-        message: '❌ Error al guardar',
+        message: 'Error al guardar.',
         type: 'error',
       });
     }
@@ -612,7 +623,14 @@ export function WorkoutLogScreen({
                 delayLongPress={2000}
                 disabled={false}
                 >
-                <Text style={styles.timerLabel}>Tiempo hasta la siguiente serie</Text>
+                <View style={styles.timerLabelRow}>
+                  <MaterialCommunityIcons
+                    name="timer-sand"
+                    size={16}
+                    color={theme.colors.darkGray}
+                  />
+                  <Text style={styles.timerLabel}>Tiempo hasta la siguiente serie</Text>
+                </View>
                 <Text style={styles.timerText}>
                   {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
                 </Text>
@@ -631,7 +649,7 @@ export function WorkoutLogScreen({
 
         <View style={styles.buttonContainer}>
           <Button
-            title="🎯 Guardar"
+            title="Guardar"
             onPress={handleSaveWorkout}
             variant="primary"
             size="large"
@@ -640,7 +658,13 @@ export function WorkoutLogScreen({
       </ScrollView>
 
       <GlassTopBar
-        title={`${selectedDay.emoji} ${selectedDay.name}`}
+        title={selectedDay.name}
+        titleElement={
+          <View style={styles.topBarTitleRow}>
+            {renderDayAccentIcon(selectedDay, 16)}
+            <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
+          </View>
+        }
         subtitle="Rellena los ejercicios"
         topInset={insets.top}
       />
@@ -716,9 +740,10 @@ export function WorkoutLogScreen({
                     setShowDaySelector(false);
                   }}
                 >
-                  <Text style={styles.dayOptionText}>
-                    {d.emoji} {d.name}
-                  </Text>
+                    <View style={styles.dayOptionContent}>
+                      {renderDayAccentIcon(d, 14)}
+                      <Text style={styles.dayOptionText}>{d.name}</Text>
+                    </View>
                 </Pressable>
               ))}
             </ScrollView>
@@ -801,6 +826,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  dayOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
   daysList: {
     marginVertical: 12,
   },
@@ -846,11 +876,16 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: theme.colors.darkGray,
   },
+  timerLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
   timerLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: theme.colors.darkGray,
-    marginBottom: 12,
   },
   timerHint: {
     fontSize: 12,
@@ -858,5 +893,18 @@ const styles = StyleSheet.create({
     color: theme.colors.darkGray,
     marginTop: 12,
     opacity: 0.8,
+  },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  topBarTitleText: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: theme.colors.text,
+    textShadowColor: 'rgba(0, 0, 0, 0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
   },
 });

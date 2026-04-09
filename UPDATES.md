@@ -1,5 +1,20 @@
 # UPDATES
 
+## Version 0.4.5 - 2026-04-09
+
+### Nuevas funcionalidades
+- Nueva barra flotante primaria reutilizable para la navegacion principal entre Entrenar, Rutinas, Calendario y Datos.
+
+### Cambios
+- Flujo de navegacion refinado: Calendario y Datos pasan a usar la barra primaria flotante y el detalle de rutina vuelve a "Selecciona una rutina".
+- Limpieza visual en vistas clave sustituyendo emojis visibles por iconos de Material Design Icons, manteniendo los colores de los dias de rutina.
+- Selector de rutinas, detalle, nueva rutina, calendario, datos y registro de entrenamiento adaptados al nuevo sistema iconografico.
+- Home: `assets/title.png` reducido para integrarse mejor en la top bar.
+- Top bar ajustada para acercar el contenido a la barra de estado y mejorar la integracion edge-to-edge.
+- Android: barra de estado nativa configurada como transparente para integrarse con la cabecera glass.
+- Dependencia `expo-blur` alineada con Expo SDK 51 para evitar incompatibilidades en Android.
+
+
 ## Version 0.4.4 - 2026-04-09
 
 ### Nuevas funcionalidades

@@ -15,6 +15,7 @@ export {
 	FLOATING_GLASS_BAR_HEIGHT,
 	FLOATING_GLASS_BAR_MARGIN,
 } from './FloatingGlassBar';
+export { FloatingPrimaryNav } from './FloatingPrimaryNav';
 export {
 	GLASS_BLUR_INTENSITY,
 	GLASS_TOP_BAR_BG,

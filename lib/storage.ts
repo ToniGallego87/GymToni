@@ -2,7 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
-import { WorkoutAppData, WorkoutRoutine } from '@types/index';
+import { WorkoutAppData, WorkoutRoutine } from '../types';
 import { parseSeriesString } from './parsers';
 
 const APP_STORAGE_KEY = 'gymtrack_app_data';

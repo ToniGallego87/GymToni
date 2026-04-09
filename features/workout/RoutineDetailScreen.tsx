@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -147,7 +148,14 @@ export function RoutineDetailScreen({
           style={styles.timerBlock}
           onPress={handleOpenTimerModal}
         >
-          <Text style={styles.timerBlockLabel}>⏱️ Temporizador de Descanso</Text>
+          <View style={styles.timerBlockLabelRow}>
+            <MaterialCommunityIcons
+              name="timer-sand"
+              size={16}
+              color={theme.colors.background}
+            />
+            <Text style={styles.timerBlockLabel}>Temporizador de descanso</Text>
+          </View>
           <Text style={styles.timerBlockValue}>{formatTime(getTimerDurationSeconds())}</Text>
           <Text style={styles.timerBlockHint}>Toca para editar</Text>
         </Pressable>
@@ -379,11 +387,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...theme.shadow.soft,
   },
+  timerBlockLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   timerBlockLabel: {
     fontSize: 14,
     fontWeight: '700',
     color: theme.colors.background,
-    marginBottom: 8,
   },
   timerBlockValue: {
     fontSize: 32,

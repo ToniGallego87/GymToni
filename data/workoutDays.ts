@@ -1,4 +1,4 @@
-import { WorkoutRoutine } from '@types/index';
+import { WorkoutRoutine } from '../types';
 
 const JAN_01_2026 = new Date('2026-01-01T08:00:00').getTime();
 const FEB_01_2026 = new Date('2026-02-01T08:00:00').getTime();

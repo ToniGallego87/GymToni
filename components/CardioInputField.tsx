@@ -7,6 +7,7 @@ import {
   Pressable,
   GestureResponderEvent,
 } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 
 interface CardioInputFieldProps {
@@ -27,7 +28,10 @@ export function CardioInputField({
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>🏃 Cardio (opcional)</Text>
+        <View style={styles.headerLeft}>
+          <MaterialCommunityIcons name="run" size={20} color={theme.colors.text} style={styles.icon} />
+          <Text style={styles.title}>Cardio (opcional)</Text>
+        </View>
         {onToggle && (
           <Pressable
             style={({ pressed }) => [
@@ -73,6 +77,10 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
   title: {
     fontSize: 17,
     fontWeight: '700',
@@ -90,6 +98,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textSecondary,
     lineHeight: 18,
+  },
+  icon: {
+    marginRight: 8,
   },
   input: {
     backgroundColor: theme.colors.darkGray,

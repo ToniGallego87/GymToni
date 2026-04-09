@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -8,7 +9,7 @@ import {
   GestureResponderEvent,
   ScrollView,
 } from 'react-native';
-import { ParsedSet, ExerciseLog } from '@types/index';
+import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
 import { parseSeriesString } from '@lib/parsers';
 
@@ -153,9 +154,11 @@ export function ExerciseInputField({
           ]}
           onPress={onNotesPress}
         >
-          <Text style={styles.notesButtonText}>
-            ✏️
-          </Text>
+          <MaterialCommunityIcons
+            name="pencil-outline"
+            size={16}
+            color={theme.colors.text}
+          />
         </Pressable>
       </View>
 
@@ -258,7 +261,10 @@ export function ExerciseInputField({
               ]}
               onPress={handleAddSet}
             >
-              <Text style={styles.buttonText}>➕ Añadir</Text>
+              <View style={styles.buttonContent}>
+                <MaterialCommunityIcons name="plus" size={16} color={theme.colors.darkGray} />
+                <Text style={styles.buttonText}>Añadir</Text>
+              </View>
             </Pressable>
 
             {hasAddedSets && (
@@ -269,7 +275,10 @@ export function ExerciseInputField({
                 ]}
                 onPress={onRemoveLastSet}
               >
-                <Text style={styles.buttonText}>➖ Borrar</Text>
+                <View style={styles.buttonContent}>
+                  <MaterialCommunityIcons name="minus" size={16} color={theme.colors.darkGray} />
+                  <Text style={styles.buttonText}>Borrar</Text>
+                </View>
               </Pressable>
             )}
 
@@ -280,7 +289,10 @@ export function ExerciseInputField({
               ]}
               onPress={onFinishExercise}
             >
-              <Text style={styles.buttonText}>✔️ Terminar</Text>
+              <View style={styles.buttonContent}>
+                <MaterialCommunityIcons name="check" size={16} color={theme.colors.darkGray} />
+                <Text style={styles.buttonText}>Terminar</Text>
+              </View>
             </Pressable>
           </View>
         </View>
@@ -288,9 +300,12 @@ export function ExerciseInputField({
 
       {isMaxSetsReached && (
         <View style={styles.maxReachedContainer}>
-          <Text style={styles.maxReachedText}>
-            ✓ Completado ({addedSets.length}/{target?.sets})
-          </Text>
+          <View style={styles.maxReachedRow}>
+            <MaterialCommunityIcons name="check-circle" size={18} color={theme.colors.success} />
+            <Text style={styles.maxReachedText}>
+              Completado ({addedSets.length}/{target?.sets})
+            </Text>
+          </View>
           <Pressable
             style={({ pressed }) => [
               styles.deleteLastButton,
@@ -298,7 +313,10 @@ export function ExerciseInputField({
             ]}
             onPress={onRemoveLastSet}
           >
-            <Text style={styles.buttonText}>➖ Borrar</Text>
+            <View style={styles.buttonContent}>
+              <MaterialCommunityIcons name="minus" size={16} color={theme.colors.darkGray} />
+              <Text style={styles.buttonText}>Borrar</Text>
+            </View>
           </Pressable>
         </View>
       )}
@@ -367,6 +385,10 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     marginBottom: 8,
   },
+  previousNotesRow: {
+    color: '#FFB347',
+    fontStyle: 'italic',
+  },
   notesRow: {
     fontSize: 13,
     color: '#FFD400',
@@ -395,11 +417,6 @@ const styles = StyleSheet.create({
   },
   notesButtonPressed: {
     backgroundColor: theme.colors.mediumGray,
-  },
-  notesButtonText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text,
   },
   seriesContainer: {
     marginBottom: 12,
@@ -507,6 +524,11 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 15,
   },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   buttonPressed: {
     opacity: 0.92,
   },
@@ -517,6 +539,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: theme.colors.primary,
+  },
+  maxReachedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   maxReachedText: {
     color: theme.colors.primaryLight,

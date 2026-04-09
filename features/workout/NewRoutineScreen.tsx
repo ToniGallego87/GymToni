@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -166,10 +167,10 @@ export function NewRoutineScreen({
         days: builtDays,
       });
 
-      setToast({ message: '✅ Nueva rutina creada', type: 'success' });
+      setToast({ message: 'Nueva rutina creada', type: 'success' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo crear la rutina';
-      setToast({ message: `❌ ${message}`, type: 'error' });
+      setToast({ message, type: 'error' });
     }
   };
 
@@ -214,10 +215,10 @@ export function NewRoutineScreen({
 
         <View style={styles.rowButtons}>
           <Button
-            title="➕ Añadir día"
+            title="Añadir día"
             onPress={() => {
               if (days.length >= 7) {
-                setToast({ message: '⚠️ Máximo 7 días', type: 'error' });
+                setToast({ message: 'Máximo 7 días', type: 'error' });
                 return;
               }
 
@@ -233,7 +234,7 @@ export function NewRoutineScreen({
           />
 
           <Button
-            title="➖ Quitar día"
+            title="Quitar día"
             onPress={() => setDays((previous: NewRoutineDayForm[]) => previous.slice(0, -1))}
             variant="secondary"
             disabled={days.length <= 1}
@@ -250,7 +251,13 @@ export function NewRoutineScreen({
       </ScrollView>
 
       <GlassTopBar
-        title="➕ Nueva rutina"
+        title="Nueva rutina"
+        titleElement={(
+          <View style={styles.topBarTitleRow}>
+            <MaterialCommunityIcons name="playlist-plus" size={18} color={theme.colors.text} />
+            <Text style={styles.topBarTitleText}>Nueva rutina</Text>
+          </View>
+        )}
         subtitle="Define los ejercicios que realizarás cada día"
         topInset={insets.top}
       />
@@ -332,5 +339,16 @@ const styles = StyleSheet.create({
   },
   growButton: {
     flex: 1,
+  },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
   },
 });

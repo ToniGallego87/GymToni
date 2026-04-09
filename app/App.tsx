@@ -20,7 +20,7 @@ import {
 } from '@features/workout';
 import { clearAppData, loadAppData, saveAppData } from '@lib/storage';
 import { theme } from '@lib/theme';
-import { WorkoutAppData, WorkoutDay, WorkoutLog, WorkoutRoutine } from '@types/index';
+import { WorkoutAppData, WorkoutDay, WorkoutLog, WorkoutRoutine } from '../types';
 
 type Screen =
   | { type: 'home' }
@@ -408,7 +408,10 @@ function AppContent() {
       {screen.type === 'calendar' && (
         <CalendarScreen
           onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'calendar' })}
-          onBack={() => setScreen({ type: 'home' })}
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateData={() => setScreen({ type: 'data' })}
         />
       )}
 
@@ -417,7 +420,10 @@ function AppContent() {
           onImportData={handleImportData}
           onExportData={handleExportData}
           onClearData={handleClearData}
-          onBack={() => setScreen({ type: 'home' })}
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateData={() => setScreen({ type: 'data' })}
         />
       )}
 
@@ -432,7 +438,7 @@ function AppContent() {
       {screen.type === 'routine-details' && (
         <RoutineDetailScreen
           routine={screen.routine}
-          onBack={() => setScreen({ type: 'home' })}
+          onBack={() => setScreen({ type: 'routine-selector' })}
         />
       )}
     </View>
@@ -442,7 +448,7 @@ function AppContent() {
 export default function App() {
   return (
     <WorkoutProvider>
-      <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} translucent={false} />
+      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
       <AppContent />
     </WorkoutProvider>
   );

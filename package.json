@@ -21,7 +21,7 @@
     "@react-navigation/native": "~6.1.18",
     "@react-navigation/native-stack": "~6.10.1",
     "expo": "~51.0.39",
-    "expo-blur": "^55.0.13",
+    "expo-blur": "~13.0.3",
     "expo-constants": "~16.0.2",
     "expo-document-picker": "~12.0.2",
     "expo-file-system": "~17.0.1",

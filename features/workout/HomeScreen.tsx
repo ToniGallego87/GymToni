@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   FlatList,
@@ -23,9 +24,9 @@ import {
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
-  FloatingGlassBar,
   FLOATING_GLASS_BAR_HEIGHT,
   FLOATING_GLASS_BAR_MARGIN,
+  FloatingPrimaryNav,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
 } from '../../components';
@@ -379,8 +380,8 @@ export function HomeScreen({
   const hasNoRoutines = activeDays.length === 0;
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBaseBottom = Math.max(insets.bottom, 10);
-  const selectorBackBottom = floatingBaseBottom + FLOATING_BACK_BUTTON_MARGIN;
-  const selectorScrollBottomPadding = selectorBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const selectorNavBottom = floatingBaseBottom + FLOATING_GLASS_BAR_MARGIN;
+  const selectorScrollBottomPadding = selectorNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
   const floatingNavBottom = floatingBaseBottom + FLOATING_GLASS_BAR_MARGIN;
   const homeScrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
   const appVersion = require('../../app.json').expo.version;
@@ -713,12 +714,24 @@ export function HomeScreen({
         </ScrollView>
 
         <GlassTopBar
-          title="📚 Selecciona una rutina"
+          title="Selecciona una rutina"
+          titleElement={(
+            <View style={styles.selectorTitleRow}>
+              <MaterialCommunityIcons name="book-open-variant" size={18} color={theme.colors.text} />
+              <Text style={styles.selectorTitleText}>Selecciona una rutina</Text>
+            </View>
+          )}
           subtitle="Consulta la que desees o crea una nueva"
           topInset={insets.top}
         />
 
-        <FloatingBackButton onPress={handleCloseRoutineSelector} bottom={selectorBackBottom} />
+        <FloatingPrimaryNav
+          bottom={selectorNavBottom}
+          activeTab="routines"
+          onPressHome={onNavigateHome || handleCloseRoutineSelector}
+          onPressCalendar={onNavigateCalendar}
+          onPressData={onNavigateData}
+        />
 
         <Modal
           visible={!!routineToDeleteId}
@@ -808,7 +821,11 @@ export function HomeScreen({
           onPress={handleStartPress}
         >
           <View style={styles.heroIconWrap}>
-            <Text style={styles.heroIcon}>{hasNoRoutines ? '➕' : isRoutineOld && !isDisplayedRoutineActive ? '🔒' : (isTodayWorkoutCompleted() ? '✔️' : '🏋️')}</Text>
+            <MaterialCommunityIcons
+              name={hasNoRoutines ? 'plus-thick' : isRoutineOld && !isDisplayedRoutineActive ? 'lock-outline' : (isTodayWorkoutCompleted() ? 'check-bold' : 'weight-lifter') as any}
+              size={38}
+              style={styles.heroIcon}
+            />
           </View>
           <View style={styles.heroTitleWrapper}>
             <Text 
@@ -836,7 +853,14 @@ export function HomeScreen({
               activeOpacity={0.85}
             >
               <View style={styles.progressHeaderRow}>
-                <Text style={styles.progressTitle}>📊 Rutina {state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1} {showWeeklyProgressChart ? '▲' : '▼'}</Text>
+                <View style={styles.progressTitleRow}>
+                  <MaterialCommunityIcons
+                    name="chart-bar"
+                    size={18}
+                    style={styles.progressTitleIcon}
+                  />
+                  <Text style={styles.progressTitle}>Rutina {state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1} {showWeeklyProgressChart ? '▲' : '▼'}</Text>
+                </View>
                 <Text
                   style={[
                     styles.progressLatest,
@@ -998,7 +1022,10 @@ export function HomeScreen({
                     setSelectedLogDayForOptions(undefined);
                   }}
                 >
-                  <Text style={styles.modalButtonEditText}>✏️ Editar</Text>
+                  <View style={styles.modalActionRow}>
+                    <MaterialCommunityIcons name="pencil-outline" size={16} color={theme.colors.darkGray} />
+                    <Text style={styles.modalButtonEditText}>Editar</Text>
+                  </View>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.modalButtonDelete}
@@ -1008,7 +1035,10 @@ export function HomeScreen({
                     setSelectedLogDayForOptions(undefined);
                   }}
                 >
-                  <Text style={styles.modalButtonDeleteText}>🗑️ Eliminar</Text>
+                  <View style={styles.modalActionRow}>
+                    <MaterialCommunityIcons name="delete-outline" size={16} color={theme.colors.darkGray} />
+                    <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
+                  </View>
                 </TouchableOpacity>
               </View>
               <TouchableOpacity
@@ -1056,38 +1086,20 @@ export function HomeScreen({
       </Modal>
 
       {!hasNoRoutines && (
-        <FloatingGlassBar bottom={floatingNavBottom}>
-
-          <TouchableOpacity
-            style={styles.floatingNavItem}
-            onPress={() => {
-              if (onOpenRoutineSelector) {
-                onOpenRoutineSelector();
-              } else {
-                setShowRoutineSelector(true);
-              }
-            }}
-          >
-            <Text style={styles.floatingNavLabel}>
-              📋 Rutinas
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.floatingNavItem}
-            onPress={() => onNavigateCalendar?.()}
-          >
-            <Text style={styles.floatingNavLabel}>📅 Calen...</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.floatingNavItem}
-            onPress={() => onNavigateData?.()}
-          >
-            <Text style={styles.floatingNavLabel}>🗂️ Datos</Text>
-          </TouchableOpacity>
-
-        </FloatingGlassBar>
+        <FloatingPrimaryNav
+          bottom={floatingNavBottom}
+          activeTab="home"
+          onPressHome={onNavigateHome}
+          onPressRoutines={() => {
+            if (onOpenRoutineSelector) {
+              onOpenRoutineSelector();
+            } else {
+              setShowRoutineSelector(true);
+            }
+          }}
+          onPressCalendar={onNavigateCalendar}
+          onPressData={onNavigateData}
+        />
       )}
 
       <GlassTopBar
@@ -1158,8 +1170,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   titleImage: {
-    width: 220,
-    height: 52,
+    width: 147,
+    height: 35,
     alignSelf: 'flex-start',
   },
   progressCard: {
@@ -1179,6 +1191,14 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  progressTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  progressTitleIcon: {
+    color: theme.colors.text,
   },
   progressToggleButton: {
     paddingVertical: 6,
@@ -1340,25 +1360,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     letterSpacing: -0.8,
-    textAlign: 'center',
-  },
-  floatingNavItem: {
-    flex: 1,
-    backgroundColor: 'rgba(255, 255, 255, 0.03)',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.14)',
-    minHeight: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  floatingNavLabel: {
-    color: 'rgba(239, 243, 250, 0.95)',
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 20,
     textAlign: 'center',
   },
   weeksSection: {
@@ -1639,6 +1640,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 20,
   },
+  selectorTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  selectorTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
+  },
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -1724,6 +1736,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: theme.colors.darkGray,
+  },
+  modalActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
 });
 

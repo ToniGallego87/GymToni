@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { ParsedSet } from '@types/index';
+import { ParsedSet } from '../types';
 import { parseSeriesString, formatParsedSet } from '@lib/parsers';
 import { theme } from '@lib/theme';
 

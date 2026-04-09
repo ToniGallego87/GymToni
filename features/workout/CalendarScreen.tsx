@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -9,9 +10,9 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  FloatingPrimaryNav,
+  FLOATING_GLASS_BAR_HEIGHT,
+  FLOATING_GLASS_BAR_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
 } from '@components';
@@ -21,7 +22,10 @@ import { theme } from '@lib/theme';
 
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
-  onBack?: () => void;
+  onNavigateHome?: () => void;
+  onNavigateRoutines?: () => void;
+  onNavigateCalendar?: () => void;
+  onNavigateData?: () => void;
 }
 
 const MONTH_NAMES = [
@@ -60,13 +64,26 @@ function getWeekColor(blockNumber: number) {
   return WEEK_COLORS[(Math.max(1, blockNumber) - 1) % WEEK_COLORS.length];
 }
 
-export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
+export function CalendarScreen({
+  onSelectLog,
+  onNavigateHome,
+  onNavigateRoutines,
+  onNavigateCalendar,
+  onNavigateData,
+}: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const [monthOffset, setMonthOffset] = useState(0);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingNavBottom = Math.max(insets.bottom, 10) + FLOATING_GLASS_BAR_MARGIN;
+  const scrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
+
+  const titleElement = (
+    <View style={styles.topBarTitleRow}>
+      <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.colors.text} />
+      <Text style={styles.topBarTitleText}>Calendario</Text>
+    </View>
+  );
 
   const getDayById = (dayId: string) => {
     for (const routine of state.routines) {
@@ -150,7 +167,12 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
         <StatusBar style="light" translucent backgroundColor="transparent" />
 
         <View style={[styles.emptyState, { paddingTop: topBarHeight + 24 }]}> 
-          <Text style={styles.emptyEmoji}>📭</Text>
+          <MaterialCommunityIcons
+            name="inbox-outline"
+            size={44}
+            color={theme.colors.textSecondary}
+            style={styles.emptyEmoji}
+          />
           <Text style={styles.emptyTitle}>Sin entrenamientos</Text>
           <Text style={styles.emptyText}>
             Guarda una sesión para verla reflejada en el calendario.
@@ -158,12 +180,20 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
         </View>
 
         <GlassTopBar
-          title="📅 Calendario"
+          title="Calendario"
+          titleElement={titleElement}
           subtitle="Tu historial mensual"
           topInset={insets.top}
         />
 
-        {!!onBack && <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />}
+        <FloatingPrimaryNav
+          bottom={floatingNavBottom}
+          activeTab="calendar"
+          onPressHome={onNavigateHome}
+          onPressRoutines={onNavigateRoutines}
+          onPressCalendar={onNavigateCalendar}
+          onPressData={onNavigateData}
+        />
       </View>
     );
   }
@@ -188,7 +218,7 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
             style={styles.monthNavButton}
             onPress={() => setMonthOffset((prev: number) => prev - 1)}
           >
-            <Text style={styles.monthNavText}>⬅️</Text>
+            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.colors.text} />
           </Pressable>
 
           <Text style={styles.monthTitle}>
@@ -199,7 +229,7 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
             style={styles.monthNavButton}
             onPress={() => setMonthOffset((prev: number) => prev + 1)}
           >
-            <Text style={styles.monthNavText}>➡️</Text>
+            <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.text} />
           </Pressable>
         </View>
 
@@ -262,12 +292,20 @@ export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
       </ScrollView>
 
       <GlassTopBar
-        title="📅 Calendario"
-        subtitle="Vista mensual del historial"
+        title="Calendario"
+        titleElement={titleElement}
+        subtitle="Repasa tus ejercicios mes por mes"
         topInset={insets.top}
       />
 
-      {!!onBack && <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />}
+      <FloatingPrimaryNav
+        bottom={floatingNavBottom}
+        activeTab="calendar"
+        onPressHome={onNavigateHome}
+        onPressRoutines={onNavigateRoutines}
+        onPressCalendar={onNavigateCalendar}
+        onPressData={onNavigateData}
+      />
     </View>
   );
 }
@@ -309,6 +347,17 @@ const styles = StyleSheet.create({
   },
   monthNavText: {
     fontSize: 16,
+  },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
   },
   weekHeader: {
     flexDirection: 'row',

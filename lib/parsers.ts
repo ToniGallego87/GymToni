@@ -1,4 +1,4 @@
-import { ParsedSet } from '@types/index';
+import { ParsedSet } from '../types';
 
 /**
  * Parsea un string de formato "60x8, 65x6, 65x4" a array de sets

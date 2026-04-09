@@ -1,4 +1,4 @@
-import { ExerciseLog, ParsedSet, WorkoutLog } from '@types/index';
+import { ExerciseLog, ParsedSet, WorkoutLog } from '../types';
 
 interface ImprovementResult {
   isImproved: boolean;

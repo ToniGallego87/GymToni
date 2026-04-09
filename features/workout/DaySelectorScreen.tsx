@@ -1,4 +1,5 @@
 import React from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   Text,
@@ -15,7 +16,7 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
 } from '@components';
-import { WorkoutDay, WorkoutRoutine } from '@types/index';
+import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 
 interface DaySelectorScreenProps {
@@ -69,7 +70,13 @@ export function DaySelectorScreen({
       </ScrollView>
 
       <GlassTopBar
-        title="📅 Elige la sesión"
+        title="Elige la sesión"
+        titleElement={(
+          <View style={styles.topBarTitleRow}>
+            <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.colors.text} />
+            <Text style={styles.topBarTitleText}>Elige la sesión</Text>
+          </View>
+        )}
         subtitle="Selecciona el día que vas a registrar"
         topInset={insets.top}
         rightElement={
@@ -122,6 +129,17 @@ const styles = StyleSheet.create({
   },
   dayCardPressed: {
     opacity: 0.85,
+  },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
   },
   dayLeading: {
     marginRight: 12,

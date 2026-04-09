@@ -1,4 +1,5 @@
 import React from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
   ScrollView,
@@ -16,7 +17,7 @@ import {
 } from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import { formatDate } from '@lib/storage';
-import { WorkoutLog, WorkoutDay, ExerciseLog } from '@types/index';
+import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
 import {
@@ -192,19 +193,22 @@ export function DetailScreen({
               <Text style={styles.cardioLabel}>{log.cardio.type?.toUpperCase()}</Text>
               <View style={styles.cardioDetails}>
                 {log.cardio.duration && (
-                  <Text style={styles.cardioDetail}>
-                    ⏱️ {log.cardio.duration} min
-                  </Text>
+                  <View style={styles.cardioDetailRow}>
+                    <MaterialCommunityIcons name="timer-sand" size={14} color={theme.colors.primary} />
+                    <Text style={styles.cardioDetail}>{log.cardio.duration} min</Text>
+                  </View>
                 )}
                 {log.cardio.pace && (
-                  <Text style={styles.cardioDetail}>
-                    📍 {extractPaceNumber(log.cardio.pace)} km/h
-                  </Text>
+                  <View style={styles.cardioDetailRow}>
+                    <MaterialCommunityIcons name="map-marker-path" size={14} color={theme.colors.primary} />
+                    <Text style={styles.cardioDetail}>{extractPaceNumber(log.cardio.pace)} km/h</Text>
+                  </View>
                 )}
                 {log.cardio.rawInput && extractIncline(log.cardio.rawInput) && (
-                  <Text style={styles.cardioDetail}>
-                    📈 {extractIncline(log.cardio.rawInput)}
-                  </Text>
+                  <View style={styles.cardioDetailRow}>
+                    <MaterialCommunityIcons name="chart-line" size={14} color={theme.colors.primary} />
+                    <Text style={styles.cardioDetail}>{extractIncline(log.cardio.rawInput)}</Text>
+                  </View>
                 )}
               </View>
             </View>
@@ -302,6 +306,11 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: '500',
     lineHeight: 18,
+  },
+  cardioDetailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   footer: {
     marginTop: 32,
