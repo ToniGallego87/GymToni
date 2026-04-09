@@ -103,6 +103,20 @@ export function DetailScreen({
     return null;
   };
 
+  const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
+    const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
+    
+    if (imp.percent === 0) {
+      return { symbol: '=', color: theme.colors.warning, display: roundedPercent };
+    }
+    
+    return {
+      symbol: imp.isImproved ? '↑' : '↓', 
+      color: imp.isImproved ? theme.colors.success : theme.colors.error,
+      display: roundedPercent
+    };
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -148,8 +162,9 @@ export function DetailScreen({
               parsedSets={selectedExercise?.parsedSets || []}
               notes={selectedExercise?.notes}
               previousSets={prevExercise?.parsedSets}
-              improvementText={exerciseImprovement ? `${exerciseImprovement.isImproved ? '↑' : '↓'} ${exerciseImprovement.percent.toFixed(1)}%` : undefined}
+              improvementText={exerciseImprovement ? (() => { const fmt = formatImprovementDisplay(exerciseImprovement); return `${fmt.symbol} ${fmt.display}%`; })() : undefined}
               improvementPositive={exerciseImprovement ? exerciseImprovement.isImproved : true}
+              improvementColor={exerciseImprovement ? (() => { const fmt = formatImprovementDisplay(exerciseImprovement); return fmt.color; })() : undefined}
               isDetail={true}
             />
           );

@@ -29,6 +29,8 @@ interface WorkoutLogScreenProps {
   onBack: () => void;
 }
 
+const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
+
 export function WorkoutLogScreen({
   day,
   onSave,
@@ -61,20 +63,27 @@ export function WorkoutLogScreen({
         await Notifications.cancelScheduledNotificationAsync(timerNotificationId);
       }
 
+      const triggerDate = new Date(Date.now() + seconds * 1000);
+
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
           title: 'Descanso finalizado',
           body: 'Es hora de tu siguiente serie',
-          sound: true,
+          icon: 'notification_icon',
+          color: '#F9A825',
+          sound: 'default',  // ← Especificar sonido
+          vibrate: [0, 300, 150, 300, 150, 300],
+          priority: Notifications.AndroidNotificationPriority.MAX,
           data: {
             source: 'rest-timer',
             dayId: selectedDay.id,
             routineId: getRoutineIdForDay(),
           },
-        },
+        } as any,
         trigger: {
-          seconds,
-          channelId: 'rest-timer',
+          date: triggerDate,
+          allowWhileIdle: true,
+          channelId: REST_TIMER_CHANNEL_ID,
         } as any,
       });
 
@@ -124,12 +133,20 @@ export function WorkoutLogScreen({
         }
 
         if (Platform.OS === 'android') {
-          await Notifications.setNotificationChannelAsync('rest-timer', {
+          // Remove previous channels to avoid stale channel settings kept by Android.
+          await Notifications.deleteNotificationChannelAsync('rest-timer').catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync('rest-timer-v2').catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync('rest-timer-v3').catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync('rest-timer-v4').catch(() => undefined);
+
+          await Notifications.setNotificationChannelAsync(REST_TIMER_CHANNEL_ID, {
             name: 'Rest Timer',
             importance: Notifications.AndroidImportance.MAX,
             vibrationPattern: [0, 300, 150, 300, 150, 300],
             lightColor: '#F9A825',
             lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+            bypassDnd: true,
+            sound: 'default',
           });
         }
       } catch (error) {
@@ -288,7 +305,7 @@ export function WorkoutLogScreen({
       return;
     }
 
-    // Activar cronómetro solo si aún faltan series por completar.
+    // Activar temporizador solo si aún faltan series por completar.
     void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
   };
 
@@ -309,6 +326,11 @@ export function WorkoutLogScreen({
         [exerciseId]: updatedSets,
       };
     });
+
+    // Detener el temporizador si está activo para este ejercicio
+    if (activeTimerId === exerciseId) {
+      void stopTimer();
+    }
   };
 
   const getPreviousExerciseLog = (exerciseId: string) => {

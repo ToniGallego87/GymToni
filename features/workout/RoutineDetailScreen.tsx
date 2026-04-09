@@ -127,7 +127,7 @@ export function RoutineDetailScreen({
           style={styles.timerBlock}
           onPress={handleOpenTimerModal}
         >
-          <Text style={styles.timerBlockLabel}>⏱️ Cronómetro de Descanso</Text>
+          <Text style={styles.timerBlockLabel}>⏱️ Temporizador de Descanso</Text>
           <Text style={styles.timerBlockValue}>{formatTime(getTimerDurationSeconds())}</Text>
           <Text style={styles.timerBlockHint}>Toca para editar</Text>
         </Pressable>
@@ -176,7 +176,7 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Cronómetro</Text>
+            <Text style={styles.modalTitle}>Editar Temporizador</Text>
             <Text style={styles.timerModalLabel}>Duración en segundos:</Text>
             <TextInput
               style={styles.timerModalInput}

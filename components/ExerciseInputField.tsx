@@ -45,6 +45,20 @@ export function ExerciseInputField({
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
 
+  const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
+    const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
+    
+    if (imp.percent === 0) {
+      return { symbol: '=', styleKey: 'improvementNeutral', display: roundedPercent };
+    }
+    
+    return {
+      symbol: imp.isImproved ? '↑' : '↓', 
+      styleKey: imp.isImproved ? 'improvementUp' : 'improvementDown',
+      display: roundedPercent
+    };
+  };
+
   const handleAddSet = () => {
     const weight = parseFloat(weightValue.trim());
     const reps = parseFloat(repsValue.trim());
@@ -151,14 +165,19 @@ export function ExerciseInputField({
             Objetivo: {target.sets}x{target.reps}
           </Text>
           {improvement && addedSets.length > 0 && isMaxSetsReached && (
-            <Text
-              style={[
-                styles.improvementText,
-                improvement.isImproved ? styles.improvementUp : styles.improvementDown,
-              ]}
-            >
-              {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
-            </Text>
+            (() => {
+              const fmt = formatImprovementDisplay(improvement);
+              return (
+                <Text
+                  style={[
+                    styles.improvementText,
+                    styles[fmt.styleKey as keyof typeof styles],
+                  ]}
+                >
+                  {fmt.symbol} {fmt.display}%
+                </Text>
+              );
+            })()
           )}
         </View>
       )}
@@ -338,6 +357,9 @@ const styles = StyleSheet.create({
   },
   improvementDown: {
     color: theme.colors.error,
+  },
+  improvementNeutral: {
+    color: theme.colors.warning,
   },
   previousRow: {
     fontSize: 13,

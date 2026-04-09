@@ -2,7 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, BackHandler, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
@@ -485,6 +485,7 @@ function BottomNavItem({ emoji, label, active, onPress }: BottomNavItemProps) {
 export default function App() {
   return (
     <WorkoutProvider>
+      <StatusBar barStyle="light-content" backgroundColor={theme.colors.background} translucent={false} />
       <AppContent />
     </WorkoutProvider>
   );

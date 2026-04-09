@@ -12,6 +12,7 @@ interface ExerciseResultDisplayProps {
   previousSets?: ParsedSet[];
   improvementText?: string;
   improvementPositive?: boolean;
+  improvementColor?: string;
   targetSets?: number;
   targetReps?: string | number;
   isDetail?: boolean;
@@ -55,6 +56,7 @@ export function ExerciseResultDisplay({
   previousSets,
   improvementText,
   improvementPositive = true,
+  improvementColor,
   targetSets,
   targetReps,
   isDetail = false,
@@ -106,9 +108,7 @@ export function ExerciseResultDisplay({
           <Text
             style={[
               styles.improvementText,
-              improvementPositive
-                ? styles.improvementUp
-                : styles.improvementDown,
+              improvementColor ? { color: improvementColor } : (improvementPositive ? styles.improvementUp : styles.improvementDown),
             ]}
           >
             {improvementText}

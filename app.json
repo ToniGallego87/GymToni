@@ -3,7 +3,7 @@
     "name": "GymToni",
     "slug": "gymtoni",
     "icon": "./assets/icon.png",
-    "version": "0.4.2",
+    "version": "0.4.3",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": [
@@ -16,6 +16,11 @@
     "android": {
       "package": "com.gymtrack.app",
       "permissions": []
+    },
+    "androidStatusBar": {
+      "backgroundColor": "#0F1115",
+      "barStyle": "light-content",
+      "translucent": false
     },
     "web": {
       "favicon": "./assets/icon.png"

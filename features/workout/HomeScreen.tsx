@@ -132,9 +132,13 @@ function buildWeekProgress(
 
   const latestBlockNumber = orderedBlocks[orderedBlocks.length - 1];
 
-  return orderedBlocks.map((blockNumber, index) => {
+  // Calcular los factores de mejora de cada semana respecto a la anterior
+  const weeklyFactors: number[] = [];
+  
+  orderedBlocks.forEach((blockNumber, index) => {
     if (index === 0) {
-      return { week: 1, improvement: 0 };
+      weeklyFactors.push(1); // Semana 1 es el baseline, factor = 1
+      return;
     }
 
     const previousBlockNumber = blockNumber - 1;
@@ -142,7 +146,8 @@ function buildWeekProgress(
     const previousWeekLogsForBlock = groupedByBlock[previousBlockNumber] || [];
 
     if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
-      return { week: index + 1, improvement: 0 };
+      weeklyFactors.push(1); // Sin cambio si hay datos faltantes
+      return;
     }
 
     let improvement: ImprovementResult | null;
@@ -150,7 +155,7 @@ function buildWeekProgress(
     if (blockNumber === latestBlockNumber) {
       const completedDayIds = currentWeekLogsForBlock
         .map(log => log.dayId)
-        .filter((dayId, index, array) => !!dayId && array.indexOf(dayId) === index);
+        .filter((dayId, idx, array) => !!dayId && array.indexOf(dayId) === idx);
       const currentScores = getWeekScores(currentWeekLogsForBlock, {
         restrictToDayIds: completedDayIds,
         applyMissingPenalty: false,
@@ -176,9 +181,29 @@ function buildWeekProgress(
       ? (improvement.isImproved ? improvement.percent : -improvement.percent)
       : 0;
 
+    // Convertir porcentaje a factor multiplicativo (ej: 10% -> 1.10, -5% -> 0.95)
+    const factor = 1 + (signedDelta / 100);
+    weeklyFactors.push(factor);
+  });
+
+  // Calcular el porcentaje acumulado respecto a la semana 1
+  return orderedBlocks.map((blockNumber, index) => {
+    if (index === 0) {
+      return { week: 1, improvement: 0 };
+    }
+
+    // Acumular factores desde semana 2 hasta la semana actual
+    let accumulatedFactor = 1;
+    for (let i = 1; i <= index; i++) {
+      accumulatedFactor *= weeklyFactors[i];
+    }
+
+    // Convertir factor acumulado a porcentaje respecto a semana 1
+    const improvementPercent = (accumulatedFactor - 1) * 100;
+
     return {
       week: index + 1,
-      improvement: Math.round(signedDelta * 10) / 10,
+      improvement: Math.round(improvementPercent * 10) / 10,
     };
   });
 }
@@ -334,6 +359,20 @@ export function HomeScreen({
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
   );
   const hasNoRoutines = activeDays.length === 0;
+
+  const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
+    const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
+    
+    if (imp.percent === 0) {
+      return { symbol: '=', styleKey: 'weekImprovementNeutral', display: roundedPercent };
+    }
+    
+    return {
+      symbol: imp.isImproved ? '↑' : '↓', 
+      styleKey: imp.isImproved ? 'weekImprovementUp' : 'weekImprovementDown',
+      display: roundedPercent
+    };
+  };
 
   const handleStartPress = () => {
     if (hasNoRoutines) {
@@ -705,7 +744,7 @@ export function HomeScreen({
             style={styles.titleImage}
             resizeMode="contain"
           />
-          <Text style={styles.subtitle}>Tu rutina optimizada</Text>
+          <Text style={styles.subtitle}>Versión {require('../../app.json').expo.version}</Text>
         </View>
 
         <Pressable
@@ -876,14 +915,19 @@ export function HomeScreen({
                                 <View style={styles.historyLogNameRow}>
                                   <Text style={styles.historyLogDayName}>{getDisplayDayName(day.name)}</Text>
                                   {!!improvement && (
-                                    <Text
-                                      style={[
-                                        styles.historyLogImprovementText,
-                                        improvement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
-                                      ]}
-                                    >
-                                      {improvement.isImproved ? '↑' : '↓'} {improvement.percent.toFixed(1)}%
-                                    </Text>
+                                    (() => {
+                                      const fmt = formatImprovementDisplay(improvement);
+                                      return (
+                                        <Text
+                                          style={[
+                                            styles.historyLogImprovementText,
+                                            styles[fmt.styleKey as keyof typeof styles],
+                                          ]}
+                                        >
+                                          {fmt.symbol} {fmt.display}%
+                                        </Text>
+                                      );
+                                    })()
                                   )}
                                 </View>
                                 <Text style={styles.historyLogDate}>{getExecutionDateLabel(log)}</Text>
@@ -1356,6 +1400,9 @@ const styles = StyleSheet.create({
   },
   weekImprovementDown: {
     color: theme.colors.error,
+  },
+  weekImprovementNeutral: {
+    color: theme.colors.warning,
   },
   weekHeaderMeta: {
     fontSize: 14,

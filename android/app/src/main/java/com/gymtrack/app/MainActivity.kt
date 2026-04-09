@@ -2,6 +2,10 @@ package com.gymtrack.app
 
 import android.os.Build
 import android.os.Bundle
+import android.view.View
+import android.view.WindowInsetsController
+import androidx.core.graphics.toColorInt
+import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -11,12 +15,37 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 
 class MainActivity : ReactActivity() {
+  private fun applySystemBarStyle() {
+    window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+    window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+    WindowCompat.setDecorFitsSystemWindows(window, true)
+    window.statusBarColor = "#0F1115".toColorInt()
+    WindowCompat.getInsetsController(window, window.decorView)?.isAppearanceLightStatusBars = false
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+      window.insetsController?.setSystemBarsAppearance(
+        0,
+        WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS
+      )
+    } else {
+      @Suppress("DEPRECATION")
+      window.decorView.systemUiVisibility =
+        window.decorView.systemUiVisibility and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+    }
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
     // This is required for expo-splash-screen.
     setTheme(R.style.AppTheme);
     super.onCreate(null)
+    applySystemBarStyle()
+  }
+
+  override fun onResume() {
+    super.onResume()
+    applySystemBarStyle()
   }
 
   /**

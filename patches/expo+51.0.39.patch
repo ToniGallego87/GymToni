@@ -1,0 +1,14 @@
+diff --git a/node_modules/expo/android/build.gradle b/node_modules/expo/android/build.gradle
+index 5645b26..ba00cdb 100644
+--- a/node_modules/expo/android/build.gradle
++++ b/node_modules/expo/android/build.gradle
+@@ -7,7 +7,8 @@ def expoModulesCorePlugin = new File(project(":expo-modules-core").projectDir.ab
+ apply from: expoModulesCorePlugin
+ applyKotlinExpoModulesCorePlugin()
+ useDefaultAndroidSdkVersions()
+-useExpoPublishing()
++// Publishing metadata is not required for assembling this app and can fail on some AGP setups.
++// useExpoPublishing()
+ 
+ static def versionToNumber(major, minor, patch) {
+   return patch * 100 + minor * 10000 + major * 1000000
