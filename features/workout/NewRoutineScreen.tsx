@@ -3,11 +3,20 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   TextInput,
 } from 'react-native';
-import { Button, Toast } from '@components';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  Button,
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+  Toast,
+} from '../../components';
 import { generateId } from '@lib/storage';
 import { theme } from '@lib/theme';
 import { WorkoutDay, WorkoutExercise, WorkoutRoutine } from '../../types';
@@ -77,6 +86,7 @@ export function NewRoutineScreen({
   onCreateRoutine,
   onBack,
 }: NewRoutineScreenProps) {
+  const insets = useSafeAreaInsets();
   const [days, setDays] = useState<NewRoutineDayForm[]>([
     { id: generateId(), title: '', exercisesText: '' },
   ]);
@@ -84,6 +94,9 @@ export function NewRoutineScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const canAddNewDay = useMemo(
     () => days.every((day: NewRoutineDayForm) => day.title.trim() && day.exercisesText.trim()),
@@ -161,13 +174,20 @@ export function NewRoutineScreen({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>➕ Nueva rutina</Text>
-        <Text style={styles.subtitle}>Define los ejercicios que realizarás cada día</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {days.map((day: NewRoutineDayForm, index: number) => (
           <View key={day.id} style={styles.dayCard}>
             <Text style={styles.dayTitle}>Día {index + 1}</Text>
@@ -229,14 +249,13 @@ export function NewRoutineScreen({
         />
       </ScrollView>
 
-      <View style={styles.footerButtons}>
-        <Button
-          title="← Volver"
-          onPress={onBack}
-          variant="secondary"
-          size="large"
-        />
-      </View>
+      <GlassTopBar
+        title="➕ Nueva rutina"
+        subtitle="Define los ejercicios que realizarás cada día"
+        topInset={insets.top}
+      />
+
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
       {toast && (
         <Toast
@@ -245,7 +264,7 @@ export function NewRoutineScreen({
           onDismiss={() => setToast(null)}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -254,27 +273,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    fontStyle: 'italic',
-    lineHeight: 19,
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-    marginTop: theme.spacing.md,
+    marginTop: 0,
     gap: 12,
   },
   dayCard: {
@@ -328,9 +332,5 @@ const styles = StyleSheet.create({
   },
   growButton: {
     flex: 1,
-  },
-  footerButtons: {
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
   },
 });

@@ -3,13 +3,21 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Pressable,
   Modal,
   TextInput,
 } from 'react-native';
-import { WorkoutRoutine, WorkoutDay } from '../../types';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+} from '../../components';
+import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
 import { useWorkout } from '@hooks/useWorkout';
 
@@ -24,11 +32,16 @@ export function RoutineDetailScreen({
   routine,
   onBack,
 }: RoutineDetailScreenProps) {
+  const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [showEmojiModal, setShowEmojiModal] = useState(false);
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
+
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   // Obtener la rutina actualizada del estado
   const currentRoutine = state.routines.find(r => r.id === routine.id) || routine;
@@ -84,13 +97,20 @@ export function RoutineDetailScreen({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>{currentRoutine.name}</Text>
-        <Text style={styles.subtitle}>{currentRoutine.description}</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         
         {currentRoutine.days.map(day => {
           const accent = getTrainingAccent(day);
@@ -131,12 +151,16 @@ export function RoutineDetailScreen({
           <Text style={styles.timerBlockValue}>{formatTime(getTimerDurationSeconds())}</Text>
           <Text style={styles.timerBlockHint}>Toca para editar</Text>
         </Pressable>
-        
+
       </ScrollView>
 
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </Pressable>
+      <GlassTopBar
+        title={currentRoutine.name}
+        subtitle={currentRoutine.description}
+        topInset={insets.top}
+      />
+
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
       <Modal
         visible={showEmojiModal}
@@ -203,7 +227,7 @@ export function RoutineDetailScreen({
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -212,27 +236,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    fontStyle: 'italic',
-    lineHeight: 19,
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-    marginTop: theme.spacing.md,
+    marginTop: 0,
   },
   dayBlock: {
     backgroundColor: theme.colors.surface,
@@ -296,23 +305,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     lineHeight: 18,
     color: theme.colors.textSecondary,
-  },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginTop: 16,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 15,
-    lineHeight: 20,
   },
   modalOverlay: {
     flex: 1,

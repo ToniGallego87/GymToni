@@ -3,16 +3,25 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Pressable,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+} from '@components';
 import { useWorkout } from '@hooks/useWorkout';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme } from '@lib/theme';
 
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
+  onBack?: () => void;
 }
 
 const MONTH_NAMES = [
@@ -51,9 +60,13 @@ function getWeekColor(blockNumber: number) {
   return WEEK_COLORS[(Math.max(1, blockNumber) - 1) % WEEK_COLORS.length];
 }
 
-export function CalendarScreen({ onSelectLog }: CalendarScreenProps) {
+export function CalendarScreen({ onSelectLog, onBack }: CalendarScreenProps) {
+  const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const [monthOffset, setMonthOffset] = useState(0);
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const getDayById = (dayId: string) => {
     for (const routine of state.routines) {
@@ -133,31 +146,43 @@ export function CalendarScreen({ onSelectLog }: CalendarScreenProps) {
 
   if (state.logs.length === 0) {
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>📅 Calendario</Text>
-          <Text style={styles.subtitle}>Tu historial mensual</Text>
-        </View>
+      <View style={styles.container}>
+        <StatusBar style="light" translucent backgroundColor="transparent" />
 
-        <View style={styles.emptyState}>
+        <View style={[styles.emptyState, { paddingTop: topBarHeight + 24 }]}> 
           <Text style={styles.emptyEmoji}>📭</Text>
           <Text style={styles.emptyTitle}>Sin entrenamientos</Text>
           <Text style={styles.emptyText}>
             Guarda una sesión para verla reflejada en el calendario.
           </Text>
         </View>
-      </SafeAreaView>
+
+        <GlassTopBar
+          title="📅 Calendario"
+          subtitle="Tu historial mensual"
+          topInset={insets.top}
+        />
+
+        {!!onBack && <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />}
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>📅 Calendario</Text>
-        <Text style={styles.subtitle}>Vista mensual del historial</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.monthCard}>
           <Pressable
             style={styles.monthNavButton}
@@ -235,7 +260,15 @@ export function CalendarScreen({ onSelectLog }: CalendarScreenProps) {
           })}
         </View>
       </ScrollView>
-    </SafeAreaView>
+
+      <GlassTopBar
+        title="📅 Calendario"
+        subtitle="Vista mensual del historial"
+        topInset={insets.top}
+      />
+
+      {!!onBack && <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />}
+    </View>
   );
 }
 
@@ -244,27 +277,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    fontStyle: 'italic',
-    lineHeight: 19,
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
     paddingBottom: theme.spacing.xl,
-    marginTop: theme.spacing.md,
+    marginTop: 0,
   },
   monthCard: {
     backgroundColor: theme.colors.surface,

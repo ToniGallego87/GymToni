@@ -3,10 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Pressable,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+} from '@components';
 import { WorkoutDay, WorkoutRoutine } from '@types/index';
 import { getDisplayDayName, theme } from '@lib/theme';
 
@@ -21,23 +29,27 @@ export function DaySelectorScreen({
   onSelectDay,
   onBack,
 }: DaySelectorScreenProps) {
+  const insets = useSafeAreaInsets();
   const days = routine?.days || [];
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerRow}>
-          <Text style={styles.title}>📅 Elige la sesión</Text>
-          {!!routine && (
-            <View style={styles.badge}>
-              <Text style={styles.badgeText}>{routine.name}</Text>
-            </View>
-          )}
-        </View>
-        <Text style={styles.subtitle}>Selecciona el día que vas a registrar</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {days.map(day => (
           <Pressable
             key={day.id}
@@ -56,10 +68,21 @@ export function DaySelectorScreen({
         ))}
       </ScrollView>
 
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </Pressable>
-    </SafeAreaView>
+      <GlassTopBar
+        title="📅 Elige la sesión"
+        subtitle="Selecciona el día que vas a registrar"
+        topInset={insets.top}
+        rightElement={
+          !!routine ? (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{routine.name}</Text>
+            </View>
+          ) : undefined
+        }
+      />
+
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+    </View>
   );
 }
 
@@ -68,29 +91,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  headerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.text,
+  scroll: {
     flex: 1,
-  },
-  subtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 19,
   },
   badge: {
     backgroundColor: theme.colors.primaryMuted,
@@ -105,8 +107,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-    marginTop: theme.spacing.md,
+    marginTop: 0,
   },
   dayCard: {
     backgroundColor: theme.colors.surface,
@@ -153,21 +154,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     overflow: 'hidden',
     lineHeight: 16,
-  },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 15,
-    lineHeight: 20,
   },
 });

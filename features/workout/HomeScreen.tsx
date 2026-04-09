@@ -4,7 +4,6 @@ import {
   FlatList,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   Pressable,
@@ -13,15 +12,30 @@ import {
   Alert,
   Image,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
-import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '@types/index';
+import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { buildImprovementFromStrengthScores, getWorkoutStrengthScore } from '@lib/progress';
+import {
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  FloatingGlassBar,
+  FLOATING_GLASS_BAR_HEIGHT,
+  FLOATING_GLASS_BAR_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+} from '../../components';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
+  onNavigateHome?: () => void;
+  onNavigateCalendar?: () => void;
+  onNavigateData?: () => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
   onOpenRoutineDetails?: (routine: WorkoutRoutine) => void;
@@ -305,6 +319,9 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
 export function HomeScreen({
   onSelectDay,
   onSelectLog,
+  onNavigateHome,
+  onNavigateCalendar,
+  onNavigateData,
   onOpenDaySelector,
   onOpenRoutineSelector,
   onOpenRoutineDetails,
@@ -314,6 +331,7 @@ export function HomeScreen({
   initialShowRoutineSelector = false,
   onCloseRoutineSelector,
 }: HomeScreenProps) {
+  const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const [showRoutineSelector, setShowRoutineSelector] = useState(initialShowRoutineSelector);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
@@ -359,6 +377,13 @@ export function HomeScreen({
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
   );
   const hasNoRoutines = activeDays.length === 0;
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBaseBottom = Math.max(insets.bottom, 10);
+  const selectorBackBottom = floatingBaseBottom + FLOATING_BACK_BUTTON_MARGIN;
+  const selectorScrollBottomPadding = selectorBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingNavBottom = floatingBaseBottom + FLOATING_GLASS_BAR_MARGIN;
+  const homeScrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
+  const appVersion = require('../../app.json').expo.version;
 
   const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
     const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
@@ -621,17 +646,33 @@ export function HomeScreen({
     setLogToDeleteId(undefined);
   };
 
+  const handleCloseRoutineSelector = () => {
+    if (onCloseRoutineSelector) {
+      onCloseRoutineSelector();
+      return;
+    }
+
+    setShowRoutineSelector(false);
+  };
+
   if (showRoutineSelector) {
+    const selectedRoutineInSelector = state.routines.find(r => r.id === viewedRoutineId);
+
     return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.title}>📚 Selecciona una rutina</Text>
-          <Text style={styles.subtitle}>Consulta la que desees o crea una nueva</Text>
-        </View>
+      <View style={styles.container}>
+        <StatusBar style="light" translucent backgroundColor="transparent" />
 
         <ScrollView
-          contentContainerStyle={styles.routineListContainer}
+          style={styles.scroll}
+          contentContainerStyle={[
+            styles.routineListContainer,
+            {
+              paddingTop: topBarHeight + 12,
+              paddingBottom: selectorScrollBottomPadding,
+            },
+          ]}
           scrollEnabled={true}
+          showsVerticalScrollIndicator={false}
         >
           {state.routines.map((routine: WorkoutRoutine) => {
             const routineHasLogs = state.logs.some(log => log.routineId === routine.id);
@@ -660,17 +701,24 @@ export function HomeScreen({
               <Text style={styles.newRoutineCardText}>+ Nueva rutina</Text>
             </TouchableOpacity>
           )}
+
+          {!!selectedRoutineInSelector && !!onOpenRoutineDetails && (
+            <TouchableOpacity
+              style={styles.selectorDetailsButton}
+              onPress={() => onOpenRoutineDetails(selectedRoutineInSelector)}
+            >
+              <Text style={styles.selectorDetailsButtonText}>Consultar detalles de esta rutina</Text>
+            </TouchableOpacity>
+          )}
         </ScrollView>
 
-        <Pressable style={styles.backButton} onPress={() => {
-          if (onCloseRoutineSelector) {
-            onCloseRoutineSelector();
-          } else {
-            setShowRoutineSelector(false);
-          }
-        }}>
-          <Text style={styles.backButtonText}>← Volver</Text>
-        </Pressable>
+        <GlassTopBar
+          title="📚 Selecciona una rutina"
+          subtitle="Consulta la que desees o crea una nueva"
+          topInset={insets.top}
+        />
+
+        <FloatingBackButton onPress={handleCloseRoutineSelector} bottom={selectorBackBottom} />
 
         <Modal
           visible={!!routineToDeleteId}
@@ -731,21 +779,26 @@ export function HomeScreen({
             </View>
           </View>
         </Modal>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }} nestedScrollEnabled>
-        <View style={styles.header}>
-          <Image
-            source={require('../../assets/title.png')}
-            style={styles.titleImage}
-            resizeMode="contain"
-          />
-          <Text style={styles.subtitle}>Versión {require('../../app.json').expo.version}</Text>
-        </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
+
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.homeScrollContent,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: homeScrollBottomPadding,
+          },
+        ]}
+        nestedScrollEnabled
+        showsVerticalScrollIndicator={false}
+      >
 
         <Pressable
           style={({ pressed }) => [
@@ -767,34 +820,6 @@ export function HomeScreen({
           </View>
         </Pressable>
 
-        {!hasNoRoutines && (
-        <View style={styles.buttonsRow}>
-          <TouchableOpacity
-            style={styles.buttonRowItem}
-            onPress={() => {
-              if (onOpenRoutineSelector) {
-                onOpenRoutineSelector();
-              } else {
-                setShowRoutineSelector(true);
-              }
-            }}
-          >
-            <Text style={styles.buttonRowLabel}>
-              {displayedRoutine ? `Rutina ${state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1}` : 'Rutinas'} ▼
-            </Text>
-          </TouchableOpacity>
-
-          {!!activeRoutine && !!onOpenRoutineDetails && (
-            <TouchableOpacity
-              style={styles.buttonRowItem}
-              onPress={() => onOpenRoutineDetails(activeRoutine)}
-            >
-              <Text style={styles.buttonRowLabel}>Consultar detalles</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        )}
-
         {weeklyProgress.length > 0 && (
           <View style={[
             styles.progressCard,
@@ -811,7 +836,7 @@ export function HomeScreen({
               activeOpacity={0.85}
             >
               <View style={styles.progressHeaderRow}>
-                <Text style={styles.progressTitle}>Progreso de la rutina {showWeeklyProgressChart ? '▲' : '▼'}</Text>
+                <Text style={styles.progressTitle}>📊 Rutina {state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1} {showWeeklyProgressChart ? '▲' : '▼'}</Text>
                 <Text
                   style={[
                     styles.progressLatest,
@@ -1029,7 +1054,55 @@ export function HomeScreen({
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+
+      {!hasNoRoutines && (
+        <FloatingGlassBar bottom={floatingNavBottom}>
+
+          <TouchableOpacity
+            style={styles.floatingNavItem}
+            onPress={() => {
+              if (onOpenRoutineSelector) {
+                onOpenRoutineSelector();
+              } else {
+                setShowRoutineSelector(true);
+              }
+            }}
+          >
+            <Text style={styles.floatingNavLabel}>
+              📋 Rutinas
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.floatingNavItem}
+            onPress={() => onNavigateCalendar?.()}
+          >
+            <Text style={styles.floatingNavLabel}>📅 Calen...</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.floatingNavItem}
+            onPress={() => onNavigateData?.()}
+          >
+            <Text style={styles.floatingNavLabel}>🗂️ Datos</Text>
+          </TouchableOpacity>
+
+        </FloatingGlassBar>
+      )}
+
+      <GlassTopBar
+        title="Inicio"
+        titleElement={
+          <Image
+            source={require('../../assets/title.png')}
+            style={styles.titleImage}
+            resizeMode="contain"
+          />
+        }
+        subtitle={`Versión ${appVersion}`}
+        topInset={insets.top}
+      />
+    </View>
   );
 }
 
@@ -1066,11 +1139,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-    backgroundColor: theme.colors.background,
+  scroll: {
+    flex: 1,
+  },
+  homeScrollContent: {
+    flexGrow: 1,
   },
   headerTop: {
     flexDirection: 'row',
@@ -1087,15 +1160,7 @@ const styles = StyleSheet.create({
   titleImage: {
     width: 220,
     height: 52,
-    alignSelf: 'center',
-  },
-  subtitle: {
-    marginTop: 4,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    lineHeight: 19,
-    fontStyle: 'italic',
-    alignSelf: 'center'
+    alignSelf: 'flex-start',
   },
   progressCard: {
     marginHorizontal: theme.spacing.md,
@@ -1277,29 +1342,22 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
     textAlign: 'center',
   },
-  buttonsRow: {
-    flexDirection: 'row',
-    marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    gap: 12,
-  },
-  buttonRowItem: {
+  floatingNavItem: {
     flex: 1,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
     borderRadius: theme.borderRadius.md,
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    minHeight: 52,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.14)',
+    minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  buttonRowLabel: {
-    color: theme.colors.text,
+  floatingNavLabel: {
+    color: 'rgba(239, 243, 250, 0.95)',
     fontSize: 15,
-    fontWeight: '700',
+    fontWeight: '800',
     lineHeight: 20,
     textAlign: 'center',
   },
@@ -1505,7 +1563,7 @@ const styles = StyleSheet.create({
   },
   routineListContainer: {
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: 0,
   },
   routineCard: {
     backgroundColor: theme.colors.surface,
@@ -1565,21 +1623,21 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
   },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: 16,
-    backgroundColor: theme.colors.surface,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  selectorDetailsButton: {
+    marginTop: 4,
+    marginBottom: 4,
+    backgroundColor: theme.colors.surfaceAlt,
     borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primary,
+    paddingVertical: 14,
+    alignItems: 'center',
   },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+  selectorDetailsButtonText: {
     color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 20,
   },
   modalOverlay: {
     flex: 1,

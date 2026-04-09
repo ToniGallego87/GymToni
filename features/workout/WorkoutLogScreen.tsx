@@ -4,7 +4,6 @@ import {
   ScrollView,
   Text,
   StyleSheet,
-  SafeAreaView,
   Modal,
   TextInput,
   Pressable,
@@ -12,14 +11,26 @@ import {
   AppState,
   Platform,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
-import { ExerciseInputField, CardioInputField, Button, Toast } from '@components';
+import {
+  ExerciseInputField,
+  CardioInputField,
+  Button,
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+  Toast,
+} from '../../components';
 import { parseCardioString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
-import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '@types/index';
+import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '../../types';
 import { theme } from '@lib/theme';
 import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@lib/progress';
 
@@ -36,6 +47,7 @@ export function WorkoutLogScreen({
   onSave,
   onBack,
 }: WorkoutLogScreenProps) {
+  const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const [selectedDay, setSelectedDay] = useState(day);
   const [showDaySelector, setShowDaySelector] = useState(false);
@@ -258,6 +270,9 @@ export function WorkoutLogScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const getRoutineIdForDay = () => {
     for (const routine of state.routines) {
@@ -543,17 +558,19 @@ export function WorkoutLogScreen({
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {selectedDay.emoji} {selectedDay.name}
-        </Text>
-        <Text style={styles.headerSubtitle}>Rellena los ejercicios</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
       >
         {selectedDay.exercises.map((exercise: any) => {
           const previousLog = getPreviousExerciseLog(exercise.id);
@@ -572,7 +589,7 @@ export function WorkoutLogScreen({
                 reps: exercise.targetReps,
               }}
               addedSets={currentSets}
-              onAddSet={(set) => handleAddSet(exercise.id, set)}
+              onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
               onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
               onFinishExercise={() => handleFinishExercise(exercise.id)}
               onNotesPress={() => handleExerciseNotesPress(exercise.id)}
@@ -622,9 +639,13 @@ export function WorkoutLogScreen({
         </View>
       </ScrollView>
 
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </Pressable>
+      <GlassTopBar
+        title={`${selectedDay.emoji} ${selectedDay.name}`}
+        subtitle="Rellena los ejercicios"
+        topInset={insets.top}
+      />
+
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
       {toast && (
         <Toast
@@ -710,7 +731,7 @@ export function WorkoutLogScreen({
           </View>
         </View>
       </Modal>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -719,30 +740,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  headerSubtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 19,
-  },
   scrollView: {
     flex: 1,
   },
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 0,
-    paddingBottom: 16,
   },
   buttonContainer: {
     marginTop: 15,
@@ -752,22 +755,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: theme.colors.primary,
     marginVertical: 12,
-  },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginTop: 16,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 14,
   },
   saveButton: {
     marginBottom: 8,

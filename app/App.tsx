@@ -2,7 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Alert, BackHandler, Platform, Pressable, StatusBar, StyleSheet, Text, View } from 'react-native';
+import { Alert, BackHandler, Platform, StatusBar, StyleSheet, View } from 'react-native';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
@@ -319,16 +319,15 @@ function AppContent() {
     setScreen({ type: 'home' });
   };
 
-  const showBottomNav = screen.type === 'home'
-    || screen.type === 'calendar'
-    || screen.type === 'data';
-
   return (
     <View style={styles.container}>
       {screen.type === 'routine-selector' && (
         <HomeScreen
           onSelectDay={day => setScreen({ type: 'workout-log', day })}
           onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateData={() => setScreen({ type: 'data' })}
           onOpenDaySelector={() => {
             if (activeRoutine?.days.length) {
               setScreen({ type: 'day-selector' });
@@ -349,6 +348,9 @@ function AppContent() {
         <HomeScreen
           onSelectDay={day => setScreen({ type: 'workout-log', day })}
           onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateData={() => setScreen({ type: 'data' })}
           onOpenDaySelector={() => {
             if (activeRoutine?.days.length) {
               setScreen({ type: 'day-selector' });
@@ -415,6 +417,7 @@ function AppContent() {
           onImportData={handleImportData}
           onExportData={handleExportData}
           onClearData={handleClearData}
+          onBack={() => setScreen({ type: 'home' })}
         />
       )}
 
@@ -432,53 +435,7 @@ function AppContent() {
           onBack={() => setScreen({ type: 'home' })}
         />
       )}
-
-      {showBottomNav && (
-        <View style={styles.bottomNav}>
-          <BottomNavItem
-            emoji="🏠"
-            label="Inicio"
-            active={screen.type === 'home'}
-            onPress={() => setScreen({ type: 'home' })}
-          />
-          <BottomNavItem
-            emoji="📅"
-            label="Calendario"
-            active={screen.type === 'calendar'}
-            onPress={() => setScreen({ type: 'calendar' })}
-          />
-          <BottomNavItem
-            emoji="🗂️"
-            label="Datos"
-            active={screen.type === 'data'}
-            onPress={() => setScreen({ type: 'data' })}
-          />
-        </View>
-      )}
     </View>
-  );
-}
-
-interface BottomNavItemProps {
-  emoji: string;
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}
-
-function BottomNavItem({ emoji, label, active, onPress }: BottomNavItemProps) {
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.navItem,
-        active && styles.navItemActive,
-        pressed && styles.navItemPressed,
-      ]}
-      onPress={onPress}
-    >
-      <Text style={styles.navEmoji}>{emoji}</Text>
-      <Text style={[styles.navLabel, active && styles.navLabelActive]}>{label}</Text>
-    </Pressable>
   );
 }
 
@@ -495,40 +452,5 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.surface,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    paddingVertical: 8,
-  },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    opacity: 0.7,
-  },
-  navItemActive: {
-    opacity: 1,
-    borderTopWidth: 3,
-    borderTopColor: theme.colors.primary,
-  },
-  navItemPressed: {
-    opacity: 0.5,
-  },
-  navEmoji: {
-    fontSize: 20,
-    marginBottom: 4,
-  },
-  navLabel: {
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    fontWeight: '700',
-    lineHeight: 16,
-  },
-  navLabelActive: {
-    color: theme.colors.text,
   },
 });

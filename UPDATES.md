@@ -1,5 +1,22 @@
 # UPDATES
 
+## Version 0.4.4 - 2026-04-09
+
+### Nuevas funcionalidades
+- Nuevo sistema visual reutilizable tipo glass para cabeceras y acciones flotantes (top bar fija con blur + overlays).
+- Nueva barra flotante reutilizable para acciones principales en Home.
+- Personalizacion de titulo en la top bar mediante nodo React (soporte para imagen en lugar de texto).
+
+### Cambios
+- Rediseño edge-to-edge aplicado y unificado en pantallas clave: Rutina, Selector de dia, Detalle, Registro de entrenamiento, Nueva rutina, Calendario y Datos.
+- Botones Volver convertidos a estilo flotante glass en vistas con retorno.
+- Navegacion principal integrada en Home dentro de barra flotante (Rutinas, Calendario y Datos), eliminando la barra inferior clasica de App.
+- En selector de rutinas, acceso a "Consultar detalles" movido a boton dedicado dentro de la propia vista.
+- Calendario: se añade boton Volver flotante y ajuste de espaciado inferior para evitar solapes.
+- Datos: se añade boton Volver flotante y ajuste de espaciado inferior para evitar solapes.
+- Home: la cabecera superior ahora usa `assets/title.png` como titulo visual y alineado a la izquierda.
+- Unificacion global de parametros de blur/transparencia mediante tokens compartidos para mantener homogeneidad visual.
+
 ## Version 0.4.3 - 2026-04-08
 
 ### Cambios

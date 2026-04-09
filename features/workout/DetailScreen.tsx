@@ -4,9 +4,16 @@ import {
   ScrollView,
   Text,
   StyleSheet,
-  SafeAreaView,
-  Pressable,
 } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+} from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import { formatDate } from '@lib/storage';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '@types/index';
@@ -56,7 +63,11 @@ export function DetailScreen({
   day,
   onBack,
 }: DetailScreenProps) {
+  const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const displayedDate = log.date
     ? new Date(`${log.date}T00:00:00`).toLocaleDateString('es-ES', {
@@ -118,17 +129,19 @@ export function DetailScreen({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>
-          {day.emoji} {day.name}
-        </Text>
-        <Text style={styles.headerSubtitle}>{displayedDate}</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
       <ScrollView
         style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
       >
         {day.exercises.length > 0 && (
           <Text style={styles.sectionTitle}>
@@ -199,10 +212,14 @@ export function DetailScreen({
         )}
       </ScrollView>
 
-      <Pressable style={styles.backButton} onPress={onBack}>
-        <Text style={styles.backButtonText}>← Volver</Text>
-      </Pressable>
-    </SafeAreaView>
+      <GlassTopBar
+        title={`${day.emoji} ${day.name}`}
+        subtitle={displayedDate}
+        topInset={insets.top}
+      />
+
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+    </View>
   );
 }
 
@@ -210,40 +227,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
-  },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  headerTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  headerSubtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 19,
-  },
-  backButton: {
-    marginHorizontal: theme.spacing.md,
-    marginTop: 16,
-    marginBottom: theme.spacing.md,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  backButtonText: {
-    color: theme.colors.primary,
-    fontWeight: '700',
-    fontSize: 15,
-    lineHeight: 20,
   },
   detailTitleRow: {
     flexDirection: 'row',
@@ -274,8 +257,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingVertical: 16,
-    paddingTop: theme.spacing.lg,
-    paddingBottom: theme.spacing.lg,
   },
   sectionTitle: {
     fontSize: 17,

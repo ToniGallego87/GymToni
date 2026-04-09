@@ -1,14 +1,22 @@
 import React, { useState } from 'react';
 import {
+  Button,
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
+  GlassTopBar,
+  GLASS_TOP_BAR_BASE_HEIGHT,
+  Toast,
+} from '@components';
+import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
   Modal,
-  Pressable,
 } from 'react-native';
-import { Button, Toast } from '@components';
+import { StatusBar } from 'expo-status-bar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
 
@@ -16,13 +24,16 @@ interface DataScreenProps {
   onImportData: () => Promise<void>;
   onExportData: () => Promise<void>;
   onClearData: () => Promise<void> | void;
+  onBack?: () => void;
 }
 
 export function DataScreen({
   onImportData,
   onExportData,
   onClearData,
+  onBack,
 }: DataScreenProps) {
+  const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const [showImportModal, setShowImportModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
@@ -31,6 +42,9 @@ export function DataScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const hasNoData = state.routines.length === 0 && state.logs.length === 0;
 
@@ -62,13 +76,20 @@ export function DataScreen({
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.title}>🗂️ Datos</Text>
-        <Text style={styles.subtitle}>Importa, exporta o limpia la información</Text>
-      </View>
+    <View style={styles.container}>
+      <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: topBarHeight + 12,
+            paddingBottom: scrollBottomPadding,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {!hasNoData && (
           <View style={styles.summaryCard}>
             <Text style={styles.summaryTitle}>📊 Resumen actual</Text>
@@ -130,6 +151,14 @@ export function DataScreen({
           </View>
         )}
       </ScrollView>
+
+      <GlassTopBar
+        title="🗂️ Datos"
+        subtitle="Importa, exporta o limpia la información"
+        topInset={insets.top}
+      />
+
+      {!!onBack && <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />}
 
       <Modal visible={showImportModal} animationType="fade" transparent>
         <View style={styles.modalOverlay}>
@@ -198,7 +227,7 @@ export function DataScreen({
           onDismiss={() => setToast(null)}
         />
       )}
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -207,27 +236,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  header: {
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-    paddingBottom: theme.spacing.sm,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  subtitle: {
-    marginTop: 4,
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontStyle: 'italic',
-    lineHeight: 19,
+  scroll: {
+    flex: 1,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-    marginTop: theme.spacing.md,
+    paddingBottom: 0,
+    marginTop: 0,
     gap: 12,
   },
   summaryCard: {
