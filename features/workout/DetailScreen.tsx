@@ -9,6 +9,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -217,7 +218,13 @@ export function DetailScreen({
       </ScrollView>
 
       <GlassTopBar
-        title={`${day.emoji} ${day.name}`}
+        title={day.name}
+        titleElement={(
+          <View style={styles.topBarTitleRow}>
+            <DayAccentIcon emoji={day.emoji} name={day.name} size={16} />
+            <Text style={styles.topBarTitleText}>{day.name}</Text>
+          </View>
+        )}
         subtitle={displayedDate}
         topInset={insets.top}
       />
@@ -248,6 +255,17 @@ const styles = StyleSheet.create({
   },
   detailImprovementDown: {
     color: theme.colors.error,
+  },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  topBarTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
   },
   date: {
     fontSize: 13,
@@ -325,3 +343,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+

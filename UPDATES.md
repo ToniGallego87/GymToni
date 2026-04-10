@@ -1,5 +1,13 @@
 # UPDATES
 
+## Version 0.4.5.a - 2026-04-10
+
+### Cambios
+- Eliminados los emojis de colores y sustuidos por icons que usan colores a traves de css.
+- Cohesión de la barra de título en todas las ventanas.
+- Ajustes visuales en la barra de navegación.
+- Mejora general en la coherencia visual.
+
 ## Version 0.4.5 - 2026-04-09
 
 ### Nuevas funcionalidades
@@ -15,7 +23,7 @@
 - Dependencia `expo-blur` alineada con Expo SDK 51 para evitar incompatibilidades en Android.
 
 
-## Version 0.4.4 - 2026-04-09
+## Version 0.4.4.a - 2026-04-09
 
 ### Nuevas funcionalidades
 - Nuevo sistema visual reutilizable tipo glass para cabeceras y acciones flotantes (top bar fija con blur + overlays).
@@ -32,6 +40,7 @@
 - Home: la cabecera superior ahora usa `assets/title.png` como titulo visual y alineado a la izquierda.
 - Unificacion global de parametros de blur/transparencia mediante tokens compartidos para mantener homogeneidad visual.
 
+
 ## Version 0.4.3 - 2026-04-08
 
 ### Cambios
@@ -40,6 +49,7 @@
 - La grafica semanal ahora muestra delta semanal directo (semana vs semana anterior) en lugar de progreso acumulado.
 - En semanas cerradas (cuando ya arranco la siguiente), el porcentaje aplica penalizacion por dias no entrenados segun la misma regla del listado.
 - APK de release regenerada localmente tras los cambios: app-release.apk.
+
 
 ## Version 0.4.2 - 2026-04-08
 

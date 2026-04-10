@@ -6,6 +6,7 @@ import {
   Pressable,
   GestureResponderEvent,
 } from 'react-native';
+import { DayAccentIcon } from './DayAccentIcon';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
 
 interface DayCardProps {
@@ -26,7 +27,7 @@ export function DayCard({ emoji, name, description, onPress }: DayCardProps) {
       <View style={styles.content}>
         <View style={styles.leading}>
           <View style={[styles.dot, { backgroundColor: accentColor }]} />
-          <Text style={styles.emoji}>{emoji}</Text>
+          <DayAccentIcon emoji={emoji} name={name} size={22} />
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.name}>{getDisplayDayName(name)}</Text>
@@ -68,9 +69,6 @@ const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     marginRight: 12,
-  },
-  emoji: {
-    fontSize: 26,
   },
   textContainer: {
     flex: 1,

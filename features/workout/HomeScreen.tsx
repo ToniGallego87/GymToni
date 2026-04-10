@@ -21,11 +21,11 @@ import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { buildImprovementFromStrengthScores, getWorkoutStrengthScore } from '@lib/progress';
 import {
+  DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
-  FLOATING_GLASS_BAR_HEIGHT,
-  FLOATING_GLASS_BAR_MARGIN,
+  getFloatingPrimaryNavMetrics,
   FloatingPrimaryNav,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
@@ -379,11 +379,11 @@ export function HomeScreen({
   );
   const hasNoRoutines = activeDays.length === 0;
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBaseBottom = Math.max(insets.bottom, 10);
-  const selectorNavBottom = floatingBaseBottom + FLOATING_GLASS_BAR_MARGIN;
-  const selectorScrollBottomPadding = selectorNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
-  const floatingNavBottom = floatingBaseBottom + FLOATING_GLASS_BAR_MARGIN;
-  const homeScrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
+  const { bottom: floatingNavBottom, scrollBottomPadding: floatingNavScrollBottomPadding } =
+    getFloatingPrimaryNavMetrics(insets.bottom);
+  const selectorNavBottom = floatingNavBottom;
+  const selectorScrollBottomPadding = floatingNavScrollBottomPadding;
+  const homeScrollBottomPadding = floatingNavScrollBottomPadding;
   const appVersion = require('../../app.json').expo.version;
 
   const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
@@ -714,11 +714,11 @@ export function HomeScreen({
         </ScrollView>
 
         <GlassTopBar
-          title="Selecciona una rutina"
+          title="Rutina"
           titleElement={(
             <View style={styles.selectorTitleRow}>
               <MaterialCommunityIcons name="book-open-variant" size={18} color={theme.colors.text} />
-              <Text style={styles.selectorTitleText}>Selecciona una rutina</Text>
+              <Text style={styles.selectorTitleText}>Rutinas</Text>
             </View>
           )}
           subtitle="Consulta la que desees o crea una nueva"
@@ -959,7 +959,9 @@ export function HomeScreen({
                         >
                           <View style={styles.historyLogHeader}>
                             <View style={styles.historyLogLeft}>
-                              <Text style={styles.historyLogEmoji}>{day.emoji}</Text>
+                              <View style={styles.historyLogAccent}>
+                                <DayAccentIcon emoji={day.emoji} name={day.name} size={18} />
+                              </View>
                               <View>
                                 <View style={styles.historyLogNameRow}>
                                   <Text style={styles.historyLogDayName}>{getDisplayDayName(day.name)}</Text>
@@ -1170,8 +1172,8 @@ const styles = StyleSheet.create({
     letterSpacing: -0.8,
   },
   titleImage: {
-    width: 147,
-    height: 35,
+    width: 115,
+    height: 24,
     alignSelf: 'flex-start',
   },
   progressCard: {
@@ -1289,7 +1291,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.lg,
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
     marginBottom: theme.spacing.md,
     paddingVertical: 25,
     paddingHorizontal: 24,
@@ -1305,7 +1306,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.error,
     borderRadius: theme.borderRadius.lg,
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     paddingVertical: 25,
     paddingHorizontal: 24,
@@ -1317,7 +1317,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.warning,
     borderRadius: theme.borderRadius.lg,
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
     marginBottom: theme.spacing.lg,
     paddingVertical: 25,
     paddingHorizontal: 24,
@@ -1329,7 +1328,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.success,
     borderRadius: theme.borderRadius.lg,
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
     marginBottom: theme.spacing.md,
     paddingVertical: 25,
     paddingHorizontal: 24,
@@ -1503,9 +1501,9 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flex: 1,
   },
-  historyLogEmoji: {
-    fontSize: 22,
+  historyLogAccent: {
     marginRight: 12,
+    paddingTop: 2,
   },
   historyLogNameRow: {
     flexDirection: 'row',
@@ -1744,4 +1742,6 @@ const styles = StyleSheet.create({
     gap: 6,
   },
 });
+
+
 

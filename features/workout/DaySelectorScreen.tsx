@@ -10,6 +10,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -58,7 +59,7 @@ export function DaySelectorScreen({
             onPress={() => onSelectDay(day)}
           >
             <View style={styles.dayLeading}>
-              <Text style={styles.dayEmoji}>{day.emoji}</Text>
+              <DayAccentIcon emoji={day.emoji} name={day.name} size={20} />
             </View>
             <View style={styles.dayContent}>
               <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
@@ -144,9 +145,6 @@ const styles = StyleSheet.create({
   dayLeading: {
     marginRight: 12,
   },
-  dayEmoji: {
-    fontSize: 24,
-  },
   dayContent: {
     flex: 1,
   },
@@ -174,3 +172,5 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 });
+
+

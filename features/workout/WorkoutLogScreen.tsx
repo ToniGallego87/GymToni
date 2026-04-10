@@ -19,6 +19,7 @@ import { useWorkout } from '@hooks/useWorkout';
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
 import {
+  DayAccentIcon,
   ExerciseInputField,
   CardioInputField,
   Button,
@@ -32,7 +33,7 @@ import {
 import { parseCardioString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
 import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '../../types';
-import { getTrainingAccent, theme } from '@lib/theme';
+import { theme } from '@lib/theme';
 import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@lib/progress';
 
 interface WorkoutLogScreenProps {
@@ -42,16 +43,6 @@ interface WorkoutLogScreenProps {
 }
 
 const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
-
-function renderDayAccentIcon(day: WorkoutDay, size: number) {
-  return (
-    <MaterialCommunityIcons
-      name="circle"
-      size={size}
-      color={getTrainingAccent(day)}
-    />
-  );
-}
 
 export function WorkoutLogScreen({
   day,
@@ -661,7 +652,7 @@ export function WorkoutLogScreen({
         title={selectedDay.name}
         titleElement={
           <View style={styles.topBarTitleRow}>
-            {renderDayAccentIcon(selectedDay, 16)}
+            <DayAccentIcon emoji={selectedDay.emoji} name={selectedDay.name} size={16} />
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
         }
@@ -741,7 +732,7 @@ export function WorkoutLogScreen({
                   }}
                 >
                     <View style={styles.dayOptionContent}>
-                      {renderDayAccentIcon(d, 14)}
+                      <DayAccentIcon emoji={d.emoji} name={d.name} size={14} />
                       <Text style={styles.dayOptionText}>{d.name}</Text>
                     </View>
                 </Pressable>
@@ -900,11 +891,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topBarTitleText: {
-    fontSize: 28,
+    fontSize: 20,
     fontWeight: '800',
     color: theme.colors.text,
-    textShadowColor: 'rgba(0, 0, 0, 0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
+    lineHeight: 24,
   },
 });
+
+

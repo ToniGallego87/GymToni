@@ -1,4 +1,5 @@
 export { DayCard } from './DayCard';
+export { DayAccentIcon } from './DayAccentIcon';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export { CardioInputField } from './CardioInputField';
@@ -14,6 +15,7 @@ export {
 	FloatingGlassBar,
 	FLOATING_GLASS_BAR_HEIGHT,
 	FLOATING_GLASS_BAR_MARGIN,
+	getFloatingPrimaryNavMetrics,
 } from './FloatingGlassBar';
 export { FloatingPrimaryNav } from './FloatingPrimaryNav';
 export {

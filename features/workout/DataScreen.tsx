@@ -3,8 +3,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
   FloatingPrimaryNav,
-  FLOATING_GLASS_BAR_HEIGHT,
-  FLOATING_GLASS_BAR_MARGIN,
+  getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   Toast,
@@ -50,8 +49,8 @@ export function DataScreen({
     type: 'success' | 'error';
   } | null>(null);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingNavBottom = Math.max(insets.bottom, 10) + FLOATING_GLASS_BAR_MARGIN;
-  const scrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
+  const { bottom: floatingNavBottom, scrollBottomPadding } =
+    getFloatingPrimaryNavMetrics(insets.bottom);
 
   const hasNoData = state.routines.length === 0 && state.logs.length === 0;
 
@@ -174,7 +173,7 @@ export function DataScreen({
       <GlassTopBar
         title="Datos"
         titleElement={(
-          <View style={styles.titleRow}>
+          <View style={styles.topBarTitleRow}>
             <MaterialCommunityIcons name="folder-cog-outline" size={18} color={theme.colors.text} />
             <Text style={styles.topBarTitle}>Datos</Text>
           </View>
@@ -303,6 +302,11 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 12,
   },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   topBarTitle: {
     fontSize: 20,
     fontWeight: '800',
@@ -405,3 +409,5 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
+
+

@@ -11,8 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FloatingPrimaryNav,
-  FLOATING_GLASS_BAR_HEIGHT,
-  FLOATING_GLASS_BAR_MARGIN,
+  getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
 } from '@components';
@@ -75,8 +74,8 @@ export function CalendarScreen({
   const { state } = useWorkout();
   const [monthOffset, setMonthOffset] = useState(0);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingNavBottom = Math.max(insets.bottom, 10) + FLOATING_GLASS_BAR_MARGIN;
-  const scrollBottomPadding = floatingNavBottom + FLOATING_GLASS_BAR_HEIGHT + 28;
+  const { bottom: floatingNavBottom, scrollBottomPadding } =
+    getFloatingPrimaryNavMetrics(insets.bottom);
 
   const titleElement = (
     <View style={styles.topBarTitleRow}>
@@ -443,3 +442,5 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
+
+

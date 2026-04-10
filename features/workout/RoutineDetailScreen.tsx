@@ -12,6 +12,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -124,7 +125,9 @@ export function RoutineDetailScreen({
             >
               <View style={styles.dayHeader}>
                 <View style={styles.dayHeaderLeft}>
-                  <Text style={styles.dayEmoji}>{day.emoji}</Text>
+                  <View style={styles.dayAccentWrap}>
+                    <DayAccentIcon emoji={day.emoji} name={day.name} size={16} />
+                  </View>
                   <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
                 </View>
                 <Text style={styles.dayBadge}>Día {day.dayNumber}</Text>
@@ -163,8 +166,14 @@ export function RoutineDetailScreen({
       </ScrollView>
 
       <GlassTopBar
-        title={currentRoutine.name}
-        subtitle={currentRoutine.description}
+        title="Rutina"
+        titleElement={(
+          <View style={styles.topBarTitleRow}>
+            <MaterialCommunityIcons name="file-document-edit-outline" size={18} color={theme.colors.text} />
+            <Text style={styles.topBarTitleText}>Rutina</Text>
+          </View>
+        )}
+        subtitle={currentRoutine.name}
         topInset={insets.top}
       />
 
@@ -178,16 +187,18 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Elige un emoji</Text>
+            <Text style={styles.modalTitle}>Selecciona un color</Text>
             <View style={styles.emojiGrid}>
               {EMOJI_CHOICES.map(emoji => (
                 <Pressable
                   key={emoji}
-                  style={({ pressed }) => [styles.emojiButton, pressed && styles.emojiButtonPressed]}
+                  style={({ pressed }) => [
+                    styles.emojiButton,
+                    { backgroundColor: getTrainingAccent({ emoji }) },
+                    pressed && styles.emojiButtonPressed,
+                  ]}
                   onPress={() => handleSelectEmoji(emoji)}
-                >
-                  <Text style={styles.emojiButtonText}>{emoji}</Text>
-                </Pressable>
+                />
               ))}
             </View>
             <Pressable
@@ -247,6 +258,17 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
   },
+  topBarTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  topBarTitleText: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
+  },
   content: {
     paddingHorizontal: theme.spacing.md,
     marginTop: 0,
@@ -272,9 +294,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  dayEmoji: {
-    fontSize: 20,
+  dayAccentWrap: {
     marginRight: 10,
+    paddingTop: 2,
   },
   dayName: {
     fontSize: 19,
@@ -342,31 +364,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
-    marginBottom: theme.spacing.md,
     justifyContent: 'center',
+    marginBottom: theme.spacing.xs,
   },
   emojiButton: {
     width: '30%',
-    aspectRatio: 1,
-    backgroundColor: theme.colors.surfaceAlt,
+    height: 48,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   emojiButtonPressed: {
-    opacity: 0.7,
-    backgroundColor: theme.colors.primary,
-  },
-  emojiButtonText: {
-    fontSize: 32,
+    opacity: 0.85,
   },
   cancelButton: {
     backgroundColor: theme.colors.surfaceAlt,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    marginTop: theme.spacing.xs,
     paddingVertical: 12,
     paddingHorizontal: 16,
     alignItems: 'center',
@@ -460,3 +476,5 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 });
+
+

@@ -1,9 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextStyle, ViewStyle } from 'react-native';
+import { View, Text, StyleSheet, TextStyle, ViewStyle, Platform } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import {
-  GLASS_BLUR_INTENSITY,
+  GLASS_TOP_BAR_BLUR_INTENSITY,
   GLASS_TOP_BAR_BG,
   GLASS_TOP_BAR_OVERLAY,
 } from './glassTokens';
@@ -37,22 +37,12 @@ export function GlassTopBar({
 }: GlassTopBarProps) {
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + topInset;
   const topBarPaddingTop = Math.max(topInset - 16, 0);
-
-  return (
-    <View
-      style={[
-        styles.topBar,
-        { height: topBarHeight, paddingTop: topBarPaddingTop },
-        containerStyle,
-      ]}
-    >
-      <FrostedBlur
-        tint="dark"
-        intensity={GLASS_BLUR_INTENSITY}
-        experimentalBlurMethod="dimezisBlurView"
-        style={styles.topBarBlur}
-      />
-      <View style={styles.topBarGlassOverlay} />
+  const sharedFrameStyle = { height: topBarHeight };
+  const topBarBlurIntensity = Platform.OS === 'android'
+    ? Math.max(GLASS_TOP_BAR_BLUR_INTENSITY, 72)
+    : GLASS_TOP_BAR_BLUR_INTENSITY;
+  const foregroundContent = (
+    <View style={[styles.topBarForeground, sharedFrameStyle, { paddingTop: topBarPaddingTop }]}>
       <View style={styles.topBarContent}>
         <View style={styles.topBarRow}>
           <View style={styles.textWrap}>
@@ -74,17 +64,35 @@ export function GlassTopBar({
       </View>
     </View>
   );
+
+  return (
+    <>
+      <View
+        style={[styles.topBarBackground, sharedFrameStyle, containerStyle]}
+        pointerEvents="none"
+      >
+        <FrostedBlur
+          tint="dark"
+          intensity={topBarBlurIntensity}
+          experimentalBlurMethod="dimezisBlurView"
+          style={styles.topBarBlur}
+        />
+        <View style={styles.topBarGlassOverlay} />
+      </View>
+      {foregroundContent}
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
-  topBar: {
+  topBarBackground: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     zIndex: 25,
     justifyContent: 'flex-start',
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 0,
     borderBottomColor: 'rgba(255, 255, 255, 0.12)',
     backgroundColor: GLASS_TOP_BAR_BG,
     overflow: 'hidden',
@@ -95,7 +103,13 @@ const styles = StyleSheet.create({
   topBarGlassOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: GLASS_TOP_BAR_OVERLAY,
-    pointerEvents: 'none',
+  },
+  topBarForeground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 26,
   },
   topBarContent: {
     paddingHorizontal: theme.spacing.md,
@@ -117,9 +131,6 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     color: theme.colors.text,
-    textShadowColor: 'rgba(0, 0, 0, 0.35)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 6,
   },
   subtitle: {
     marginTop: 4,
@@ -127,8 +138,5 @@ const styles = StyleSheet.create({
     color: 'rgba(235, 239, 245, 0.86)',
     fontStyle: 'italic',
     lineHeight: 19,
-    textShadowColor: 'rgba(0, 0, 0, 0.25)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
 });

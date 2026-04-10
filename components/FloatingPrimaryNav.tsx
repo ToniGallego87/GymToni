@@ -34,13 +34,13 @@ export function FloatingPrimaryNav({
     {
       key: 'home',
       label: 'Entrenar',
-      icon: 'arm-flex',
+      icon: 'dumbbell',
       onPress: onPressHome,
     },
     {
       key: 'routines',
       label: 'Rutinas',
-      icon: 'dumbbell',
+      icon: 'book-open-variant',
       onPress: onPressRoutines,
     },
     {
@@ -52,7 +52,7 @@ export function FloatingPrimaryNav({
     {
       key: 'data',
       label: 'Datos',
-      icon: 'database-outline',
+      icon: 'folder-cog-outline',
       onPress: onPressData,
     },
   ];
@@ -72,10 +72,9 @@ export function FloatingPrimaryNav({
           >
             <MaterialCommunityIcons
               name={item.icon}
-              size={19}
+              size={25}
               style={[styles.icon, isActive && styles.iconActive]}
             />
-            <Text style={[styles.label, isActive && styles.labelActive]}>{item.label}</Text>
           </TouchableOpacity>
         );
       })}

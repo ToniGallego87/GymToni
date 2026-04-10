@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
   },
   floatingBackGlassOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: GLASS_FLOATING_OVERLAY,
+    backgroundColor: 'rgba(8, 12, 16, 0.05)',
     pointerEvents: 'none',
   },
   backButtonText: {

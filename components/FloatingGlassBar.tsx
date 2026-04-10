@@ -14,7 +14,17 @@ import {
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
 
 export const FLOATING_GLASS_BAR_HEIGHT = 72;
-export const FLOATING_GLASS_BAR_MARGIN = 16;
+export const FLOATING_GLASS_BAR_MARGIN = 12;
+export const FLOATING_PRIMARY_NAV_MIN_INSET = 0;
+export const FLOATING_PRIMARY_NAV_SCROLL_EXTRA_PADDING = 28;
+
+export function getFloatingPrimaryNavMetrics(bottomInset: number) {
+  const bottom = Math.max(bottomInset, FLOATING_PRIMARY_NAV_MIN_INSET) + FLOATING_GLASS_BAR_MARGIN;
+  const scrollBottomPadding =
+    bottom + FLOATING_GLASS_BAR_HEIGHT + FLOATING_PRIMARY_NAV_SCROLL_EXTRA_PADDING;
+
+  return { bottom, scrollBottomPadding };
+}
 
 interface FloatingGlassBarProps {
   bottom: number;
@@ -96,7 +106,7 @@ const styles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 8,
-    paddingVertical: 11,
+    paddingVertical: 7,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
