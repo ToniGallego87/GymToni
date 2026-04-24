@@ -26,7 +26,7 @@ type Screen =
   | { type: 'home' }
   | { type: 'routine-selector' }
   | { type: 'day-selector' }
-  | { type: 'workout-log'; day: WorkoutDay }
+  | { type: 'workout-log'; day: WorkoutDay; log?: WorkoutLog }
   | { type: 'detail'; log: WorkoutLog; day: WorkoutDay; origin: 'home' | 'calendar' }
   | { type: 'calendar' }
   | { type: 'data' }
@@ -325,6 +325,7 @@ function AppContent() {
         <HomeScreen
           onSelectDay={day => setScreen({ type: 'workout-log', day })}
           onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateData={() => setScreen({ type: 'data' })}
@@ -348,6 +349,7 @@ function AppContent() {
         <HomeScreen
           onSelectDay={day => setScreen({ type: 'workout-log', day })}
           onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateData={() => setScreen({ type: 'data' })}
@@ -402,6 +404,7 @@ function AppContent() {
           log={screen.log}
           day={screen.day}
           onBack={() => setScreen({ type: screen.origin === 'calendar' ? 'calendar' : 'home' })}
+          onEdit={(log, day) => setScreen({ type: 'workout-log', day, log })}
         />
       )}
 

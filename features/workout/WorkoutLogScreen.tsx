@@ -30,7 +30,7 @@ import {
   GLASS_TOP_BAR_BASE_HEIGHT,
   Toast,
 } from '../../components';
-import { parseCardioString } from '@lib/parsers';
+import { parseCardioString, parseSeriesString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
 import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '../../types';
 import { theme } from '@lib/theme';
@@ -38,6 +38,7 @@ import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@
 
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
+  log?: WorkoutLog;
   onSave: () => void;
   onBack: () => void;
 }
@@ -46,17 +47,107 @@ const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
 
 export function WorkoutLogScreen({
   day,
+  log,
   onSave,
   onBack,
 }: WorkoutLogScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
-  const [selectedDay, setSelectedDay] = useState(day);
+
+  const getActiveDays = (): WorkoutDay[] => {
+    const activeRoutine = state.routines.find(
+      (r: WorkoutRoutine) => r.id === state.activeRoutineId
+    );
+    return activeRoutine?.days || [];
+  };
+
+  const [selectedDay, setSelectedDay] = useState(() => {
+    if (log) {
+      const activeDays = getActiveDays();
+      return activeDays.find(d => d.id === log.dayId) || day;
+    }
+    return day;
+  });
+
+  // Función para obtener el último log de hoy para este día
+  const getLatestTodayLog = () => {
+    const today = getToday();
+    const logsForDayToday = state.logs.filter(
+      l => l.dayId === selectedDay.id && l.date === today
+    );
+    if (logsForDayToday.length === 0) return null;
+    
+    // Retornar el más reciente (createdAt más alto)
+    return logsForDayToday.reduce((latest, current) => 
+      current.createdAt > latest.createdAt ? current : latest
+    );
+  };
+
+  // Obtener el log existente: si se pasa log, usarlo; sino el último de hoy
+  const existingLog = log || getLatestTodayLog();
+
+  // Cargar datos iniciales del log existente si existe
+  const initialExerciseSets = selectedDay.exercises.reduce((acc, ex) => {
+    if (existingLog) {
+      const exerciseLog = existingLog.exercises.find((e: ExerciseLog) => e.exerciseId === ex.id);
+      if (exerciseLog && exerciseLog.parsedSets && exerciseLog.parsedSets.length > 0) {
+        return { ...acc, [ex.id]: exerciseLog.parsedSets };
+      } else if (exerciseLog && exerciseLog.rawInput) {
+        // Parsear rawInput si no hay parsedSets
+        const parsed = parseSeriesString(exerciseLog.rawInput);
+        return { ...acc, [ex.id]: parsed };
+      }
+    }
+    return { ...acc, [ex.id]: [] };
+  }, {} as Record<string, ParsedSet[]>);
+
+  const initialNotes = selectedDay.exercises.reduce((acc, ex) => {
+    if (existingLog) {
+      const exerciseLog = existingLog.exercises.find((e: ExerciseLog) => e.exerciseId === ex.id);
+      if (exerciseLog && exerciseLog.notes) {
+        return { ...acc, [ex.id]: exerciseLog.notes };
+      }
+    }
+    return acc;
+  }, {} as Record<string, string>);
+
+  const initialCardioInput = existingLog?.cardio?.rawInput || '';
+  
+  // Estado para almacenar las series agregadas por cada ejercicio
+  const [exerciseSets, setExerciseSets] = useState<Record<string, ParsedSet[]>>(initialExerciseSets);
+  
+  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(initialNotes);
+  const [cardioInput, setCardioInput] = useState(initialCardioInput);
+  const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
+  const [notesText, setNotesText] = useState('');
+  const [isWorkoutSaved, setIsWorkoutSaved] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+  } | null>(null);
   const [showDaySelector, setShowDaySelector] = useState(false);
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerEndAt, setTimerEndAt] = useState<number | null>(null);
   const [timerNotificationId, setTimerNotificationId] = useState<string | null>(null);
+  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+
+  const getRoutineIdForDay = () => {
+    for (const routine of state.routines) {
+      if (routine.days.find((d: any) => d.id === selectedDay.id)) {
+        return routine.id;
+      }
+    }
+    return state.activeRoutineId || 'routine3';
+  };
+
+  const getTimerDurationFromRoutine = (): number => {
+    const routineId = getRoutineIdForDay();
+    const routine = state.routines.find(r => r.id === routineId) as any;
+    return routine?.timerDuration || 150;
+  };
 
   const clearTimerNotification = async () => {
     if (!timerNotificationId || !Notifications) return;
@@ -85,7 +176,7 @@ export function WorkoutLogScreen({
           body: 'Es hora de tu siguiente serie',
           icon: 'notification_icon',
           color: '#F9A825',
-          sound: 'default',  // ← Especificar sonido
+          sound: 'default',
           vibrate: [0, 300, 150, 300, 150, 300],
           priority: Notifications.AndroidNotificationPriority.MAX,
           data: {
@@ -223,81 +314,6 @@ export function WorkoutLogScreen({
     };
   }, [timerNotificationId]);
   
-  // Función para obtener el último log de hoy para este día
-  const getLatestTodayLog = () => {
-    const today = getToday();
-    const logsForDayToday = state.logs.filter(
-      log => log.dayId === selectedDay.id && log.date === today
-    );
-    if (logsForDayToday.length === 0) return null;
-    
-    // Retornar el más reciente (createdAt más alto)
-    return logsForDayToday.reduce((latest, current) => 
-      current.createdAt > latest.createdAt ? current : latest
-    );
-  };
-
-  // Cargar datos iniciales del último log si existe
-  const latestTodayLog = getLatestTodayLog();
-  const initialExerciseSets = selectedDay.exercises.reduce((acc, ex) => {
-    if (latestTodayLog) {
-      const exerciseLog = latestTodayLog.exercises.find(e => e.exerciseId === ex.id);
-      if (exerciseLog && exerciseLog.parsedSets) {
-        return { ...acc, [ex.id]: exerciseLog.parsedSets };
-      }
-    }
-    return { ...acc, [ex.id]: [] };
-  }, {} as Record<string, ParsedSet[]>);
-
-  const initialNotes = selectedDay.exercises.reduce((acc, ex) => {
-    if (latestTodayLog) {
-      const exerciseLog = latestTodayLog.exercises.find(e => e.exerciseId === ex.id);
-      if (exerciseLog && exerciseLog.notes) {
-        return { ...acc, [ex.id]: exerciseLog.notes };
-      }
-    }
-    return acc;
-  }, {} as Record<string, string>);
-
-  const initialCardioInput = latestTodayLog?.cardio?.rawInput || '';
-  
-  // Estado para almacenar las series agregadas por cada ejercicio
-  const [exerciseSets, setExerciseSets] = useState<Record<string, ParsedSet[]>>(initialExerciseSets);
-  
-  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(initialNotes);
-  const [cardioInput, setCardioInput] = useState(initialCardioInput);
-  const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
-  const [notesText, setNotesText] = useState('');
-  const [toast, setToast] = useState<{
-    message: string;
-    type: 'success' | 'error';
-  } | null>(null);
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
-
-  const getRoutineIdForDay = () => {
-    for (const routine of state.routines) {
-      if (routine.days.find((d: any) => d.id === selectedDay.id)) {
-        return routine.id;
-      }
-    }
-    return state.activeRoutineId || 'routine3';
-  };
-
-  const getActiveDays = (): WorkoutDay[] => {
-    const activeRoutine = state.routines.find(
-      (r: WorkoutRoutine) => r.id === state.activeRoutineId
-    );
-    return activeRoutine?.days || [];
-  };
-
-  const getTimerDurationFromRoutine = (): number => {
-    const routineId = getRoutineIdForDay();
-    const routine = state.routines.find(r => r.id === routineId) as any;
-    return routine?.timerDuration || 150;
-  };
-
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
 
@@ -351,13 +367,11 @@ export function WorkoutLogScreen({
   };
 
   const getPreviousExerciseLog = (exerciseId: string) => {
-    console.log(`[getPreviousExerciseLog] START - Looking for exerciseId: ${exerciseId}, dayId: ${selectedDay.id}`);
-    console.log(`[getPreviousExerciseLog] Total logs in state: ${state.logs.length}`);
-    
+    const currentLogId = existingLog?.id;
+
     // Obtener todos los logs del mismo día, sin filtrar por fecha
     const logsForDay = state.logs.filter((log) => log.dayId === selectedDay.id);
-    console.log(`[getPreviousExerciseLog] Logs for this day: ${logsForDay.length}`);
-    
+
     // Obtener todos los ejercicios de esos logs
     const allExercisesForDay: (ExerciseLog & { logDate: number; logId: string })[] = [];
     logsForDay.forEach((log) => {
@@ -365,33 +379,19 @@ export function WorkoutLogScreen({
         allExercisesForDay.push({ ...ex, logDate: log.createdAt, logId: log.id });
       });
     });
-    console.log(`[getPreviousExerciseLog] All exercises for this day: ${allExercisesForDay.length}`);
-    
-    // Filtrar por exerciseId
-    const matchingExercises = allExercisesForDay.filter((ex) => ex.exerciseId === exerciseId);
-    console.log(`[getPreviousExerciseLog] Exercises matching ID ${exerciseId}: ${matchingExercises.length}`);
-    
+
+    // Filtrar por exerciseId y excluir el log actual
+    const matchingExercises = allExercisesForDay.filter(
+      (ex) => ex.exerciseId === exerciseId && ex.logId !== currentLogId
+    );
+
     if (matchingExercises.length === 0) {
-      console.log(`[getPreviousExerciseLog] No exercises found - returning null`);
       return null;
     }
-    
-    // Ordenar por fecha descendente
+
+    // Ordenar por fecha descendente y retornar el más reciente anterior
     matchingExercises.sort((a, b) => b.logDate - a.logDate);
-    
-    // Retornar el más reciente que no sea de hoy
-    const today = new Date().toLocaleDateString('es-ES');
-    for (const exercise of matchingExercises) {
-      const logDate = new Date(exercise.logDate).toLocaleDateString('es-ES');
-      console.log(`[getPreviousExerciseLog] Checking exercise from ${logDate}`);
-      if (logDate !== today) {
-        console.log(`[getPreviousExerciseLog] FOUND - Returning exercise with rawInput: ${exercise.rawInput}`);
-        return exercise;
-      }
-    }
-    
-    console.log(`[getPreviousExerciseLog] All exercises are from today - returning null`);
-    return null;
+    return matchingExercises[0] || null;
   };
 
   const buildExerciseImprovement = (
@@ -449,27 +449,31 @@ export function WorkoutLogScreen({
         : undefined;
 
       const workoutLog: WorkoutLog = {
-        id: generateId(),
+        id: log?.id || generateId(),
         routineId: getRoutineIdForDay(),
         dayId: selectedDay.id,
-        date: getToday(),
+        date: log?.date || getToday(),
         exercises: exerciseLogs,
         cardio: cardioLog,
-        createdAt: Date.now(),
+        createdAt: log?.createdAt || Date.now(),
         updatedAt: Date.now(),
       };
 
-      // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
-      const today = getToday();
-      const existingLogOfToday = state.logs.find(
-        log => log.dayId === selectedDay.id && log.date === today
-      );
-      
-      if (existingLogOfToday) {
-        dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+      if (log) {
+        dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
+      } else {
+        // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
+        const today = getToday();
+        const existingLogOfToday = state.logs.find(
+          l => l.dayId === selectedDay.id && l.date === today
+        );
+        
+        if (existingLogOfToday) {
+          dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+        }
+        
+        dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
       }
-      
-      dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
     } catch (error) {
       console.error('Error auto-saving workout:', error);
     }
@@ -501,32 +505,33 @@ export function WorkoutLogScreen({
         : undefined;
 
       const workoutLog: WorkoutLog = {
-        id: generateId(),
+        id: log?.id || generateId(),
         routineId: getRoutineIdForDay(),
         dayId: selectedDay.id,
-        date: getToday(),
+        date: log?.date || getToday(),
         exercises: exerciseLogs,
         cardio: cardioLog,
-        createdAt: Date.now(),
+        createdAt: log?.createdAt || Date.now(),
         updatedAt: Date.now(),
       };
 
-      // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
-      const today = getToday();
-      const existingLogOfToday = state.logs.find(
-        log => log.dayId === selectedDay.id && log.date === today
-      );
-      
-      if (existingLogOfToday) {
-        dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+      if (log) {
+        dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
+      } else {
+        // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
+        const today = getToday();
+        const existingLogOfToday = state.logs.find(
+          l => l.dayId === selectedDay.id && l.date === today
+        );
+        
+        if (existingLogOfToday) {
+          dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+        }
+        
+        dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
       }
-      
-      dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
 
-      setToast({
-        message: 'Entrenamiento guardado, excelente.',
-        type: 'success',
-      });
+      setIsWorkoutSaved(true);
 
       setTimeout(() => {
         onSave();
@@ -611,7 +616,7 @@ export function WorkoutLogScreen({
                 onLongPress={() => {
                   void stopTimer();
                 }}
-                delayLongPress={2000}
+                delayLongPress={1000}
                 disabled={false}
                 >
                 <View style={styles.timerLabelRow}>
@@ -625,7 +630,7 @@ export function WorkoutLogScreen({
                 <Text style={styles.timerText}>
                   {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
                 </Text>
-                <Text style={styles.timerHint}>Pulsa para +30s, mantén 2s para eliminar</Text>
+                <Text style={styles.timerHint}>Tocar: +30s | Mantener: elimina temporizador</Text>
                 </Pressable>
             )}
           </React.Fragment>
@@ -639,12 +644,19 @@ export function WorkoutLogScreen({
         />
 
         <View style={styles.buttonContainer}>
-          <Button
-            title="Guardar"
-            onPress={handleSaveWorkout}
-            variant="primary"
-            size="large"
-          />
+          {isWorkoutSaved ? (
+            <View style={[styles.saveMessageContainer]}>
+              <MaterialCommunityIcons name="check-circle" size={24} />
+              <Text style={styles.saveMessageText}>Entrenamiento guardado</Text>
+            </View>
+          ) : (
+            <Button
+              title="Guardar"
+              onPress={handleSaveWorkout}
+              variant="primary"
+              size="large"
+            />
+          )}
         </View>
       </ScrollView>
 
@@ -656,7 +668,13 @@ export function WorkoutLogScreen({
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
         }
-        subtitle="Rellena los ejercicios"
+        subtitle={`Rellena los ejercicios - ${(() => {
+          const dateString = log?.date || existingLog?.date;
+          if (dateString) {
+            return dateString.split('-').reverse().join('/');
+          }
+          return new Date(existingLog?.createdAt || Date.now()).toISOString().split('T')[0].split('-').reverse().join('/');
+        })()}`}
         topInset={insets.top}
       />
 
@@ -766,6 +784,21 @@ const styles = StyleSheet.create({
   buttonContainer: {
     marginTop: 15,
   },
+  saveMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: theme.colors.success,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderRadius: theme.borderRadius.md,
+  },
+  saveMessageText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.background,
+  },
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
@@ -849,7 +882,7 @@ const styles = StyleSheet.create({
     marginHorizontal: 20,
     backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.lg,
-    padding: 20,
+    padding: 15,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#000',
@@ -870,16 +903,15 @@ const styles = StyleSheet.create({
   timerLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
+    gap: 8
   },
   timerLabel: {
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: '600',
     color: theme.colors.darkGray,
   },
   timerHint: {
-    fontSize: 12,
+    fontSize: 13,
     fontStyle: 'italic',
     color: theme.colors.darkGray,
     marginTop: 12,
@@ -897,5 +929,3 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 });
-
-

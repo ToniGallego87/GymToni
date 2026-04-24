@@ -15,6 +15,7 @@ import {
   FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  Button,
 } from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import { formatDate } from '@lib/storage';
@@ -31,6 +32,7 @@ interface DetailScreenProps {
   log: WorkoutLog;
   day: WorkoutDay;
   onBack: () => void;
+  onEdit: (log: WorkoutLog, day: WorkoutDay) => void;
 }
 
 interface ImprovementResult {
@@ -64,6 +66,7 @@ export function DetailScreen({
   log,
   day,
   onBack,
+  onEdit,
 }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -215,6 +218,15 @@ export function DetailScreen({
             </View>
           </>
         )}
+
+        {/* <View style={styles.editButtonContainer}>
+          <Button
+            title="Editar entrenamiento"
+            onPress={() => onEdit(log, day)}
+            variant="primary"
+            size="large"
+          />
+        </View> */}
       </ScrollView>
 
       <GlassTopBar
@@ -341,6 +353,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: theme.colors.textSecondary,
     lineHeight: 18,
+  },
+  editButtonContainer: {
+    marginTop: 20,
   },
 });
 

@@ -8,6 +8,7 @@ import {
   Pressable,
   GestureResponderEvent,
   ScrollView,
+  Keyboard,
 } from 'react-native';
 import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
@@ -61,14 +62,20 @@ export function ExerciseInputField({
   };
 
   const handleAddSet = () => {
-    const weight = parseFloat(weightValue.trim());
-    const reps = parseFloat(repsValue.trim());
+    // Usar placeholders si los campos están vacíos
+    const weightStr = (weightValue.trim() || getWeightPlaceholder()).trim();
+    const repsStr = (repsValue.trim() || getRepPlaceholder()).trim();
+
+    const weight = parseFloat(weightStr);
+    const reps = parseFloat(repsStr);
 
     // Permitir peso 0 pero reps debe ser > 0
     if (!isNaN(weight) && !isNaN(reps) && weight >= 0 && reps > 0) {
       onAddSet({ weight, reps });
       setWeightValue('');
       setRepsValue('');
+      // Cerrar el teclado después de añadir
+      Keyboard.dismiss();
     }
   };
 
@@ -542,7 +549,6 @@ const styles = StyleSheet.create({
   },
   maxReachedRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     gap: 8,
   },
   maxReachedText: {

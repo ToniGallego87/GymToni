@@ -38,6 +38,8 @@ export function RoutineDetailScreen({
   const { state, dispatch } = useWorkout();
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [showEmojiModal, setShowEmojiModal] = useState(false);
+  const [showEditExercisesModal, setShowEditExercisesModal] = useState(false);
+  const [exercisesEditText, setExercisesEditText] = useState('');
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
 
@@ -83,6 +85,60 @@ export function RoutineDetailScreen({
     setShowEmojiModal(true);
   };
 
+  const handleLongPressDay = (dayId: string) => {
+    const day = currentRoutine.days.find(d => d.id === dayId);
+    if (day) {
+      // Crear un texto con los ejercicios para poder editarlos
+      const exercisesText = day.exercises
+        .map(ex => `${ex.name} — ${ex.targetSets || '—'}x${ex.targetReps || '—'}`)
+        .join('\n');
+      setExercisesEditText(exercisesText);
+      setSelectedDayId(dayId);
+      setShowEditExercisesModal(true);
+    }
+  };
+
+  const handleSaveExercises = () => {
+    if (!selectedDayId) return;
+    
+    const day = currentRoutine.days.find(d => d.id === selectedDayId);
+    if (!day) return;
+
+    // Parsear el texto para actualizar ejercicios
+    const lines = exercisesEditText.trim().split('\n');
+    const updatedExercises = lines
+      .filter(line => line.trim().length > 0)
+      .map((line, index) => {
+        // Parsear formato: "Nombre — Nx#"
+        const match = line.match(/^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+|\d+\.?\d*|—)?/);
+        
+        const name = match ? match[1].trim() : line.trim();
+        const targetSets = match && match[2] && match[2] !== '—' ? parseInt(match[2]) : undefined;
+        const targetReps = match && match[3] && match[3] !== '—' ? match[3] : undefined;
+
+        // Mantener el ID del ejercicio original si es posible
+        const originalExercise = day.exercises[index];
+
+        return {
+          id: originalExercise?.id || `exercise-${Date.now()}-${index}`,
+          name,
+          order: (originalExercise?.order || index) + 1,
+          targetSets,
+          targetReps: targetReps as string | undefined,
+        };
+      });
+
+    const updatedDay = { ...day, exercises: updatedExercises };
+    dispatch({
+      type: 'UPDATE_DAY',
+      payload: { routineId: currentRoutine.id, dayId: selectedDayId, day: updatedDay },
+    });
+
+    setShowEditExercisesModal(false);
+    setSelectedDayId(null);
+    setExercisesEditText('');
+  };
+
   const handleSelectEmoji = (emoji: string) => {
     if (selectedDayId) {
       const day = currentRoutine.days.find(d => d.id === selectedDayId);
@@ -122,6 +178,8 @@ export function RoutineDetailScreen({
               key={day.id}
               style={[styles.dayBlock, { borderColor: accent }]}
               onPress={() => handleSelectDay(day.id)}
+              onLongPress={() => handleLongPressDay(day.id)}
+              delayLongPress={1000}
             >
               <View style={styles.dayHeader}>
                 <View style={styles.dayHeaderLeft}>
@@ -207,6 +265,51 @@ export function RoutineDetailScreen({
             >
               <Text style={styles.cancelButtonText}>Cancelar</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showEditExercisesModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowEditExercisesModal(false);
+          setSelectedDayId(null);
+          setExercisesEditText('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Editar Ejercicios</Text>
+            <Text style={styles.editExercisesLabel}>Formato: Nombre — SetsxReps</Text>
+            <TextInput
+              style={styles.editExercisesInput}
+              placeholder="Ej: Sentadilla — 4x8&#10;Prensa — 3x10"
+              placeholderTextColor={theme.colors.textSecondary}
+              value={exercisesEditText}
+              onChangeText={setExercisesEditText}
+              multiline
+              scrollEnabled={false}
+            />
+            <View style={styles.editExercisesButtons}>
+              <Pressable
+                style={({ pressed }) => [styles.editButton, pressed && styles.buttonPressed]}
+                onPress={handleSaveExercises}
+              >
+                <Text style={styles.editButtonText}>Editar</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
+                onPress={() => {
+                  setShowEditExercisesModal(false);
+                  setSelectedDayId(null);
+                  setExercisesEditText('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Volver</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -376,6 +479,42 @@ const styles = StyleSheet.create({
   },
   emojiButtonPressed: {
     opacity: 0.85,
+  },
+  editExercisesLabel: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    marginBottom: 8,
+    fontWeight: '600',
+  },
+  editExercisesInput: {
+    backgroundColor: theme.colors.darkGray,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: theme.colors.text,
+    minHeight: 100,
+    marginBottom: 12,
+    textAlignVertical: 'top',
+  },
+  editExercisesButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  editButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: theme.colors.background,
   },
   cancelButton: {
     backgroundColor: theme.colors.surfaceAlt,

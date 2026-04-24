@@ -17,9 +17,9 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
-import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '../../types';
+import { WorkoutDay, WorkoutRoutine, WorkoutLog, ExerciseLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
-import { buildImprovementFromStrengthScores, getWorkoutStrengthScore } from '@lib/progress';
+import { buildImprovementFromStrengthScores, getWorkoutStrengthScore, getExerciseImprovementPercent } from '@lib/progress';
 import {
   DayAccentIcon,
   FloatingBackButton,
@@ -34,6 +34,7 @@ import {
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
+  onEditLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onNavigateHome?: () => void;
   onNavigateCalendar?: () => void;
   onNavigateData?: () => void;
@@ -137,11 +138,10 @@ function buildWeekProgress(
     }
 
     const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
-    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
-    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.1));
+    const normalizedStrength = rawStrength / expectedCount;
 
     return {
-      strength: rawStrength * penaltyFactor,
+      strength: normalizedStrength,
     };
   };
 
@@ -156,7 +156,26 @@ function buildWeekProgress(
       return;
     }
 
-    const previousBlockNumber = blockNumber - 1;
+    // Buscar la última semana completa anterior
+    let previousBlockNumber = blockNumber - 1;
+    const expectedDays = activeDays.length || 5;
+    
+    while (previousBlockNumber >= 1) {
+      const candidateLogs = groupedByBlock[previousBlockNumber] || [];
+      const candidateUniqueDays = new Set(candidateLogs.map(log => log.dayId)).size;
+      
+      if (candidateUniqueDays === expectedDays) {
+        break; // Encontrada una semana completa
+      }
+      previousBlockNumber--;
+    }
+    
+    // Si no hay semana completa anterior, no hay cambio
+    if (previousBlockNumber < 1) {
+      weeklyFactors.push(1);
+      return;
+    }
+
     const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
     const previousWeekLogsForBlock = groupedByBlock[previousBlockNumber] || [];
 
@@ -165,32 +184,23 @@ function buildWeekProgress(
       return;
     }
 
+    // Contar días únicos en la semana actual
+    const currentUniqueDays = new Set(currentWeekLogsForBlock.map(log => log.dayId)).size;
+
+    // Si la semana actual está incompleta, no aplicar cambio (factor = 1, resultado = 0%)
+    if (currentUniqueDays < expectedDays) {
+      weeklyFactors.push(1);
+      return;
+    }
+
     let improvement: ImprovementResult | null;
 
-    if (blockNumber === latestBlockNumber) {
-      const completedDayIds = currentWeekLogsForBlock
-        .map(log => log.dayId)
-        .filter((dayId, idx, array) => !!dayId && array.indexOf(dayId) === idx);
-      const currentScores = getWeekScores(currentWeekLogsForBlock, {
-        restrictToDayIds: completedDayIds,
-        applyMissingPenalty: false,
-      });
-      const previousScores = getWeekScores(previousWeekLogsForBlock, {
-        restrictToDayIds: completedDayIds,
-        applyMissingPenalty: true,
-      });
-      improvement = buildImprovementFromStrengthScores(
-        currentScores.strength,
-        previousScores.strength
-      );
-    } else {
-      const currentScores = getWeekScores(currentWeekLogsForBlock, { applyMissingPenalty: true });
-      const previousScores = getWeekScores(previousWeekLogsForBlock, { applyMissingPenalty: true });
-      improvement = buildImprovementFromStrengthScores(
-        currentScores.strength,
-        previousScores.strength
-      );
-    }
+    const currentScores = getWeekScores(currentWeekLogsForBlock, { applyMissingPenalty: true });
+    const previousScores = getWeekScores(previousWeekLogsForBlock, { applyMissingPenalty: true });
+    improvement = buildImprovementFromStrengthScores(
+      currentScores.strength,
+      previousScores.strength
+    );
 
     const signedDelta = improvement
       ? (improvement.isImproved ? improvement.percent : -improvement.percent)
@@ -320,6 +330,7 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
 export function HomeScreen({
   onSelectDay,
   onSelectLog,
+  onEditLog,
   onNavigateHome,
   onNavigateCalendar,
   onNavigateData,
@@ -502,10 +513,34 @@ export function HomeScreen({
     const previousLog = getPreviousFilledLogForSameDay(currentLog);
     if (!previousLog) return null;
 
-    return buildImprovementFromStrengthScores(
-      getWorkoutStrengthScore(currentLog),
-      getWorkoutStrengthScore(previousLog)
-    );
+    // Obtener mapeo de ejercicios anteriores por ID/nombre
+    const previousByExerciseId: Record<string, ExerciseLog> = {};
+    const previousByExerciseName: Record<string, ExerciseLog> = {};
+    previousLog.exercises.forEach(ex => {
+      previousByExerciseId[ex.exerciseId] = ex;
+      previousByExerciseName[ex.exerciseName] = ex;
+    });
+
+    // Calcular porcentaje de mejora para cada ejercicio (negativo = 0)
+    const exerciseImprovements: number[] = [];
+    currentLog.exercises.forEach(currentEx => {
+      const previousEx = previousByExerciseId[currentEx.exerciseId] || previousByExerciseName[currentEx.exerciseName];
+      const improvement = getExerciseImprovementPercent(currentEx, previousEx || null);
+      if (improvement !== null) {
+        exerciseImprovements.push(improvement);
+      }
+    });
+
+    // Si no hay mejoras calculables, devolver null
+    if (exerciseImprovements.length === 0) return null;
+
+    // Media de mejoras
+    const avgImprovement = exerciseImprovements.reduce((sum, v) => sum + v, 0) / exerciseImprovements.length;
+    
+    return {
+      isImproved: avgImprovement > 0,
+      percent: avgImprovement,
+    };
   };
 
   const getWeekScores = (
@@ -550,32 +585,59 @@ export function HomeScreen({
   };
 
   const getWeekImprovement = (groupedByBlock: Record<number, WorkoutLog[]>, blockNumber: number, latestBlockNumber: number) => {
+    if (blockNumber === 1) return null;
+
     const currentWeekLogs = groupedByBlock[blockNumber] || [];
     const previousWeekLogs = groupedByBlock[blockNumber - 1] || [];
 
-    if (!currentWeekLogs.length || !previousWeekLogs.length) return null;
+    if (activeDays.length === 0) return null;
 
-    if (blockNumber === latestBlockNumber) {
-      const completedDayIds = currentWeekLogs
-        .map(log => log.dayId)
-        .filter((dayId, index, array) => !!dayId && array.indexOf(dayId) === index);
+    // Obtener el último log por día para la semana actual y anterior
+    const currentLatestByDayId: Record<string, WorkoutLog> = {};
+    const previousLatestByDayId: Record<string, WorkoutLog> = {};
 
-      const currentScores = getWeekScores(currentWeekLogs, {
-        restrictToDayIds: completedDayIds,
-        applyMissingPenalty: false,
-      });
-      const previousScores = getWeekScores(previousWeekLogs, {
-        restrictToDayIds: completedDayIds,
-        applyMissingPenalty: true,
-      });
+    currentWeekLogs.forEach(log => {
+      if (!currentLatestByDayId[log.dayId] || getLogTimestamp(log) > getLogTimestamp(currentLatestByDayId[log.dayId])) {
+        currentLatestByDayId[log.dayId] = log;
+      }
+    });
 
-      return buildImprovementFromStrengthScores(currentScores.strength, previousScores.strength);
-    }
+    previousWeekLogs.forEach(log => {
+      if (!previousLatestByDayId[log.dayId] || getLogTimestamp(log) > getLogTimestamp(previousLatestByDayId[log.dayId])) {
+        previousLatestByDayId[log.dayId] = log;
+      }
+    });
 
-    const currentScores = getWeekScores(currentWeekLogs, { applyMissingPenalty: true });
-    const previousScores = getWeekScores(previousWeekLogs, { applyMissingPenalty: true });
+    // Calcular porcentaje de mejora para cada día que aparece en ambas semanas
+    const dayImprovements: number[] = [];
 
-    return buildImprovementFromStrengthScores(currentScores.strength, previousScores.strength);
+    activeDays.forEach(day => {
+      const currentDayLog = currentLatestByDayId[day.id];
+      const previousDayLog = previousLatestByDayId[day.id];
+
+      if (currentDayLog && previousDayLog) {
+        // Ambas semanas tienen el día: calcular mejora
+        const improvement = getLogImprovement(currentDayLog);
+        dayImprovements.push(improvement ? improvement.percent : 0);
+      } else if (currentDayLog && !previousDayLog) {
+        // Solo la semana actual tiene el día: contar como mejora (primer vez)
+        dayImprovements.push(0);
+      } else if (!currentDayLog) {
+        // La semana actual no tiene el día: contar como 0
+        dayImprovements.push(0);
+      }
+    });
+
+    // Si no hay valores, devolver null
+    if (dayImprovements.length === 0) return null;
+
+    // Media de mejoras
+    const avgImprovement = dayImprovements.reduce((sum, v) => sum + v, 0) / dayImprovements.length;
+
+    return {
+      isImproved: avgImprovement > 0,
+      percent: avgImprovement,
+    };
   };
 
   const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
@@ -942,20 +1004,16 @@ export function HomeScreen({
                             pressed && styles.historyLogCardPressed,
                           ]}
                           onPress={() => {
-                            // Si el log es de hoy, mostrar modal con opciones
-                            if (isToday) {
-                              setLogWithOptionsId(log.id);
-                              setSelectedLogDayForOptions(day);
-                            } else {
-                              onSelectLog?.(log, day);
-                            }
+                            // Mostrar modal con opciones para todos los logs (hoy y días pasados)
+                            setLogWithOptionsId(log.id);
+                            setSelectedLogDayForOptions(day);
                           }}
                           onLongPress={() => {
-                            if (isToday) {
-                              setLogToDeleteId(log.id);
-                            }
+                            // Long press en cualquier log (no importa si es hoy o no) para opciones
+                            setLogWithOptionsId(log.id);
+                            setSelectedLogDayForOptions(day);
                           }}
-                          delayLongPress={2000}
+                          delayLongPress={1000}
                         >
                           <View style={styles.historyLogHeader}>
                             <View style={styles.historyLogLeft}>
@@ -1017,8 +1075,13 @@ export function HomeScreen({
                 <TouchableOpacity
                   style={styles.modalButtonEdit}
                   onPress={() => {
-                    if (selectedLogDayForOptions) {
-                      onSelectDay?.(selectedLogDayForOptions);
+                    const log = displayedRoutineLogs.find(l => l.id === logWithOptionsId);
+                    console.log('🔧 Editar presionado - log:', log?.id, 'day:', selectedLogDayForOptions?.name, 'onEditLog:', !!onEditLog);
+                    if (log && selectedLogDayForOptions && onEditLog) {
+                      console.log('✅ Llamando onEditLog');
+                      onEditLog(log, selectedLogDayForOptions);
+                    } else {
+                      console.log('❌ Faltan parámetros - log:', !!log, 'day:', !!selectedLogDayForOptions, 'onEditLog:', !!onEditLog);
                     }
                     setLogWithOptionsId(undefined);
                     setSelectedLogDayForOptions(undefined);
@@ -1134,7 +1197,7 @@ function RoutineCard({ routine, isViewed, isActive, onPress, onLongPress }: Rout
       style={[styles.routineCard, isViewed && styles.routineCardActive]}
       onPress={onPress}
       onLongPress={onLongPress}
-      delayLongPress={2000}
+      delayLongPress={1000}
     >
       <View style={styles.routineCardContent}>
         <Text style={styles.routineCardName}>{routine.name}</Text>

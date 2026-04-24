@@ -1,9 +1,16 @@
 # UPDATES
 
+## Version 0.4.5.b - 2026-04-23
+
+### Cambios
+- Ajustes y arreglos en los porcentajes
+- Opción para eliminar días de ejercicio antiguos
+- Mejoras visuales en varios puntos de la aplicación
+
 ## Version 0.4.5.a - 2026-04-10
 
 ### Cambios
-- Eliminados los emojis de colores y sustuidos por icons que usan colores a traves de css.
+- Eliminados los emojis de colores y sustituidos por icons que usan colores a traves de css.
 - Cohesión de la barra de título en todas las ventanas.
 - Ajustes visuales en la barra de navegación.
 - Mejora general en la coherencia visual.

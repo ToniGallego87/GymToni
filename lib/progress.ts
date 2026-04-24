@@ -76,3 +76,36 @@ export function buildImprovementFromStrengthScores(
   const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
   return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
 }
+
+/**
+ * Calcula el porcentaje de mejora de un ejercicio comparándolo con su versión anterior.
+ * Si el porcentaje es negativo, se devuelve 0 (no se cuenta la pérdida).
+ * Si no hay sesión anterior, devuelve null.
+ */
+export function getExerciseImprovementPercent(
+  currentExercise: ExerciseLog | null,
+  previousExercise: ExerciseLog | null
+): number | null {
+  if (!currentExercise || !previousExercise) return null;
+
+  const currentScore = getExerciseStrengthScore(currentExercise);
+  const previousScore = getExerciseStrengthScore(previousExercise);
+
+  // Si ambos son 0, no hay mejora
+  if (currentScore === 0 && previousScore === 0) return null;
+
+  // Si el anterior era 0 pero el actual > 0, mejora del 100%
+  if (previousScore === 0 && currentScore > 0) {
+    return 100;
+  }
+
+  // Si el anterior era > 0 y el actual es 0, pérdida (cuenta como 0)
+  if (previousScore > 0 && currentScore === 0) {
+    return 0;
+  }
+
+  const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
+  
+  // Los porcentajes negativos se cuentan como 0
+  return Math.max(0, deltaPct);
+}

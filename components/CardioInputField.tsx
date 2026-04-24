@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,8 @@ import {
   StyleSheet,
   Pressable,
   GestureResponderEvent,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
@@ -18,6 +20,16 @@ interface CardioInputFieldProps {
   placeholder?: string;
 }
 
+type CardioType = 'treadmill' | 'outdoor-run' | 'stationary-bike' | 'elliptical' | 'other' | null;
+
+const CARDIO_OPTIONS = [
+  { id: 'treadmill', label: 'Correr en cinta' },
+  { id: 'outdoor-run', label: 'Correr en exterior' },
+  { id: 'stationary-bike', label: 'Bici estática' },
+  { id: 'elliptical', label: 'Elíptica' },
+  { id: 'other', label: 'Otro' },
+];
+
 export function CardioInputField({
   value,
   onChangeText,
@@ -25,6 +37,71 @@ export function CardioInputField({
   onToggle,
   placeholder = 'Ej: Cinta: 22.5mins, 11.5kmh',
 }: CardioInputFieldProps) {
+  const [showCardioModal, setShowCardioModal] = useState(false);
+  const [selectedCardioType, setSelectedCardioType] = useState<CardioType>(null);
+  const [customCardioType, setCustomCardioType] = useState('');
+  const [cardioMinutes, setCardioMinutes] = useState('');
+  const [cardioSpeed, setCardioSpeed] = useState('');
+  const [cardioPendiente, setCardioPendiente] = useState('');
+  const [step, setStep] = useState<'type' | 'details'>('type');
+
+  const parseCurrentValue = () => {
+    if (!value) return;
+    // Intentar parsear formato: "tipo: Xmins, YkmhZ%"
+    // Por ahora, vamos a dejar que el usuario lo edite manualmente
+  };
+
+  const handleSelectCardioType = (typeId: string) => {
+    setSelectedCardioType(typeId as CardioType);
+    if (typeId === 'other') {
+      setStep('type'); // Mostrar campo de texto para tipo personalizado
+    } else {
+      setStep('details');
+    }
+  };
+
+  const handleCardioTypeConfirm = () => {
+    if (customCardioType.trim()) {
+      setStep('details');
+    }
+  };
+
+  const handleSaveCardio = () => {
+    if (!selectedCardioType || !cardioMinutes) return;
+
+    let cardioText = '';
+    let typeLabel = customCardioType || CARDIO_OPTIONS.find(o => o.id === selectedCardioType)?.label || '';
+
+    cardioText = `${typeLabel}: ${cardioMinutes}min`;
+    if (cardioSpeed) {
+      cardioText += `, ${cardioSpeed}kmh`;
+    }
+    if (cardioPendiente && selectedCardioType === 'treadmill') {
+      cardioText += `, ${cardioPendiente}%`;
+    }
+
+    onChangeText(cardioText);
+
+    // Reset states
+    setSelectedCardioType(null);
+    setCustomCardioType('');
+    setCardioMinutes('');
+    setCardioSpeed('');
+    setCardioPendiente('');
+    setStep('type');
+    setShowCardioModal(false);
+  };
+
+  const handleClearCardio = () => {
+    onChangeText('');
+    setSelectedCardioType(null);
+    setCustomCardioType('');
+    setCardioMinutes('');
+    setCardioSpeed('');
+    setCardioPendiente('');
+    setStep('type');
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -46,16 +123,179 @@ export function CardioInputField({
       </View>
 
       {expanded && (
-        <TextInput
-          style={styles.input}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.textSecondary}
-          value={value}
-          onChangeText={onChangeText}
-          multiline={true}
-          maxLength={200}
-        />
+        <>
+          {value ? (
+            <View style={styles.cardioDisplayContainer}>
+              <Text style={styles.cardioDisplayText}>{value}</Text>
+              <Pressable
+                style={({ pressed }) => [styles.editButton, pressed && styles.buttonPressed]}
+                onPress={() => {
+                  setShowCardioModal(true);
+                  setStep('type');
+                }}
+              >
+                <MaterialCommunityIcons name="pencil" size={16} color={theme.colors.darkGray} />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}
+                onPress={handleClearCardio}
+              >
+                <MaterialCommunityIcons name="close" size={16} color={theme.colors.darkGray} />
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              style={({ pressed }) => [styles.addCardioButton, pressed && styles.buttonPressed]}
+              onPress={() => {
+                setShowCardioModal(true);
+                setStep('type');
+              }}
+            >
+              <MaterialCommunityIcons name="plus" size={18} color={theme.colors.darkGray} />
+              <Text style={styles.addCardioText}>Añadir cardio</Text>
+            </Pressable>
+          )}
+        </>
       )}
+
+      <Modal
+        visible={showCardioModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setShowCardioModal(false);
+          setStep('type');
+          setSelectedCardioType(null);
+          setCustomCardioType('');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {step === 'type' && !selectedCardioType && (
+              <>
+                <Text style={styles.modalTitle}>Selecciona el tipo de cardio</Text>
+                <ScrollView style={styles.optionsScroll} showsVerticalScrollIndicator={false}>
+                  {CARDIO_OPTIONS.map(option => (
+                    <Pressable
+                      key={option.id}
+                      style={({ pressed }) => [styles.optionButton, pressed && styles.optionButtonPressed]}
+                      onPress={() => handleSelectCardioType(option.id)}
+                    >
+                      <Text style={styles.optionButtonText}>{option.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+                <Pressable
+                  style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+                  onPress={() => {
+                    setShowCardioModal(false);
+                    setStep('type');
+                  }}
+                >
+                  <Text style={styles.closeButtonText}>Cancelar</Text>
+                </Pressable>
+              </>
+            )}
+
+            {step === 'type' && selectedCardioType === 'other' && (
+              <>
+                <Text style={styles.modalTitle}>Especifica el tipo de ejercicio</Text>
+                <TextInput
+                  style={styles.customTypeInput}
+                  placeholder="Ej: Escalador, Remo, etc."
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={customCardioType}
+                  onChangeText={setCustomCardioType}
+                />
+                <Pressable
+                  style={({ pressed }) => [styles.confirmButton, !customCardioType && styles.disabledButton, pressed && styles.buttonPressed]}
+                  onPress={handleCardioTypeConfirm}
+                  disabled={!customCardioType}
+                >
+                  <Text style={styles.confirmButtonText}>Continuar</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+                  onPress={() => {
+                    setSelectedCardioType(null);
+                    setCustomCardioType('');
+                  }}
+                >
+                  <Text style={styles.closeButtonText}>Atrás</Text>
+                </Pressable>
+              </>
+            )}
+
+            {step === 'details' && (
+              <>
+                <Text style={styles.modalTitle}>Detalles del cardio</Text>
+                <View style={styles.detailsContainer}>
+                  <View style={styles.inputRowCardio}>
+                    <View style={styles.inputGroupCardio}>
+                      <Text style={styles.labelCardio}>Minutos</Text>
+                      <TextInput
+                        style={styles.inputCardio}
+                        placeholder="0"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={cardioMinutes}
+                        onChangeText={setCardioMinutes}
+                        keyboardType="decimal-pad"
+                        maxLength={6}
+                      />
+                    </View>
+                    <View style={styles.inputGroupCardio}>
+                      <Text style={styles.labelCardio}>km/h</Text>
+                      <TextInput
+                        style={styles.inputCardio}
+                        placeholder="0"
+                        placeholderTextColor={theme.colors.textSecondary}
+                        value={cardioSpeed}
+                        onChangeText={setCardioSpeed}
+                        keyboardType="decimal-pad"
+                        maxLength={5}
+                      />
+                    </View>
+                    {selectedCardioType === 'treadmill' && (
+                      <View style={styles.inputGroupCardio}>
+                        <Text style={styles.labelCardio}>Pendiente %</Text>
+                        <TextInput
+                          style={styles.inputCardio}
+                          placeholder="0"
+                          placeholderTextColor={theme.colors.textSecondary}
+                          value={cardioPendiente}
+                          onChangeText={setCardioPendiente}
+                          keyboardType="decimal-pad"
+                          maxLength={5}
+                        />
+                      </View>
+                    )}
+                  </View>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [styles.saveButton, !cardioMinutes && styles.disabledButton, pressed && styles.buttonPressed]}
+                  onPress={handleSaveCardio}
+                  disabled={!cardioMinutes}
+                >
+                  <Text style={styles.saveButtonText}>Guardar</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+                  onPress={() => {
+                    setSelectedCardioType(null);
+                    setCustomCardioType('');
+                    setCardioMinutes('');
+                    setCardioSpeed('');
+                    setCardioPendiente('');
+                    setStep('type');
+                  }}
+                >
+                  <Text style={styles.closeButtonText}>Atrás</Text>
+                </Pressable>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -102,18 +342,179 @@ const styles = StyleSheet.create({
   icon: {
     marginRight: 8,
   },
-  input: {
+  cardioDisplayContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     backgroundColor: theme.colors.darkGray,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
-    padding: 16,
-    fontSize: 15,
-    fontFamily: 'monospace',
-    minHeight: 56,
-    color: theme.colors.text,
+    padding: 14,
     marginTop: 10,
-    textAlignVertical: 'top',
-    lineHeight: 22,
+    gap: 8,
+  },
+  cardioDisplayText: {
+    flex: 1,
+    fontSize: 14,
+    color: theme.colors.text,
+    fontWeight: '500',
+  },
+  editButton: {
+    padding: 8,
+    backgroundColor: theme.colors.primaryMuted,
+    borderRadius: theme.borderRadius.sm,
+  },
+  clearButton: {
+    padding: 8,
+    backgroundColor: theme.colors.error + '30',
+    borderRadius: theme.borderRadius.sm,
+  },
+  addCardioButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.primaryMuted,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.md,
+    marginTop: 10,
+  },
+  addCardioText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  buttonPressed: {
+    opacity: 0.8,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 16,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    padding: 20,
+    width: '100%',
+    maxWidth: 340,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  optionsScroll: {
+    maxHeight: 300,
+    marginBottom: 12,
+  },
+  optionButton: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    marginBottom: 8,
+    alignItems: 'center',
+  },
+  optionButtonPressed: {
+    opacity: 0.8,
+  },
+  optionButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  customTypeInput: {
+    backgroundColor: theme.colors.darkGray,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.md,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    fontSize: 15,
+    color: theme.colors.text,
+    marginBottom: 14,
+  },
+  detailsContainer: {
+    marginBottom: 14,
+  },
+  inputRowCardio: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  inputGroupCardio: {
+    flex: 1,
+  },
+  labelCardio: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+    marginBottom: 6,
+    textTransform: 'uppercase',
+  },
+  inputCardio: {
+    backgroundColor: theme.colors.darkGray,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+    color: theme.colors.text,
+    minHeight: 40,
+  },
+  saveButton: {
+    backgroundColor: theme.colors.success,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  saveButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.background,
+  },
+  confirmButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  confirmButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.background,
+  },
+  closeButton: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+  },
+  closeButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: theme.colors.text,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
 });
