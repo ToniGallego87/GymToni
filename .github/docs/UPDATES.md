@@ -1,5 +1,25 @@
 # UPDATES
 
+## Version 0.4.5.c - 2026-05-31
+
+### Arquitectura
+- Capa de normalización centralizada en `lib/normalize.ts`: `syncActiveRoutine`, `ensureParsedSets`, `resolveActiveRoutineId` y `normalizeAppData` como fuente única de verdad.
+- `lib/utils.ts` extraído de `storage.ts`: `generateId`, `formatDate`, `getToday`.
+- `lib/fileIO.ts`: operaciones de fichero (importar/exportar JSON) desacopladas de `App.tsx`, con lógica específica por plataforma (web/nativo).
+- `lib/storage.ts` y `WorkoutContext.tsx` refactorizados para eliminar duplicaciones usando `lib/normalize.ts`.
+
+### Nuevas funcionalidades
+- Cronómetro de series para ejercicios basados en tiempo (detecta unidades `s`, `seg`, `min` en el objetivo): muestra pantalla Start/Stop, botón "Usar Xs" y Reset.
+- Home sincroniza automáticamente con la rutina activa al arrancar la app (ya no queda rutina desincronizada tras cargar datos).
+
+### Cambios
+- Comportamiento de pulsación en logs del historial: logs de días pasados abren el detalle directamente; el log de hoy muestra modal con opciones editar/eliminar.
+- Gráfica semanal unificada con el listado: misma penalización por días faltantes (`penaltyFactor`) y mismo tipo de porcentaje (delta semana-a-semana en lugar de acumulado desde la semana 1).
+- Calendario: la etiqueta de rutina en cada celda muestra número ordinal (R1, R2…) en lugar del ID interno.
+- Botón "Añadir cardio" ahora usa fondo amarillo primario (era casi invisible con `primaryMuted`).
+- Opciones de selección de cardio con icono representativo a la izquierda y color amarillo (borde, icono y texto).
+- Iconos de editar y borrar cardio corregidos: editar en amarillo primario, borrar en rojo.
+
 ## Version 0.4.5.b - 2026-04-23
 
 ### Cambios

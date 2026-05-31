@@ -280,7 +280,7 @@ export function CalendarScreen({
 
                 {hasLogs && primaryLog && primaryDay && (
                   <View style={styles.dayMeta}>
-                    <Text style={styles.dayMetaText}>R{primaryLog.routineId.replace('routine', '')}</Text>
+                    <Text style={styles.dayMetaText}>R{state.routines.findIndex((r: WorkoutRoutine) => r.id === primaryLog.routineId) + 1}</Text>
                     <Text style={styles.dayMetaText}>Día {primaryDay.dayNumber}</Text>
                   </View>
                 )}

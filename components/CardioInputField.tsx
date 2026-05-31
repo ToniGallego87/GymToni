@@ -23,11 +23,11 @@ interface CardioInputFieldProps {
 type CardioType = 'treadmill' | 'outdoor-run' | 'stationary-bike' | 'elliptical' | 'other' | null;
 
 const CARDIO_OPTIONS = [
-  { id: 'treadmill', label: 'Correr en cinta' },
-  { id: 'outdoor-run', label: 'Correr en exterior' },
-  { id: 'stationary-bike', label: 'Bici estática' },
-  { id: 'elliptical', label: 'Elíptica' },
-  { id: 'other', label: 'Otro' },
+  { id: 'treadmill', label: 'Correr en cinta', icon: 'treadmill' },
+  { id: 'outdoor-run', label: 'Correr en exterior', icon: 'run' },
+  { id: 'stationary-bike', label: 'Bici estática', icon: 'bike-stationary' },
+  { id: 'elliptical', label: 'Elíptica', icon: 'human-handsup' },
+  { id: 'other', label: 'Otro', icon: 'dots-horizontal-circle-outline' },
 ];
 
 export function CardioInputField({
@@ -181,6 +181,7 @@ export function CardioInputField({
                       style={({ pressed }) => [styles.optionButton, pressed && styles.optionButtonPressed]}
                       onPress={() => handleSelectCardioType(option.id)}
                     >
+                      <MaterialCommunityIcons name={option.icon as any} size={20} color={theme.colors.primary} />
                       <Text style={styles.optionButtonText}>{option.label}</Text>
                     </Pressable>
                   ))}
@@ -375,7 +376,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: theme.colors.primaryMuted,
+    backgroundColor: theme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: theme.borderRadius.md,
@@ -384,7 +385,7 @@ const styles = StyleSheet.create({
   addCardioText: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: '#1a1a1a',
   },
   buttonPressed: {
     opacity: 0.8,
@@ -417,14 +418,16 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   optionButton: {
-    backgroundColor: theme.colors.surfaceAlt,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.primaryMuted,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 16,
     marginBottom: 8,
-    alignItems: 'center',
   },
   optionButtonPressed: {
     opacity: 0.8,
@@ -432,7 +435,7 @@ const styles = StyleSheet.create({
   optionButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: theme.colors.primary,
   },
   customTypeInput: {
     backgroundColor: theme.colors.darkGray,
