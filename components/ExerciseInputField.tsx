@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -46,6 +46,50 @@ export function ExerciseInputField({
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
+
+  // Cronómetro para ejercicios medidos en tiempo
+  const [timerRunning, setTimerRunning] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  const isTimeBased = !!(target?.reps && /\d+\s*(s\b|seg|sec|min)/i.test(target.reps));
+
+  const startTimer = () => {
+    setTimerRunning(true);
+    timerRef.current = setInterval(() => {
+      setTimerSeconds(prev => prev + 1);
+    }, 1000);
+  };
+
+  const stopTimer = () => {
+    setTimerRunning(false);
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  };
+
+  const resetTimer = () => {
+    stopTimer();
+    setTimerSeconds(0);
+  };
+
+  const useTimerAsReps = () => {
+    stopTimer();
+    setRepsValue(String(timerSeconds));
+  };
+
+  const formatTimerDisplay = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
 
   const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
     const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
@@ -302,6 +346,49 @@ export function ExerciseInputField({
               </View>
             </Pressable>
           </View>
+
+          {isTimeBased && (
+            <View style={styles.stopwatchContainer}>
+              <Text style={styles.stopwatchDisplay}>{formatTimerDisplay(timerSeconds)}</Text>
+              <View style={styles.stopwatchButtons}>
+                <Pressable
+                  style={({ pressed }) => [
+                    timerRunning ? styles.stopwatchStopButton : styles.stopwatchStartButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={timerRunning ? stopTimer : startTimer}
+                >
+                  <MaterialCommunityIcons
+                    name={timerRunning ? 'stop' : 'play'}
+                    size={18}
+                    color={theme.colors.darkGray}
+                  />
+                  <Text style={styles.stopwatchButtonText}>
+                    {timerRunning ? 'Parar' : 'Iniciar'}
+                  </Text>
+                </Pressable>
+
+                {timerSeconds > 0 && !timerRunning && (
+                  <Pressable
+                    style={({ pressed }) => [styles.stopwatchUseButton, pressed && styles.buttonPressed]}
+                    onPress={useTimerAsReps}
+                  >
+                    <MaterialCommunityIcons name="check" size={18} color={theme.colors.darkGray} />
+                    <Text style={styles.stopwatchButtonText}>Usar {timerSeconds}s</Text>
+                  </Pressable>
+                )}
+
+                {timerSeconds > 0 && (
+                  <Pressable
+                    style={({ pressed }) => [styles.stopwatchResetButton, pressed && styles.buttonPressed]}
+                    onPress={resetTimer}
+                  >
+                    <MaterialCommunityIcons name="refresh" size={18} color={theme.colors.darkGray} />
+                  </Pressable>
+                )}
+              </View>
+            </View>
+          )}
         </View>
       )}
 
@@ -556,5 +643,66 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
     marginBottom: 8,
+  },
+  stopwatchContainer: {
+    marginTop: 12,
+    backgroundColor: theme.colors.darkGray,
+    borderRadius: theme.borderRadius.sm,
+    padding: 12,
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  stopwatchDisplay: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    letterSpacing: 2,
+    fontVariant: ['tabular-nums'],
+  },
+  stopwatchButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  stopwatchStartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.success,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.sm,
+  },
+  stopwatchStopButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.error,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.sm,
+  },
+  stopwatchUseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: theme.colors.primary,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.sm,
+  },
+  stopwatchResetButton: {
+    backgroundColor: theme.colors.surfaceAlt,
+    padding: 10,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  stopwatchButtonText: {
+    color: theme.colors.darkGray,
+    fontWeight: '800',
+    fontSize: 14,
   },
 });

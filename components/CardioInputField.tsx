@@ -134,13 +134,13 @@ export function CardioInputField({
                   setStep('type');
                 }}
               >
-                <MaterialCommunityIcons name="pencil" size={16} color={theme.colors.darkGray} />
+                <MaterialCommunityIcons name="pencil" size={16} color={theme.colors.primary} />
               </Pressable>
               <Pressable
                 style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}
                 onPress={handleClearCardio}
               >
-                <MaterialCommunityIcons name="close" size={16} color={theme.colors.darkGray} />
+                <MaterialCommunityIcons name="close" size={16} color={theme.colors.error} />
               </Pressable>
             </View>
           ) : (
@@ -151,7 +151,7 @@ export function CardioInputField({
                 setStep('type');
               }}
             >
-              <MaterialCommunityIcons name="plus" size={18} color={theme.colors.darkGray} />
+              <MaterialCommunityIcons name="plus" size={18} color={theme.colors.primary} />
               <Text style={styles.addCardioText}>Añadir cardio</Text>
             </Pressable>
           )}

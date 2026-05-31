@@ -138,66 +138,31 @@ function buildWeekProgress(
     }
 
     const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
-    const normalizedStrength = rawStrength / expectedCount;
+    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
+    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.1));
 
     return {
-      strength: normalizedStrength,
+      strength: rawStrength * penaltyFactor,
     };
   };
 
-  const latestBlockNumber = orderedBlocks[orderedBlocks.length - 1];
-
-  // Calcular los factores de mejora de cada semana respecto a la anterior
-  const weeklyFactors: number[] = [];
-  
-  orderedBlocks.forEach((blockNumber, index) => {
+  // Calcular el porcentaje de mejora semana a semana (delta directo, igual que el listado)
+  return orderedBlocks.map((blockNumber, index) => {
     if (index === 0) {
-      weeklyFactors.push(1); // Semana 1 es el baseline, factor = 1
-      return;
+      return { week: 1, improvement: 0 };
     }
 
-    // Buscar la última semana completa anterior
-    let previousBlockNumber = blockNumber - 1;
-    const expectedDays = activeDays.length || 5;
-    
-    while (previousBlockNumber >= 1) {
-      const candidateLogs = groupedByBlock[previousBlockNumber] || [];
-      const candidateUniqueDays = new Set(candidateLogs.map(log => log.dayId)).size;
-      
-      if (candidateUniqueDays === expectedDays) {
-        break; // Encontrada una semana completa
-      }
-      previousBlockNumber--;
-    }
-    
-    // Si no hay semana completa anterior, no hay cambio
-    if (previousBlockNumber < 1) {
-      weeklyFactors.push(1);
-      return;
-    }
-
+    const previousBlockNumber = orderedBlocks[index - 1];
     const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
     const previousWeekLogsForBlock = groupedByBlock[previousBlockNumber] || [];
 
     if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
-      weeklyFactors.push(1); // Sin cambio si hay datos faltantes
-      return;
+      return { week: index + 1, improvement: 0 };
     }
-
-    // Contar días únicos en la semana actual
-    const currentUniqueDays = new Set(currentWeekLogsForBlock.map(log => log.dayId)).size;
-
-    // Si la semana actual está incompleta, no aplicar cambio (factor = 1, resultado = 0%)
-    if (currentUniqueDays < expectedDays) {
-      weeklyFactors.push(1);
-      return;
-    }
-
-    let improvement: ImprovementResult | null;
 
     const currentScores = getWeekScores(currentWeekLogsForBlock, { applyMissingPenalty: true });
     const previousScores = getWeekScores(previousWeekLogsForBlock, { applyMissingPenalty: true });
-    improvement = buildImprovementFromStrengthScores(
+    const improvement = buildImprovementFromStrengthScores(
       currentScores.strength,
       previousScores.strength
     );
@@ -206,29 +171,9 @@ function buildWeekProgress(
       ? (improvement.isImproved ? improvement.percent : -improvement.percent)
       : 0;
 
-    // Convertir porcentaje a factor multiplicativo (ej: 10% -> 1.10, -5% -> 0.95)
-    const factor = 1 + (signedDelta / 100);
-    weeklyFactors.push(factor);
-  });
-
-  // Calcular el porcentaje acumulado respecto a la semana 1
-  return orderedBlocks.map((blockNumber, index) => {
-    if (index === 0) {
-      return { week: 1, improvement: 0 };
-    }
-
-    // Acumular factores desde semana 2 hasta la semana actual
-    let accumulatedFactor = 1;
-    for (let i = 1; i <= index; i++) {
-      accumulatedFactor *= weeklyFactors[i];
-    }
-
-    // Convertir factor acumulado a porcentaje respecto a semana 1
-    const improvementPercent = (accumulatedFactor - 1) * 100;
-
     return {
       week: index + 1,
-      improvement: Math.round(improvementPercent * 10) / 10,
+      improvement: Math.round(signedDelta * 10) / 10,
     };
   });
 }
@@ -354,6 +299,11 @@ export function HomeScreen({
   const [logWithOptionsId, setLogWithOptionsId] = useState<string | undefined>(undefined);
   const [selectedLogDayForOptions, setSelectedLogDayForOptions] = useState<WorkoutDay | undefined>(undefined);
   const { width: windowWidth } = useWindowDimensions();
+
+  // Sincronizar con la rutina activa cuando cambia (ej: tras hidratación del storage)
+  useEffect(() => {
+    setViewedRoutineId(state.activeRoutineId);
+  }, [state.activeRoutineId]);
 
   const activeRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
@@ -1004,12 +954,17 @@ export function HomeScreen({
                             pressed && styles.historyLogCardPressed,
                           ]}
                           onPress={() => {
-                            // Mostrar modal con opciones para todos los logs (hoy y días pasados)
-                            setLogWithOptionsId(log.id);
-                            setSelectedLogDayForOptions(day);
+                            if (isToday) {
+                              // Hoy: mostrar modal con opciones (editar / eliminar)
+                              setLogWithOptionsId(log.id);
+                              setSelectedLogDayForOptions(day);
+                            } else {
+                              // Días pasados: ir directamente a la vista de detalle
+                              onSelectLog?.(log, day);
+                            }
                           }}
                           onLongPress={() => {
-                            // Long press en cualquier log (no importa si es hoy o no) para opciones
+                            // Long press en cualquier log para opciones (editar / eliminar)
                             setLogWithOptionsId(log.id);
                             setSelectedLogDayForOptions(day);
                           }}

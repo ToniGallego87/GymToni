@@ -1,28 +1,8 @@
 import React, { createContext, ReactNode, useReducer } from 'react';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
-import { WorkoutAction, WorkoutRoutine, WorkoutState } from '../../types';
-import { parseSeriesString } from '@lib/parsers';
-
-const syncActiveRoutine = (routines: WorkoutRoutine[], activeRoutineId?: string) => {
-  return routines.map(routine => ({
-    ...routine,
-    isActive: routine.id === activeRoutineId,
-  }));
-};
-
-// Ensure all logs have parsedSets properly populated
-const ensureParsedSets = (logs: typeof INITIAL_LOGS) => {
-  return logs.map(log => ({
-    ...log,
-    exercises: (log.exercises || []).map(exercise => ({
-      ...exercise,
-      parsedSets: (exercise.parsedSets && exercise.parsedSets.length > 0)
-        ? exercise.parsedSets
-        : parseSeriesString(exercise.rawInput || ''),
-    })),
-  }));
-};
+import { WorkoutAction, WorkoutState } from '../../types';
+import { ensureParsedSets, resolveActiveRoutineId, syncActiveRoutine } from '@lib/normalize';
 
 const initialState: WorkoutState = {
   routines: syncActiveRoutine(WORKOUT_ROUTINES, DEFAULT_ACTIVE_ROUTINE_ID || WORKOUT_ROUTINES[WORKOUT_ROUTINES.length - 1]?.id),
@@ -33,10 +13,10 @@ const initialState: WorkoutState = {
 function workoutReducer(state: WorkoutState, action: WorkoutAction): WorkoutState {
   switch (action.type) {
     case 'SET_APP_DATA': {
-      const activeRoutineId = action.payload.activeRoutineId
-        || action.payload.routines.find(routine => routine.isActive)?.id
-        || action.payload.routines[action.payload.routines.length - 1]?.id
-        || undefined;
+      const activeRoutineId = resolveActiveRoutineId(
+        action.payload.routines,
+        action.payload.activeRoutineId
+      );
 
       return {
         ...state,
