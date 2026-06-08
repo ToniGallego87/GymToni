@@ -18,6 +18,9 @@ web-build/
 # TypeScript
 *.tsbuildinfo
 
+# Build logs
+buildlog.txt
+
 # IDE
 .vscode/
 .idea/

@@ -125,7 +125,6 @@ export function WorkoutLogScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
-  const [showDaySelector, setShowDaySelector] = useState(false);
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerEndAt, setTimerEndAt] = useState<number | null>(null);
@@ -135,17 +134,15 @@ export function WorkoutLogScreen({
   const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const getRoutineIdForDay = () => {
-    for (const routine of state.routines) {
-      if (routine.days.find((d: any) => d.id === selectedDay.id)) {
-        return routine.id;
-      }
-    }
-    return state.activeRoutineId || 'routine3';
+    const owningRoutine = state.routines.find(routine =>
+      routine.days.some(d => d.id === selectedDay.id)
+    );
+    return owningRoutine?.id || state.activeRoutineId || '';
   };
 
   const getTimerDurationFromRoutine = (): number => {
     const routineId = getRoutineIdForDay();
-    const routine = state.routines.find(r => r.id === routineId) as any;
+    const routine = state.routines.find(r => r.id === routineId);
     return routine?.timerDuration || 150;
   };
 
@@ -317,18 +314,12 @@ export function WorkoutLogScreen({
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
 
-    setExerciseSets((prev) => {
-      const updatedSets = [...(prev[exerciseId] || []), set];
-      const updated = {
-        ...prev,
-        [exerciseId]: updatedSets,
-      };
-      // Auto-guardar después de actualizar el estado
-      setTimeout(() => {
-        autoSaveWorkout(updated);
-      }, 0);
-      return updated;
-    });
+    const updated = {
+      ...exerciseSets,
+      [exerciseId]: [...(exerciseSets[exerciseId] || []), set],
+    };
+    setExerciseSets(updated);
+    autoSaveWorkout(updated);
 
     const currentSetsCount = exerciseSets[exerciseId]?.length || 0;
     const willReachTarget = targetSets > 0 && currentSetsCount + 1 >= targetSets;
@@ -343,22 +334,20 @@ export function WorkoutLogScreen({
   };
 
   const handleRemoveLastSet = (exerciseId: string) => {
-    setExerciseSets((prev) => {
-      let updatedSets = prev[exerciseId].slice(0, -1);
-      // Borrar todos los vacíos (guiones) del final
-      while (updatedSets.length > 0) {
-        const lastSet = updatedSets[updatedSets.length - 1];
-        if (lastSet.weight === -1 || lastSet.reps === -1) {
-          updatedSets = updatedSets.slice(0, -1);
-        } else {
-          break;
-        }
+    let updatedSets = (exerciseSets[exerciseId] || []).slice(0, -1);
+    // Borrar todos los vacíos (guiones) del final
+    while (updatedSets.length > 0) {
+      const lastSet = updatedSets[updatedSets.length - 1];
+      if (lastSet.weight === -1 || lastSet.reps === -1) {
+        updatedSets = updatedSets.slice(0, -1);
+      } else {
+        break;
       }
-      return {
-        ...prev,
-        [exerciseId]: updatedSets,
-      };
-    });
+    }
+
+    const updated = { ...exerciseSets, [exerciseId]: updatedSets };
+    setExerciseSets(updated);
+    autoSaveWorkout(updated);
 
     // Detener el temporizador si está activo para este ejercicio
     if (activeTimerId === exerciseId) {
@@ -408,72 +397,87 @@ export function WorkoutLogScreen({
   const handleFinishExercise = (exerciseId: string) => {
     const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
     if (targetSets > 0) {
-      // Llenar con guiones para cada serie faltante
+      // Rellenar con guiones cada serie que falte para alcanzar el objetivo
       const currentSets = exerciseSets[exerciseId] || [];
       const setsToAdd = targetSets - currentSets.length;
-      
-      for (let i = 0; i < setsToAdd; i++) {
-        setExerciseSets((prev) => ({
-          ...prev,
-          [exerciseId]: [...(prev[exerciseId] || []), { weight: -1, reps: -1 }],
-        }));
+
+      if (setsToAdd > 0) {
+        const filledSets = [...currentSets];
+        for (let i = 0; i < setsToAdd; i++) {
+          filledSets.push({ weight: -1, reps: -1 });
+        }
+        const updated = { ...exerciseSets, [exerciseId]: filledSets };
+        setExerciseSets(updated);
+        autoSaveWorkout(updated);
       }
 
       void stopTimer();
     }
   };
 
+  // Construye el WorkoutLog a partir de las series indicadas (reutilizado por
+  // el auto-guardado y por el guardado manual).
+  const buildWorkoutLog = (sets: Record<string, ParsedSet[]>): WorkoutLog => {
+    const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
+      const exSets = sets[ex.id] || [];
+      const rawInput = exSets
+        .map(s => (s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`))
+        .join(', ');
+
+      return {
+        id: generateId(),
+        exerciseId: ex.id,
+        exerciseName: ex.name,
+        order: ex.order,
+        rawInput,
+        parsedSets: exSets,
+        notes: exerciseNotes[ex.id],
+        timestamp: Date.now(),
+      };
+    });
+
+    const cardioLog: CardioLog | undefined = cardioInput.trim()
+      ? {
+          id: generateId(),
+          ...(parseCardioString(cardioInput) as Omit<CardioLog, 'id'>),
+        }
+      : undefined;
+
+    return {
+      id: log?.id || generateId(),
+      routineId: getRoutineIdForDay(),
+      dayId: selectedDay.id,
+      date: log?.date || getToday(),
+      exercises: exerciseLogs,
+      cardio: cardioLog,
+      createdAt: log?.createdAt || Date.now(),
+      updatedAt: Date.now(),
+    };
+  };
+
+  // Persiste el log: actualiza el existente o crea uno nuevo (eliminando antes
+  // un posible log del mismo día de hoy para no duplicar).
+  const persistWorkoutLog = (workoutLog: WorkoutLog) => {
+    if (log) {
+      dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
+      return;
+    }
+
+    const today = getToday();
+    const existingLogOfToday = state.logs.find(
+      l => l.dayId === selectedDay.id && l.date === today
+    );
+
+    if (existingLogOfToday) {
+      dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+    }
+
+    dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
+  };
+
   const autoSaveWorkout = (sets: Record<string, ParsedSet[]>) => {
     try {
-      const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
-        const exSets = sets[ex.id] || [];
-        const rawInput = exSets.map(s => s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`).join(', ');
-        
-        return {
-          id: generateId(),
-          exerciseId: ex.id,
-          exerciseName: ex.name,
-          order: ex.order,
-          rawInput,
-          parsedSets: exSets,
-          notes: exerciseNotes[ex.id],
-          timestamp: Date.now(),
-        };
-      });
-
-      const cardioLog: CardioLog | undefined = cardioInput.trim()
-        ? {
-            id: generateId(),
-            ...(parseCardioString(cardioInput) as Omit<CardioLog, 'id'>),
-          }
-        : undefined;
-
-      const workoutLog: WorkoutLog = {
-        id: log?.id || generateId(),
-        routineId: getRoutineIdForDay(),
-        dayId: selectedDay.id,
-        date: log?.date || getToday(),
-        exercises: exerciseLogs,
-        cardio: cardioLog,
-        createdAt: log?.createdAt || Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      if (log) {
-        dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
-      } else {
-        // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
-        const today = getToday();
-        const existingLogOfToday = state.logs.find(
-          l => l.dayId === selectedDay.id && l.date === today
-        );
-        
-        if (existingLogOfToday) {
-          dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
-        }
-        
-        dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
-      }
+      persistWorkoutLog(buildWorkoutLog(sets));
     } catch (error) {
       console.error('Error auto-saving workout:', error);
     }
@@ -481,55 +485,7 @@ export function WorkoutLogScreen({
 
   const handleSaveWorkout = () => {
     try {
-      const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
-        const sets = exerciseSets[ex.id] || [];
-        const rawInput = sets.map(s => s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`).join(', ');
-        
-        return {
-          id: generateId(),
-          exerciseId: ex.id,
-          exerciseName: ex.name,
-          order: ex.order,
-          rawInput,
-          parsedSets: sets,
-          notes: exerciseNotes[ex.id],
-          timestamp: Date.now(),
-        };
-      });
-
-      const cardioLog: CardioLog | undefined = cardioInput.trim()
-        ? {
-            id: generateId(),
-            ...(parseCardioString(cardioInput) as Omit<CardioLog, 'id'>),
-          }
-        : undefined;
-
-      const workoutLog: WorkoutLog = {
-        id: log?.id || generateId(),
-        routineId: getRoutineIdForDay(),
-        dayId: selectedDay.id,
-        date: log?.date || getToday(),
-        exercises: exerciseLogs,
-        cardio: cardioLog,
-        createdAt: log?.createdAt || Date.now(),
-        updatedAt: Date.now(),
-      };
-
-      if (log) {
-        dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
-      } else {
-        // Eliminar el log anterior del mismo día (si existe) para evitar duplicados
-        const today = getToday();
-        const existingLogOfToday = state.logs.find(
-          l => l.dayId === selectedDay.id && l.date === today
-        );
-        
-        if (existingLogOfToday) {
-          dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
-        }
-        
-        dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
-      }
+      persistWorkoutLog(buildWorkoutLog(exerciseSets));
 
       setIsWorkoutSaved(true);
 
@@ -563,6 +519,13 @@ export function WorkoutLogScreen({
   const hasExerciseInput = selectedDay.exercises.some(
     ex => exerciseSets[ex.id]?.length > 0
   );
+
+  // Fecha mostrada en el subtítulo, en formato dd/mm/aaaa.
+  const getSubtitleDate = (): string => {
+    const dateString = log?.date || existingLog?.date
+      || new Date(existingLog?.createdAt || Date.now()).toISOString().split('T')[0];
+    return dateString.split('-').reverse().join('/');
+  };
 
   return (
     <View style={styles.container}>
@@ -668,13 +631,7 @@ export function WorkoutLogScreen({
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
         }
-        subtitle={`Rellena los ejercicios - ${(() => {
-          const dateString = log?.date || existingLog?.date;
-          if (dateString) {
-            return dateString.split('-').reverse().join('/');
-          }
-          return new Date(existingLog?.createdAt || Date.now()).toISOString().split('T')[0].split('-').reverse().join('/');
-        })()}`}
+        subtitle={`Rellena los ejercicios - ${getSubtitleDate()}`}
         topInset={insets.top}
       />
 
@@ -720,48 +677,6 @@ export function WorkoutLogScreen({
                 size="medium"
               />
             </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal de cambio de día */}
-      <Modal
-        visible={showDaySelector}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setShowDaySelector(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.daySelectorContent}>
-            <Text style={styles.modalTitle}>Cambiar ejercicio</Text>
-            <ScrollView style={styles.daysList}>
-              {getActiveDays().map((d) => (
-                <Pressable
-                  key={d.id}
-                  style={({ pressed }) => [
-                    styles.dayOption,
-                    selectedDay.id === d.id && styles.dayOptionSelected,
-                    pressed && styles.dayOptionPressed,
-                  ]}
-                  onPress={() => {
-                    setSelectedDay(d);
-                    setExerciseSets(d.exercises.reduce((acc, ex) => ({ ...acc, [ex.id]: [] }), {}));
-                    setShowDaySelector(false);
-                  }}
-                >
-                    <View style={styles.dayOptionContent}>
-                      <DayAccentIcon emoji={d.emoji} name={d.name} size={14} />
-                      <Text style={styles.dayOptionText}>{d.name}</Text>
-                    </View>
-                </Pressable>
-              ))}
-            </ScrollView>
-            <Button
-              title="Cancelar"
-              onPress={() => setShowDaySelector(false)}
-              variant="secondary"
-              size="medium"
-            />
           </View>
         </View>
       </Modal>
@@ -820,13 +735,6 @@ const styles = StyleSheet.create({
     padding: 20,
     maxHeight: '80%',
   },
-  daySelectorContent: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
-  },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -849,33 +757,6 @@ const styles = StyleSheet.create({
   modalButtons: {
     flexDirection: 'row',
     gap: 8,
-  },
-  dayOptionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  daysList: {
-    marginVertical: 12,
-  },
-  dayOption: {
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  dayOptionSelected: {
-    backgroundColor: theme.colors.darkGray,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
-  },
-  dayOptionPressed: {
-    opacity: 0.7,
-  },
-  dayOptionText: {
-    fontSize: 14,
-    color: theme.colors.text,
-    fontWeight: '500',
   },
   timerContainer: {
     marginVertical: 16,

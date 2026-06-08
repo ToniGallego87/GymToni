@@ -51,7 +51,7 @@ export function RoutineDetailScreen({
   const currentRoutine = state.routines.find(r => r.id === routine.id) || routine;
 
   const getTimerDurationSeconds = () => {
-    return (currentRoutine as any).timerDuration || 150;
+    return currentRoutine.timerDuration || 150;
   };
 
   const formatTime = (seconds: number) => {
@@ -110,7 +110,7 @@ export function RoutineDetailScreen({
       .filter(line => line.trim().length > 0)
       .map((line, index) => {
         // Parsear formato: "Nombre — Nx#"
-        const match = line.match(/^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+|\d+\.?\d*|—)?/);
+        const match = line.match(/^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+(?:-\d+)?|—)?/);
         
         const name = match ? match[1].trim() : line.trim();
         const targetSets = match && match[2] && match[2] !== '—' ? parseInt(match[2]) : undefined;
@@ -122,7 +122,7 @@ export function RoutineDetailScreen({
         return {
           id: originalExercise?.id || `exercise-${Date.now()}-${index}`,
           name,
-          order: (originalExercise?.order || index) + 1,
+          order: index + 1,
           targetSets,
           targetReps: targetReps as string | undefined,
         };

@@ -1,9 +1,11 @@
 import { ParsedSet } from '../types';
 
 /**
- * Parsea un string de formato "60x8, 65x6, 65x4" a array de sets
- * Soporta decimales como "12.5x15"
- * Retorna array vacío si no puede parsear
+ * Parsea un string de formato "60x8, 65x6, 65x4" a array de sets.
+ * - Soporta decimales: "12.5x15".
+ * - Soporta pesos combinados (p. ej. mancuernas) sumándolos: "8+8x11" -> { weight: 16, reps: 11 }.
+ * - Ignora entradas sin reps ("80x") o con formato no reconocido.
+ * Retorna array vacío si no puede parsear nada.
  */
 export function parseSeriesString(input: string): ParsedSet[] {
   if (!input || !input.trim()) return [];
@@ -16,11 +18,13 @@ export function parseSeriesString(input: string): ParsedSet[] {
   for (const series of seriesArray) {
     const trimmed = series.trim();
 
-    // Extraer patrón "PESO x REPS"
-    const match = trimmed.match(/^([\d.]+)\s*x\s*([\d.]+)/i);
+    // Extraer patrón "PESO x REPS". El peso admite sumas (8+8) para cargas combinadas.
+    const match = trimmed.match(/^([\d.+]+)\s*x\s*([\d.]+)/i);
 
     if (match) {
-      const weight = parseFloat(match[1]);
+      const weight = match[1]
+        .split('+')
+        .reduce((total, part) => total + (parseFloat(part) || 0), 0);
       const reps = parseFloat(match[2]);
 
       if (!isNaN(weight) && !isNaN(reps)) {

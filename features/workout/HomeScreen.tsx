@@ -19,7 +19,9 @@ import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
 import { WorkoutDay, WorkoutRoutine, WorkoutLog, ExerciseLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
-import { buildImprovementFromStrengthScores, getWorkoutStrengthScore, getExerciseImprovementPercent } from '@lib/progress';
+import { buildImprovementFromStrengthScores, getExerciseImprovementPercent, ImprovementResult } from '@lib/progress';
+import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
+import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
 import {
   DayAccentIcon,
   FloatingBackButton,
@@ -53,11 +55,6 @@ interface WeekProgressPoint {
   improvement: number;
 }
 
-interface ImprovementResult {
-  isImproved: boolean;
-  percent: number;
-}
-
 function buildWeekProgress(
   logs: WorkoutLog[],
   activeRoutineId?: string,
@@ -73,99 +70,30 @@ function buildWeekProgress(
   activeDays.forEach(day => {
     dayIdToDayNumber[day.id] = day.dayNumber;
   });
-  const sortedByDateAsc = [...routineLogs].sort((a, b) => a.createdAt - b.createdAt);
-  const groupedByBlock: Record<number, WorkoutLog[]> = {};
 
-  let block = 1;
-  let currentWeekLogs: WorkoutLog[] = [];
-  let seenDays: Record<number, boolean> = {};
-
-  sortedByDateAsc.forEach(log => {
-    const dayNumber = dayIdToDayNumber[log.dayId];
-
-    if (dayNumber && seenDays[dayNumber] && currentWeekLogs.length > 0) {
-      groupedByBlock[block] = currentWeekLogs;
-      block += 1;
-      currentWeekLogs = [];
-      seenDays = {};
-    }
-
-    currentWeekLogs.push(log);
-    if (dayNumber) {
-      seenDays[dayNumber] = true;
-    }
-  });
-
-  if (currentWeekLogs.length > 0) {
-    groupedByBlock[block] = currentWeekLogs;
-  }
-
+  const groupedByBlock = groupLogsIntoWeekBlocks(routineLogs, log => dayIdToDayNumber[log.dayId]);
   const orderedBlocks = Object.keys(groupedByBlock)
     .map(Number)
     .sort((a, b) => a - b);
 
-  const getWeekScores = (
-    weekLogs: WorkoutLog[],
-    options: { restrictToDayIds?: string[]; applyMissingPenalty?: boolean } = {}
-  ) => {
-    const { restrictToDayIds, applyMissingPenalty = true } = options;
-    if (weekLogs.length === 0) {
-      return { strength: 0 };
-    }
-
-    const latestByDayId: Record<string, WorkoutLog> = {};
-    [...weekLogs]
-      .sort((a, b) => b.createdAt - a.createdAt)
-      .forEach(log => {
-        if (!log.dayId) return;
-        if (!latestByDayId[log.dayId]) {
-          latestByDayId[log.dayId] = log;
-        }
-      });
-
-    const selectedLogs: WorkoutLog[] = [];
-    Object.keys(latestByDayId).forEach(dayId => {
-      const log = latestByDayId[dayId];
-      if (!restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1) {
-        selectedLogs.push(log);
-      }
-    });
-
-    const rawStrength = selectedLogs.reduce((sum: number, log: WorkoutLog) => sum + getWorkoutStrengthScore(log), 0);
-
-    if (!applyMissingPenalty) {
-      return { strength: rawStrength };
-    }
-
-    const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
-    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
-    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.1));
-
-    return {
-      strength: rawStrength * penaltyFactor,
-    };
-  };
-
-  // Calcular el porcentaje de mejora semana a semana (delta directo, igual que el listado)
+  // El gráfico compara cada semana contra la PRIMERA (progreso acumulado),
+  // a diferencia del listado, que compara contra la semana anterior.
   return orderedBlocks.map((blockNumber, index) => {
     if (index === 0) {
       return { week: 1, improvement: 0 };
     }
 
-    const previousBlockNumber = orderedBlocks[index - 1];
+    const firstBlockNumber = orderedBlocks[0];
     const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
-    const previousWeekLogsForBlock = groupedByBlock[previousBlockNumber] || [];
+    const previousWeekLogsForBlock = groupedByBlock[firstBlockNumber] || [];
 
     if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
       return { week: index + 1, improvement: 0 };
     }
 
-    const currentScores = getWeekScores(currentWeekLogsForBlock, { applyMissingPenalty: true });
-    const previousScores = getWeekScores(previousWeekLogsForBlock, { applyMissingPenalty: true });
-    const improvement = buildImprovementFromStrengthScores(
-      currentScores.strength,
-      previousScores.strength
-    );
+    const currentStrength = getWeekStrengthScore(currentWeekLogsForBlock, { activeDaysCount: activeDays.length });
+    const previousStrength = getWeekStrengthScore(previousWeekLogsForBlock, { activeDaysCount: activeDays.length });
+    const improvement = buildImprovementFromStrengthScores(currentStrength, previousStrength);
 
     const signedDelta = improvement
       ? (improvement.isImproved ? improvement.percent : -improvement.percent)
@@ -333,7 +261,6 @@ export function HomeScreen({
     () => buildWeekProgress(state.logs, displayedRoutineId, activeDays),
     [activeDays, state.logs, displayedRoutineId]
   );
-  const latestPoint = weeklyProgress[weeklyProgress.length - 1];
   const chartWidth = Math.max(
     250,
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
@@ -348,17 +275,12 @@ export function HomeScreen({
   const appVersion = require('../../app.json').expo.version;
 
   const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
-    const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
-    
-    if (imp.percent === 0) {
-      return { symbol: '=', styleKey: 'weekImprovementNeutral', display: roundedPercent };
-    }
-    
-    return {
-      symbol: imp.isImproved ? '↑' : '↓', 
-      styleKey: imp.isImproved ? 'weekImprovementUp' : 'weekImprovementDown',
-      display: roundedPercent
-    };
+    const { symbol, display, kind } = getImprovementDisplay(imp);
+    const styleKey =
+      kind === 'up' ? 'weekImprovementUp'
+      : kind === 'down' ? 'weekImprovementDown'
+      : 'weekImprovementNeutral';
+    return { symbol, styleKey, display };
   };
 
   const handleStartPress = () => {
@@ -414,42 +336,9 @@ export function HomeScreen({
     return activeDays.every(day => daysWithLogs.has(day.id));
   };
 
-  const getLogTimestamp = (log: WorkoutLog) => {
-    if (typeof log.createdAt === 'number') return log.createdAt;
-    if (log.date) return new Date(`${log.date}T00:00:00`).getTime();
-    return 0;
-  };
-
-  const buildWeekDataForLogs = (sourceLogs: WorkoutLog[]) => {
-    const sortedByDateAsc = [...sourceLogs].sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b));
-    const groupedByBlock: Record<number, WorkoutLog[]> = {};
-
-    let block = 1;
-    let currentWeekLogs: WorkoutLog[] = [];
-    let seenDays: Record<number, boolean> = {};
-
-    sortedByDateAsc.forEach(log => {
-      const dayNumber = getDay(log.dayId)?.dayNumber;
-
-      if (dayNumber && seenDays[dayNumber] && currentWeekLogs.length > 0) {
-        groupedByBlock[block] = currentWeekLogs;
-        block += 1;
-        currentWeekLogs = [];
-        seenDays = {};
-      }
-
-      currentWeekLogs.push(log);
-      if (dayNumber) {
-        seenDays[dayNumber] = true;
-      }
-    });
-
-    if (currentWeekLogs.length > 0) {
-      groupedByBlock[block] = currentWeekLogs;
-    }
-
-    return { groupedByBlock };
-  };
+  const buildWeekDataForLogs = (sourceLogs: WorkoutLog[]) => ({
+    groupedByBlock: groupLogsIntoWeekBlocks(sourceLogs, log => getDay(log.dayId)?.dayNumber),
+  });
 
   const getPreviousFilledLogForSameDay = (currentLog: WorkoutLog) => {
     const currentTs = getLogTimestamp(currentLog);
@@ -459,11 +348,14 @@ export function HomeScreen({
       .sort((a: WorkoutLog, b: WorkoutLog) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
   };
 
-  const getLogImprovement = (currentLog: WorkoutLog) => {
-    const previousLog = getPreviousFilledLogForSameDay(currentLog);
+  // Media de la mejora por ejercicio entre dos sesiones concretas (negativo = 0).
+  const computeImprovementBetweenLogs = (
+    currentLog: WorkoutLog,
+    previousLog: WorkoutLog | null
+  ): ImprovementResult | null => {
     if (!previousLog) return null;
 
-    // Obtener mapeo de ejercicios anteriores por ID/nombre
+    // Mapeo de ejercicios anteriores por ID y por nombre (para casar renombrados)
     const previousByExerciseId: Record<string, ExerciseLog> = {};
     const previousByExerciseName: Record<string, ExerciseLog> = {};
     previousLog.exercises.forEach(ex => {
@@ -471,7 +363,6 @@ export function HomeScreen({
       previousByExerciseName[ex.exerciseName] = ex;
     });
 
-    // Calcular porcentaje de mejora para cada ejercicio (negativo = 0)
     const exerciseImprovements: number[] = [];
     currentLog.exercises.forEach(currentEx => {
       const previousEx = previousByExerciseId[currentEx.exerciseId] || previousByExerciseName[currentEx.exerciseName];
@@ -481,60 +372,17 @@ export function HomeScreen({
       }
     });
 
-    // Si no hay mejoras calculables, devolver null
     if (exerciseImprovements.length === 0) return null;
 
-    // Media de mejoras
     const avgImprovement = exerciseImprovements.reduce((sum, v) => sum + v, 0) / exerciseImprovements.length;
-    
-    return {
-      isImproved: avgImprovement > 0,
-      percent: avgImprovement,
-    };
+    return { isImproved: avgImprovement > 0, percent: avgImprovement };
   };
 
-  const getWeekScores = (
-    weekLogs: WorkoutLog[],
-    options: { restrictToDayIds?: string[]; applyMissingPenalty?: boolean } = {}
-  ) => {
-    const { restrictToDayIds, applyMissingPenalty = true } = options;
-    if (weekLogs.length === 0) {
-      return { strength: 0 };
-    }
+  // Mejora de una sesión respecto a la anterior del mismo día (independiente de la semana).
+  const getLogImprovement = (currentLog: WorkoutLog) =>
+    computeImprovementBetweenLogs(currentLog, getPreviousFilledLogForSameDay(currentLog));
 
-    const latestByDayId: Record<string, WorkoutLog> = {};
-    [...weekLogs]
-      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
-      .forEach(log => {
-        if (!latestByDayId[log.dayId]) {
-          latestByDayId[log.dayId] = log;
-        }
-      });
-
-    const selectedLogs: WorkoutLog[] = [];
-    Object.keys(latestByDayId).forEach(dayId => {
-      const log = latestByDayId[dayId];
-      if (!restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1) {
-        selectedLogs.push(log);
-      }
-    });
-
-    const rawStrength = selectedLogs.reduce((sum, log) => sum + getWorkoutStrengthScore(log), 0);
-
-    if (!applyMissingPenalty) {
-      return { strength: rawStrength };
-    }
-
-    const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDays.length || 5);
-    const missingDays = Math.max(0, expectedCount - selectedLogs.length);
-    const penaltyFactor = Math.max(0, 1 - (missingDays * 0.1));
-
-    return {
-      strength: rawStrength * penaltyFactor,
-    };
-  };
-
-  const getWeekImprovement = (groupedByBlock: Record<number, WorkoutLog[]>, blockNumber: number, latestBlockNumber: number) => {
+  const getWeekImprovement = (groupedByBlock: Record<number, WorkoutLog[]>, blockNumber: number) => {
     if (blockNumber === 1) return null;
 
     const currentWeekLogs = groupedByBlock[blockNumber] || [];
@@ -566,8 +414,8 @@ export function HomeScreen({
       const previousDayLog = previousLatestByDayId[day.id];
 
       if (currentDayLog && previousDayLog) {
-        // Ambas semanas tienen el día: calcular mejora
-        const improvement = getLogImprovement(currentDayLog);
+        // Ambas semanas tienen el día: comparar esta semana contra la anterior
+        const improvement = computeImprovementBetweenLogs(currentDayLog, previousDayLog);
         dayImprovements.push(improvement ? improvement.percent : 0);
       } else if (currentDayLog && !previousDayLog) {
         // Solo la semana actual tiene el día: contar como mejora (primer vez)
@@ -601,6 +449,35 @@ export function HomeScreen({
       currentWeekBlock: blocks[0],
     };
   }, [displayedRoutineLogs]);
+
+  const filteredWeeklyProgress = useMemo(() => {
+    if (!weeklyProgress || weeklyProgress.length === 0) return weeklyProgress;
+    if (!currentWeekBlock || !groupedByBlock) return weeklyProgress;
+
+    const lastWeekLogs = groupedByBlock[currentWeekBlock] || [];
+    // Si la semana actual NO está completada, excluir el último punto del gráfico
+    if (!isWeekCompleted(lastWeekLogs)) {
+      return weeklyProgress.slice(0, Math.max(0, weeklyProgress.length - 1));
+    }
+    return weeklyProgress;
+  }, [weeklyProgress, groupedByBlock, currentWeekBlock]);
+
+  const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
+
+  // Estado visual de la tarjeta principal según la situación de la rutina/día.
+  const getHeroState = (): { style: object; icon: string; title: string } => {
+    if (hasNoRoutines) {
+      return { style: styles.heroCardWarning, icon: 'plus-thick', title: 'Añade una rutina' };
+    }
+    if (isRoutineOld && !isDisplayedRoutineActive) {
+      return { style: styles.heroCardClosed, icon: 'lock-outline', title: 'Rutina Cerrada' };
+    }
+    if (isTodayWorkoutCompleted()) {
+      return { style: styles.heroCardCompleted, icon: 'check-bold', title: 'Entrenamiento completado' };
+    }
+    return { style: styles.heroCard, icon: 'weight-lifter', title: 'Empezar entrenamiento' };
+  };
+  const hero = getHeroState();
 
   const handleSelectRoutine = (routineId: string) => {
     // Verificar si la rutina tiene logs (es vieja)
@@ -826,30 +703,27 @@ export function HomeScreen({
       >
 
         <Pressable
-          style={({ pressed }) => [
-            hasNoRoutines ? styles.heroCardWarning : (isRoutineOld && !isDisplayedRoutineActive ? styles.heroCardClosed : (isTodayWorkoutCompleted() ? styles.heroCardCompleted : styles.heroCard)),
-            pressed && styles.heroCardPressed
-          ]}
+          style={({ pressed }) => [hero.style, pressed && styles.heroCardPressed]}
           onPress={handleStartPress}
         >
           <View style={styles.heroIconWrap}>
             <MaterialCommunityIcons
-              name={hasNoRoutines ? 'plus-thick' : isRoutineOld && !isDisplayedRoutineActive ? 'lock-outline' : (isTodayWorkoutCompleted() ? 'check-bold' : 'weight-lifter') as any}
+              name={hero.icon as any}
               size={38}
               style={styles.heroIcon}
             />
           </View>
           <View style={styles.heroTitleWrapper}>
-            <Text 
+            <Text
               style={styles.heroTitle}
               numberOfLines={1}
             >
-              {hasNoRoutines ? 'Añade una rutina' : isRoutineOld && !isDisplayedRoutineActive ? 'Rutina Cerrada' : (isTodayWorkoutCompleted() ? 'Entrenamiento completado' : 'Empezar entrenamiento')}
+              {hero.title}
             </Text>
           </View>
         </Pressable>
 
-        {weeklyProgress.length > 0 && (
+        {filteredWeeklyProgress.length > 0 && (
           <View style={[
             styles.progressCard,
             { borderColor: latestPoint
@@ -887,7 +761,7 @@ export function HomeScreen({
             </TouchableOpacity>
 
             {showWeeklyProgressChart && (
-              <ProgressBarChart points={weeklyProgress} width={chartWidth} />
+              <ProgressBarChart points={filteredWeeklyProgress} width={chartWidth} />
             )}
           </View>
         )}
@@ -905,7 +779,7 @@ export function HomeScreen({
                 const isExpanded = isDisplayedRoutineActive && !weekCompleted
                   ? (expandedWeekBlocks[block] ?? (block === currentWeekBlock))
                   : (expandedWeekBlocks[block] ?? false);
-                const weekImprovement = getWeekImprovement(groupedByBlock, block, currentWeekBlock);
+                const weekImprovement = getWeekImprovement(groupedByBlock, block);
 
                 return (
                   <View key={block}>
@@ -1031,12 +905,8 @@ export function HomeScreen({
                   style={styles.modalButtonEdit}
                   onPress={() => {
                     const log = displayedRoutineLogs.find(l => l.id === logWithOptionsId);
-                    console.log('🔧 Editar presionado - log:', log?.id, 'day:', selectedLogDayForOptions?.name, 'onEditLog:', !!onEditLog);
                     if (log && selectedLogDayForOptions && onEditLog) {
-                      console.log('✅ Llamando onEditLog');
                       onEditLog(log, selectedLogDayForOptions);
-                    } else {
-                      console.log('❌ Faltan parámetros - log:', !!log, 'day:', !!selectedLogDayForOptions, 'onEditLog:', !!onEditLog);
                     }
                     setLogWithOptionsId(undefined);
                     setSelectedLogDayForOptions(undefined);

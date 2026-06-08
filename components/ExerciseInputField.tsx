@@ -13,6 +13,7 @@ import {
 import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
 import { parseSeriesString } from '@lib/parsers';
+import { getImprovementDisplay } from '@lib/utils';
 
 interface ExerciseInputFieldProps {
   order: number;
@@ -92,17 +93,12 @@ export function ExerciseInputField({
   };
 
   const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
-    const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
-    
-    if (imp.percent === 0) {
-      return { symbol: '=', styleKey: 'improvementNeutral', display: roundedPercent };
-    }
-    
-    return {
-      symbol: imp.isImproved ? '↑' : '↓', 
-      styleKey: imp.isImproved ? 'improvementUp' : 'improvementDown',
-      display: roundedPercent
-    };
+    const { symbol, display, kind } = getImprovementDisplay(imp);
+    const styleKey =
+      kind === 'up' ? 'improvementUp'
+      : kind === 'down' ? 'improvementDown'
+      : 'improvementNeutral';
+    return { symbol, styleKey, display };
   };
 
   const handleAddSet = () => {

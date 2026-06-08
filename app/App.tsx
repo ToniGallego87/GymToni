@@ -64,19 +64,19 @@ function AppContent() {
   useEffect(() => {
     if (!hasHydrated) return;
 
-    const persistState = async () => {
-      try {
-        await saveAppData({
-          routines: state.routines,
-          activeRoutineId: state.activeRoutineId,
-          logs: state.logs,
-        });
-      } catch (error) {
+    // Debounce: agrupa ráfagas de cambios (p. ej. añadir varias series seguidas)
+    // en una sola escritura a almacenamiento.
+    const handle = setTimeout(() => {
+      saveAppData({
+        routines: state.routines,
+        activeRoutineId: state.activeRoutineId,
+        logs: state.logs,
+      }).catch(error => {
         console.error('Error saving app data:', error);
-      }
-    };
+      });
+    }, 500);
 
-    persistState();
+    return () => clearTimeout(handle);
   }, [hasHydrated, state.activeRoutineId, state.logs, state.routines]);
 
   // Manejar botón atrás en móvil
@@ -210,6 +210,17 @@ function AppContent() {
 
     if (!Array.isArray(payload?.routines) || !Array.isArray(payload?.logs)) {
       throw new Error('El fichero no tiene el formato esperado');
+    }
+
+    const routinesValid = payload.routines.every(
+      routine => routine && typeof routine.id === 'string' && Array.isArray(routine.days)
+    );
+    const logsValid = payload.logs.every(
+      log => log && typeof log.id === 'string' && Array.isArray(log.exercises)
+    );
+
+    if (!routinesValid || !logsValid) {
+      throw new Error('El fichero contiene datos con un formato no válido');
     }
 
     const activeRoutineId = payload.activeRoutineId

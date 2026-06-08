@@ -1,9 +1,16 @@
 import { ExerciseLog, ParsedSet, WorkoutLog } from '../types';
 
-interface ImprovementResult {
+export interface ImprovementResult {
   isImproved: boolean;
   percent: number;
 }
+
+/**
+ * Porcentaje de mejora que se asigna la primera vez que se registra un
+ * ejercicio/sesión (no hay sesión anterior con la que comparar).
+ * Se centraliza aquí para que todas las pantallas muestren el mismo valor.
+ */
+export const FIRST_TIME_IMPROVEMENT_PERCENT = 30;
 
 function isValidSet(setItem: ParsedSet): boolean {
   return Number.isFinite(setItem.weight)
@@ -66,7 +73,7 @@ export function buildImprovementFromStrengthScores(
   if (!Number.isFinite(currentScore) || !Number.isFinite(previousScore)) return null;
 
   if (previousScore <= 0 && currentScore > 0) {
-    return { isImproved: true, percent: 30 };
+    return { isImproved: true, percent: FIRST_TIME_IMPROVEMENT_PERCENT };
   }
 
   if (previousScore <= 0 && currentScore <= 0) {
@@ -94,9 +101,9 @@ export function getExerciseImprovementPercent(
   // Si ambos son 0, no hay mejora
   if (currentScore === 0 && previousScore === 0) return null;
 
-  // Si el anterior era 0 pero el actual > 0, mejora del 100%
+  // Si el anterior era 0 pero el actual > 0, primera vez (sin baseline real)
   if (previousScore === 0 && currentScore > 0) {
-    return 100;
+    return FIRST_TIME_IMPROVEMENT_PERCENT;
   }
 
   // Si el anterior era > 0 y el actual es 0, pérdida (cuenta como 0)

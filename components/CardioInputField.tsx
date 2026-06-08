@@ -23,9 +23,9 @@ interface CardioInputFieldProps {
 type CardioType = 'treadmill' | 'outdoor-run' | 'stationary-bike' | 'elliptical' | 'other' | null;
 
 const CARDIO_OPTIONS = [
-  { id: 'treadmill', label: 'Correr en cinta', icon: 'treadmill' },
+  { id: 'treadmill', label: 'Correr en cinta', icon: 'run-fast' },
   { id: 'outdoor-run', label: 'Correr en exterior', icon: 'run' },
-  { id: 'stationary-bike', label: 'Bici estática', icon: 'bike-stationary' },
+  { id: 'stationary-bike', label: 'Bici estática', icon: 'bicycle' },
   { id: 'elliptical', label: 'Elíptica', icon: 'human-handsup' },
   { id: 'other', label: 'Otro', icon: 'dots-horizontal-circle-outline' },
 ];
@@ -37,6 +37,10 @@ export function CardioInputField({
   onToggle,
   placeholder = 'Ej: Cinta: 22.5mins, 11.5kmh',
 }: CardioInputFieldProps) {
+  const [cardioEntries, setCardioEntries] = useState<string[]>(() => {
+    if (!value) return [];
+    return value.split(' | ').filter(e => e.trim());
+  });
   const [showCardioModal, setShowCardioModal] = useState(false);
   const [selectedCardioType, setSelectedCardioType] = useState<CardioType>(null);
   const [customCardioType, setCustomCardioType] = useState('');
@@ -80,9 +84,10 @@ export function CardioInputField({
       cardioText += `, ${cardioPendiente}%`;
     }
 
-    onChangeText(cardioText);
+    const newEntries = [...cardioEntries, cardioText];
+    setCardioEntries(newEntries);
+    onChangeText(newEntries.join(' | '));
 
-    // Reset states
     setSelectedCardioType(null);
     setCustomCardioType('');
     setCardioMinutes('');
@@ -92,14 +97,10 @@ export function CardioInputField({
     setShowCardioModal(false);
   };
 
-  const handleClearCardio = () => {
-    onChangeText('');
-    setSelectedCardioType(null);
-    setCustomCardioType('');
-    setCardioMinutes('');
-    setCardioSpeed('');
-    setCardioPendiente('');
-    setStep('type');
+  const handleDeleteEntry = (index: number) => {
+    const newEntries = cardioEntries.filter((_, i) => i !== index);
+    setCardioEntries(newEntries);
+    onChangeText(newEntries.join(' | '));
   };
 
   return (
@@ -124,37 +125,29 @@ export function CardioInputField({
 
       {expanded && (
         <>
-          {value ? (
-            <View style={styles.cardioDisplayContainer}>
-              <Text style={styles.cardioDisplayText}>{value}</Text>
-              <Pressable
-                style={({ pressed }) => [styles.editButton, pressed && styles.buttonPressed]}
-                onPress={() => {
-                  setShowCardioModal(true);
-                  setStep('type');
-                }}
-              >
-                <MaterialCommunityIcons name="pencil" size={16} color={theme.colors.primary} />
-              </Pressable>
+          {cardioEntries.map((entry, index) => (
+            <View key={index} style={styles.cardioDisplayContainer}>
+              <Text style={styles.cardioDisplayText}>{entry}</Text>
               <Pressable
                 style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}
-                onPress={handleClearCardio}
+                onPress={() => handleDeleteEntry(index)}
               >
                 <MaterialCommunityIcons name="close" size={16} color={theme.colors.error} />
               </Pressable>
             </View>
-          ) : (
-            <Pressable
-              style={({ pressed }) => [styles.addCardioButton, pressed && styles.buttonPressed]}
-              onPress={() => {
-                setShowCardioModal(true);
-                setStep('type');
-              }}
-            >
-              <MaterialCommunityIcons name="plus" size={18} color={theme.colors.primary} />
-              <Text style={styles.addCardioText}>Añadir cardio</Text>
-            </Pressable>
-          )}
+          ))}
+          <Pressable
+            style={({ pressed }) => [styles.addCardioButton, pressed && styles.buttonPressed]}
+            onPress={() => {
+              setShowCardioModal(true);
+              setStep('type');
+            }}
+          >
+            <View style={styles.buttonContent}>
+              <MaterialCommunityIcons name="plus" size={16} color={theme.colors.darkGray} />
+              <Text style={styles.addCardioText}>Añadir</Text>
+            </View>
+          </Pressable>
         </>
       )}
 
@@ -361,31 +354,28 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontWeight: '500',
   },
-  editButton: {
-    padding: 8,
-    backgroundColor: theme.colors.primaryMuted,
-    borderRadius: theme.borderRadius.sm,
-  },
   clearButton: {
     padding: 8,
     backgroundColor: theme.colors.error + '30',
     borderRadius: theme.borderRadius.sm,
   },
   addCardioButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 14,
+    backgroundColor: theme.colors.success,
+    paddingVertical: 12,
     paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.md,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
     marginTop: 10,
   },
   addCardioText: {
+    color: theme.colors.darkGray,
+    fontWeight: '800',
     fontSize: 15,
-    fontWeight: '700',
-    color: '#1a1a1a',
+  },
+  buttonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   buttonPressed: {
     opacity: 0.8,

@@ -18,6 +18,7 @@ import {
 import { useWorkout } from '@hooks/useWorkout';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme } from '@lib/theme';
+import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
@@ -50,14 +51,6 @@ const WEEK_COLORS = [
   theme.colors.error,
   theme.colors.warning,
 ];
-
-function getLogTimestamp(log: WorkoutLog) {
-  if (typeof log.createdAt === 'number' && Number.isFinite(log.createdAt)) {
-    return log.createdAt;
-  }
-
-  return new Date(`${log.date}T00:00:00`).getTime();
-}
 
 function getWeekColor(blockNumber: number) {
   return WEEK_COLORS[(Math.max(1, blockNumber) - 1) % WEEK_COLORS.length];
@@ -96,26 +89,14 @@ export function CalendarScreen({
     const map: Record<string, number> = {};
 
     state.routines.forEach((routine: WorkoutRoutine) => {
-      const routineLogs = state.logs
-        .filter((log: WorkoutLog) => log.routineId === routine.id)
-        .sort((a: WorkoutLog, b: WorkoutLog) => getLogTimestamp(a) - getLogTimestamp(b));
+      const routineLogs = state.logs.filter((log: WorkoutLog) => log.routineId === routine.id);
+      const grouped = groupLogsIntoWeekBlocks(routineLogs, log => getDayById(log.dayId)?.dayNumber);
 
-      let block = 1;
-      const seenDays = new Set<number>();
-
-      routineLogs.forEach((log: WorkoutLog) => {
-        const dayNumber = getDayById(log.dayId)?.dayNumber;
-
-        if (dayNumber && seenDays.has(dayNumber) && seenDays.size > 0) {
-          block += 1;
-          seenDays.clear();
-        }
-
-        map[log.id] = block;
-
-        if (dayNumber) {
-          seenDays.add(dayNumber);
-        }
+      Object.keys(grouped).forEach(blockKey => {
+        const block = Number(blockKey);
+        grouped[block].forEach(log => {
+          map[log.id] = block;
+        });
       });
     });
 

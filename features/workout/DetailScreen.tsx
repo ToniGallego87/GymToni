@@ -19,6 +19,7 @@ import {
 } from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import { formatDate } from '@lib/storage';
+import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
@@ -34,19 +35,6 @@ interface DetailScreenProps {
   onBack: () => void;
   onEdit: (log: WorkoutLog, day: WorkoutDay) => void;
 }
-
-interface ImprovementResult {
-  isImproved: boolean;
-  percent: number;
-}
-
-function getLogTimestamp(log: WorkoutLog | null): number {
-  if (!log) return 0;
-  if (typeof log.createdAt === 'number') return log.createdAt;
-  if (log.date) return new Date(`${log.date}T00:00:00`).getTime();
-  return 0;
-}
-
 
 function extractIncline(rawInput: string): string | null {
   if (!rawInput) return null;
@@ -120,17 +108,12 @@ export function DetailScreen({
   };
 
   const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
-    const roundedPercent = imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
-    
-    if (imp.percent === 0) {
-      return { symbol: '=', color: theme.colors.warning, display: roundedPercent };
-    }
-    
-    return {
-      symbol: imp.isImproved ? '↑' : '↓', 
-      color: imp.isImproved ? theme.colors.success : theme.colors.error,
-      display: roundedPercent
-    };
+    const { symbol, display, kind } = getImprovementDisplay(imp);
+    const color =
+      kind === 'up' ? theme.colors.success
+      : kind === 'down' ? theme.colors.error
+      : theme.colors.warning;
+    return { symbol, color, display };
   };
 
   return (

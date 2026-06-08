@@ -1,5 +1,32 @@
 # UPDATES
 
+## Version 0.4.6 - 2026-06-08
+
+### Arquitectura
+- Nuevo `lib/weeks.ts` con la lógica de agrupación en semanas (`groupLogsIntoWeekBlocks`) y de puntuación semanal (`getWeekStrengthScore`), antes duplicada en Home y Calendario.
+- Helpers compartidos en `lib/utils.ts`: `getLogTimestamp` (timestamp comparable de un log) y `getImprovementDisplay` (símbolo/texto/tipo de una mejora), eliminando las copias repartidas por las pantallas.
+- `WorkoutLogScreen` deduplicado: `buildWorkoutLog` y `persistWorkoutLog` reemplazan la lógica de guardado repetida entre auto-guardado y guardado manual.
+- `FIRST_TIME_IMPROVEMENT_PERCENT` centralizado en `lib/progress.ts`.
+
+### Nuevas funcionalidades
+- El parser de series admite pesos combinados (p. ej. `8+8x11` → 16 kg) para cargas con dos mancuernas.
+- Cardio admite múltiples entradas por sesión.
+
+### Correcciones
+- Unificado el porcentaje de mejora de "primera vez" (antes 30% en unas pantallas y 100% en otras).
+- El cálculo de mejora semana a semana compara de verdad la semana actual contra la anterior (antes calculaba un valor que no usaba la semana previa concreta).
+- El entrenamiento se auto-guarda también al borrar o terminar series (antes solo al añadir).
+- Eliminados `console.log` de depuración y código muerto (modal de cambio de día inalcanzable).
+- Quitados casts `as any` y el ID de rutina hardcodeado.
+
+### Cambios
+- Persistencia con debounce (agrupa ráfagas de cambios en una sola escritura).
+- Importación de datos con validación de estructura más estricta.
+- Tests automatizados (Jest + ts-jest) para `lib/parsers.ts` y `lib/progress.ts` (23 casos).
+- Iconos de cardio corregidos (cinta y bici estática).
+- `buildlog.txt` añadido a `.gitignore`; metadatos de `package.json` alineados con la app.
+- Android: memoria del daemon de Gradle aumentada para builds más estables.
+
 ## Version 0.4.5.c - 2026-05-31
 
 ### Arquitectura

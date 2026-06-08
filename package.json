@@ -1,8 +1,8 @@
 {
-  "name": "gymtrack",
-  "version": "0.1.0",
+  "name": "gymtoni",
+  "version": "0.4.6",
   "private": true,
-  "description": "MVP app para registrar entrenamientos de gimnasio de forma rápida",
+  "description": "App para registrar entrenamientos de gimnasio de forma rápida",
   "main": "expo-router/entry",
   "scripts": {
     "start": "expo start",
@@ -13,6 +13,7 @@
     "eas-build": "eas build --platform all",
     "format": "prettier --write .",
     "type-check": "tsc --noEmit",
+    "test": "jest",
     "postinstall": "patch-package"
   },
   "dependencies": {
@@ -44,11 +45,14 @@
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
+    "@types/jest": "^29.5.14",
     "@types/react": "~18.2.79",
     "babel-plugin-module-resolver": "^5.0.2",
     "babel-preset-expo": "~11.0.10",
+    "jest": "^29.7.0",
     "patch-package": "^8.0.1",
     "prettier": "~3.0.0",
+    "ts-jest": "^29.4.11",
     "typescript": "~5.3.0"
   },
   "resolutions": {
