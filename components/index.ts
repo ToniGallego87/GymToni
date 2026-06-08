@@ -1,4 +1,7 @@
 export { DayCard } from './DayCard';
+export { HeroCard } from './HeroCard';
+export type { HeroVariant } from './HeroCard';
+export { GradientFill } from './GradientFill';
 export { DayAccentIcon } from './DayAccentIcon';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';

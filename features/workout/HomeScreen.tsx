@@ -31,6 +31,9 @@ import {
   FloatingPrimaryNav,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  HeroCard,
+  HeroVariant,
+  GradientFill,
 } from '../../components';
 
 interface HomeScreenProps {
@@ -465,17 +468,17 @@ export function HomeScreen({
   const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
 
   // Estado visual de la tarjeta principal según la situación de la rutina/día.
-  const getHeroState = (): { style: object; icon: string; title: string } => {
+  const getHeroState = (): { variant: HeroVariant; icon: string; title: string } => {
     if (hasNoRoutines) {
-      return { style: styles.heroCardWarning, icon: 'plus-thick', title: 'Añade una rutina' };
+      return { variant: 'add', icon: 'plus-thick', title: 'Añade una rutina' };
     }
     if (isRoutineOld && !isDisplayedRoutineActive) {
-      return { style: styles.heroCardClosed, icon: 'lock-outline', title: 'Rutina Cerrada' };
+      return { variant: 'closed', icon: 'lock-outline', title: 'Rutina Cerrada' };
     }
     if (isTodayWorkoutCompleted()) {
-      return { style: styles.heroCardCompleted, icon: 'check-bold', title: 'Entrenamiento completado' };
+      return { variant: 'completed', icon: 'check-bold', title: 'Entrenamiento completado' };
     }
-    return { style: styles.heroCard, icon: 'weight-lifter', title: 'Empezar entrenamiento' };
+    return { variant: 'start', icon: 'weight-lifter', title: 'Empezar entrenamiento' };
   };
   const hero = getHeroState();
 
@@ -702,37 +705,22 @@ export function HomeScreen({
         showsVerticalScrollIndicator={false}
       >
 
-        <Pressable
-          style={({ pressed }) => [hero.style, pressed && styles.heroCardPressed]}
+        <HeroCard
+          variant={hero.variant}
+          icon={hero.icon}
+          title={hero.title}
           onPress={handleStartPress}
-        >
-          <View style={styles.heroIconWrap}>
-            <MaterialCommunityIcons
-              name={hero.icon as any}
-              size={38}
-              style={styles.heroIcon}
-            />
-          </View>
-          <View style={styles.heroTitleWrapper}>
-            <Text
-              style={styles.heroTitle}
-              numberOfLines={1}
-            >
-              {hero.title}
-            </Text>
-          </View>
-        </Pressable>
+        />
 
-        {filteredWeeklyProgress.length > 0 && (
-          <View style={[
-            styles.progressCard,
-            { borderColor: latestPoint
-              ? latestPoint.improvement >= 0
-                ? theme.colors.success
-                : theme.colors.error
-              : theme.colors.primary
-            },
-          ]}>
+        {filteredWeeklyProgress.length > 0 && (() => {
+          const progressAccent = latestPoint
+            ? latestPoint.improvement >= 0
+              ? theme.colors.success
+              : theme.colors.error
+            : theme.colors.primary;
+          return (
+          <View style={[styles.progressCard, { borderColor: progressAccent }]}>
+            <GradientFill accent={progressAccent} />
             <TouchableOpacity
               style={styles.progressToggleButton}
               onPress={() => setShowWeeklyProgressChart((prev: boolean) => !prev)}
@@ -764,7 +752,8 @@ export function HomeScreen({
               <ProgressBarChart points={filteredWeeklyProgress} width={chartWidth} />
             )}
           </View>
-        )}
+          );
+        })()}
 
         {displayedRoutineLogs.length > 0 && (
           <View style={[styles.weeksSection, { flex: 1 }]}>
@@ -780,20 +769,18 @@ export function HomeScreen({
                   ? (expandedWeekBlocks[block] ?? (block === currentWeekBlock))
                   : (expandedWeekBlocks[block] ?? false);
                 const weekImprovement = getWeekImprovement(groupedByBlock, block);
+                const weekAccent = weekImprovement
+                  ? weekImprovement.isImproved
+                    ? theme.colors.success
+                    : theme.colors.error
+                  : theme.colors.primary;
 
                 return (
                   <View key={block}>
                     <Pressable
-                      style={[
-                        styles.weekHeaderButton,
-                        { borderColor: weekImprovement
-                          ? weekImprovement.isImproved
-                            ? theme.colors.success
-                            : theme.colors.error
-                          : theme.colors.primary
-                        },
-                      ]}
+                      style={[styles.weekHeaderButton, { borderColor: weekAccent }]}
                       onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}>
+                      <GradientFill accent={weekAccent} />
 
                       <View style={styles.weekTitleRow}>
                         <Text style={styles.weekTitle}>Semana {block}</Text>
@@ -1068,7 +1055,7 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.md,
     marginBottom: theme.spacing.sm,
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderWidth: 2,
     borderColor: theme.colors.primary,
@@ -1175,79 +1162,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 18,
   },
-  heroCard: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.lg,
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    paddingVertical: 25,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    overflow: 'visible',
-    ...theme.shadow.card,
-  },
-  heroCardPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.995 }],
-  },
-  heroCardClosed: {
-    backgroundColor: theme.colors.error,
-    borderRadius: theme.borderRadius.lg,
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-    paddingVertical: 25,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    overflow: 'hidden',
-    ...theme.shadow.card,
-  },
-  heroCardWarning: {
-    backgroundColor: theme.colors.warning,
-    borderRadius: theme.borderRadius.lg,
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.lg,
-    paddingVertical: 25,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    overflow: 'hidden',
-    ...theme.shadow.card,
-  },
-  heroCardCompleted: {
-    backgroundColor: theme.colors.success,
-    borderRadius: theme.borderRadius.lg,
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    paddingVertical: 25,
-    paddingHorizontal: 24,
-    alignItems: 'center',
-    overflow: 'visible',
-    ...theme.shadow.card,
-  },
-  heroIconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: 'rgba(16, 19, 24, 0.14)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 16,
-  },
-  heroIcon: {
-    fontSize: 40,
-  },
-  heroTitleWrapper: {
-    width: '100%',
-    paddingHorizontal: theme.spacing.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  heroTitle: {
-    color: theme.colors.darkGray,
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.8,
-    textAlign: 'center',
-  },
   weeksSection: {
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.sm,
@@ -1317,9 +1231,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 52,
     borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surfaceAlt,
+    backgroundColor: 'transparent',
     borderLeftWidth: 4,
     borderColor: theme.colors.primary,
+    overflow: 'hidden',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
