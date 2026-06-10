@@ -34,6 +34,11 @@ export const theme = {
     emoji_orange: '#FF9500'
   },
 
+  // Fuente display (Anton) para titulares. Cargada en App.tsx vía expo-font.
+  fonts: {
+    display: 'Anton',
+  },
+
   typography: {
     h1: {
       fontSize: 28,

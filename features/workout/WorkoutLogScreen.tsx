@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
-  ScrollView,
   Text,
   StyleSheet,
   Modal,
@@ -13,6 +12,12 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 // expo-notifications does not support web; load it only on native platforms
@@ -29,11 +34,12 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   Toast,
+  StretchScrollView,
 } from '../../components';
 import { parseCardioString, parseSeriesString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
 import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '../../types';
-import { theme } from '@lib/theme';
+import { theme, getTrainingAccent } from '@lib/theme';
 import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@lib/progress';
 
 interface WorkoutLogScreenProps {
@@ -44,6 +50,46 @@ interface WorkoutLogScreenProps {
 }
 
 const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Botón principal estilo HeroCard (gradiente dorado), coherente con Inicio y Nueva rutina.
+function SaveWorkoutButton({ onPress }: { onPress: () => void }) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <AnimatedPressable
+      style={[styles.saveWrapper, animatedStyle]}
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 18, stiffness: 320 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+      }}
+    >
+      <LinearGradient
+        colors={['#F9D85A', '#F7CC3D', '#E0B226']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.saveGradient}
+      >
+        <LinearGradient
+          colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.saveSheen}
+          pointerEvents="none"
+        />
+        <MaterialCommunityIcons name="content-save-check" size={22} color={theme.colors.darkGray} />
+        <Text style={styles.saveText}>Guardar</Text>
+      </LinearGradient>
+    </AnimatedPressable>
+  );
+}
 
 export function WorkoutLogScreen({
   day,
@@ -132,6 +178,7 @@ export function WorkoutLogScreen({
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
   const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const dayAccent = getTrainingAccent({ emoji: selectedDay.emoji, name: selectedDay.name });
 
   const getRoutineIdForDay = () => {
     const owningRoutine = state.routines.find(routine =>
@@ -531,12 +578,12 @@ export function WorkoutLogScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -566,6 +613,7 @@ export function WorkoutLogScreen({
               notes={exerciseNotes[exercise.id]}
               previousLog={previousLog}
               improvement={improvement}
+              accent={dayAccent}
             />
             {activeTimerId === exercise.id && timerSeconds > 0 && !isTargetCompleted && (
                 <Pressable 
@@ -613,15 +661,10 @@ export function WorkoutLogScreen({
               <Text style={styles.saveMessageText}>Entrenamiento guardado</Text>
             </View>
           ) : (
-            <Button
-              title="Guardar"
-              onPress={handleSaveWorkout}
-              variant="primary"
-              size="large"
-            />
+            <SaveWorkoutButton onPress={handleSaveWorkout} />
           )}
         </View>
-      </ScrollView>
+      </StretchScrollView>
 
       <GlassTopBar
         title={selectedDay.name}
@@ -698,6 +741,34 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginTop: 15,
+  },
+  saveWrapper: {
+    borderRadius: theme.borderRadius.lg,
+    ...theme.shadow.card,
+  },
+  saveGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: theme.borderRadius.lg,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    overflow: 'hidden',
+  },
+  saveSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+  },
+  saveText: {
+    color: theme.colors.darkGray,
+    fontFamily: theme.fonts.display,
+    fontSize: 22,
+    letterSpacing: 0.5,
+    lineHeight: 26,
   },
   saveMessageContainer: {
     flexDirection: 'row',

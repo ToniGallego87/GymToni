@@ -36,13 +36,29 @@ export function GlassTopBar({
   titleStyle,
 }: GlassTopBarProps) {
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + topInset;
-  const topBarPaddingTop = Math.max(topInset - 16, 0);
-  const sharedFrameStyle = { height: topBarHeight };
+  const topBarPaddingTop = topInset + 6;
   const topBarBlurIntensity = Platform.OS === 'android'
     ? Math.max(GLASS_TOP_BAR_BLUR_INTENSITY, 72)
     : GLASS_TOP_BAR_BLUR_INTENSITY;
-  const foregroundContent = (
-    <View style={[styles.topBarForeground, sharedFrameStyle, { paddingTop: topBarPaddingTop }]}>
+
+  // La barra crece con el contenido (minHeight) para que títulos de 2 líneas no
+  // empujen el subtítulo contra el borde inferior; el paddingBottom garantiza aire.
+  return (
+    <View
+      style={[
+        styles.topBarBackground,
+        { minHeight: topBarHeight, paddingTop: topBarPaddingTop },
+        containerStyle,
+      ]}
+    >
+      <FrostedBlur
+        tint="dark"
+        intensity={topBarBlurIntensity}
+        experimentalBlurMethod="dimezisBlurView"
+        style={styles.topBarBlur}
+        pointerEvents="none"
+      />
+      <View style={styles.topBarGlassOverlay} pointerEvents="none" />
       <View style={styles.topBarContent}>
         <View style={styles.topBarRow}>
           <View style={styles.textWrap}>
@@ -63,24 +79,6 @@ export function GlassTopBar({
         </View>
       </View>
     </View>
-  );
-
-  return (
-    <>
-      <View
-        style={[styles.topBarBackground, sharedFrameStyle, containerStyle]}
-        pointerEvents="none"
-      >
-        <FrostedBlur
-          tint="dark"
-          intensity={topBarBlurIntensity}
-          experimentalBlurMethod="dimezisBlurView"
-          style={styles.topBarBlur}
-        />
-        <View style={styles.topBarGlassOverlay} />
-      </View>
-      {foregroundContent}
-    </>
   );
 }
 
@@ -103,13 +101,6 @@ const styles = StyleSheet.create({
   topBarGlassOverlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: GLASS_TOP_BAR_OVERLAY,
-  },
-  topBarForeground: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 26,
   },
   topBarContent: {
     paddingHorizontal: theme.spacing.md,

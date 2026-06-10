@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { ParsedSet } from '../types';
 import { parseSeriesString, formatParsedSet } from '@lib/parsers';
 import { theme } from '@lib/theme';
+import { GradientFill } from './GradientFill';
 
 interface ExerciseResultDisplayProps {
   exerciseName: string;
@@ -16,6 +17,8 @@ interface ExerciseResultDisplayProps {
   targetSets?: number;
   targetReps?: string | number;
   isDetail?: boolean;
+  // Color de acento del día (push/pull/pierna). Tiñe borde y fondo en detalle.
+  accent?: string;
 }
 
 type ComparisonStatus = 'up' | 'same' | 'down' | 'missing';
@@ -60,6 +63,7 @@ export function ExerciseResultDisplay({
   targetSets,
   targetReps,
   isDetail = false,
+  accent = theme.colors.current,
 }: ExerciseResultDisplayProps) {
 
   const effectiveParsedSets =
@@ -88,7 +92,14 @@ export function ExerciseResultDisplay({
   });
 
   return (
-    <View style={[styles.container, isDetail && styles.containerDetail]}>
+    <View
+      style={[
+        styles.container,
+        isDetail && styles.containerDetail,
+        isDetail && { borderLeftColor: accent },
+      ]}
+    >
+      {isDetail && <GradientFill accent={accent} />}
 
       {/* Header */}
       <View style={[styles.header, isDetail && styles.headerDetail]}>
@@ -178,8 +189,10 @@ const styles = StyleSheet.create({
   },
 
   containerDetail: {
+    backgroundColor: 'transparent',
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.current,
+    overflow: 'hidden',
   },
 
   header: {
@@ -204,7 +217,10 @@ const styles = StyleSheet.create({
   },
 
   exerciseNameDetail: {
-    fontSize: 16,
+    fontSize: 20,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.3,
+    lineHeight: 25,
     marginBottom: 4,
   },
 

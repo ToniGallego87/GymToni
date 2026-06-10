@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -16,6 +15,7 @@ import {
   FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  StretchScrollView,
 } from '@components';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
@@ -41,12 +41,12 @@ export function DaySelectorScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -68,7 +68,7 @@ export function DaySelectorScreen({
             <Text style={styles.dayBadge}>Día {day.dayNumber}</Text>
           </Pressable>
         ))}
-      </ScrollView>
+      </StretchScrollView>
 
       <GlassTopBar
         title="Elige la sesión"

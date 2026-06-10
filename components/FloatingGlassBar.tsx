@@ -13,7 +13,7 @@ import {
 
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
 
-export const FLOATING_GLASS_BAR_HEIGHT = 72;
+export const FLOATING_GLASS_BAR_HEIGHT = 70;
 export const FLOATING_GLASS_BAR_MARGIN = 12;
 export const FLOATING_PRIMARY_NAV_MIN_INSET = 0;
 export const FLOATING_PRIMARY_NAV_SCROLL_EXTRA_PADDING = 28;
@@ -64,11 +64,12 @@ const styles = StyleSheet.create({
   container: {
     position: 'absolute',
     zIndex: 30,
-    borderRadius: 28,
+    borderRadius: 24,
     backgroundColor: GLASS_FLOATING_BG,
     borderWidth: 1,
     borderColor: GLASS_FLOATING_BORDER,
     overflow: 'hidden',
+    justifyContent: 'center',
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.16,
@@ -99,14 +100,14 @@ const styles = StyleSheet.create({
     right: 1,
     top: 1,
     bottom: 1,
-    borderRadius: 27,
+    borderRadius: 23,
     borderWidth: 1,
     borderColor: GLASS_FLOATING_INNER_STROKE,
     pointerEvents: 'none',
   },
   content: {
     paddingHorizontal: 8,
-    paddingVertical: 7,
+    paddingVertical: 4,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

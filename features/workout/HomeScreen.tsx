@@ -12,8 +12,12 @@ import {
   Modal,
   Alert,
   Image,
+  LayoutAnimation,
+  Platform,
+  UIManager,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
@@ -34,6 +38,8 @@ import {
   HeroCard,
   HeroVariant,
   GradientFill,
+  AnimatedCounter,
+  StretchScrollView,
 } from '../../components';
 
 interface HomeScreenProps {
@@ -56,6 +62,9 @@ interface HomeScreenProps {
 interface WeekProgressPoint {
   week: number;
   improvement: number;
+  isCurrent?: boolean;
+  /** La semana no tiene todos los días de la rutina entrenados. */
+  isIncomplete?: boolean;
 }
 
 function buildWeekProgress(
@@ -69,33 +78,62 @@ function buildWeekProgress(
   const routineLogs = logs.filter(log => log.routineId === activeRoutineId);
   if (routineLogs.length === 0) return [];
 
-  const dayIdToDayNumber: Record<string, number> = {};
-  activeDays.forEach(day => {
-    dayIdToDayNumber[day.id] = day.dayNumber;
-  });
+  // Agrupación por dayId directamente — sin depender del mapping dayId→dayNumber,
+  // que puede fallar si la rutina fue modificada y los IDs de días cambiaron.
+  const sortedLogs = [...routineLogs].sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b));
+  const groupedByBlock: Record<number, WorkoutLog[]> = {};
+  let blockNum = 1;
+  let blockLogs: WorkoutLog[] = [];
+  let seenDayIds = new Set<string>();
 
-  const groupedByBlock = groupLogsIntoWeekBlocks(routineLogs, log => dayIdToDayNumber[log.dayId]);
+  for (const log of sortedLogs) {
+    if (log.dayId && seenDayIds.has(log.dayId) && blockLogs.length > 0) {
+      groupedByBlock[blockNum++] = blockLogs;
+      blockLogs = [];
+      seenDayIds = new Set();
+    }
+    blockLogs.push(log);
+    if (log.dayId) seenDayIds.add(log.dayId);
+  }
+  if (blockLogs.length > 0) groupedByBlock[blockNum] = blockLogs;
+
   const orderedBlocks = Object.keys(groupedByBlock)
     .map(Number)
     .sort((a, b) => a - b);
 
+  // Una semana está incompleta si no tiene entrenados todos los días de la rutina.
+  const isBlockIncomplete = (logsForBlock: WorkoutLog[]) =>
+    activeDays.length > 0 && !activeDays.every(d => logsForBlock.some(l => l.dayId === d.id));
+
   // El gráfico compara cada semana contra la PRIMERA (progreso acumulado),
   // a diferencia del listado, que compara contra la semana anterior.
-  return orderedBlocks.map((blockNumber, index) => {
+  const points: WeekProgressPoint[] = orderedBlocks.map((blockNumber, index) => {
     if (index === 0) {
-      return { week: 1, improvement: 0 };
+      return { week: 1, improvement: 0, isIncomplete: isBlockIncomplete(groupedByBlock[blockNumber] || []) };
     }
 
     const firstBlockNumber = orderedBlocks[0];
     const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
     const previousWeekLogsForBlock = groupedByBlock[firstBlockNumber] || [];
+    const isIncomplete = isBlockIncomplete(currentWeekLogsForBlock);
 
     if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
-      return { week: index + 1, improvement: 0 };
+      return { week: index + 1, improvement: 0, isIncomplete };
     }
 
-    const currentStrength = getWeekStrengthScore(currentWeekLogsForBlock, { activeDaysCount: activeDays.length });
-    const previousStrength = getWeekStrengthScore(previousWeekLogsForBlock, { activeDaysCount: activeDays.length });
+    // Una semana incompleta NO se penaliza por días que faltan: solo se cuentan
+    // los días entrenados, comparándolos contra esos mismos días de la semana base
+    // (igual que el porcentaje del listado).
+    const currentDayIds = Array.from(
+      new Set(currentWeekLogsForBlock.map(log => log.dayId).filter(Boolean))
+    );
+    const scoreOptions = {
+      activeDaysCount: activeDays.length,
+      restrictToDayIds: currentDayIds,
+      applyMissingPenalty: false,
+    };
+    const currentStrength = getWeekStrengthScore(currentWeekLogsForBlock, scoreOptions);
+    const previousStrength = getWeekStrengthScore(previousWeekLogsForBlock, scoreOptions);
     const improvement = buildImprovementFromStrengthScores(currentStrength, previousStrength);
 
     const signedDelta = improvement
@@ -105,18 +143,37 @@ function buildWeekProgress(
     return {
       week: index + 1,
       improvement: Math.round(signedDelta * 10) / 10,
+      isIncomplete,
     };
   });
+
+  // La última semana entrenada es la "semana en curso" SOLO si aún le faltan días.
+  // Si está completa, no hay semana en curso abierta: no se añade ningún punto
+  // sintético (evita mostrar una semana fantasma extra en rutinas cerradas o
+  // recién completadas que nunca se entrenó).
+  const lastBlockNumber = orderedBlocks[orderedBlocks.length - 1];
+  const lastBlockLogs = groupedByBlock[lastBlockNumber] || [];
+  const trainedDayIds = new Set(lastBlockLogs.map((l: WorkoutLog) => l.dayId));
+  const lastBlockIsComplete = activeDays.length > 0 && activeDays.every(d => trainedDayIds.has(d.id));
+
+  if (!lastBlockIsComplete && points.length > 0) {
+    points[points.length - 1] = { ...points[points.length - 1], isCurrent: true };
+  }
+
+  return points;
 }
 
 function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; width: number }) {
+  // Semana 1 es siempre la base (mejora 0), no se muestra.
+  const filteredPoints = points.slice(1);
+
   const chartPadding = { top: 16, right: 12, bottom: 28, left: 38 };
   const chartHeight = 170;
   const chartWidth = width;
   const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
   const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
 
-  const values = points.map(point => point.improvement);
+  const values = filteredPoints.map(point => point.improvement);
   const minValue = Math.min(...values, 0);
   const maxValue = Math.max(...values, 0);
   const sameValueRange = minValue === maxValue;
@@ -124,7 +181,7 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
   const domainMin = Math.min(minValue - domainPadding, 0);
   const domainMax = Math.max(maxValue + domainPadding, 0);
 
-  const barSlotWidth = points.length > 0 ? plotWidth / points.length : plotWidth;
+  const barSlotWidth = filteredPoints.length > 0 ? plotWidth / filteredPoints.length : plotWidth;
   const barWidth = Math.max(18, Math.min(barSlotWidth * 0.55, 34));
   const getBarX = (index: number) => {
     return chartPadding.left + (index * barSlotWidth) + ((barSlotWidth - barWidth) / 2);
@@ -161,31 +218,51 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
           ]}
         />
 
-        {points.map((point, index) => {
+        {filteredPoints.map((point, index) => {
           const x = getBarX(index);
           const y = getY(point.improvement);
           const barTop = point.improvement >= 0 ? y : zeroAxisY;
           const barHeight = Math.max(Math.abs(zeroAxisY - y), 4);
           const isPositive = point.improvement >= 0;
-          const shouldRenderBar = index > 0;
+          const isCurrentWeek = !!point.isCurrent;
+          // Amarillo solo para la semana en curso; azul para una semana anterior
+          // (no en curso) que quedó incompleta en días.
+          const isPrevIncomplete = !isCurrentWeek && !!point.isIncomplete;
+          const isHighlighted = isCurrentWeek || isPrevIncomplete;
+          const barColor = isCurrentWeek
+            ? theme.colors.primary
+            : isPrevIncomplete
+              ? theme.colors.emoji_blue
+              : isPositive ? theme.colors.success : theme.colors.error;
+          const valueLabelTop = isPositive ? barTop - 16 : barTop + barHeight + 2;
+          const signedLabel = `${point.improvement > 0 ? '+' : ''}${Math.round(point.improvement)}%`;
 
           return (
             <React.Fragment key={`point-${point.week}-${index}`}>
-              {shouldRenderBar && (
-                <View
-                  style={[
-                    styles.chartBar,
-                    {
-                      left: x,
-                      top: barTop,
-                      height: barHeight,
-                      width: barWidth,
-                      backgroundColor: isPositive ? theme.colors.success : theme.colors.error,
-                    },
-                  ]}
-                />
-              )}
-              <Text style={[styles.chartXLabel, { left: x + (barWidth / 2) - 16, top: chartHeight - 20 }]}>S{point.week}</Text>
+              <View
+                style={[
+                  styles.chartBar,
+                  {
+                    left: x,
+                    top: barTop,
+                    height: barHeight,
+                    width: barWidth,
+                    backgroundColor: barColor,
+                  },
+                ]}
+              />
+              <Text
+                style={[
+                  styles.chartValueLabel,
+                  isHighlighted && styles.chartValueLabelCurrent,
+                  isPrevIncomplete && styles.chartLabelBlue,
+                  { left: x + barWidth / 2 - 20, top: valueLabelTop },
+                ]}
+                numberOfLines={1}
+              >
+                {signedLabel}
+              </Text>
+              <Text style={[styles.chartXLabel, isCurrentWeek && styles.chartXLabelCurrent, { left: x + (barWidth / 2) - 16, top: chartHeight - 20 }]}>S{point.week}</Text>
             </React.Fragment>
           );
         })}
@@ -201,6 +278,28 @@ function ProgressBarChart({ points, width }: { points: WeekProgressPoint[]; widt
       </View>
     </View>
   );
+}
+
+if (
+  Platform.OS === 'android' &&
+  UIManager.setLayoutAnimationEnabledExperimental
+) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Animación suave para expandir/colapsar secciones (semanas, gráfico).
+function animateLayout() {
+  LayoutAnimation.configureNext(
+    LayoutAnimation.create(220, LayoutAnimation.Types.easeInEaseOut, LayoutAnimation.Properties.opacity)
+  );
+}
+
+type TrendKind = 'up' | 'down' | 'neutral';
+
+// Icono de tendencia coherente (sustituye las flechas Unicode ↑↓=).
+function TrendIcon({ kind, size, color }: { kind: TrendKind; size: number; color: string }) {
+  const name = kind === 'up' ? 'arrow-up-bold' : kind === 'down' ? 'arrow-down-bold' : 'equal';
+  return <MaterialCommunityIcons name={name} size={size} color={color} />;
 }
 
 export function HomeScreen({
@@ -283,7 +382,7 @@ export function HomeScreen({
       kind === 'up' ? 'weekImprovementUp'
       : kind === 'down' ? 'weekImprovementDown'
       : 'weekImprovementNeutral';
-    return { symbol, styleKey, display };
+    return { symbol, styleKey, display, kind };
   };
 
   const handleStartPress = () => {
@@ -453,17 +552,30 @@ export function HomeScreen({
     };
   }, [displayedRoutineLogs]);
 
-  const filteredWeeklyProgress = useMemo(() => {
-    if (!weeklyProgress || weeklyProgress.length === 0) return weeklyProgress;
-    if (!currentWeekBlock || !groupedByBlock) return weeklyProgress;
-
-    const lastWeekLogs = groupedByBlock[currentWeekBlock] || [];
-    // Si la semana actual NO está completada, excluir el último punto del gráfico
-    if (!isWeekCompleted(lastWeekLogs)) {
-      return weeklyProgress.slice(0, Math.max(0, weeklyProgress.length - 1));
+  // Racha: semanas completadas consecutivas hasta la última. Una semana en curso
+  // (la más reciente, aún incompleta) no rompe la racha.
+  const completedStreak = useMemo(() => {
+    const asc = Object.keys(groupedByBlock)
+      .map(Number)
+      .sort((a, b) => a - b);
+    let streak = 0;
+    for (let i = asc.length - 1; i >= 0; i--) {
+      const weekLogs = groupedByBlock[asc[i]] || [];
+      if (isWeekCompleted(weekLogs)) {
+        streak++;
+      } else if (i === asc.length - 1) {
+        continue;
+      } else {
+        break;
+      }
     }
-    return weeklyProgress;
-  }, [weeklyProgress, groupedByBlock, currentWeekBlock]);
+    return streak;
+  }, [groupedByBlock, activeDays]);
+
+  // El gráfico muestra todas las semanas entrenadas tal cual: la última semana en
+  // curso (incompleta) se muestra resaltada como "actual" desde buildWeekProgress,
+  // y no se añaden semanas fantasma. No hay nada que recortar aquí.
+  const filteredWeeklyProgress = weeklyProgress;
 
   const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
 
@@ -555,12 +667,12 @@ export function HomeScreen({
       <View style={styles.container}>
         <StatusBar style="light" translucent backgroundColor="transparent" />
 
-        <ScrollView
+        <StretchScrollView
           style={styles.scroll}
           contentContainerStyle={[
             styles.routineListContainer,
             {
-              paddingTop: topBarHeight + 12,
+              paddingTop: topBarHeight + 28,
               paddingBottom: selectorScrollBottomPadding,
             },
           ]}
@@ -603,7 +715,7 @@ export function HomeScreen({
               <Text style={styles.selectorDetailsButtonText}>Consultar detalles de esta rutina</Text>
             </TouchableOpacity>
           )}
-        </ScrollView>
+        </StretchScrollView>
 
         <GlassTopBar
           title="Rutina"
@@ -692,7 +804,7 @@ export function HomeScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.homeScrollContent,
@@ -712,6 +824,13 @@ export function HomeScreen({
           onPress={handleStartPress}
         />
 
+        {isDisplayedRoutineActive && completedStreak >= 2 && (
+          <View style={styles.streakChip}>
+            <Text style={styles.streakEmoji}>🔥</Text>
+            <Text style={styles.streakText}>{completedStreak} semanas seguidas</Text>
+          </View>
+        )}
+
         {filteredWeeklyProgress.length > 0 && (() => {
           const progressAccent = latestPoint
             ? latestPoint.improvement >= 0
@@ -723,7 +842,10 @@ export function HomeScreen({
             <GradientFill accent={progressAccent} />
             <TouchableOpacity
               style={styles.progressToggleButton}
-              onPress={() => setShowWeeklyProgressChart((prev: boolean) => !prev)}
+              onPress={() => {
+                animateLayout();
+                setShowWeeklyProgressChart((prev: boolean) => !prev);
+              }}
               activeOpacity={0.85}
             >
               <View style={styles.progressHeaderRow}>
@@ -733,18 +855,33 @@ export function HomeScreen({
                     size={18}
                     style={styles.progressTitleIcon}
                   />
-                  <Text style={styles.progressTitle}>Rutina {state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1} {showWeeklyProgressChart ? '▲' : '▼'}</Text>
+                  <Text style={styles.progressTitle}>Rutina {state.routines.findIndex((r: WorkoutRoutine) => r.id === displayedRoutineId) + 1}</Text>
+                  <MaterialCommunityIcons
+                    name={showWeeklyProgressChart ? 'chevron-up' : 'chevron-down'}
+                    size={20}
+                    color={theme.colors.text}
+                  />
                 </View>
-                <Text
-                  style={[
-                    styles.progressLatest,
-                    latestPoint && latestPoint.improvement >= 0
-                      ? styles.progressLatestUp
-                      : styles.progressLatestDown,
-                  ]}
-                >
-                  {latestPoint ? `${latestPoint.improvement >= 0 ? '↑' : '↓'} ${Math.abs(latestPoint.improvement).toFixed(1)}%` : '0%'}
-                </Text>
+                {latestPoint ? (
+                  <View style={styles.deltaRow}>
+                    <TrendIcon
+                      kind={latestPoint.improvement >= 0 ? 'up' : 'down'}
+                      size={16}
+                      color={latestPoint.improvement >= 0 ? theme.colors.success : theme.colors.error}
+                    />
+                    <AnimatedCounter
+                      value={Math.abs(latestPoint.improvement)}
+                      decimals={1}
+                      suffix="%"
+                      style={[
+                        styles.progressLatest,
+                        latestPoint.improvement >= 0 ? styles.progressLatestUp : styles.progressLatestDown,
+                      ]}
+                    />
+                  </View>
+                ) : (
+                  <Text style={[styles.progressLatest, styles.progressLatestUp]}>0%</Text>
+                )}
               </View>
             </TouchableOpacity>
 
@@ -769,46 +906,74 @@ export function HomeScreen({
                   ? (expandedWeekBlocks[block] ?? (block === currentWeekBlock))
                   : (expandedWeekBlocks[block] ?? false);
                 const weekImprovement = getWeekImprovement(groupedByBlock, block);
-                const weekAccent = weekImprovement
-                  ? weekImprovement.isImproved
-                    ? theme.colors.success
-                    : theme.colors.error
-                  : theme.colors.primary;
+                const isCurrentWeek = isDisplayedRoutineActive && block === currentWeekBlock;
+                // Color de la semana en el listado:
+                // - Semana en curso (no completada): amarillo.
+                // - Semana 1: blanca.
+                // - Cualquier otra semana sin completar: azul.
+                // - Semanas completadas: color de mejora (verde/rojo).
+                const weekAccent =
+                  isCurrentWeek && !weekCompleted ? theme.colors.primary
+                  : block === 1 ? theme.colors.white
+                  : !weekCompleted ? theme.colors.emoji_blue
+                  : weekImprovement
+                    ? weekImprovement.isImproved
+                      ? theme.colors.success
+                      : theme.colors.error
+                    : theme.colors.white;
 
                 return (
                   <View key={block}>
                     <Pressable
                       style={[styles.weekHeaderButton, { borderColor: weekAccent }]}
-                      onPress={() => setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }))}>
+                      onPress={() => {
+                        setExpandedWeekBlocks((prev: Record<number, boolean>) => ({ ...prev, [block]: !prev[block] }));
+                      }}>
                       <GradientFill accent={weekAccent} />
 
                       <View style={styles.weekTitleRow}>
-                        <Text style={styles.weekTitle}>Semana {block}</Text>
+                        <Text style={[styles.weekTitle, { color: weekAccent }]}>Semana {block}</Text>
                         {!!weekImprovement && (
-                          <Text
-                            style={[
-                              styles.weekImprovementText,
-                              weekImprovement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
-                            ]}
-                          >
-                            {weekImprovement.isImproved ? '↑' : '↓'} {weekImprovement.percent.toFixed(1)}%
-                          </Text>
+                          <View style={styles.deltaRow}>
+                            <TrendIcon
+                              kind={weekImprovement.isImproved ? 'up' : 'down'}
+                              size={15}
+                              color={weekImprovement.isImproved ? theme.colors.success : theme.colors.error}
+                            />
+                            <AnimatedCounter
+                              value={weekImprovement.percent}
+                              decimals={1}
+                              suffix="%"
+                              style={[
+                                styles.weekImprovementText,
+                                weekImprovement.isImproved ? styles.weekImprovementUp : styles.weekImprovementDown,
+                              ]}
+                            />
+                          </View>
                         )}
                       </View>
-                      <Text style={styles.weekHeaderMeta}>
-                        {weekLogs.length} día{weekLogs.length === 1 ? '' : 's'} {isExpanded ? '▲' : '▼'}
-                      </Text>
+                      <View style={styles.weekMetaRow}>
+                        <Text style={styles.weekHeaderMeta}>
+                          {weekLogs.length} día{weekLogs.length === 1 ? '' : 's'}
+                        </Text>
+                        <MaterialCommunityIcons
+                          name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                          size={20}
+                          color={theme.colors.textSecondary}
+                        />
+                      </View>
                     </Pressable>
 
                     {isExpanded && weekLogs.map((log: WorkoutLog) => {
                       const day = getDay(log.dayId);
                       const improvement = getLogImprovement(log);
+                      const improvementFmt = improvement ? formatImprovementDisplay(improvement) : null;
                       const isToday = isLogFromToday(log);
                       if (!day) return null;
 
                       return (
+                        <Animated.View key={log.id} entering={FadeIn.duration(220)}>
                         <Pressable
-                          key={log.id}
                           style={({ pressed }: { pressed: boolean }) => [
                             styles.historyLogCard,
                             isToday && styles.historyLogCardToday,
@@ -839,28 +1004,25 @@ export function HomeScreen({
                               <View>
                                 <View style={styles.historyLogNameRow}>
                                   <Text style={styles.historyLogDayName}>{getDisplayDayName(day.name)}</Text>
-                                  {!!improvement && (
-                                    (() => {
-                                      const fmt = formatImprovementDisplay(improvement);
-                                      return (
-                                        <Text
-                                          style={[
-                                            styles.historyLogImprovementText,
-                                            styles[fmt.styleKey as keyof typeof styles],
-                                          ]}
-                                        >
-                                          {fmt.symbol} {fmt.display}%
-                                        </Text>
-                                      );
-                                    })()
-                                  )}
                                 </View>
                                 <Text style={styles.historyLogDate}>{getExecutionDateLabel(log)}</Text>
                               </View>
                             </View>
-                            <Text style={styles.historyLogBadge}>Día {day.dayNumber}</Text>
+                            <Text
+                              style={[
+                                styles.historyLogBadge,
+                                improvementFmt && (
+                                  improvementFmt.kind === 'up' ? styles.historyLogBadgeUp
+                                  : improvementFmt.kind === 'down' ? styles.historyLogBadgeDown
+                                  : styles.historyLogBadgeNeutral
+                                ),
+                              ]}
+                            >
+                              {improvementFmt ? `${improvementFmt.kind === 'up' ? '+' : improvementFmt.kind === 'down' ? '-' : ''}${improvementFmt.display}%` : '—'}
+                            </Text>
                           </View>
                         </Pressable>
+                        </Animated.View>
                       );
                     })}
                   </View>
@@ -869,7 +1031,7 @@ export function HomeScreen({
             </ScrollView>
           </View>
         )}
-      </ScrollView>
+      </StretchScrollView>
 
       <Modal
         visible={!!logWithOptionsId}
@@ -925,7 +1087,10 @@ export function HomeScreen({
                   setSelectedLogDayForOptions(undefined);
                 }}
               >
-                <Text style={styles.modalButtonCancelText}>← Volver</Text>
+                <View style={styles.modalActionRow}>
+                  <MaterialCommunityIcons name="arrow-left" size={16} color={theme.colors.primary} />
+                  <Text style={styles.modalButtonCancelText}>Volver</Text>
+                </View>
               </TouchableOpacity>
             </View>
           </View>
@@ -1011,6 +1176,7 @@ function RoutineCard({ routine, isViewed, isActive, onPress, onLongPress }: Rout
       onLongPress={onLongPress}
       delayLongPress={1000}
     >
+      <GradientFill accent={theme.colors.primary} />
       <View style={styles.routineCardContent}>
         <Text style={styles.routineCardName}>{routine.name}</Text>
         <Text style={styles.routineCardDesc}>{routine.description}</Text>
@@ -1018,7 +1184,12 @@ function RoutineCard({ routine, isViewed, isActive, onPress, onLongPress }: Rout
           {routine.days.length} días de entrenamiento
         </Text>
       </View>
-      {isActive && <Text style={styles.routineCardActiveIndicator}>✓ Activa</Text>}
+      {isActive && (
+        <View style={styles.routineCardActiveIndicator}>
+          <MaterialCommunityIcons name="check-bold" size={13} color={theme.colors.primaryLight} />
+          <Text style={styles.routineCardActiveText}>Activa</Text>
+        </View>
+      )}
     </TouchableOpacity>
   );
 }
@@ -1064,6 +1235,30 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     alignItems: 'center',
   },
+  streakChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: 7,
+    marginHorizontal: theme.spacing.md,
+    marginBottom: theme.spacing.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: theme.borderRadius.pill,
+    backgroundColor: 'rgba(255, 149, 0, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 149, 0, 0.35)',
+  },
+  streakEmoji: {
+    fontSize: 15,
+    lineHeight: 18,
+  },
+  streakText: {
+    color: theme.colors.emoji_orange,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
   progressHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1074,6 +1269,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
+  deltaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  weekMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
   progressTitleIcon: {
     color: theme.colors.text,
   },
@@ -1083,10 +1288,11 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   progressTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 20,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.5,
     color: theme.colors.text,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   progressLatest: {
     fontSize: 17,
@@ -1124,9 +1330,25 @@ const styles = StyleSheet.create({
   },
   chartBar: {
     position: 'absolute',
-    borderRadius: 6,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: theme.colors.surface,
+  },
+  chartValueLabel: {
+    position: 'absolute',
+    width: 40,
+    textAlign: 'center',
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+    lineHeight: 14,
+  },
+  chartValueLabelCurrent: {
+    color: theme.colors.primary,
+    fontWeight: '800',
+  },
+  chartLabelBlue: {
+    color: theme.colors.emoji_blue,
   },
   chartXLabel: {
     position: 'absolute',
@@ -1136,6 +1358,10 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontWeight: '700',
     lineHeight: 16,
+  },
+  chartXLabelCurrent: {
+    color: theme.colors.primary,
+    fontWeight: '800',
   },
   chartYLabel: {
     position: 'absolute',
@@ -1245,10 +1471,11 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   weekTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 21,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.5,
     color: theme.colors.primary,
-    lineHeight: 22,
+    lineHeight: 26,
   },
   weekImprovementText: {
     fontSize: 15,
@@ -1284,11 +1511,11 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   historyLogCardToday: {
-    borderColor: theme.colors.warning,
+    borderColor: theme.colors.current,
     borderWidth: 2.5,
     borderLeftWidth: 2.5,
-    borderLeftColor: theme.colors.warning,
-    backgroundColor: 'rgba(255, 193, 7, 0.05)',
+    borderLeftColor: theme.colors.current,
+    backgroundColor: 'rgba(111, 143, 223, 0.10)',
   },
   historyLogCardPressed: {
     opacity: 0.8,
@@ -1316,10 +1543,11 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   historyLogDayName: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 19,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.3,
     color: theme.colors.text,
-    lineHeight: 20,
+    lineHeight: 23,
   },
   historyLogImprovementText: {
     fontSize: 15,
@@ -1334,18 +1562,29 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   historyLogBadge: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: theme.borderRadius.pill,
+    fontSize: 15,
+    fontFamily: theme.fonts.display,
+    fontWeight: '800',
+    overflow: 'hidden',
+    lineHeight: 18,
+    textAlign: 'center',
     color: theme.colors.primaryLight,
     backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.pill,
-    fontSize: 14,
-    fontWeight: '700',
-    overflow: 'hidden',
-    lineHeight: 16,
-    minHeight: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
+  },
+  historyLogBadgeUp: {
+    color: theme.colors.success,
+    backgroundColor: 'rgba(52, 199, 89, 0.12)',
+  },
+  historyLogBadgeDown: {
+    color: theme.colors.error,
+    backgroundColor: 'rgba(255, 69, 58, 0.12)',
+  },
+  historyLogBadgeNeutral: {
+    color: theme.colors.warning,
+    backgroundColor: 'rgba(255, 196, 0, 0.12)',
   },
   emptyHistoryBox: {
     backgroundColor: theme.colors.surface,
@@ -1368,7 +1607,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   routineCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     padding: 18,
     marginBottom: 12,
@@ -1376,22 +1615,24 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
   routineCardActive: {
     borderColor: theme.colors.primary,
     borderWidth: 3,
-    backgroundColor: theme.colors.surfaceAlt,
   },
   routineCardContent: {
     flex: 1,
   },
   routineCardName: {
-    fontSize: 19,
-    fontWeight: '800',
+    fontSize: 21,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.4,
     color: theme.colors.text,
     marginBottom: 4,
+    lineHeight: 26,
   },
   routineCardDesc: {
     fontSize: 15,
@@ -1403,14 +1644,19 @@ const styles = StyleSheet.create({
     color: theme.colors.lightGray,
   },
   routineCardActiveIndicator: {
-    fontSize: 13,
-    color: theme.colors.primaryLight,
-    fontWeight: '800',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     backgroundColor: theme.colors.primaryMuted,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,
     overflow: 'hidden',
+  },
+  routineCardActiveText: {
+    fontSize: 13,
+    color: theme.colors.primaryLight,
+    fontWeight: '800',
   },
   newRoutineCard: {
     backgroundColor: theme.colors.surfaceAlt,

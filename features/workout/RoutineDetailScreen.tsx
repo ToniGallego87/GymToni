@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
   Modal,
   TextInput,
@@ -18,6 +17,8 @@ import {
   FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  GradientFill,
+  StretchScrollView,
 } from '../../components';
 import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
@@ -110,11 +111,11 @@ export function RoutineDetailScreen({
       .filter(line => line.trim().length > 0)
       .map((line, index) => {
         // Parsear formato: "Nombre — Nx#"
-        const match = line.match(/^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+(?:-\d+)?|—)?/);
+        const match = line.match(/^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+(?:-\d+)?\s*[a-zA-Z]*|—)?/);
         
         const name = match ? match[1].trim() : line.trim();
         const targetSets = match && match[2] && match[2] !== '—' ? parseInt(match[2]) : undefined;
-        const targetReps = match && match[3] && match[3] !== '—' ? match[3] : undefined;
+        const targetReps = match && match[3] && match[3].trim() !== '—' ? match[3].trim() : undefined;
 
         // Mantener el ID del ejercicio original si es posible
         const originalExercise = day.exercises[index];
@@ -158,12 +159,12 @@ export function RoutineDetailScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -181,6 +182,7 @@ export function RoutineDetailScreen({
               onLongPress={() => handleLongPressDay(day.id)}
               delayLongPress={1000}
             >
+              <GradientFill accent={accent} />
               <View style={styles.dayHeader}>
                 <View style={styles.dayHeaderLeft}>
                   <View style={styles.dayAccentWrap}>
@@ -221,7 +223,7 @@ export function RoutineDetailScreen({
           <Text style={styles.timerBlockHint}>Toca para editar</Text>
         </Pressable>
 
-      </ScrollView>
+      </StretchScrollView>
 
       <GlassTopBar
         title="Rutina"
@@ -377,12 +379,13 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   dayBlock: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderLeftWidth: 4,
     borderColor: theme.colors.border,
     padding: theme.spacing.md,
     marginBottom: 12,
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
   dayHeader: {
@@ -402,11 +405,12 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   dayName: {
-    fontSize: 19,
-    fontWeight: '800',
+    fontSize: 20,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.3,
     color: theme.colors.text,
     flexShrink: 1,
-    lineHeight: 22,
+    lineHeight: 25,
   },
   dayBadge: {
     color: theme.colors.primaryLight,

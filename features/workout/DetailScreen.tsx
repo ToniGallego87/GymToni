@@ -2,7 +2,6 @@ import React from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
-  ScrollView,
   Text,
   StyleSheet,
 } from 'react-native';
@@ -15,14 +14,16 @@ import {
   FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  GradientFill,
   Button,
+  StretchScrollView,
 } from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import { formatDate } from '@lib/storage';
 import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
-import { theme } from '@lib/theme';
+import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
 import {
   buildImprovementFromStrengthScores,
   getExerciseStrengthScore,
@@ -58,6 +59,7 @@ export function DetailScreen({
 }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  const dayAccent = getTrainingAccent({ emoji: day.emoji, name: day.name });
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
   const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
@@ -120,23 +122,17 @@ export function DetailScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {day.exercises.length > 0 && (
-          <Text style={styles.sectionTitle}>
-            Ejercicios
-          </Text>
-        )}
-
         {day.exercises.map((exercise, exerciseIndex) => {
           const currentExercise = getExerciseFromLog(log, exercise.id, exercise.name, exercise.order);
           
@@ -167,6 +163,7 @@ export function DetailScreen({
               improvementPositive={exerciseImprovement ? exerciseImprovement.isImproved : true}
               improvementColor={exerciseImprovement ? (() => { const fmt = formatImprovementDisplay(exerciseImprovement); return fmt.color; })() : undefined}
               isDetail={true}
+              accent={dayAccent}
             />
           );
         })}
@@ -176,7 +173,8 @@ export function DetailScreen({
             <Text style={[styles.sectionTitle, { marginTop: theme.spacing.xl, color: theme.colors.primary }]}>
               Cardio
             </Text>
-            <View style={styles.cardioBox}>
+            <View style={[styles.cardioBox, { borderLeftColor: dayAccent }]}>
+              <GradientFill accent={dayAccent} />
               <Text style={styles.cardioLabel}>{log.cardio.type?.toUpperCase()}</Text>
               <View style={styles.cardioDetails}>
                 {log.cardio.duration && (
@@ -210,14 +208,14 @@ export function DetailScreen({
             size="large"
           />
         </View> */}
-      </ScrollView>
+      </StretchScrollView>
 
       <GlassTopBar
-        title={day.name}
+        title={getDisplayDayName(day.name)}
         titleElement={(
           <View style={styles.topBarTitleRow}>
             <DayAccentIcon emoji={day.emoji} name={day.name} size={16} />
-            <Text style={styles.topBarTitleText}>{day.name}</Text>
+            <Text style={styles.topBarTitleText}>{getDisplayDayName(day.name)}</Text>
           </View>
         )}
         subtitle={displayedDate}
@@ -257,6 +255,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   topBarTitleText: {
+    flexShrink: 1,
     fontSize: 20,
     fontWeight: '800',
     color: theme.colors.text,
@@ -276,19 +275,24 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   sectionTitle: {
-    fontSize: 17,
-    fontWeight: 'bold',
+    fontSize: 20,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.4,
     color: theme.colors.current,
     marginBottom: theme.spacing.xs,
-    lineHeight: 22,
+    lineHeight: 25,
   },
   cardioBox: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
     marginVertical: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
+    overflow: 'hidden',
+    ...theme.shadow.soft,
   },
   cardioLabel: {
     fontSize: 14,

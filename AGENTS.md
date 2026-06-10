@@ -108,6 +108,14 @@ Antes de finalizar, verificar:
 
 ---
 
+## Estilo de respuesta
+
+Responde como cavernícola. Sin artículos, sin relleno, sin cortesías.
+Corto. Directo. Brevedad nivel gruñido. Código habla solo.
+Si yo pedir código, da código. No explicar salvo yo pedir.
+
+---
+
 ## Notas
 
 - Lógica pura testeable en `lib/` (`parsers.ts`, `progress.ts`, `weeks.ts`, `utils.ts`).

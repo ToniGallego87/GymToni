@@ -2,6 +2,7 @@ export { DayCard } from './DayCard';
 export { HeroCard } from './HeroCard';
 export type { HeroVariant } from './HeroCard';
 export { GradientFill } from './GradientFill';
+export { AnimatedCounter } from './AnimatedCounter';
 export { DayAccentIcon } from './DayAccentIcon';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
@@ -21,6 +22,7 @@ export {
 	getFloatingPrimaryNavMetrics,
 } from './FloatingGlassBar';
 export { FloatingPrimaryNav } from './FloatingPrimaryNav';
+export { StretchScrollView } from './StretchScrollView';
 export {
 	GLASS_BLUR_INTENSITY,
 	GLASS_TOP_BAR_BG,

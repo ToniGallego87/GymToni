@@ -7,9 +7,10 @@
     <item name="colorPrimaryDark">@color/status_bar_color</item>
     <item name="android:windowBackground">@color/status_bar_color</item>
     <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-    <item name="android:statusBarColor">@color/status_bar_color</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
     <item name="android:windowLightStatusBar" tools:targetApi="m">false</item>
     <item name="android:windowTranslucentStatus">false</item>
+    <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="o_mr1">shortEdges</item>
   </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
     <item name="android:padding">0dp</item>

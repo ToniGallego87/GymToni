@@ -6,13 +6,14 @@ import {
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  GradientFill,
   Toast,
+  StretchScrollView,
 } from '@components';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Modal,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -85,12 +86,12 @@ export function DataScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -98,6 +99,7 @@ export function DataScreen({
       >
         {!hasNoData && (
           <View style={styles.summaryCard}>
+            <GradientFill accent={theme.colors.primary} />
             <View style={styles.titleRow}>
               <MaterialCommunityIcons name="chart-box-outline" size={18} color={theme.colors.text} />
               <Text style={styles.summaryTitle}>Resumen actual</Text>
@@ -118,6 +120,7 @@ export function DataScreen({
 
         {!hasNoData && (
           <View style={styles.actionCard}>
+            <GradientFill accent={theme.colors.primary} />
             <View style={styles.titleRow}>
               <MaterialCommunityIcons name="export-variant" size={18} color={theme.colors.text} />
               <Text style={styles.actionTitle}>Exportar datos</Text>
@@ -135,6 +138,7 @@ export function DataScreen({
         )}
 
         <View style={styles.actionCard}>
+          <GradientFill accent={theme.colors.primary} />
           <View style={styles.titleRow}>
             <MaterialCommunityIcons name="import" size={18} color={theme.colors.text} />
             <Text style={styles.actionTitle}>Importar datos</Text>
@@ -153,6 +157,7 @@ export function DataScreen({
 
         {!hasNoData && (
           <View style={[styles.actionCard, styles.dangerCard]}>
+            <GradientFill accent={theme.colors.error} />
             <View style={styles.titleRow}>
               <MaterialCommunityIcons name="delete-outline" size={18} color={theme.colors.error} />
               <Text style={[styles.actionTitle, styles.dangerTitle]}>Limpiar datos</Text>
@@ -168,7 +173,7 @@ export function DataScreen({
             />
           </View>
         )}
-      </ScrollView>
+      </StretchScrollView>
 
       <GlassTopBar
         title="Datos"
@@ -280,27 +285,29 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingBottom: 0,
     marginTop: 0,
-    gap: 12,
+    gap: 20,
   },
   summaryCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
-    borderWidth: 2,
-    borderColor: theme.colors.primary,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     padding: theme.spacing.md,
+    gap: 12,
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
   summaryTitle: {
-    fontSize: 19,
-    fontWeight: '800',
+    fontSize: 21,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.4,
     color: theme.colors.text,
-    lineHeight: 24,
+    lineHeight: 26,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 12,
   },
   topBarTitleRow: {
     flexDirection: 'row',
@@ -322,9 +329,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   summaryValue: {
-    fontSize: 26,
-    fontWeight: '800',
+    fontSize: 32,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.5,
     color: theme.colors.primary,
+    lineHeight: 38,
   },
   summaryLabel: {
     marginTop: 4,
@@ -338,21 +347,21 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.border,
   },
   actionCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
     padding: theme.spacing.md,
     gap: 10,
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
   actionTitle: {
-    fontSize: 19,
-    fontWeight: '800',
+    fontSize: 21,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.4,
     color: theme.colors.text,
-    lineHeight: 24,
+    lineHeight: 26,
   },
   actionSubtitle: {
     fontSize: 14,
@@ -360,7 +369,7 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
   },
   dangerCard: {
-    borderLeftColor: theme.colors.error,
+    borderColor: theme.colors.error,
   },
   dangerTitle: {
     color: theme.colors.error,

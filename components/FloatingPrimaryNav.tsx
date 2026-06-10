@@ -72,9 +72,15 @@ export function FloatingPrimaryNav({
           >
             <MaterialCommunityIcons
               name={item.icon}
-              size={25}
+              size={22}
               style={[styles.icon, isActive && styles.iconActive]}
             />
+            <Text
+              style={[styles.label, isActive && styles.labelActive]}
+              numberOfLines={1}
+            >
+              {item.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -85,12 +91,12 @@ export function FloatingPrimaryNav({
 const styles = StyleSheet.create({
   item: {
     flex: 1,
-    borderRadius: 16,
-    minHeight: 56,
+    borderRadius: 14,
+    minHeight: 50,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,
-    paddingVertical: 12,
+    paddingVertical: 6,
     backgroundColor: 'transparent',
   },
   itemActive: {
@@ -100,7 +106,7 @@ const styles = StyleSheet.create({
   },
   icon: {
     color: theme.colors.textSecondary,
-    marginBottom: 5,
+    marginBottom: 3,
   },
   iconActive: {
     color: theme.colors.primary,
@@ -110,9 +116,10 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
     lineHeight: 14,
+    letterSpacing: -0.2,
     textAlign: 'center',
   },
   labelActive: {
-    color: theme.colors.white,
+    color: theme.colors.primary,
   },
 });

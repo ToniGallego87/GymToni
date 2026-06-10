@@ -74,8 +74,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   name: {
-    fontSize: 17,
-    fontWeight: '700',
+    fontSize: 19,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.3,
     color: theme.colors.text,
     marginBottom: 4,
   },

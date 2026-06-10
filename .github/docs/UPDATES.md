@@ -1,5 +1,37 @@
 # UPDATES
 
+## Version 0.4.9 - 2026-06-10
+
+### Cambios
+- Barra de estado del móvil ahora transparente y edge-to-edge: el contenido se dibuja detrás del status bar y la barra de título glass (`GlassTopBar`) lo cubre, de modo que status bar y título parecen un único elemento translúcido y se ve el fondo a través.
+
+### Arquitectura
+- Android pasa a edge-to-edge real: `targetSdk`/`compileSdk` 34 → 35 (en Android 15+ targetear SDK < 35 forzaba el inset del status bar). `MainActivity` configura `statusBarColor` transparente, `layoutInDisplayCutoutMode=shortEdges` (para muescas/cámara) y desactiva el contraste forzado.
+- Nuevo `app/_layout.tsx` con `<Slot/>`: elimina el `Stack` por defecto de expo-router, que envolvía la ruta e inseteaba el contenido el alto del status bar.
+- Patch de `expo-modules-core` (`patches/`) para compilar contra SDK 35 (`requestedPermissions` pasó a nullable en API 35).
+
+## Version 0.4.8 - 2026-06-09
+
+### Nuevas funcionalidades
+- Indicador de racha en Inicio ("🔥 N semanas seguidas") que cuenta semanas completadas consecutivas; una semana en curso no rompe la racha.
+
+### Cambios
+- Vista de día de entrenamiento terminado acorde a Inicio: cada tarjeta de ejercicio y la de cardio se tiñen con el color del día (`GradientFill` + borde de acento), con el nombre del ejercicio en fuente display. El título de la barra muestra solo el nombre del día (sin el prefijo "Día X -") y se eliminó el encabezado "Ejercicios" redundante.
+- Barra superior (`GlassTopBar`) ahora crece con el contenido: los títulos de 2 líneas ya no empujan la fecha/subtítulo contra el borde inferior.
+- Vistas Rutinas y Datos acordes a Inicio: tarjetas de rutina, de día (detalle de rutina) y de resumen/acciones de Datos con gradiente sutil (`GradientFill`), borde de acento y títulos en fuente display; los contadores de Datos (rutinas/entrenamientos) también en fuente display.
+- Calendario acorde a Inicio: cabecera de mes con gradiente sutil (`GradientFill`), borde de acento y nombre del mes en fuente display; el día de "hoy" se resalta en azul (antes blanco) para alinearse con el resto de la app.
+- Pantalla de rellenar ejercicios rediseñada acorde a Inicio: cada tarjeta de ejercicio se tiñe con el color del día (push azul, pull rojo, pierna verde) mediante borde de acento, gradiente sutil (`GradientFill`) y círculo de acento, con el nombre en fuente display y las series añadidas como chips del mismo color. Botón "Guardar" con gradiente dorado estilo tarjeta principal.
+- Pantalla de nueva rutina rediseñada acorde a Inicio: cada día se tiñe en vivo con el color de su tipo (push azul, pull rojo, pierna verde) mediante borde de acento y gradiente sutil (`GradientFill`), con círculo de acento, emoji y "Día N" en fuente display.
+- Previsualización de ejercicios en vivo bajo el campo de texto: chips con el nombre y el esquema de series×reps (p. ej. "Press banca · 4×6-8"), confirmando que la sintaxis `[4x6-8]` se interpretó.
+- Botón "Crear rutina" con gradiente dorado estilo tarjeta principal, y "Añadir/Quitar día" convertidos en chips-pill coherentes con el resto de la app.
+- Barra de navegación inferior con etiqueta de texto bajo cada icono (Entrenar, Rutinas, Calendario, Datos), más clara que solo iconos.
+- Indicadores de tendencia unificados a iconos vectoriales (flechas y chevrons) en la tarjeta de progreso, las cabeceras de semana y el historial, sustituyendo los símbolos de texto (▲▼↑↓✓).
+- El resaltado del entrenamiento de "hoy" pasa de ámbar a azul, para que no compita con el amarillo de marca.
+- Fuente display "Anton" (condensada, estilo deportivo) en los titulares: tarjeta principal, "Semana N", "Rutina N" y nombres de día. Cargada con expo-font (sin dependencias nuevas).
+- Animación de despliegue suave al expandir/colapsar semanas y el gráfico de progreso.
+- Los porcentajes de mejora destacados (progreso y semanas) cuentan animados desde 0.
+- Gráfico de progreso mejorado: etiqueta de valor sobre cada barra y resaltado de la mejor semana.
+
 ## Version 0.4.7 - 2026-06-08
 
 ### Cambios

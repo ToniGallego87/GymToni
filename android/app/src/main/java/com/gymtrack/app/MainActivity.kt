@@ -5,7 +5,9 @@ import android.os.Bundle
 import android.graphics.Color
 import android.view.View
 import android.view.WindowInsetsController
+import android.view.WindowManager
 import androidx.core.graphics.toColorInt
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
@@ -19,8 +21,32 @@ class MainActivity : ReactActivity() {
   private fun applySystemBarStyle() {
     window.addFlags(android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
     window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
+    // En pantallas con muesca/cámara el modo por defecto reserva la franja del cutout
+    // (status bar), impidiendo que el contenido se dibuje detrás. shortEdges lo permite.
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+      window.attributes = window.attributes.apply {
+        layoutInDisplayCutoutMode =
+          WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+      }
+    }
+    // Edge-to-edge: el contenido se dibuja detrás de las barras de sistema. Requiere
+    // targetSdk >= 35 para que Android 15+ no fuerce el inset del status bar.
     WindowCompat.setDecorFitsSystemWindows(window, false)
     window.statusBarColor = Color.TRANSPARENT
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+      window.isStatusBarContrastEnforced = false
+    }
+    // RN aplica el inset superior como padding del content view, empujando todo bajo
+    // el status bar. Forzamos padding 0 y dejamos pasar los insets a los hijos para
+    // que react-native-safe-area-context los siga leyendo (la barra glass se dimensiona
+    // con ellos y cubre el status bar).
+    findViewById<View>(android.R.id.content)?.let { content ->
+      ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+        v.setPadding(0, 0, 0, 0)
+        insets
+      }
+      ViewCompat.requestApplyInsets(content)
+    }
     WindowCompat.getInsetsController(window, window.decorView)?.isAppearanceLightStatusBars = false
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {

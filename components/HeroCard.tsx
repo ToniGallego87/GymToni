@@ -111,9 +111,10 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.darkGray,
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: -0.8,
+    fontFamily: theme.fonts.display,
+    fontSize: 26,
+    lineHeight: 30,
+    letterSpacing: 0.5,
     textAlign: 'center',
   },
 });

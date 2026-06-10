@@ -4,22 +4,29 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TextInput,
+  Pressable,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Button,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  GradientFill,
   Toast,
+  StretchScrollView,
 } from '../../components';
 import { generateId } from '@lib/storage';
-import { theme } from '@lib/theme';
+import { theme, getTrainingAccent } from '@lib/theme';
 import { WorkoutDay, WorkoutExercise, WorkoutRoutine } from '../../types';
 
 interface NewRoutineScreenProps {
@@ -35,6 +42,14 @@ interface NewRoutineDayForm {
 }
 
 const EXTRA_EMOJIS = ['🟡', '🟣', '🟠', '⚪'];
+
+// Acento por tipo de día, coherente con getTrainingAccent (Inicio).
+const TYPE_ACCENT: Record<string, string> = {
+  push: theme.colors.emoji_blue,
+  pull: theme.colors.error,
+  legs: theme.colors.emoji_green,
+  mixed: theme.colors.primary,
+};
 
 function getNormalizedDayType(value: string) {
   const normalized = value.trim().toLowerCase();
@@ -55,13 +70,42 @@ function getEmojiForDayType(type: string, fallbackIndex: number) {
   return EXTRA_EMOJIS[fallbackIndex % EXTRA_EMOJIS.length];
 }
 
+// Color y emoji en vivo para pintar la card mientras se escribe el título.
+function getDayAccent(title: string, index: number): { accent: string; emoji: string | null } {
+  const trimmed = title.trim();
+  if (!trimmed) return { accent: theme.colors.border, emoji: null };
+
+  const type = getNormalizedDayType(trimmed);
+  const emoji = getEmojiForDayType(type, index);
+  const accent = TYPE_ACCENT[type] ?? getTrainingAccent({ emoji });
+  return { accent, emoji };
+}
+
+const EXERCISE_LINE_REGEX = /^(.*?)\s*\[(\d+)\s*x\s*([^\]]+)\]\s*$/i;
+
+// Previsualización de ejercicios: confirma que la sintaxis [4x6-8] se entendió.
+function parseExercisePreview(text: string): { name: string; scheme: string }[] {
+  return text
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line: string) => line.trim())
+    .filter(Boolean)
+    .map((line: string) => {
+      const parsed = line.match(EXERCISE_LINE_REGEX);
+      if (parsed) {
+        return { name: parsed[1].trim() || 'Ejercicio', scheme: `${parsed[2]}×${parsed[3].trim()}` };
+      }
+      return { name: line, scheme: '3×10-12' };
+    });
+}
+
 function parseExerciseLine(
   line: string,
   routineId: string,
   dayNumber: number,
   order: number
 ): WorkoutExercise {
-  const parsed = line.match(/^(.*?)\s*\[(\d+)\s*x\s*([^\]]+)\]\s*$/i);
+  const parsed = line.match(EXERCISE_LINE_REGEX);
 
   if (parsed) {
     return {
@@ -80,6 +124,46 @@ function parseExerciseLine(
     targetSets: 3,
     targetReps: '10-12',
   };
+}
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+
+// Botón principal estilo HeroCard (gradiente dorado), coherente con "Empezar entrenamiento".
+function CreateRoutineButton({ onPress }: { onPress: () => void }) {
+  const scale = useSharedValue(1);
+  const animatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <AnimatedPressable
+      style={[styles.createWrapper, animatedStyle]}
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 18, stiffness: 320 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+      }}
+    >
+      <LinearGradient
+        colors={['#F9D85A', '#F7CC3D', '#E0B226']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.createGradient}
+      >
+        <LinearGradient
+          colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 0, y: 1 }}
+          style={styles.createSheen}
+          pointerEvents="none"
+        />
+        <MaterialCommunityIcons name="check-bold" size={22} color={theme.colors.darkGray} />
+        <Text style={styles.createText}>Crear rutina</Text>
+      </LinearGradient>
+    </AnimatedPressable>
+  );
 }
 
 export function NewRoutineScreen({
@@ -103,11 +187,29 @@ export function NewRoutineScreen({
     () => days.every((day: NewRoutineDayForm) => day.title.trim() && day.exercisesText.trim()),
     [days]
   );
+  const canRemoveDay = days.length > 1;
+  const canAddMoreDays = canAddNewDay && days.length < 7;
 
   const handleUpdateDay = (dayId: string, key: keyof NewRoutineDayForm, value: string) => {
     setDays((previous: NewRoutineDayForm[]) => previous.map((day: NewRoutineDayForm) => (
       day.id === dayId ? { ...day, [key]: value } : day
     )));
+  };
+
+  const handleAddDay = () => {
+    if (days.length >= 7) {
+      setToast({ message: 'Máximo 7 días', type: 'error' });
+      return;
+    }
+
+    setDays((previous: NewRoutineDayForm[]) => ([
+      ...previous,
+      { id: generateId(), title: '', exercisesText: '' },
+    ]));
+  };
+
+  const handleRemoveDay = () => {
+    setDays((previous: NewRoutineDayForm[]) => previous.slice(0, -1));
   };
 
   const buildRoutineDays = (routineId: string): WorkoutDay[] => {
@@ -178,77 +280,100 @@ export function NewRoutineScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {days.map((day: NewRoutineDayForm, index: number) => (
-          <View key={day.id} style={styles.dayCard}>
-            <Text style={styles.dayTitle}>Día {index + 1}</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Ej: Push pesado"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={day.title}
-              onChangeText={(value: string) => handleUpdateDay(day.id, 'title', value)}
-            />
+        {days.map((day: NewRoutineDayForm, index: number) => {
+          const { accent, emoji } = getDayAccent(day.title, index);
+          const preview = parseExercisePreview(day.exercisesText);
 
-            <Text style={styles.label}>Ejercicios</Text>
-            <TextInput
-              style={styles.exercisesInput}
-              placeholder={'Un ejercicio por línea\nOpcional: Press banca [4x6-8]'}
-              placeholderTextColor={theme.colors.textSecondary}
-              value={day.exercisesText}
-              onChangeText={(value: string) => handleUpdateDay(day.id, 'exercisesText', value)}
-              multiline
-              textAlignVertical="top"
-            />
-          </View>
-        ))}
+          return (
+            <View key={day.id} style={[styles.dayCard, { borderLeftColor: accent }]}>
+              <GradientFill accent={day.title.trim() ? accent : undefined} />
+
+              <View style={styles.dayHeaderRow}>
+                <MaterialCommunityIcons name="circle" size={15} color={accent} />
+                <Text style={styles.dayTitleDisplay}>Día {index + 1}</Text>
+                {!!emoji && <Text style={styles.dayTypeEmoji}>{emoji}</Text>}
+              </View>
+
+              <TextInput
+                style={styles.input}
+                placeholder="Ej: Push pesado"
+                placeholderTextColor={theme.colors.textSecondary}
+                value={day.title}
+                onChangeText={(value: string) => handleUpdateDay(day.id, 'title', value)}
+              />
+
+              <Text style={styles.label}>Ejercicios</Text>
+              <TextInput
+                style={styles.exercisesInput}
+                placeholder={'Un ejercicio por línea\nOpcional: Press banca [4x6-8]'}
+                placeholderTextColor={theme.colors.textSecondary}
+                value={day.exercisesText}
+                onChangeText={(value: string) => handleUpdateDay(day.id, 'exercisesText', value)}
+                multiline
+                textAlignVertical="top"
+              />
+
+              {preview.length > 0 && (
+                <View style={styles.previewWrap}>
+                  {preview.map((ex: { name: string; scheme: string }, exIndex: number) => (
+                    <View key={exIndex} style={[styles.previewChip, { borderColor: accent }]}>
+                      <Text style={styles.previewChipName} numberOfLines={1}>
+                        {ex.name}
+                      </Text>
+                      <Text style={styles.previewChipScheme}>{ex.scheme}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </View>
+          );
+        })}
 
         <View style={styles.rowButtons}>
-          <Button
-            title="Añadir día"
-            onPress={() => {
-              if (days.length >= 7) {
-                setToast({ message: 'Máximo 7 días', type: 'error' });
-                return;
-              }
+          <Pressable
+            style={[styles.dayChip, !canAddMoreDays && styles.dayChipDisabled]}
+            onPress={handleAddDay}
+            disabled={!canAddMoreDays}
+          >
+            <MaterialCommunityIcons
+              name="plus-thick"
+              size={16}
+              color={canAddMoreDays ? theme.colors.primary : theme.colors.textSecondary}
+            />
+            <Text style={[styles.dayChipText, !canAddMoreDays && styles.dayChipTextDisabled]}>
+              Añadir día
+            </Text>
+          </Pressable>
 
-              setDays((previous: NewRoutineDayForm[]) => ([
-                ...previous,
-                { id: generateId(), title: '', exercisesText: '' },
-              ]));
-            }}
-            variant="secondary"
-            disabled={!canAddNewDay || days.length >= 7}
-            size="medium"
-            style={styles.growButton}
-          />
-
-          <Button
-            title="Quitar día"
-            onPress={() => setDays((previous: NewRoutineDayForm[]) => previous.slice(0, -1))}
-            variant="secondary"
-            disabled={days.length <= 1}
-            size="medium"
-            style={styles.growButton}
-          />
+          <Pressable
+            style={[styles.dayChip, !canRemoveDay && styles.dayChipDisabled]}
+            onPress={handleRemoveDay}
+            disabled={!canRemoveDay}
+          >
+            <MaterialCommunityIcons
+              name="minus-thick"
+              size={16}
+              color={canRemoveDay ? theme.colors.primary : theme.colors.textSecondary}
+            />
+            <Text style={[styles.dayChipText, !canRemoveDay && styles.dayChipTextDisabled]}>
+              Quitar día
+            </Text>
+          </Pressable>
         </View>
 
-        <Button
-          title="Crear rutina"
-          onPress={handleCreate}
-          size="large"
-        />
-      </ScrollView>
+        <CreateRoutineButton onPress={handleCreate} />
+      </StretchScrollView>
 
       <GlassTopBar
         title="Nueva rutina"
@@ -289,19 +414,32 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   dayCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
     padding: theme.spacing.md,
     gap: 10,
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
-  dayTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: theme.colors.primary,
-    lineHeight: 22,
+  dayHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  dayTitleDisplay: {
+    fontSize: 21,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.5,
+    color: theme.colors.text,
+    lineHeight: 26,
+  },
+  dayTypeEmoji: {
+    fontSize: 15,
+    lineHeight: 20,
   },
   label: {
     fontSize: 13,
@@ -333,12 +471,100 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  previewWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  previewChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    maxWidth: '100%',
+    paddingLeft: 12,
+    paddingRight: 6,
+    paddingVertical: 5,
+    borderRadius: theme.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  previewChipName: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.text,
+    lineHeight: 18,
+  },
+  previewChipScheme: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: theme.colors.primaryLight,
+    backgroundColor: theme.colors.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: theme.borderRadius.pill,
+    overflow: 'hidden',
+    lineHeight: 16,
+  },
   rowButtons: {
     flexDirection: 'row',
     gap: 10,
   },
-  growButton: {
+  dayChip: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surface,
+  },
+  dayChipDisabled: {
+    borderColor: theme.colors.border,
+    opacity: 0.5,
+  },
+  dayChipText: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: theme.colors.primary,
+    lineHeight: 18,
+  },
+  dayChipTextDisabled: {
+    color: theme.colors.textSecondary,
+  },
+  createWrapper: {
+    borderRadius: theme.borderRadius.lg,
+    marginTop: 4,
+    ...theme.shadow.card,
+  },
+  createGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+    borderRadius: theme.borderRadius.lg,
+    paddingVertical: 18,
+    paddingHorizontal: 24,
+    overflow: 'hidden',
+  },
+  createSheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
+  },
+  createText: {
+    color: theme.colors.darkGray,
+    fontFamily: theme.fonts.display,
+    fontSize: 22,
+    letterSpacing: 0.5,
+    lineHeight: 26,
   },
   topBarTitleRow: {
     flexDirection: 'row',
@@ -352,5 +578,3 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
 });
-
-

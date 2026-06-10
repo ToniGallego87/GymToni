@@ -1,5 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { BackHandler, Platform, StatusBar, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
+import * as SplashScreen from 'expo-splash-screen';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
@@ -368,12 +371,32 @@ function AppContent() {
   );
 }
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
+
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Anton: require('../assets/fonts/Anton-Regular.ttf'),
+  });
+
+  const onLayoutRootView = useCallback(async () => {
+    if (fontsLoaded) {
+      await SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [fontsLoaded]);
+
+  if (!fontsLoaded) {
+    return null;
+  }
+
   return (
-    <WorkoutProvider>
-      <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
-      <AppContent />
-    </WorkoutProvider>
+    <GestureHandlerRootView style={styles.container}>
+      <WorkoutProvider>
+        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <View style={styles.container} onLayout={onLayoutRootView}>
+          <AppContent />
+        </View>
+      </WorkoutProvider>
+    </GestureHandlerRootView>
   );
 }
 

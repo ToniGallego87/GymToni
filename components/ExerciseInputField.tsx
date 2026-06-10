@@ -14,6 +14,7 @@ import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
 import { parseSeriesString } from '@lib/parsers';
 import { getImprovementDisplay } from '@lib/utils';
+import { GradientFill } from './GradientFill';
 
 interface ExerciseInputFieldProps {
   order: number;
@@ -30,6 +31,8 @@ interface ExerciseInputFieldProps {
   notes?: string;
   previousLog?: ExerciseLog | null;
   improvement?: { isImproved: boolean; percent: number } | null;
+  // Color de acento del día (push/pull/pierna). Tiñe borde, fondo y tags.
+  accent?: string;
 }
 
 export function ExerciseInputField({
@@ -44,6 +47,7 @@ export function ExerciseInputField({
   notes,
   previousLog,
   improvement,
+  accent = theme.colors.primary,
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
@@ -189,9 +193,16 @@ export function ExerciseInputField({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { borderLeftColor: accent }]}>
+      <GradientFill accent={accent} />
       <View style={styles.header}>
         <View style={styles.titleSection}>
+          <MaterialCommunityIcons
+            name="circle"
+            size={13}
+            color={accent}
+            style={styles.titleAccent}
+          />
           <Text style={styles.exerciseName}>{order}.- {exerciseName}</Text>
         </View>
         <Pressable
@@ -258,8 +269,8 @@ export function ExerciseInputField({
             contentContainerStyle={styles.seriesList}
           >
             {addedSets.map((set, idx) => (
-              <View key={idx} style={styles.serieTag}>
-                <Text style={styles.serieTagText}>
+              <View key={idx} style={[styles.serieTag, { borderColor: accent }]}>
+                <Text style={[styles.serieTagText, { color: accent }]}>
                   {set.weight === -1 || set.reps === -1 ? '—' : `${set.weight}x${set.reps}`}
                 </Text>
               </View>
@@ -416,15 +427,16 @@ export function ExerciseInputField({
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     marginTop: 16,
     marginBottom: 8,
     padding: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderLeftWidth: 3,
+    borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
   header: {
@@ -435,14 +447,20 @@ const styles = StyleSheet.create({
   },
   titleSection: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flex: 1,
+    gap: 8,
+  },
+  titleAccent: {
+    marginTop: 2,
   },
   exerciseName: {
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 20,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.3,
     color: theme.colors.text,
     flexShrink: 1,
+    lineHeight: 25,
   },
   targetRowContainer: {
     flexDirection: 'row',

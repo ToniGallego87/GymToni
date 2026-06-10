@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -14,10 +13,12 @@ import {
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  GradientFill,
+  StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
-import { theme } from '@lib/theme';
+import { theme, getTrainingAccent } from '@lib/theme';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 interface CalendarScreenProps {
@@ -44,17 +45,6 @@ const MONTH_NAMES = [
 ];
 
 const WEEK_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
-const WEEK_COLORS = [
-  theme.colors.primary,
-  theme.colors.emoji_green,
-  theme.colors.emoji_blue,
-  theme.colors.error,
-  theme.colors.warning,
-];
-
-function getWeekColor(blockNumber: number) {
-  return WEEK_COLORS[(Math.max(1, blockNumber) - 1) % WEEK_COLORS.length];
-}
 
 export function CalendarScreen({
   onSelectLog,
@@ -85,6 +75,7 @@ export function CalendarScreen({
     return undefined;
   };
 
+  // Número de semana (bloque) dentro de su rutina para cada log.
   const logToWeekBlock = useMemo(() => {
     const map: Record<string, number> = {};
 
@@ -182,23 +173,24 @@ export function CalendarScreen({
     <View style={styles.container}>
       <StatusBar style="light" translucent backgroundColor="transparent" />
 
-      <ScrollView
+      <StretchScrollView
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: scrollBottomPadding,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.monthCard}>
+          <GradientFill accent={theme.colors.primary} />
           <Pressable
             style={styles.monthNavButton}
             onPress={() => setMonthOffset((prev: number) => prev - 1)}
           >
-            <MaterialCommunityIcons name="chevron-left" size={20} color={theme.colors.text} />
+            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.colors.text} />
           </Pressable>
 
           <Text style={styles.monthTitle}>
@@ -209,7 +201,7 @@ export function CalendarScreen({
             style={styles.monthNavButton}
             onPress={() => setMonthOffset((prev: number) => prev + 1)}
           >
-            <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.text} />
+            <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.text} />
           </Pressable>
         </View>
 
@@ -232,12 +224,13 @@ export function CalendarScreen({
             const primaryLog = dayLogs[0];
             const primaryDay = primaryLog ? getDayById(primaryLog.dayId) : undefined;
             const hasLogs = !!primaryLog && !!primaryDay;
-            const weekBlocks = dayLogs
-              .map((log: WorkoutLog) => logToWeekBlock[log.id])
-              .filter((value: number | undefined): value is number => typeof value === 'number');
-            const cellColor = weekBlocks.length > 0
-              ? getWeekColor(Math.min(...weekBlocks))
-              : theme.colors.primary;
+            // Color de la celda = color del día de entrenamiento (emoji de la rutina).
+            const dayColor = primaryDay ? getTrainingAccent(primaryDay) : theme.colors.primary;
+            const routineIndex = primaryLog
+              ? state.routines.findIndex((r: WorkoutRoutine) => r.id === primaryLog.routineId)
+              : -1;
+            // Semana (bloque) dentro de la rutina.
+            const weekNumber = primaryLog ? logToWeekBlock[primaryLog.id] : undefined;
 
             return (
               <Pressable
@@ -251,25 +244,42 @@ export function CalendarScreen({
                 style={[
                   styles.dayCell,
                   hasLogs && styles.dayCellActive,
-                  hasLogs && { backgroundColor: cellColor, borderColor: cellColor },
+                  hasLogs && { borderColor: dayColor },
                   dateKey === todayKey && styles.dayCellToday,
                 ]}
               >
-                <Text style={[styles.dayNumber, hasLogs && styles.dayNumberActive]}>
-                  {dayNumber}
-                </Text>
-
-                {hasLogs && primaryLog && primaryDay && (
-                  <View style={styles.dayMeta}>
-                    <Text style={styles.dayMetaText}>R{state.routines.findIndex((r: WorkoutRoutine) => r.id === primaryLog.routineId) + 1}</Text>
-                    <Text style={styles.dayMetaText}>Día {primaryDay.dayNumber}</Text>
-                  </View>
+                {hasLogs ? (
+                  <>
+                    <GradientFill accent={dayColor} />
+                    <Text style={[styles.dayNumber, { color: theme.colors.white }]}>
+                      {dayNumber}
+                    </Text>
+                    {typeof weekNumber === 'number' ? (
+                      <Text
+                        style={[styles.dayWeekLabel, { color: dayColor }]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.6}
+                      >
+                        S{weekNumber}
+                      </Text>
+                    ) : (
+                      <View style={styles.dayWeekSpacer} />
+                    )}
+                    {routineIndex >= 0 && (
+                      <Text style={styles.dayRoutineChip} numberOfLines={1}>
+                        R{routineIndex + 1}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.dayNumber}>{dayNumber}</Text>
                 )}
               </Pressable>
             );
           })}
         </View>
-      </ScrollView>
+      </StretchScrollView>
 
       <GlassTopBar
         title="Calendario"
@@ -304,22 +314,27 @@ const styles = StyleSheet.create({
     marginTop: 0,
   },
   monthCard: {
-    backgroundColor: theme.colors.surface,
+    backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderLeftWidth: 4,
+    borderLeftColor: theme.colors.primary,
+    overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     marginBottom: 14,
+    ...theme.shadow.soft,
   },
   monthTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 22,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.5,
     color: theme.colors.text,
-    lineHeight: 22,
+    lineHeight: 27,
   },
   monthNavButton: {
     paddingHorizontal: 10,
@@ -361,15 +376,16 @@ const styles = StyleSheet.create({
   dayCell: {
     flex: 1,
     minWidth: '12.8%',
-    minHeight: 72,
+    minHeight: 80,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    paddingVertical: 6,
-    paddingHorizontal: 3,
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 7,
+    paddingHorizontal: 6,
+    alignItems: 'stretch',
+    justifyContent: 'flex-start',
+    overflow: 'hidden',
   },
   dayCellEmpty: {
     opacity: 0,
@@ -378,27 +394,50 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   dayCellToday: {
-    borderWidth: 2,
-    borderColor: theme.colors.white,
+    borderWidth: 2.5,
+    borderColor: theme.colors.current,
   },
   dayNumber: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '800',
     color: theme.colors.text,
     lineHeight: 16,
   },
-  dayNumberActive: {
-    color: theme.colors.darkGray,
+  // Chip de rutina (R1, R2...): pequeño, blanco, centrado en la parte inferior.
+  // includeFontPadding:false + textAlignVertical centran el texto dentro de la
+  // pastilla en Android (si no, queda desplazado hacia arriba).
+  dayRoutineChip: {
+    alignSelf: 'center',
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.2,
+    lineHeight: 12,
+    color: theme.colors.primary,
+    borderColor: theme.colors.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderRadius: theme.borderRadius.pill,
+    overflow: 'hidden',
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
-  dayMeta: {
-    alignItems: 'center',
-    gap: 1,
+  // Número de semana (S1, S2...): protagonista, centrado en el espacio restante.
+  // lineHeight con holgura sobre fontSize: Anton tiene ascendentes altas y, si
+  // van muy pegados, el glifo se recorta por arriba.
+  dayWeekLabel: {
+    flex: 1,
+    fontFamily: theme.fonts.display,
+    fontSize: 26,
+    letterSpacing: 0.5,
+    lineHeight: 32,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
-  dayMetaText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.darkGray,
-    lineHeight: 16,
+  dayWeekSpacer: {
+    flex: 1,
   },
   emptyState: {
     flex: 1,
