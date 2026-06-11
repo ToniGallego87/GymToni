@@ -7,15 +7,15 @@
 | Framework | React Native + Expo (SDK 51) |
 | Lenguaje | TypeScript strict |
 | Estado global | Context API + useReducer |
-| Persistencia | AsyncStorage (local) |
+| Persistencia | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web |
 | Navegación | State-based (sin react-navigation) |
 | UI | Componentes custom + sistema glass |
 
 ## Flujo de datos
 
 ```
-AsyncStorage (disco)
-       ↕ load/save (lib/storage.ts)
+SQLite (nativo) / localStorage JSON (web)
+       ↕ load/save (lib/storage.ts → lib/db/)
 normalizeAppData() ← fuente única (lib/normalize.ts)
        ↕
 WorkoutContext (Provider + useReducer)
@@ -28,10 +28,10 @@ WorkoutContext (Provider + useReducer)
 ### Ciclo completo
 
 1. `App.tsx` monta `WorkoutProvider`
-2. Provider carga datos desde AsyncStorage → `normalizeAppData()` → `SET_APP_DATA`
+2. Provider carga datos desde storage (SQLite/web JSON) → `normalizeAppData()` → `SET_APP_DATA`
 3. Pantallas consumen estado via `useWorkout()`
 4. Acciones del usuario → `dispatch(action)` → reducer actualiza estado
-5. Efecto en App.tsx persiste cambios a AsyncStorage
+5. El wrapper de `dispatch` (`WorkoutProvider`) persiste cada acción de forma granular via `persistAction()` (`lib/persistence.ts`)
 
 ### Principio clave: normalización una sola vez
 
@@ -88,7 +88,9 @@ features/workout/       → Pantallas y lógica de negocio
 hooks/                  → useWorkout (consumer del context)
 lib/                    → Lógica compartida
   ├── normalize.ts      → Fuente única: syncActiveRoutine, ensureParsedSets, normalizeAppData
-  ├── storage.ts        → Persistencia AsyncStorage (load/save/clear)
+  ├── storage.ts        → Persistencia (load/save/clear): SQLite en nativo, JSON en web
+  ├── persistence.ts    → Mapea cada acción del reducer a su escritura granular (cola serie; debounce en web)
+  ├── db/               → Capa SQLite: schema.ts (DDL+migraciones), mappers.ts (AppData↔filas + por entidad), index.ts (repositorio + escrituras granulares)
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
   ├── parsers.ts        → Parsers de series y cardio
   ├── progress.ts       → Cálculos de progreso y 1RM
@@ -129,7 +131,14 @@ parseCardioString('Cinta: 22.5mins, 11.5kmh')
 
 ## Persistencia
 
-- Clave única en AsyncStorage: datos serializados como JSON
-- Carga al montar App (efecto de hidratación), guarda en cada cambio de estado
-- Sin migraciones (schema fijo hasta ahora)
+- **Nativo**: SQLite (`expo-sqlite`, BD `gymtoni.db`) via `lib/db/`. Esquema relacional:
+  - Plan: `routines` → `workout_days` → `exercises` (FK `NOT NULL` + `ON DELETE CASCADE`).
+  - Historial: `workout_logs` → `exercise_logs` → `log_sets`, más `cardio_logs` (1:1 con log). Referencias al plan débiles (`ON DELETE SET NULL`) para que el historial sobreviva a cambios de rutina; `exercise_name` es snapshot intencionado.
+  - `settings` (clave/valor): `active_routine_id` y la marca `initialized`.
+  - Convención FK: nombre de la tabla referenciada + `_id` (p. ej. `workout_days_id`). Ids GUID.
+- Migraciones por `PRAGMA user_version` (`lib/db/schema.ts`).
+- **Escrituras granulares** (`lib/persistence.ts`): el wrapper de `dispatch` traduce cada acción a su escritura mínima (upsert/borrado de una rutina, día o log; cambio de rutina activa), serializadas en una cola. `UPDATE_ROUTINE`/`UPDATE_DAY` hacen upsert preservando la identidad de rutina y días para no romper (`SET NULL`) las referencias del historial. `saveAppDataToDb` (reemplazo completo en transacción) se reserva para importación, migración legacy y seed inicial.
+- Migración legacy: al arrancar, si la BD está vacía y hay JSON del formato anterior en AsyncStorage, se importa y se borran las claves antiguas. En primer arranque sin datos se siembra con los datos de fábrica.
+- Vaciar datos deja la BD vacía **e inicializada** (marca `initialized`): las rutinas de fábrica no reaparecen al reiniciar.
+- **Web**: JSON en localStorage (expo-sqlite no soporta web en SDK 51), guardado completo con debounce; mismo `storage.ts`/`persistence.ts`, rama por plataforma.
 - Importar/exportar: `lib/fileIO.ts` (plataforma web via DOM, nativa via DocumentPicker + Sharing)

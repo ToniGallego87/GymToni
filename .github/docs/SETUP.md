@@ -5,7 +5,7 @@
 **GymTrack** es un MVP de app para registrar entrenamientos de gimnasio de forma rápida y moderna.
 
 - **Stack**: React Native + Expo + TypeScript
-- **Persistencia**: In-memory (Expo Snack) o AsyncStorage (versión local)
+- **Persistencia**: SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web
 - **Arquitectura**: Context API + useReducer, componentes reutilizables
 - **Versión**: ✅ **v1.1** - Formulario serie por serie + Multi-rutina + UI diseñada
 - **Estado**: MVP Completo con 3 rutinas, soporte multi-rutina, nuevo sistema de registro
@@ -111,7 +111,8 @@ GymTrack/
 │
 ├── 📂 lib/
 │   ├── parsers.ts                 ← parseSeriesString, parseCardioString
-│   └── storage.ts                 ← AsyncStorage helpers
+│   ├── storage.ts                 ← Persistencia: SQLite en nativo, JSON en web
+│   └── db/                        ← Capa SQLite (schema, mappers, repositorio)
 │
 ├── 📂 types/
 │   └── index.ts                   ← Tipos TypeScript
@@ -795,7 +796,7 @@ npm run type-check
 - ✅ Estudiar el código (TypeScript, componentes, state)
 - ✅ Extender con nuevas features
 
-**Sin dependencias complejas. Sin configuración complicada. Puro React Native con AsyncStorage.**
+**Sin dependencias complejas. Sin configuración complicada. Puro React Native con SQLite local.**
 
 ---
 

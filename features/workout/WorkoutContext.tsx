@@ -1,8 +1,9 @@
-import React, { createContext, ReactNode, useReducer } from 'react';
+import React, { createContext, ReactNode, useCallback, useReducer, useRef } from 'react';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
 import { WorkoutAction, WorkoutState } from '../../types';
 import { ensureParsedSets, resolveActiveRoutineId, syncActiveRoutine } from '@lib/normalize';
+import { persistAction } from '@lib/persistence';
 
 const initialState: WorkoutState = {
   routines: syncActiveRoutine(WORKOUT_ROUTINES, DEFAULT_ACTIVE_ROUTINE_ID || WORKOUT_ROUTINES[WORKOUT_ROUTINES.length - 1]?.id),
@@ -124,7 +125,20 @@ export const WorkoutContext = createContext<{
 });
 
 export function WorkoutProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(workoutReducer, initialState);
+  const [state, baseDispatch] = useReducer(workoutReducer, initialState);
+
+  // Espejo síncrono del estado: permite derivar el resultado de una acción
+  // (y persistirlo) incluso para dispatches encadenados en el mismo tick,
+  // antes de que React confirme el re-render.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+
+  const dispatch = useCallback((action: WorkoutAction) => {
+    const next = workoutReducer(stateRef.current, action);
+    stateRef.current = next;
+    baseDispatch(action);
+    persistAction(action, next);
+  }, []);
 
   return (
     <WorkoutContext.Provider value={{ state, dispatch }}>

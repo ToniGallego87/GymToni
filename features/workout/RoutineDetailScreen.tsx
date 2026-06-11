@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import QRCode from 'react-native-qrcode-svg';
 import {
   View,
   Text,
@@ -22,6 +23,8 @@ import {
 } from '../../components';
 import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
+import { generateId } from '@lib/storage';
+import { buildRoutineShareLink } from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
 
 interface RoutineDetailScreenProps {
@@ -43,13 +46,23 @@ export function RoutineDetailScreen({
   const [exercisesEditText, setExercisesEditText] = useState('');
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
+  const [showQrModal, setShowQrModal] = useState(false);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding =
+    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   // Obtener la rutina actualizada del estado
-  const currentRoutine = state.routines.find(r => r.id === routine.id) || routine;
+  const currentRoutine =
+    state.routines.find((r) => r.id === routine.id) || routine;
+
+  // Enlace que codifica la rutina para compartir por QR (deep link).
+  const shareLink = useMemo(
+    () => buildRoutineShareLink(currentRoutine),
+    [currentRoutine]
+  );
 
   const getTimerDurationSeconds = () => {
     return currentRoutine.timerDuration || 150;
@@ -87,11 +100,13 @@ export function RoutineDetailScreen({
   };
 
   const handleLongPressDay = (dayId: string) => {
-    const day = currentRoutine.days.find(d => d.id === dayId);
+    const day = currentRoutine.days.find((d) => d.id === dayId);
     if (day) {
       // Crear un texto con los ejercicios para poder editarlos
       const exercisesText = day.exercises
-        .map(ex => `${ex.name} — ${ex.targetSets || '—'}x${ex.targetReps || '—'}`)
+        .map(
+          (ex) => `${ex.name} — ${ex.targetSets || '—'}x${ex.targetReps || '—'}`
+        )
         .join('\n');
       setExercisesEditText(exercisesText);
       setSelectedDayId(dayId);
@@ -101,27 +116,35 @@ export function RoutineDetailScreen({
 
   const handleSaveExercises = () => {
     if (!selectedDayId) return;
-    
-    const day = currentRoutine.days.find(d => d.id === selectedDayId);
+
+    const day = currentRoutine.days.find((d) => d.id === selectedDayId);
     if (!day) return;
 
     // Parsear el texto para actualizar ejercicios
     const lines = exercisesEditText.trim().split('\n');
     const updatedExercises = lines
-      .filter(line => line.trim().length > 0)
+      .filter((line) => line.trim().length > 0)
       .map((line, index) => {
         // Parsear formato: "Nombre — Nx#"
-        const match = line.match(/^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+(?:-\d+)?\s*[a-zA-Z]*|—)?/);
-        
+        const match = line.match(
+          /^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+(?:-\d+)?\s*[a-zA-Z]*|—)?/
+        );
+
         const name = match ? match[1].trim() : line.trim();
-        const targetSets = match && match[2] && match[2] !== '—' ? parseInt(match[2]) : undefined;
-        const targetReps = match && match[3] && match[3].trim() !== '—' ? match[3].trim() : undefined;
+        const targetSets =
+          match && match[2] && match[2] !== '—'
+            ? parseInt(match[2])
+            : undefined;
+        const targetReps =
+          match && match[3] && match[3].trim() !== '—'
+            ? match[3].trim()
+            : undefined;
 
         // Mantener el ID del ejercicio original si es posible
         const originalExercise = day.exercises[index];
 
         return {
-          id: originalExercise?.id || `exercise-${Date.now()}-${index}`,
+          id: originalExercise?.id || generateId(),
           name,
           order: index + 1,
           targetSets,
@@ -132,7 +155,11 @@ export function RoutineDetailScreen({
     const updatedDay = { ...day, exercises: updatedExercises };
     dispatch({
       type: 'UPDATE_DAY',
-      payload: { routineId: currentRoutine.id, dayId: selectedDayId, day: updatedDay },
+      payload: {
+        routineId: currentRoutine.id,
+        dayId: selectedDayId,
+        day: updatedDay,
+      },
     });
 
     setShowEditExercisesModal(false);
@@ -142,12 +169,16 @@ export function RoutineDetailScreen({
 
   const handleSelectEmoji = (emoji: string) => {
     if (selectedDayId) {
-      const day = currentRoutine.days.find(d => d.id === selectedDayId);
+      const day = currentRoutine.days.find((d) => d.id === selectedDayId);
       if (day) {
         const updatedDay = { ...day, emoji };
         dispatch({
           type: 'UPDATE_DAY',
-          payload: { routineId: currentRoutine.id, dayId: selectedDayId, day: updatedDay },
+          payload: {
+            routineId: currentRoutine.id,
+            dayId: selectedDayId,
+            day: updatedDay,
+          },
         });
       }
     }
@@ -170,8 +201,7 @@ export function RoutineDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        
-        {currentRoutine.days.map(day => {
+        {currentRoutine.days.map((day) => {
           const accent = getTrainingAccent(day);
 
           return (
@@ -186,19 +216,28 @@ export function RoutineDetailScreen({
               <View style={styles.dayHeader}>
                 <View style={styles.dayHeaderLeft}>
                   <View style={styles.dayAccentWrap}>
-                    <DayAccentIcon emoji={day.emoji} name={day.name} size={16} />
+                    <DayAccentIcon
+                      emoji={day.emoji}
+                      name={day.name}
+                      size={16}
+                    />
                   </View>
-                  <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
+                  <Text style={styles.dayName}>
+                    {getDisplayDayName(day.name)}
+                  </Text>
                 </View>
                 <Text style={styles.dayBadge}>Día {day.dayNumber}</Text>
               </View>
 
               <View style={styles.exerciseList}>
-                {day.exercises.map(exercise => (
+                {day.exercises.map((exercise) => (
                   <View key={exercise.id} style={styles.exerciseRow}>
-                    <View style={[styles.exerciseDot, { backgroundColor: accent }]} />
+                    <View
+                      style={[styles.exerciseDot, { backgroundColor: accent }]}
+                    />
                     <Text style={styles.exerciseText}>
-                      {exercise.name} — {exercise.targetSets || '-'}x{exercise.targetReps || '-'}
+                      {exercise.name} — {exercise.targetSets || '-'}x
+                      {exercise.targetReps || '-'}
                     </Text>
                   </View>
                 ))}
@@ -207,10 +246,7 @@ export function RoutineDetailScreen({
           );
         })}
 
-        <Pressable
-          style={styles.timerBlock}
-          onPress={handleOpenTimerModal}
-        >
+        <Pressable style={styles.timerBlock} onPress={handleOpenTimerModal}>
           <View style={styles.timerBlockLabelRow}>
             <MaterialCommunityIcons
               name="timer-sand"
@@ -219,20 +255,50 @@ export function RoutineDetailScreen({
             />
             <Text style={styles.timerBlockLabel}>Temporizador de descanso</Text>
           </View>
-          <Text style={styles.timerBlockValue}>{formatTime(getTimerDurationSeconds())}</Text>
+          <Text style={styles.timerBlockValue}>
+            {formatTime(getTimerDurationSeconds())}
+          </Text>
           <Text style={styles.timerBlockHint}>Toca para editar</Text>
         </Pressable>
 
+        <Pressable
+          style={({ pressed }) => [
+            styles.shareBlock,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => setShowQrModal(true)}
+        >
+          <MaterialCommunityIcons
+            name="qrcode"
+            size={20}
+            color={theme.colors.text}
+          />
+          <View style={styles.shareBlockTextWrap}>
+            <Text style={styles.shareBlockLabel}>Compartir por QR</Text>
+            <Text style={styles.shareBlockHint}>
+              Otro móvil escanea y carga la rutina
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color={theme.colors.textSecondary}
+          />
+        </Pressable>
       </StretchScrollView>
 
       <GlassTopBar
         title="Rutina"
-        titleElement={(
+        titleElement={
           <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons name="file-document-edit-outline" size={18} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="file-document-edit-outline"
+              size={18}
+              color={theme.colors.text}
+            />
             <Text style={styles.topBarTitleText}>Rutina</Text>
           </View>
-        )}
+        }
         subtitle={currentRoutine.name}
         topInset={insets.top}
       />
@@ -249,7 +315,7 @@ export function RoutineDetailScreen({
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Selecciona un color</Text>
             <View style={styles.emojiGrid}>
-              {EMOJI_CHOICES.map(emoji => (
+              {EMOJI_CHOICES.map((emoji) => (
                 <Pressable
                   key={emoji}
                   style={({ pressed }) => [
@@ -262,7 +328,10 @@ export function RoutineDetailScreen({
               ))}
             </View>
             <Pressable
-              style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
+              style={({ pressed }) => [
+                styles.cancelButton,
+                pressed && styles.buttonPressed,
+              ]}
               onPress={() => setShowEmojiModal(false)}
             >
               <Text style={styles.cancelButtonText}>Cancelar</Text>
@@ -284,7 +353,9 @@ export function RoutineDetailScreen({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Editar Ejercicios</Text>
-            <Text style={styles.editExercisesLabel}>Formato: Nombre — SetsxReps</Text>
+            <Text style={styles.editExercisesLabel}>
+              Formato: Nombre — SetsxReps
+            </Text>
             <TextInput
               style={styles.editExercisesInput}
               placeholder="Ej: Sentadilla — 4x8&#10;Prensa — 3x10"
@@ -296,13 +367,19 @@ export function RoutineDetailScreen({
             />
             <View style={styles.editExercisesButtons}>
               <Pressable
-                style={({ pressed }) => [styles.editButton, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [
+                  styles.editButton,
+                  pressed && styles.buttonPressed,
+                ]}
                 onPress={handleSaveExercises}
               >
                 <Text style={styles.editButtonText}>Editar</Text>
               </Pressable>
               <Pressable
-                style={({ pressed }) => [styles.cancelButton, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [
+                  styles.cancelButton,
+                  pressed && styles.buttonPressed,
+                ]}
                 onPress={() => {
                   setShowEditExercisesModal(false);
                   setSelectedDayId(null);
@@ -333,21 +410,64 @@ export function RoutineDetailScreen({
               value={timerInput}
               onChangeText={setTimerInput}
             />
-            <Text style={styles.timerModalFormat}>Equivalente: {formatTime(parseInt(timerInput, 10) || 0)}</Text>
+            <Text style={styles.timerModalFormat}>
+              Equivalente: {formatTime(parseInt(timerInput, 10) || 0)}
+            </Text>
             <View style={styles.timerModalButtons}>
               <Pressable
-                style={({ pressed }) => [styles.timerModalButton, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [
+                  styles.timerModalButton,
+                  pressed && styles.buttonPressed,
+                ]}
                 onPress={handleSaveTimer}
               >
                 <Text style={styles.timerModalButtonText}>Guardar</Text>
               </Pressable>
               <Pressable
-                style={({ pressed }) => [styles.timerModalButton, styles.timerModalButtonCancel, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [
+                  styles.timerModalButton,
+                  styles.timerModalButtonCancel,
+                  pressed && styles.buttonPressed,
+                ]}
                 onPress={() => setShowTimerModal(false)}
               >
                 <Text style={styles.timerModalButtonTextCancel}>Cancelar</Text>
               </Pressable>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showQrModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowQrModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Compartir rutina</Text>
+            <Text style={styles.qrModalHint}>
+              Escanea este código con la cámara de otro móvil para cargar «
+              {getDisplayDayName(currentRoutine.name) || currentRoutine.name}».
+            </Text>
+            <View style={styles.qrCanvas}>
+              <QRCode
+                value={shareLink}
+                size={232}
+                backgroundColor="#FFFFFF"
+                color="#000000"
+              />
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.cancelButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => setShowQrModal(false)}
+            >
+              <Text style={styles.cancelButtonText}>Cerrar</Text>
+            </Pressable>
           </View>
         </View>
       </Modal>
@@ -568,6 +688,46 @@ const styles = StyleSheet.create({
     color: theme.colors.background,
     opacity: 0.8,
   },
+  shareBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    marginTop: theme.spacing.md,
+    ...theme.shadow.soft,
+  },
+  shareBlockTextWrap: {
+    flex: 1,
+  },
+  shareBlockLabel: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 20,
+  },
+  shareBlockHint: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    lineHeight: 16,
+  },
+  qrModalHint: {
+    fontSize: 14,
+    color: theme.colors.textSecondary,
+    textAlign: 'center',
+    marginBottom: theme.spacing.md,
+    lineHeight: 19,
+  },
+  qrCanvas: {
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: theme.borderRadius.md,
+    marginBottom: theme.spacing.md,
+  },
   timerModalLabel: {
     fontSize: 14,
     fontWeight: '700',
@@ -619,5 +779,3 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
 });
-
-

@@ -1,7 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { BackHandler, Platform, StatusBar, StyleSheet, View } from 'react-native';
+import {
+  BackHandler,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  View,
+} from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
+import * as Linking from 'expo-linking';
 import * as SplashScreen from 'expo-splash-screen';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
@@ -18,42 +25,63 @@ import {
   WorkoutLogScreen,
   useWorkout,
 } from '@features/workout';
-import { clearAppData, loadAppData, saveAppData } from '@lib/storage';
+import {
+  clearAppData,
+  getSeedAppData,
+  loadAppData,
+  saveAppData,
+} from '@lib/storage';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
+import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import { theme } from '@lib/theme';
-import { WorkoutAppData, WorkoutDay, WorkoutLog, WorkoutRoutine } from '../types';
+import {
+  WorkoutAppData,
+  WorkoutDay,
+  WorkoutLog,
+  WorkoutRoutine,
+} from '../types';
 
 type Screen =
   | { type: 'home' }
   | { type: 'routine-selector' }
   | { type: 'day-selector' }
   | { type: 'workout-log'; day: WorkoutDay; log?: WorkoutLog }
-  | { type: 'detail'; log: WorkoutLog; day: WorkoutDay; origin: 'home' | 'calendar' }
+  | {
+      type: 'detail';
+      log: WorkoutLog;
+      day: WorkoutDay;
+      origin: 'home' | 'calendar';
+    }
   | { type: 'calendar' }
   | { type: 'data' }
-  | { type: 'new-routine' }
+  | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
   | { type: 'routine-details'; routine: WorkoutRoutine };
 
 function AppContent() {
   const { dispatch, state } = useWorkout();
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
-  const [hasHydrated, setHasHydrated] = useState(false);
 
+  // Hidratación: carga desde almacenamiento (o migra el JSON legacy). La
+  // persistencia de cada cambio la hace el wrapper de dispatch de forma
+  // granular (lib/persistence.ts), no un guardado completo periódico.
   useEffect(() => {
     let isMounted = true;
 
     const hydrateState = async () => {
       try {
         const savedData = await loadAppData();
-        if (savedData && isMounted) {
+        if (!isMounted) return;
+
+        if (savedData) {
           dispatch({ type: 'SET_APP_DATA', payload: savedData });
+        } else {
+          // Primer arranque: sembrar el almacenamiento con los datos de fábrica
+          // que el reducer ya muestra, para que las escrituras granulares
+          // posteriores tengan base (rutinas + marca de inicialización).
+          await saveAppData(getSeedAppData());
         }
       } catch (error) {
         console.error('Error loading app data:', error);
-      } finally {
-        if (isMounted) {
-          setHasHydrated(true);
-        }
       }
     };
 
@@ -64,84 +92,73 @@ function AppContent() {
     };
   }, [dispatch]);
 
-  useEffect(() => {
-    if (!hasHydrated) return;
-
-    // Debounce: agrupa ráfagas de cambios (p. ej. añadir varias series seguidas)
-    // en una sola escritura a almacenamiento.
-    const handle = setTimeout(() => {
-      saveAppData({
-        routines: state.routines,
-        activeRoutineId: state.activeRoutineId,
-        logs: state.logs,
-      }).catch(error => {
-        console.error('Error saving app data:', error);
-      });
-    }, 500);
-
-    return () => clearTimeout(handle);
-  }, [hasHydrated, state.activeRoutineId, state.logs, state.routines]);
-
   // Manejar botón atrás en móvil
   useEffect(() => {
     if (Platform.OS === 'android' || Platform.OS === 'ios') {
-      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
-        if (screen.type === 'home') {
-          // Permitir que salga de la app desde la pantalla de inicio
-          return false;
-        } else {
-          // En cualquier otra pantalla, volver a inicio
-          setScreen({ type: 'home' });
-          return true;
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        () => {
+          if (screen.type === 'home') {
+            // Permitir que salga de la app desde la pantalla de inicio
+            return false;
+          } else {
+            // En cualquier otra pantalla, volver a inicio
+            setScreen({ type: 'home' });
+            return true;
+          }
         }
-      });
+      );
 
       return () => backHandler.remove();
     }
   }, [screen.type]);
 
   const activeRoutine = useMemo(
-    () => state.routines.find(routine => routine.id === state.activeRoutineId),
+    () =>
+      state.routines.find((routine) => routine.id === state.activeRoutineId),
     [state.activeRoutineId, state.routines]
   );
 
   const activeRoutineLogs = useMemo(
-    () => state.logs.filter(log => log.routineId === state.activeRoutineId),
+    () => state.logs.filter((log) => log.routineId === state.activeRoutineId),
     [state.activeRoutineId, state.logs]
   );
 
-  const canDeleteCurrentRoutine = !!activeRoutine?.isCustom
-    && activeRoutineLogs.length === 0
-    && state.routines.length > 1;
+  const canDeleteCurrentRoutine =
+    activeRoutineLogs.length === 0 && state.routines.length > 1;
 
-  const openWorkoutFromNotificationData = (data: Record<string, unknown> | undefined) => {
+  const openWorkoutFromNotificationData = (
+    data: Record<string, unknown> | undefined
+  ) => {
     if (!data || data.source !== 'rest-timer') return;
 
     const dayId = typeof data.dayId === 'string' ? data.dayId : undefined;
-    const routineId = typeof data.routineId === 'string' ? data.routineId : undefined;
+    const routineId =
+      typeof data.routineId === 'string' ? data.routineId : undefined;
 
     if (routineId && routineId !== state.activeRoutineId) {
-      const exists = state.routines.some(routine => routine.id === routineId);
+      const exists = state.routines.some((routine) => routine.id === routineId);
       if (exists) {
         dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
       }
     }
 
     const routineCandidates = routineId
-      ? state.routines.filter(routine => routine.id === routineId)
+      ? state.routines.filter((routine) => routine.id === routineId)
       : state.routines;
 
     const dayFromNotification = routineCandidates
-      .flatMap(routine => routine.days)
-      .find(day => day.id === dayId);
+      .flatMap((routine) => routine.days)
+      .find((day) => day.id === dayId);
 
     if (dayFromNotification) {
       setScreen({ type: 'workout-log', day: dayFromNotification });
       return;
     }
 
-    const fallbackRoutine = state.routines.find(routine => routine.id === state.activeRoutineId)
-      || state.routines[0];
+    const fallbackRoutine =
+      state.routines.find((routine) => routine.id === state.activeRoutineId) ||
+      state.routines[0];
     const fallbackDay = fallbackRoutine?.days?.[0];
 
     if (fallbackDay) {
@@ -154,15 +171,25 @@ function AppContent() {
   useEffect(() => {
     if (!Notifications) return;
 
-    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      openWorkoutFromNotificationData(response.notification.request.content.data as Record<string, unknown>);
-    });
+    const subscription = Notifications.addNotificationResponseReceivedListener(
+      (response) => {
+        openWorkoutFromNotificationData(
+          response.notification.request.content.data as Record<string, unknown>
+        );
+      }
+    );
 
     const consumeInitialNotificationTap = async () => {
       try {
-        const response = await Notifications!.getLastNotificationResponseAsync();
+        const response =
+          await Notifications!.getLastNotificationResponseAsync();
         if (response) {
-          openWorkoutFromNotificationData(response.notification.request.content.data as Record<string, unknown>);
+          openWorkoutFromNotificationData(
+            response.notification.request.content.data as Record<
+              string,
+              unknown
+            >
+          );
         }
       } catch (error) {
         console.error('Error reading notification response:', error);
@@ -173,6 +200,27 @@ function AppContent() {
 
     return () => subscription.remove();
   }, [dispatch, state.activeRoutineId, state.routines]);
+
+  // Deep link de importación (QR): gymtrack://import-routine?data=...
+  // Abre Nueva rutina con los días prerrellenados desde el código escaneado.
+  useEffect(() => {
+    const handleUrl = (url: string | null) => {
+      if (!url) return;
+      const shared = parseRoutineShareLink(url);
+      if (shared) {
+        setScreen({ type: 'new-routine', initialDays: shared.days });
+      }
+    };
+
+    Linking.getInitialURL()
+      .then(handleUrl)
+      .catch(() => {});
+    const subscription = Linking.addEventListener('url', ({ url }) =>
+      handleUrl(url)
+    );
+
+    return () => subscription.remove();
+  }, []);
 
   const handleCreateRoutine = (routine: WorkoutRoutine) => {
     dispatch({ type: 'ADD_ROUTINE', payload: routine });
@@ -203,7 +251,9 @@ function AppContent() {
       logs: state.logs,
     };
 
-    const fileName = `gymtrack-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const fileName = `gymtrack-backup-${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
     await downloadJsonFile(fileName, JSON.stringify(payload, null, 2));
   };
 
@@ -216,28 +266,32 @@ function AppContent() {
     }
 
     const routinesValid = payload.routines.every(
-      routine => routine && typeof routine.id === 'string' && Array.isArray(routine.days)
+      (routine) =>
+        routine && typeof routine.id === 'string' && Array.isArray(routine.days)
     );
     const logsValid = payload.logs.every(
-      log => log && typeof log.id === 'string' && Array.isArray(log.exercises)
+      (log) => log && typeof log.id === 'string' && Array.isArray(log.exercises)
     );
 
     if (!routinesValid || !logsValid) {
       throw new Error('El fichero contiene datos con un formato no válido');
     }
 
-    const activeRoutineId = payload.activeRoutineId
-      || payload.routines.find(routine => routine.isActive)?.id
-      || payload.routines[0]?.id;
+    const activeRoutineId =
+      payload.activeRoutineId ||
+      payload.routines.find((routine) => routine.isActive)?.id ||
+      payload.routines[0]?.id;
 
-    dispatch({
-      type: 'SET_APP_DATA',
-      payload: {
-        routines: payload.routines,
-        activeRoutineId,
-        logs: payload.logs,
-      },
-    });
+    const importedData: WorkoutAppData = {
+      routines: payload.routines,
+      activeRoutineId,
+      logs: payload.logs,
+    };
+
+    dispatch({ type: 'SET_APP_DATA', payload: importedData });
+    // SET_APP_DATA no se persiste en el wrapper (es también la acción de
+    // hidratación): la importación guarda explícitamente el conjunto completo.
+    await saveAppData(importedData);
 
     setScreen({ type: 'home' });
   };
@@ -246,8 +300,10 @@ function AppContent() {
     <View style={styles.container}>
       {screen.type === 'routine-selector' && (
         <HomeScreen
-          onSelectDay={day => setScreen({ type: 'workout-log', day })}
-          onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
+          onSelectLog={(log, day) =>
+            setScreen({ type: 'detail', log, day, origin: 'home' })
+          }
           onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
@@ -259,7 +315,9 @@ function AppContent() {
               setScreen({ type: 'new-routine' });
             }
           }}
-          onOpenRoutineDetails={routine => setScreen({ type: 'routine-details', routine })}
+          onOpenRoutineDetails={(routine) =>
+            setScreen({ type: 'routine-details', routine })
+          }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
@@ -270,8 +328,10 @@ function AppContent() {
 
       {screen.type === 'home' && (
         <HomeScreen
-          onSelectDay={day => setScreen({ type: 'workout-log', day })}
-          onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'home' })}
+          onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
+          onSelectLog={(log, day) =>
+            setScreen({ type: 'detail', log, day, origin: 'home' })
+          }
           onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
@@ -284,7 +344,9 @@ function AppContent() {
             }
           }}
           onOpenRoutineSelector={() => setScreen({ type: 'routine-selector' })}
-          onOpenRoutineDetails={routine => setScreen({ type: 'routine-details', routine })}
+          onOpenRoutineDetails={(routine) =>
+            setScreen({ type: 'routine-details', routine })
+          }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
@@ -294,16 +356,17 @@ function AppContent() {
       {screen.type === 'day-selector' && (
         <DaySelectorScreen
           routine={activeRoutine}
-          onSelectDay={day => {
+          onSelectDay={(day) => {
             // Si la rutina activa ya tiene un log de hoy para este día, volver a home
             const today = new Date().toISOString().split('T')[0];
             const hasLogToday = state.logs.some(
-              log => log.dayId === day.id && 
-                     log.routineId === state.activeRoutineId &&
-                     (log.date === today || 
-                      new Date(log.createdAt).toISOString().split('T')[0] === today)
+              (log) =>
+                log.dayId === day.id &&
+                log.routineId === state.activeRoutineId &&
+                (log.date === today ||
+                  new Date(log.createdAt).toISOString().split('T')[0] === today)
             );
-            
+
             if (hasLogToday) {
               setScreen({ type: 'home' });
             } else {
@@ -326,14 +389,20 @@ function AppContent() {
         <DetailScreen
           log={screen.log}
           day={screen.day}
-          onBack={() => setScreen({ type: screen.origin === 'calendar' ? 'calendar' : 'home' })}
+          onBack={() =>
+            setScreen({
+              type: screen.origin === 'calendar' ? 'calendar' : 'home',
+            })
+          }
           onEdit={(log, day) => setScreen({ type: 'workout-log', day, log })}
         />
       )}
 
       {screen.type === 'calendar' && (
         <CalendarScreen
-          onSelectLog={(log, day) => setScreen({ type: 'detail', log, day, origin: 'calendar' })}
+          onSelectLog={(log, day) =>
+            setScreen({ type: 'detail', log, day, origin: 'calendar' })
+          }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
@@ -355,9 +424,17 @@ function AppContent() {
 
       {screen.type === 'new-routine' && (
         <NewRoutineScreen
+          key={
+            screen.initialDays
+              ? `import-${screen.initialDays.length}-${
+                  screen.initialDays[0]?.title ?? ''
+                }`
+              : 'blank'
+          }
           existingRoutineCount={state.routines.length}
           onCreateRoutine={handleCreateRoutine}
           onBack={() => setScreen({ type: 'home' })}
+          initialDays={screen.initialDays}
         />
       )}
 
@@ -391,7 +468,11 @@ export default function App() {
   return (
     <GestureHandlerRootView style={styles.container}>
       <WorkoutProvider>
-        <StatusBar barStyle="light-content" backgroundColor="transparent" translucent />
+        <StatusBar
+          barStyle="light-content"
+          backgroundColor="transparent"
+          translucent
+        />
         <View style={styles.container} onLayout={onLayoutRootView}>
           <AppContent />
         </View>

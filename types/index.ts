@@ -20,7 +20,6 @@ export interface WorkoutRoutine {
   name: string;
   description?: string;
   isActive: boolean;
-  isCustom?: boolean;
   days: WorkoutDay[];
   createdAt: number;
   timerDuration?: number;

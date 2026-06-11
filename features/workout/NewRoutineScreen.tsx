@@ -1,12 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -33,6 +27,8 @@ interface NewRoutineScreenProps {
   existingRoutineCount: number;
   onCreateRoutine: (routine: WorkoutRoutine) => void;
   onBack: () => void;
+  // Días con los que arrancar el formulario (importación por QR/deep link).
+  initialDays?: { title: string; exercisesText: string }[];
 }
 
 interface NewRoutineDayForm {
@@ -56,7 +52,8 @@ function getNormalizedDayType(value: string) {
 
   if (/push|pecho|hombro|tr[ií]ceps/.test(normalized)) return 'push';
   if (/pull|espalda|b[ií]ceps/.test(normalized)) return 'pull';
-  if (/pierna|legs?|cu[aá]driceps|femoral|gl[uú]teo/.test(normalized)) return 'legs';
+  if (/pierna|legs?|cu[aá]driceps|femoral|gl[uú]teo/.test(normalized))
+    return 'legs';
   if (/torso|upper/.test(normalized)) return 'mixed';
 
   return normalized;
@@ -71,7 +68,10 @@ function getEmojiForDayType(type: string, fallbackIndex: number) {
 }
 
 // Color y emoji en vivo para pintar la card mientras se escribe el título.
-function getDayAccent(title: string, index: number): { accent: string; emoji: string | null } {
+function getDayAccent(
+  title: string,
+  index: number
+): { accent: string; emoji: string | null } {
   const trimmed = title.trim();
   if (!trimmed) return { accent: theme.colors.border, emoji: null };
 
@@ -84,7 +84,9 @@ function getDayAccent(title: string, index: number): { accent: string; emoji: st
 const EXERCISE_LINE_REGEX = /^(.*?)\s*\[(\d+)\s*x\s*([^\]]+)\]\s*$/i;
 
 // Previsualización de ejercicios: confirma que la sintaxis [4x6-8] se entendió.
-function parseExercisePreview(text: string): { name: string; scheme: string }[] {
+function parseExercisePreview(
+  text: string
+): { name: string; scheme: string }[] {
   return text
     .replace(/\r/g, '')
     .split('\n')
@@ -93,23 +95,21 @@ function parseExercisePreview(text: string): { name: string; scheme: string }[] 
     .map((line: string) => {
       const parsed = line.match(EXERCISE_LINE_REGEX);
       if (parsed) {
-        return { name: parsed[1].trim() || 'Ejercicio', scheme: `${parsed[2]}×${parsed[3].trim()}` };
+        return {
+          name: parsed[1].trim() || 'Ejercicio',
+          scheme: `${parsed[2]}×${parsed[3].trim()}`,
+        };
       }
       return { name: line, scheme: '3×10-12' };
     });
 }
 
-function parseExerciseLine(
-  line: string,
-  routineId: string,
-  dayNumber: number,
-  order: number
-): WorkoutExercise {
+function parseExerciseLine(line: string, order: number): WorkoutExercise {
   const parsed = line.match(EXERCISE_LINE_REGEX);
 
   if (parsed) {
     return {
-      id: `${routineId}-d${dayNumber}-ex${order}`,
+      id: generateId(),
       name: parsed[1].trim(),
       order,
       targetSets: parseInt(parsed[2], 10),
@@ -118,7 +118,7 @@ function parseExerciseLine(
   }
 
   return {
-    id: `${routineId}-d${dayNumber}-ex${order}`,
+    id: generateId(),
     name: line.trim(),
     order,
     targetSets: 3,
@@ -159,7 +159,11 @@ function CreateRoutineButton({ onPress }: { onPress: () => void }) {
           style={styles.createSheen}
           pointerEvents="none"
         />
-        <MaterialCommunityIcons name="check-bold" size={22} color={theme.colors.darkGray} />
+        <MaterialCommunityIcons
+          name="check-bold"
+          size={22}
+          color={theme.colors.darkGray}
+        />
         <Text style={styles.createText}>Crear rutina</Text>
       </LinearGradient>
     </AnimatedPressable>
@@ -170,30 +174,48 @@ export function NewRoutineScreen({
   existingRoutineCount,
   onCreateRoutine,
   onBack,
+  initialDays,
 }: NewRoutineScreenProps) {
   const insets = useSafeAreaInsets();
-  const [days, setDays] = useState<NewRoutineDayForm[]>([
-    { id: generateId(), title: '', exercisesText: '' },
-  ]);
+  const [days, setDays] = useState<NewRoutineDayForm[]>(() =>
+    initialDays && initialDays.length
+      ? initialDays.map((day) => ({
+          id: generateId(),
+          title: day.title,
+          exercisesText: day.exercisesText,
+        }))
+      : [{ id: generateId(), title: '', exercisesText: '' }]
+  );
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
   } | null>(null);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding =
+    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const canAddNewDay = useMemo(
-    () => days.every((day: NewRoutineDayForm) => day.title.trim() && day.exercisesText.trim()),
+    () =>
+      days.every(
+        (day: NewRoutineDayForm) => day.title.trim() && day.exercisesText.trim()
+      ),
     [days]
   );
   const canRemoveDay = days.length > 1;
   const canAddMoreDays = canAddNewDay && days.length < 7;
 
-  const handleUpdateDay = (dayId: string, key: keyof NewRoutineDayForm, value: string) => {
-    setDays((previous: NewRoutineDayForm[]) => previous.map((day: NewRoutineDayForm) => (
-      day.id === dayId ? { ...day, [key]: value } : day
-    )));
+  const handleUpdateDay = (
+    dayId: string,
+    key: keyof NewRoutineDayForm,
+    value: string
+  ) => {
+    setDays((previous: NewRoutineDayForm[]) =>
+      previous.map((day: NewRoutineDayForm) =>
+        day.id === dayId ? { ...day, [key]: value } : day
+      )
+    );
   };
 
   const handleAddDay = () => {
@@ -202,17 +224,17 @@ export function NewRoutineScreen({
       return;
     }
 
-    setDays((previous: NewRoutineDayForm[]) => ([
+    setDays((previous: NewRoutineDayForm[]) => [
       ...previous,
       { id: generateId(), title: '', exercisesText: '' },
-    ]));
+    ]);
   };
 
   const handleRemoveDay = () => {
     setDays((previous: NewRoutineDayForm[]) => previous.slice(0, -1));
   };
 
-  const buildRoutineDays = (routineId: string): WorkoutDay[] => {
+  const buildRoutineDays = (): WorkoutDay[] => {
     if (!days.length) {
       throw new Error('Añade al menos un día');
     }
@@ -240,12 +262,13 @@ export function NewRoutineScreen({
         typeOrder.push(dayType);
       }
 
-      const exercises = exerciseLines.map((line: string, exerciseIndex: number) => (
-        parseExerciseLine(line, routineId, index + 1, exerciseIndex + 1)
-      ));
+      const exercises = exerciseLines.map(
+        (line: string, exerciseIndex: number) =>
+          parseExerciseLine(line, exerciseIndex + 1)
+      );
 
       return {
-        id: `${routineId}-day${index + 1}`,
+        id: generateId(),
         dayNumber: index + 1,
         name: `Día ${index + 1} - ${dayTitle}`,
         emoji: getEmojiForDayType(dayType, typeOrder.indexOf(dayType)),
@@ -256,22 +279,21 @@ export function NewRoutineScreen({
 
   const handleCreate = () => {
     try {
-      const routineId = `routine-${Date.now()}`;
-      const builtDays = buildRoutineDays(routineId);
+      const builtDays = buildRoutineDays();
 
       onCreateRoutine({
-        id: routineId,
+        id: generateId(),
         name: `Rutina ${existingRoutineCount + 1}`,
         description: `Rutina personalizada (${builtDays.length} días)`,
         isActive: true,
-        isCustom: true,
         createdAt: Date.now(),
         days: builtDays,
       });
 
       setToast({ message: 'Nueva rutina creada', type: 'success' });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo crear la rutina';
+      const message =
+        error instanceof Error ? error.message : 'No se pudo crear la rutina';
       setToast({ message, type: 'error' });
     }
   };
@@ -296,11 +318,18 @@ export function NewRoutineScreen({
           const preview = parseExercisePreview(day.exercisesText);
 
           return (
-            <View key={day.id} style={[styles.dayCard, { borderLeftColor: accent }]}>
+            <View
+              key={day.id}
+              style={[styles.dayCard, { borderLeftColor: accent }]}
+            >
               <GradientFill accent={day.title.trim() ? accent : undefined} />
 
               <View style={styles.dayHeaderRow}>
-                <MaterialCommunityIcons name="circle" size={15} color={accent} />
+                <MaterialCommunityIcons
+                  name="circle"
+                  size={15}
+                  color={accent}
+                />
                 <Text style={styles.dayTitleDisplay}>Día {index + 1}</Text>
                 {!!emoji && <Text style={styles.dayTypeEmoji}>{emoji}</Text>}
               </View>
@@ -310,30 +339,43 @@ export function NewRoutineScreen({
                 placeholder="Ej: Push pesado"
                 placeholderTextColor={theme.colors.textSecondary}
                 value={day.title}
-                onChangeText={(value: string) => handleUpdateDay(day.id, 'title', value)}
+                onChangeText={(value: string) =>
+                  handleUpdateDay(day.id, 'title', value)
+                }
               />
 
               <Text style={styles.label}>Ejercicios</Text>
               <TextInput
                 style={styles.exercisesInput}
-                placeholder={'Un ejercicio por línea\nOpcional: Press banca [4x6-8]'}
+                placeholder={
+                  'Un ejercicio por línea\nOpcional: Press banca [4x6-8]'
+                }
                 placeholderTextColor={theme.colors.textSecondary}
                 value={day.exercisesText}
-                onChangeText={(value: string) => handleUpdateDay(day.id, 'exercisesText', value)}
+                onChangeText={(value: string) =>
+                  handleUpdateDay(day.id, 'exercisesText', value)
+                }
                 multiline
                 textAlignVertical="top"
               />
 
               {preview.length > 0 && (
                 <View style={styles.previewWrap}>
-                  {preview.map((ex: { name: string; scheme: string }, exIndex: number) => (
-                    <View key={exIndex} style={[styles.previewChip, { borderColor: accent }]}>
-                      <Text style={styles.previewChipName} numberOfLines={1}>
-                        {ex.name}
-                      </Text>
-                      <Text style={styles.previewChipScheme}>{ex.scheme}</Text>
-                    </View>
-                  ))}
+                  {preview.map(
+                    (ex: { name: string; scheme: string }, exIndex: number) => (
+                      <View
+                        key={exIndex}
+                        style={[styles.previewChip, { borderColor: accent }]}
+                      >
+                        <Text style={styles.previewChipName} numberOfLines={1}>
+                          {ex.name}
+                        </Text>
+                        <Text style={styles.previewChipScheme}>
+                          {ex.scheme}
+                        </Text>
+                      </View>
+                    )
+                  )}
                 </View>
               )}
             </View>
@@ -349,9 +391,18 @@ export function NewRoutineScreen({
             <MaterialCommunityIcons
               name="plus-thick"
               size={16}
-              color={canAddMoreDays ? theme.colors.primary : theme.colors.textSecondary}
+              color={
+                canAddMoreDays
+                  ? theme.colors.primary
+                  : theme.colors.textSecondary
+              }
             />
-            <Text style={[styles.dayChipText, !canAddMoreDays && styles.dayChipTextDisabled]}>
+            <Text
+              style={[
+                styles.dayChipText,
+                !canAddMoreDays && styles.dayChipTextDisabled,
+              ]}
+            >
               Añadir día
             </Text>
           </Pressable>
@@ -364,9 +415,16 @@ export function NewRoutineScreen({
             <MaterialCommunityIcons
               name="minus-thick"
               size={16}
-              color={canRemoveDay ? theme.colors.primary : theme.colors.textSecondary}
+              color={
+                canRemoveDay ? theme.colors.primary : theme.colors.textSecondary
+              }
             />
-            <Text style={[styles.dayChipText, !canRemoveDay && styles.dayChipTextDisabled]}>
+            <Text
+              style={[
+                styles.dayChipText,
+                !canRemoveDay && styles.dayChipTextDisabled,
+              ]}
+            >
               Quitar día
             </Text>
           </Pressable>
@@ -377,12 +435,16 @@ export function NewRoutineScreen({
 
       <GlassTopBar
         title="Nueva rutina"
-        titleElement={(
+        titleElement={
           <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons name="playlist-plus" size={18} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="playlist-plus"
+              size={18}
+              color={theme.colors.text}
+            />
             <Text style={styles.topBarTitleText}>Nueva rutina</Text>
           </View>
-        )}
+        }
         subtitle="Define los ejercicios que realizarás cada día"
         topInset={insets.top}
       />

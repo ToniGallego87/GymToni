@@ -1,5 +1,36 @@
 # UPDATES
 
+## Version 0.5.2 - 2026-06-11
+
+### Nuevas funcionalidades
+- **Compartir rutina por QR**: en el detalle de una rutina, botón "Compartir por QR" que genera un código con toda la rutina (días y ejercicios). Otro móvil con GymToni instalada lo escanea y abre "Nueva rutina" con el contenido prerrellenado, listo para crear. Todo local, sin servidor.
+
+### Arquitectura
+- El QR codifica un deep link `gymtrack://import-routine?data=...` con la rutina minificada (sin IDs: se regeneran al importar para evitar colisiones). Nuevo `lib/routineShare.ts` para codificar/decodificar el enlace.
+- `App.tsx` escucha el deep link (`expo-linking`) en arranque y en caliente, y enruta a "Nueva rutina" con los días iniciales. `NewRoutineScreen` acepta `initialDays` para prerrellenar el formulario.
+- Nuevas dependencias `react-native-svg` + `react-native-qrcode-svg` para pintar el código (requiere recompilar el binario nativo).
+
+## Version 0.5.1 - 2026-06-11
+
+### Arquitectura
+- **Persistencia granular en SQLite**: cada acción (crear/editar/borrar rutina, día o entrenamiento, cambiar rutina activa) escribe en la base de datos solo lo que cambia, en lugar de reescribir todos los datos en cada cambio. Eliminado el guardado completo periódico; un wrapper del `dispatch` traduce cada acción a su escritura mínima (`lib/persistence.ts`), serializada en una cola para preservar el orden.
+- Editar una rutina o un día hace *upsert* preservando la identidad de la rutina y de los días que perduran, de modo que el historial conserva sus referencias (antes editar la rutina podía dejar logs sin asociación correcta).
+- Primer arranque sin datos siembra la base con las rutinas de fábrica. En web se mantiene el guardado completo en JSON con debounce.
+
+### Cambios
+- "Vaciar datos" deja la app vacía e inicializada: las rutinas de fábrica ya no reaparecen al reiniciar tras vaciar.
+
+## Version 0.5.0 - 2026-06-11
+
+### Arquitectura
+- La persistencia en nativo pasa de JSON en AsyncStorage a **SQLite** (`expo-sqlite`): nuevo `lib/db/` con esquema relacional (rutinas → días → ejercicios como plan; logs → ejercicios → series como historial), migraciones por `PRAGMA user_version` y mappers puros testeados. En web se mantiene JSON/localStorage (expo-sqlite no soporta web en SDK 51).
+- Migración automática y única al arrancar: si existen datos JSON del formato anterior, se vuelcan a SQLite y se eliminan las claves antiguas. `storage.ts` conserva su interfaz (`loadAppData`/`saveAppData`/`clearAppData`), el resto de la app no cambia.
+- Datos saneados en el nuevo modelo: el flag `isActive` duplicado deja de persistirse (la rutina activa vive en `settings`), las series se guardan como filas (no como derivado del texto), desaparece el doble guardado de logs y las referencias colgando del historial se anulan de forma controlada.
+- `generateId()` ahora devuelve GUID (UUID v4); las rutinas/días/ejercicios nuevos usan GUID en lugar de ids derivados de `Date.now()`.
+
+### Cambios
+- Cualquier rutina puede borrarse, incluidas las de fábrica: eliminado el campo `isCustom` (siguen sin poder borrarse rutinas con entrenamientos registrados).
+
 ## Version 0.4.9 - 2026-06-10
 
 ### Cambios
