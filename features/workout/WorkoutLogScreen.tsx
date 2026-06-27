@@ -416,9 +416,18 @@ export function WorkoutLogScreen({
       });
     });
 
-    // Filtrar por exerciseId y excluir el log actual
+    // Tope temporal: si estamos editando un log existente, "anterior" debe ser
+    // el inmediatamente previo a ESE log, no el más reciente de todos (que podría
+    // ser uno posterior al que editamos).
+    const currentLogDate = existingLog?.createdAt ?? Infinity;
+
+    // Filtrar por exerciseId, excluir el log actual y descartar los posteriores
+    // al log que se está editando.
     const matchingExercises = allExercisesForDay.filter(
-      (ex) => ex.exerciseId === exerciseId && ex.logId !== currentLogId
+      (ex) =>
+        ex.exerciseId === exerciseId &&
+        ex.logId !== currentLogId &&
+        ex.logDate < currentLogDate
     );
 
     if (matchingExercises.length === 0) {
