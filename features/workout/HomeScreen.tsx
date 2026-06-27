@@ -21,9 +21,9 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
-import { WorkoutDay, WorkoutRoutine, WorkoutLog, ExerciseLog } from '../../types';
+import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
-import { buildImprovementFromStrengthScores, getExerciseImprovementPercent, ImprovementResult } from '@lib/progress';
+import { buildImprovementFromStrengthScores, getWorkoutStrengthScore, ImprovementResult } from '@lib/progress';
 import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
 import {
@@ -53,6 +53,7 @@ interface HomeScreenProps {
   onOpenRoutineSelector?: () => void;
   onOpenRoutineDetails?: (routine: WorkoutRoutine) => void;
   onCreateRoutine?: () => void;
+  onScanRoutineQR?: () => void;
   onDeleteCurrentRoutine?: () => void;
   canDeleteCurrentRoutine?: boolean;
   initialShowRoutineSelector?: boolean;
@@ -70,7 +71,8 @@ interface WeekProgressPoint {
 function buildWeekProgress(
   logs: WorkoutLog[],
   activeRoutineId?: string,
-  activeDays: WorkoutDay[] = []
+  activeDays: WorkoutDay[] = [],
+  dayFilter?: string
 ): WeekProgressPoint[] {
   if (!activeRoutineId) return [];
 
@@ -105,28 +107,44 @@ function buildWeekProgress(
   const isBlockIncomplete = (logsForBlock: WorkoutLog[]) =>
     activeDays.length > 0 && !activeDays.every(d => logsForBlock.some(l => l.dayId === d.id));
 
+  const blockHasDay = (logsForBlock: WorkoutLog[], dayId: string) =>
+    logsForBlock.some(l => l.dayId === dayId);
+
   // El gráfico compara cada semana contra la PRIMERA (progreso acumulado),
   // a diferencia del listado, que compara contra la semana anterior.
   const points: WeekProgressPoint[] = orderedBlocks.map((blockNumber, index) => {
+    const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
+
+    // Con filtro por día activo, una semana está "incompleta" si NO entrenó ese
+    // día; sin filtro, si le faltan días de la rutina.
+    const isIncomplete = dayFilter
+      ? !blockHasDay(currentWeekLogsForBlock, dayFilter)
+      : isBlockIncomplete(currentWeekLogsForBlock);
+
     if (index === 0) {
-      return { week: 1, improvement: 0, isIncomplete: isBlockIncomplete(groupedByBlock[blockNumber] || []) };
+      return { week: 1, improvement: 0, isIncomplete };
     }
 
     const firstBlockNumber = orderedBlocks[0];
-    const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
     const previousWeekLogsForBlock = groupedByBlock[firstBlockNumber] || [];
-    const isIncomplete = isBlockIncomplete(currentWeekLogsForBlock);
 
     if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
       return { week: index + 1, improvement: 0, isIncomplete };
     }
 
+    // Con filtro activo, las semanas que no entrenaron ese día no puntúan (0%).
+    if (dayFilter && !blockHasDay(currentWeekLogsForBlock, dayFilter)) {
+      return { week: index + 1, improvement: 0, isIncomplete };
+    }
+
     // Una semana incompleta NO se penaliza por días que faltan: solo se cuentan
-    // los días entrenados, comparándolos contra esos mismos días de la semana base
-    // (igual que el porcentaje del listado).
-    const currentDayIds = Array.from(
-      new Set(currentWeekLogsForBlock.map(log => log.dayId).filter(Boolean))
-    );
+    // los días entrenados (o el día filtrado), comparándolos contra esos mismos
+    // días de la semana base (igual que el porcentaje del listado).
+    const currentDayIds = dayFilter
+      ? [dayFilter]
+      : Array.from(
+          new Set(currentWeekLogsForBlock.map(log => log.dayId).filter(Boolean))
+        );
     const scoreOptions = {
       activeDaysCount: activeDays.length,
       restrictToDayIds: currentDayIds,
@@ -313,6 +331,7 @@ export function HomeScreen({
   onOpenRoutineSelector,
   onOpenRoutineDetails,
   onCreateRoutine,
+  onScanRoutineQR,
   onDeleteCurrentRoutine,
   canDeleteCurrentRoutine = false,
   initialShowRoutineSelector = false,
@@ -322,6 +341,7 @@ export function HomeScreen({
   const { state, dispatch } = useWorkout();
   const [showRoutineSelector, setShowRoutineSelector] = useState(initialShowRoutineSelector);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
+  const [chartDayFilter, setChartDayFilter] = useState<string | undefined>(undefined);
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<Record<number, boolean>>({});
   const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(state.activeRoutineId);
   const [routineToDeleteId, setRoutineToDeleteId] = useState<string | undefined>(undefined);
@@ -345,6 +365,12 @@ export function HomeScreen({
     (routine: WorkoutRoutine) => routine.id === displayedRoutineId
   );
   
+  // Al cambiar de rutina visualizada, resetear el filtro de la gráfica a "Todos"
+  // (los IDs de día pertenecen a otra rutina y dejarían de existir).
+  useEffect(() => {
+    setChartDayFilter(undefined);
+  }, [displayedRoutineId]);
+
   // Detectar si la rutina visualizada es la activa
   const isDisplayedRoutineActive = displayedRoutineId === state.activeRoutineId;
   
@@ -450,34 +476,17 @@ export function HomeScreen({
       .sort((a: WorkoutLog, b: WorkoutLog) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
   };
 
-  // Media de la mejora por ejercicio entre dos sesiones concretas (negativo = 0).
+  // Mejora entre dos sesiones: se agrega el volumen de carga total de cada una
+  // y se saca UN solo porcentaje (mismo criterio que Detail y la gráfica).
   const computeImprovementBetweenLogs = (
     currentLog: WorkoutLog,
     previousLog: WorkoutLog | null
   ): ImprovementResult | null => {
     if (!previousLog) return null;
-
-    // Mapeo de ejercicios anteriores por ID y por nombre (para casar renombrados)
-    const previousByExerciseId: Record<string, ExerciseLog> = {};
-    const previousByExerciseName: Record<string, ExerciseLog> = {};
-    previousLog.exercises.forEach(ex => {
-      previousByExerciseId[ex.exerciseId] = ex;
-      previousByExerciseName[ex.exerciseName] = ex;
-    });
-
-    const exerciseImprovements: number[] = [];
-    currentLog.exercises.forEach(currentEx => {
-      const previousEx = previousByExerciseId[currentEx.exerciseId] || previousByExerciseName[currentEx.exerciseName];
-      const improvement = getExerciseImprovementPercent(currentEx, previousEx || null);
-      if (improvement !== null) {
-        exerciseImprovements.push(improvement);
-      }
-    });
-
-    if (exerciseImprovements.length === 0) return null;
-
-    const avgImprovement = exerciseImprovements.reduce((sum, v) => sum + v, 0) / exerciseImprovements.length;
-    return { isImproved: avgImprovement > 0, percent: avgImprovement };
+    return buildImprovementFromStrengthScores(
+      getWorkoutStrengthScore(currentLog),
+      getWorkoutStrengthScore(previousLog)
+    );
   };
 
   // Mejora de una sesión respecto a la anterior del mismo día (independiente de la semana).
@@ -492,52 +501,22 @@ export function HomeScreen({
 
     if (activeDays.length === 0) return null;
 
-    // Obtener el último log por día para la semana actual y anterior
-    const currentLatestByDayId: Record<string, WorkoutLog> = {};
-    const previousLatestByDayId: Record<string, WorkoutLog> = {};
+    // Solo se comparan los días entrenados esta semana, contra esos mismos días de
+    // la semana anterior (sin penalizar los que falten), igual que la gráfica.
+    const currentDayIds = Array.from(
+      new Set(currentWeekLogs.map(log => log.dayId).filter(Boolean))
+    );
+    if (currentDayIds.length === 0) return null;
 
-    currentWeekLogs.forEach(log => {
-      if (!currentLatestByDayId[log.dayId] || getLogTimestamp(log) > getLogTimestamp(currentLatestByDayId[log.dayId])) {
-        currentLatestByDayId[log.dayId] = log;
-      }
-    });
-
-    previousWeekLogs.forEach(log => {
-      if (!previousLatestByDayId[log.dayId] || getLogTimestamp(log) > getLogTimestamp(previousLatestByDayId[log.dayId])) {
-        previousLatestByDayId[log.dayId] = log;
-      }
-    });
-
-    // Calcular porcentaje de mejora para cada día que aparece en ambas semanas
-    const dayImprovements: number[] = [];
-
-    activeDays.forEach(day => {
-      const currentDayLog = currentLatestByDayId[day.id];
-      const previousDayLog = previousLatestByDayId[day.id];
-
-      if (currentDayLog && previousDayLog) {
-        // Ambas semanas tienen el día: comparar esta semana contra la anterior
-        const improvement = computeImprovementBetweenLogs(currentDayLog, previousDayLog);
-        dayImprovements.push(improvement ? improvement.percent : 0);
-      } else if (currentDayLog && !previousDayLog) {
-        // Solo la semana actual tiene el día: contar como mejora (primer vez)
-        dayImprovements.push(0);
-      } else if (!currentDayLog) {
-        // La semana actual no tiene el día: contar como 0
-        dayImprovements.push(0);
-      }
-    });
-
-    // Si no hay valores, devolver null
-    if (dayImprovements.length === 0) return null;
-
-    // Media de mejoras
-    const avgImprovement = dayImprovements.reduce((sum, v) => sum + v, 0) / dayImprovements.length;
-
-    return {
-      isImproved: avgImprovement > 0,
-      percent: avgImprovement,
+    const scoreOptions = {
+      activeDaysCount: activeDays.length,
+      restrictToDayIds: currentDayIds,
+      applyMissingPenalty: false,
     };
+    const currentStrength = getWeekStrengthScore(currentWeekLogs, scoreOptions);
+    const previousStrength = getWeekStrengthScore(previousWeekLogs, scoreOptions);
+
+    return buildImprovementFromStrengthScores(currentStrength, previousStrength);
   };
 
   const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
@@ -575,7 +554,13 @@ export function HomeScreen({
   // El gráfico muestra todas las semanas entrenadas tal cual: la última semana en
   // curso (incompleta) se muestra resaltada como "actual" desde buildWeekProgress,
   // y no se añaden semanas fantasma. No hay nada que recortar aquí.
-  const filteredWeeklyProgress = weeklyProgress;
+  const filteredWeeklyProgress = useMemo(
+    () =>
+      chartDayFilter
+        ? buildWeekProgress(state.logs, displayedRoutineId, activeDays, chartDayFilter)
+        : weeklyProgress,
+    [chartDayFilter, weeklyProgress, state.logs, displayedRoutineId, activeDays]
+  );
 
   const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
 
@@ -809,7 +794,7 @@ export function HomeScreen({
         contentContainerStyle={[
           styles.homeScrollContent,
           {
-            paddingTop: topBarHeight + 12,
+            paddingTop: topBarHeight + 28,
             paddingBottom: homeScrollBottomPadding,
           },
         ]}
@@ -885,9 +870,39 @@ export function HomeScreen({
               </View>
             </TouchableOpacity>
 
-            {showWeeklyProgressChart && (
-              <ProgressBarChart points={filteredWeeklyProgress} width={chartWidth} />
-            )}
+            {showWeeklyProgressChart && (() => {
+              // Un único botón que rota entre "Semana completa" y cada día de la
+              // rutina a cada pulsación (vuelve al principio al llegar al final).
+              const dayOptions = [
+                { id: undefined as string | undefined, label: 'Semana completa' },
+                ...activeDays.map((day: WorkoutDay, index: number) => ({
+                  id: day.id,
+                  label: `${day.emoji ? `${day.emoji} ` : ''}${getDisplayDayName(day.name) || `Día ${index + 1}`}`,
+                })),
+              ];
+              const currentIndex = Math.max(0, dayOptions.findIndex(opt => opt.id === chartDayFilter));
+              const current = dayOptions[currentIndex];
+              const cycleDay = () => {
+                animateLayout();
+                const next = dayOptions[(currentIndex + 1) % dayOptions.length];
+                setChartDayFilter(next.id);
+              };
+              return (
+                <>
+                  <ProgressBarChart points={filteredWeeklyProgress} width={chartWidth} />
+                  <TouchableOpacity
+                    style={styles.chartFilterButton}
+                    onPress={cycleDay}
+                    activeOpacity={0.8}
+                  >
+                    <MaterialCommunityIcons name="autorenew" size={16} color={theme.colors.text} />
+                    <Text style={styles.chartFilterButtonText} numberOfLines={1}>
+                      {current.label}
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              );
+            })()}
           </View>
           );
         })()}
@@ -1293,6 +1308,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: theme.colors.text,
     lineHeight: 24,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   progressLatest: {
     fontSize: 17,
@@ -1311,6 +1328,25 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
     flexDirection: 'row',
+  },
+  chartFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    gap: 8,
+    marginTop: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  chartFilterButtonText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
   },
   progressChart: {
     height: 170,
@@ -1670,6 +1706,21 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: 17,
     fontWeight: '800',
+  },
+  newRoutineQRCard: {
+    marginTop: 6,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderStyle: 'dashed',
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  newRoutineQRCardText: {
+    color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: '700',
   },
   selectorDetailsButton: {
     marginTop: 4,

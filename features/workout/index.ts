@@ -8,3 +8,4 @@ export { DataScreen } from './DataScreen';
 export { DaySelectorScreen } from './DaySelectorScreen';
 export { NewRoutineScreen } from './NewRoutineScreen';
 export { RoutineDetailScreen } from './RoutineDetailScreen';
+export { QRScannerScreen } from './QRScannerScreen';

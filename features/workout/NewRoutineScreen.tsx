@@ -27,6 +27,8 @@ interface NewRoutineScreenProps {
   existingRoutineCount: number;
   onCreateRoutine: (routine: WorkoutRoutine) => void;
   onBack: () => void;
+  // Abre el escáner de QR para importar una rutina compartida.
+  onScanRoutineQR?: () => void;
   // Días con los que arrancar el formulario (importación por QR/deep link).
   initialDays?: { title: string; exercisesText: string }[];
 }
@@ -174,6 +176,7 @@ export function NewRoutineScreen({
   existingRoutineCount,
   onCreateRoutine,
   onBack,
+  onScanRoutineQR,
   initialDays,
 }: NewRoutineScreenProps) {
   const insets = useSafeAreaInsets();
@@ -431,6 +434,23 @@ export function NewRoutineScreen({
         </View>
 
         <CreateRoutineButton onPress={handleCreate} />
+
+        {onScanRoutineQR && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.qrButton,
+              pressed && styles.qrButtonPressed,
+            ]}
+            onPress={onScanRoutineQR}
+          >
+            <MaterialCommunityIcons
+              name="qrcode-scan"
+              size={18}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.qrButtonText}>Crear a partir de QR</Text>
+          </Pressable>
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -627,6 +647,30 @@ const styles = StyleSheet.create({
     fontSize: 22,
     letterSpacing: 0.5,
     lineHeight: 26,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  qrButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 4,
+    paddingVertical: 14,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  qrButtonPressed: {
+    opacity: 0.9,
+  },
+  qrButtonText: {
+    color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   topBarTitleRow: {
     flexDirection: 'row',

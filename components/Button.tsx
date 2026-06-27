@@ -2,10 +2,12 @@ import React from 'react';
 import {
   Pressable,
   Text,
+  View,
   StyleSheet,
   GestureResponderEvent,
   ViewStyle,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '@lib/theme';
 
 interface ButtonProps {
@@ -17,6 +19,13 @@ interface ButtonProps {
   size?: 'small' | 'medium' | 'large';
 }
 
+// Degradado por variante: da sensación de volumen (claro arriba → oscuro abajo),
+// igual que el botón "Guardar" de registrar un día.
+const GRADIENTS: Record<'primary' | 'danger', [string, string, string]> = {
+  primary: ['#F9D85A', '#F7CC3D', '#E0B226'],
+  danger: ['#F59898', '#F06A6A', '#D85555'],
+};
+
 export function Button({
   title,
   onPress,
@@ -25,26 +34,17 @@ export function Button({
   style,
   size = 'medium',
 }: ButtonProps) {
-  const getBackgroundColor = () => {
+  const isFilled = !disabled && (variant === 'primary' || variant === 'danger');
+
+  const getFlatBackgroundColor = () => {
     if (disabled) return theme.colors.lightGray;
-    switch (variant) {
-      case 'secondary':
-        return theme.colors.surface;
-      case 'danger':
-        return theme.colors.error;
-      default:
-        return theme.colors.primary;
-    }
+    if (variant === 'secondary') return theme.colors.surface;
+    return theme.colors.primary;
   };
 
   const getTextColor = () => {
     if (variant === 'secondary' && !disabled) return theme.colors.text;
     return theme.colors.darkGray;
-  };
-
-  const getBorderColor = () => {
-    if (variant === 'secondary') return theme.colors.border;
-    return undefined;
   };
 
   const getPadding = () => {
@@ -62,30 +62,53 @@ export function Button({
     <Pressable
       style={({ pressed }) => [
         styles.button,
-        {
-          backgroundColor: getBackgroundColor(),
-          borderColor: getBorderColor(),
-          borderWidth: variant === 'secondary' ? 1 : 0,
-          ...getPadding(),
-        },
         pressed && !disabled && styles.pressed,
         style,
       ]}
       onPress={onPress}
       disabled={disabled}
     >
-      <Text
+      <View
         style={[
-          styles.text,
+          styles.inner,
+          getPadding(),
           {
-            color: getTextColor(),
-            fontSize: size === 'small' ? 13 : size === 'large' ? 17 : 15,
-            lineHeight: size === 'small' ? 18 : size === 'large' ? 24 : 20,
+            backgroundColor: isFilled ? 'transparent' : getFlatBackgroundColor(),
+            borderColor: variant === 'secondary' ? theme.colors.border : 'transparent',
+            borderWidth: variant === 'secondary' ? 1 : 0,
           },
         ]}
       >
-        {title}
-      </Text>
+        {isFilled && (
+          <>
+            <LinearGradient
+              colors={GRADIENTS[variant === 'danger' ? 'danger' : 'primary']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 0, y: 1 }}
+              style={styles.sheen}
+              pointerEvents="none"
+            />
+          </>
+        )}
+        <Text
+          style={[
+            styles.text,
+            {
+              color: getTextColor(),
+              fontSize: size === 'small' ? 13 : size === 'large' ? 17 : 15,
+              lineHeight: size === 'small' ? 18 : size === 'large' ? 24 : 20,
+            },
+          ]}
+        >
+          {title}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -93,9 +116,20 @@ export function Button({
 const styles = StyleSheet.create({
   button: {
     borderRadius: theme.borderRadius.md,
+    ...theme.shadow.card,
+  },
+  inner: {
+    borderRadius: theme.borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    ...theme.shadow.soft,
+    overflow: 'hidden',
+  },
+  sheen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '55%',
   },
   text: {
     fontWeight: '800',

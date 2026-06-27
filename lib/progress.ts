@@ -19,7 +19,16 @@ function isValidSet(setItem: ParsedSet): boolean {
     && setItem.reps > 0;
 }
 
-function getSetPerformanceScore(setItem: ParsedSet): number {
+/**
+ * Puntuación de un set como 1RM ESTIMADO (fórmula de Epley): normaliza peso y
+ * reps en un único valor de fuerza. Es la unidad sobre la que se construyen
+ * todos los porcentajes de la app.
+ * Se eligió frente al volumen de carga (peso × reps) porque trata "subir peso
+ * bajando alguna repetición" como progreso —que es lo que se espera al entrenar
+ * fuerza—, no como retroceso. Sumar los e1RM de las series sigue premiando hacer
+ * más series y más repeticiones.
+ */
+export function getSetPerformanceScore(setItem: ParsedSet): number {
   if (!isValidSet(setItem)) return 0;
 
   // Para ejercicios sin carga externa, usar reps como métrica de rendimiento.
@@ -30,6 +39,9 @@ function getSetPerformanceScore(setItem: ParsedSet): number {
   return getEstimatedOneRepMax(setItem.weight, setItem.reps);
 }
 
+/**
+ * 1RM estimado (fórmula de Epley): peso × (1 + reps/30).
+ */
 export function getEstimatedOneRepMax(weight: number, reps: number): number {
   if (!Number.isFinite(weight) || !Number.isFinite(reps) || reps <= 0 || weight < 0) {
     return 0;
@@ -82,37 +94,4 @@ export function buildImprovementFromStrengthScores(
 
   const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
   return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
-}
-
-/**
- * Calcula el porcentaje de mejora de un ejercicio comparándolo con su versión anterior.
- * Si el porcentaje es negativo, se devuelve 0 (no se cuenta la pérdida).
- * Si no hay sesión anterior, devuelve null.
- */
-export function getExerciseImprovementPercent(
-  currentExercise: ExerciseLog | null,
-  previousExercise: ExerciseLog | null
-): number | null {
-  if (!currentExercise || !previousExercise) return null;
-
-  const currentScore = getExerciseStrengthScore(currentExercise);
-  const previousScore = getExerciseStrengthScore(previousExercise);
-
-  // Si ambos son 0, no hay mejora
-  if (currentScore === 0 && previousScore === 0) return null;
-
-  // Si el anterior era 0 pero el actual > 0, primera vez (sin baseline real)
-  if (previousScore === 0 && currentScore > 0) {
-    return FIRST_TIME_IMPROVEMENT_PERCENT;
-  }
-
-  // Si el anterior era > 0 y el actual es 0, pérdida (cuenta como 0)
-  if (previousScore > 0 && currentScore === 0) {
-    return 0;
-  }
-
-  const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
-  
-  // Los porcentajes negativos se cuentan como 0
-  return Math.max(0, deltaPct);
 }

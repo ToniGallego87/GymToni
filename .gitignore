@@ -31,3 +31,6 @@ buildlog.txt
 .classpath
 .c9/
 .history
+
+# Logs de build local
+gradle-release.log

@@ -66,6 +66,8 @@ export function ExerciseInputField({
   const isTimeBased = !!(target?.reps && /\d+\s*(s\b|seg|sec|min)/i.test(target.reps));
 
   const startTimer = () => {
+    // Cada inicio arranca desde cero (descarta el valor parado anterior).
+    setTimerSeconds(0);
     setTimerRunning(true);
     timerRef.current = setInterval(() => {
       setTimerSeconds(prev => prev + 1);
@@ -78,11 +80,6 @@ export function ExerciseInputField({
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-  };
-
-  const resetTimer = () => {
-    stopTimer();
-    setTimerSeconds(0);
   };
 
   const useTimerAsReps = () => {
@@ -193,7 +190,7 @@ export function ExerciseInputField({
   };
 
   return (
-    <View style={[styles.container, { borderLeftColor: accent }]}>
+    <View style={styles.container}>
       <GradientFill accent={accent} />
       <View style={styles.header}>
         <View style={styles.titleSection}>
@@ -384,15 +381,6 @@ export function ExerciseInputField({
                     <Text style={styles.stopwatchButtonText}>Usar {timerSeconds}s</Text>
                   </Pressable>
                 )}
-
-                {timerSeconds > 0 && (
-                  <Pressable
-                    style={({ pressed }) => [styles.stopwatchResetButton, pressed && styles.buttonPressed]}
-                    onPress={resetTimer}
-                  >
-                    <MaterialCommunityIcons name="refresh" size={18} color={theme.colors.darkGray} />
-                  </Pressable>
-                )}
               </View>
             </View>
           )}
@@ -434,8 +422,6 @@ const styles = StyleSheet.create({
     padding: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
     overflow: 'hidden',
     ...theme.shadow.soft,
   },
@@ -706,13 +692,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: theme.borderRadius.sm,
-  },
-  stopwatchResetButton: {
-    backgroundColor: theme.colors.surfaceAlt,
-    padding: 10,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
   },
   stopwatchButtonText: {
     color: theme.colors.darkGray,

@@ -1,5 +1,25 @@
 # UPDATES
 
+## Version 0.5.3 - 2026-06-27
+
+### Nuevas funcionalidades
+- **Importar rutina por QR**: nueva pantalla de importación (botón "Crear a partir de QR" en "Nueva rutina" e Inicio). Escanear el QR con la cámara del móvil abre GymToni con la rutina prerrellenada; también admite pegar el enlace `gymtrack://import-routine?data=...` a mano.
+- **Filtro de la gráfica de progreso**: bajo la gráfica de Inicio, un botón que rota a cada pulsación entre "Semana completa" (por defecto) y cada día de la rutina. El eje sigue siendo por semanas; el filtro solo restringe qué sesiones puntúan.
+
+### Correcciones
+- La flecha de cada serie (↑/↓) en la comparativa usaba un criterio distinto que el porcentaje del ejercicio, por lo que podían contradecirse. Ahora ambos usan la misma puntuación (1RM estimado por serie), así que tarjeta y porcentaje son siempre coherentes.
+- La importación completa fallaba en nativo: con ~3000 filas el aluvión de `finalize` (un statement por fila) abortaba la transacción ("NativeStatement.finalizeAsync()"). Ahora `bulkInsert` reutiliza un único prepared statement por tabla.
+- Borrado y reescritura de datos en SQLite ya no deja filas huérfanas ni choca en PK al reimportar: el `ON DELETE CASCADE` no se aplica en la conexión de `withExclusiveTransactionAsync` (sin `PRAGMA foreign_keys = ON`), así que ahora se borra explícitamente tabla a tabla (hijos antes que padres) en guardar/vaciar/upsert/borrar rutina y upsert de entrenamiento.
+- El cronómetro de series ahora reinicia a cero en cada inicio (descarta el valor parado anterior); eliminado el botón de reset, ya redundante.
+- Editar un entrenamiento de un día que no es el de hoy ya no abre el formulario vacío: `WorkoutLogScreen` no recibía el `log` a editar, así que precargaba en blanco y al guardar creaba un registro nuevo. Ahora se pasa el log, se prerrellenan series/notas/cardio y al guardar se actualiza ese mismo entrenamiento.
+
+### Cambios
+- **Porcentajes de progreso replanteados**: Inicio (comparativa diaria y semanal) deja de promediar el porcentaje de cada ejercicio —donde un accesorio ligero con gran % distorsionaba el total— y ahora agrega la puntuación de fuerza de toda la sesión/semana en un único porcentaje, el mismo criterio que ya usaban la comparativa de Detalle y la gráfica. La métrica base es el **1RM estimado** (Epley): subir peso aunque baje alguna repetición cuenta como progreso (no como retroceso, como haría el volumen de carga), y sumar las series sigue premiando hacer más series y más reps. Las regresiones se muestran de forma coherente en todas las pantallas (antes Inicio las recortaba a 0).
+- Deep link de importación robusto: `app/+native-intent.ts` redirige `import-routine` a la raíz para que expo-router no muestre "Unmatched Route"; el listener de `Linking` en `App.tsx` procesa la URL original.
+- Botones (`Button`) con degradado por variante (primary dorado, danger rojo) y brillo superior (sheen), al estilo del botón "Guardar".
+- Calendario: el chip de rutina (R1, R2…) se pinta en amarillo solo si es la rutina activa (blanco el resto); el borde del día de "hoy" pasa a azul primario.
+- Android: iconos de notificación regenerados; `colorPrimary` y splash ajustados; `versionCode` 4 → 5. Workaround de `aapt2` local en `gradle.properties` (bug de AGP 8.2.1 con referencias `@android:color/` en AARs).
+
 ## Version 0.5.2 - 2026-06-11
 
 ### Nuevas funcionalidades

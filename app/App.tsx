@@ -20,6 +20,7 @@ import {
   DetailScreen,
   HomeScreen,
   NewRoutineScreen,
+  QRScannerScreen,
   RoutineDetailScreen,
   WorkoutProvider,
   WorkoutLogScreen,
@@ -33,6 +34,7 @@ import {
 } from '@lib/storage';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
+import type { SharedRoutine } from '@lib/routineShare';
 import { theme } from '@lib/theme';
 import {
   WorkoutAppData,
@@ -55,7 +57,8 @@ type Screen =
   | { type: 'calendar' }
   | { type: 'data' }
   | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
-  | { type: 'routine-details'; routine: WorkoutRoutine };
+  | { type: 'routine-details'; routine: WorkoutRoutine }
+  | { type: 'qr-scanner' };
 
 function AppContent() {
   const { dispatch, state } = useWorkout();
@@ -319,6 +322,7 @@ function AppContent() {
             setScreen({ type: 'routine-details', routine })
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+          onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
           initialShowRoutineSelector={true}
@@ -348,6 +352,7 @@ function AppContent() {
             setScreen({ type: 'routine-details', routine })
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+          onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
         />
@@ -380,6 +385,7 @@ function AppContent() {
       {screen.type === 'workout-log' && (
         <WorkoutLogScreen
           day={screen.day}
+          log={screen.log}
           onSave={() => setScreen({ type: 'home' })}
           onBack={() => setScreen({ type: 'home' })}
         />
@@ -434,6 +440,7 @@ function AppContent() {
           existingRoutineCount={state.routines.length}
           onCreateRoutine={handleCreateRoutine}
           onBack={() => setScreen({ type: 'home' })}
+          onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
           initialDays={screen.initialDays}
         />
       )}
@@ -442,6 +449,15 @@ function AppContent() {
         <RoutineDetailScreen
           routine={screen.routine}
           onBack={() => setScreen({ type: 'routine-selector' })}
+        />
+      )}
+
+      {screen.type === 'qr-scanner' && (
+        <QRScannerScreen
+          onScanSuccess={(shared: SharedRoutine) =>
+            setScreen({ type: 'new-routine', initialDays: shared.days })
+          }
+          onBack={() => setScreen({ type: 'new-routine' })}
         />
       )}
     </View>

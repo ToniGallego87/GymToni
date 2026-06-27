@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ParsedSet } from '../types';
 import { parseSeriesString, formatParsedSet } from '@lib/parsers';
+import { getSetPerformanceScore } from '@lib/progress';
 import { theme } from '@lib/theme';
 import { GradientFill } from './GradientFill';
 
@@ -29,11 +30,14 @@ function compareSetPerformance(
 ): ComparisonStatus {
   if (!current || !previous) return 'missing';
 
-  if (current.weight > previous.weight) return 'up';
-  if (current.weight < previous.weight) return 'down';
+  // Misma métrica que el porcentaje global del ejercicio: volumen de carga
+  // (peso × reps). Así la flecha por serie no contradice el % de la cabecera
+  // (p. ej. subir peso pero bajar reps puede ser menos volumen → flecha abajo).
+  const currentScore = getSetPerformanceScore(current);
+  const previousScore = getSetPerformanceScore(previous);
 
-  if (current.reps > previous.reps) return 'up';
-  if (current.reps < previous.reps) return 'down';
+  if (currentScore > previousScore) return 'up';
+  if (currentScore < previousScore) return 'down';
 
   return 'same';
 }

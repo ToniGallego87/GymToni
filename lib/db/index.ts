@@ -21,11 +21,41 @@ import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
 
 type SQLiteDatabase = import('expo-sqlite').SQLiteDatabase;
 type SQLiteBindParams = import('expo-sqlite').SQLiteBindParams;
+type SQLiteStatement = import('expo-sqlite').SQLiteStatement;
 
 // Subconjunto async común a la BD y al objeto de transacción exclusiva.
 interface SQLiteRunner {
   execAsync(source: string): Promise<unknown>;
   runAsync(source: string, params: SQLiteBindParams): Promise<unknown>;
+}
+
+// Para inserciones masivas: prepara el statement una vez y lo reutiliza.
+interface SQLiteBulkRunner {
+  prepareAsync(source: string): Promise<SQLiteStatement>;
+}
+
+// Inserta muchas filas reutilizando un ÚNICO prepared statement por tabla.
+// La importación completa mueve ~3000 filas: con runAsync (que prepara y
+// finaliza un statement por fila) el aluvión de finalize hacía fallar la
+// transacción en nativo ("NativeStatement.finalizeAsync()"), abortando la
+// importación entera. Un statement por tabla baja de miles de finalize a uno.
+async function bulkInsert<T>(
+  runner: SQLiteBulkRunner,
+  sql: string,
+  rows: readonly T[],
+  toParams: (row: T) => SQLiteBindParams
+): Promise<void> {
+  if (!rows.length) {
+    return;
+  }
+  const statement = await runner.prepareAsync(sql);
+  try {
+    for (const row of rows) {
+      await statement.executeAsync(toParams(row));
+    }
+  } finally {
+    await statement.finalizeAsync();
+  }
 }
 
 const DB_NAME = 'gymtoni.db';
@@ -52,20 +82,6 @@ function getDb(): Promise<SQLiteDatabase> {
 }
 
 // --- Inserciones por fila (orden de inserción = orden de dependencia FK) ---
-
-function insertRoutine(runner: SQLiteRunner, row: RoutineRow): Promise<unknown> {
-  return runner.runAsync(
-    'INSERT INTO routines (id, name, description, timer_duration, created_at) VALUES (?, ?, ?, ?, ?)',
-    [row.id, row.name, row.description, row.timer_duration, row.created_at]
-  );
-}
-
-function insertDay(runner: SQLiteRunner, row: WorkoutDayRow): Promise<unknown> {
-  return runner.runAsync(
-    'INSERT INTO workout_days (id, routines_id, day_number, name, emoji, description) VALUES (?, ?, ?, ?, ?, ?)',
-    [row.id, row.routines_id, row.day_number, row.name, row.emoji, row.description]
-  );
-}
 
 function insertExercise(runner: SQLiteRunner, row: ExerciseRow): Promise<unknown> {
   return runner.runAsync(
@@ -147,34 +163,72 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
   const rows = appDataToRows(data);
 
   await db.withExclusiveTransactionAsync(async txn => {
-    // workout_logs primero: sus hijos caen por CASCADE y evita el SET NULL
-    // inútil que dispararía borrar routines antes.
-    await txn.execAsync('DELETE FROM workout_logs; DELETE FROM routines; DELETE FROM settings;');
+    // Borrado explícito tabla a tabla (hijos antes que padres). NO depender de
+    // ON DELETE CASCADE: withExclusiveTransactionAsync abre una conexión nueva
+    // que NO tiene PRAGMA foreign_keys = ON (solo se aplica a la principal en
+    // getDb), así que la cascada no se dispara. Si solo borrásemos
+    // routines/workout_logs quedarían huérfanos en workout_days/exercises/...
+    // y al reinsertar con los mismos IDs saltaría un UNIQUE/PK constraint
+    // (que aflora enmascarado como "NativeStatement.finalizeAsync() rejected").
+    await txn.execAsync(
+      'DELETE FROM cardio_logs;' +
+      'DELETE FROM log_sets;' +
+      'DELETE FROM exercise_logs;' +
+      'DELETE FROM workout_logs;' +
+      'DELETE FROM exercises;' +
+      'DELETE FROM workout_days;' +
+      'DELETE FROM routines;' +
+      'DELETE FROM settings;'
+    );
 
-    for (const row of rows.settings) {
-      await txn.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', [row.key, row.value]);
-    }
-    for (const row of rows.routines) {
-      await insertRoutine(txn, row);
-    }
-    for (const row of rows.workoutDays) {
-      await insertDay(txn, row);
-    }
-    for (const row of rows.exercises) {
-      await insertExercise(txn, row);
-    }
-    for (const row of rows.workoutLogs) {
-      await insertWorkoutLog(txn, row);
-    }
-    for (const row of rows.exerciseLogs) {
-      await insertExerciseLog(txn, row);
-    }
-    for (const row of rows.logSets) {
-      await insertLogSet(txn, row);
-    }
-    for (const row of rows.cardioLogs) {
-      await insertCardioLog(txn, row);
-    }
+    await bulkInsert(
+      txn,
+      'INSERT INTO settings (key, value) VALUES (?, ?)',
+      rows.settings,
+      row => [row.key, row.value]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO routines (id, name, description, timer_duration, created_at) VALUES (?, ?, ?, ?, ?)',
+      rows.routines,
+      row => [row.id, row.name, row.description, row.timer_duration, row.created_at]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO workout_days (id, routines_id, day_number, name, emoji, description) VALUES (?, ?, ?, ?, ?, ?)',
+      rows.workoutDays,
+      row => [row.id, row.routines_id, row.day_number, row.name, row.emoji, row.description]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets) VALUES (?, ?, ?, ?, ?, ?)',
+      rows.exercises,
+      row => [row.id, row.workout_days_id, row.name, row.exercise_order, row.target_reps, row.target_sets]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      rows.workoutLogs,
+      row => [row.id, row.routines_id, row.workout_days_id, row.date, row.created_at, row.updated_at]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, exercise_order, raw_input, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      rows.exerciseLogs,
+      row => [row.id, row.workout_logs_id, row.exercises_id, row.exercise_name, row.exercise_order, row.raw_input, row.notes, row.created_at]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps) VALUES (?, ?, ?, ?, ?)',
+      rows.logSets,
+      row => [row.id, row.exercise_logs_id, row.set_order, row.weight, row.reps]
+    );
+    await bulkInsert(
+      txn,
+      'INSERT INTO cardio_logs (id, workout_logs_id, type, raw_input, duration, distance, pace, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      rows.cardioLogs,
+      row => [row.id, row.workout_logs_id, row.type, row.raw_input, row.duration, row.distance, row.pace, row.notes]
+    );
   });
 }
 
@@ -183,7 +237,17 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
 export async function clearAppDataInDb(): Promise<void> {
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async txn => {
-    await txn.execAsync('DELETE FROM workout_logs; DELETE FROM routines; DELETE FROM settings;');
+    // Borrado explícito: la cascada no aplica en esta conexión (ver saveAppDataToDb).
+    await txn.execAsync(
+      'DELETE FROM cardio_logs;' +
+      'DELETE FROM log_sets;' +
+      'DELETE FROM exercise_logs;' +
+      'DELETE FROM workout_logs;' +
+      'DELETE FROM exercises;' +
+      'DELETE FROM workout_days;' +
+      'DELETE FROM routines;' +
+      'DELETE FROM settings;'
+    );
     await txn.runAsync('INSERT INTO settings (key, value) VALUES (?, ?)', [SETTING_INITIALIZED, '1']);
   });
 }
@@ -209,15 +273,25 @@ export async function dbUpsertRoutine(routine: WorkoutRoutine): Promise<void> {
       [routineRow.id, routineRow.name, routineRow.description, routineRow.timer_duration, routineRow.created_at]
     );
 
-    // Eliminar días que ya no existen en la rutina (cascade ejercicios).
+    // Eliminar días que ya no existen en la rutina. Sus ejercicios se borran
+    // explícitamente antes (sin FK on en esta conexión no hay cascada).
     const keepIds = days.map(day => day.id);
     if (keepIds.length) {
       const placeholders = keepIds.map(() => '?').join(', ');
+      await txn.runAsync(
+        `DELETE FROM exercises WHERE workout_days_id IN (
+           SELECT id FROM workout_days WHERE routines_id = ? AND id NOT IN (${placeholders}))`,
+        [routine.id, ...keepIds]
+      );
       await txn.runAsync(
         `DELETE FROM workout_days WHERE routines_id = ? AND id NOT IN (${placeholders})`,
         [routine.id, ...keepIds]
       );
     } else {
+      await txn.runAsync(
+        'DELETE FROM exercises WHERE workout_days_id IN (SELECT id FROM workout_days WHERE routines_id = ?)',
+        [routine.id]
+      );
       await txn.runAsync('DELETE FROM workout_days WHERE routines_id = ?', [routine.id]);
     }
 
@@ -258,7 +332,29 @@ async function upsertDayWithExercises(
 export async function dbDeleteRoutine(routineId: string): Promise<void> {
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async txn => {
+    // Borrado explícito de hijos (sin cascada en esta conexión): historial y
+    // plan de la rutina, hijos antes que padres.
+    await txn.runAsync(
+      `DELETE FROM log_sets WHERE exercise_logs_id IN (
+         SELECT el.id FROM exercise_logs el
+         JOIN workout_logs wl ON el.workout_logs_id = wl.id
+         WHERE wl.routines_id = ?)`,
+      [routineId]
+    );
+    await txn.runAsync(
+      'DELETE FROM exercise_logs WHERE workout_logs_id IN (SELECT id FROM workout_logs WHERE routines_id = ?)',
+      [routineId]
+    );
+    await txn.runAsync(
+      'DELETE FROM cardio_logs WHERE workout_logs_id IN (SELECT id FROM workout_logs WHERE routines_id = ?)',
+      [routineId]
+    );
     await txn.runAsync('DELETE FROM workout_logs WHERE routines_id = ?', [routineId]);
+    await txn.runAsync(
+      'DELETE FROM exercises WHERE workout_days_id IN (SELECT id FROM workout_days WHERE routines_id = ?)',
+      [routineId]
+    );
+    await txn.runAsync('DELETE FROM workout_days WHERE routines_id = ?', [routineId]);
     await txn.runAsync('DELETE FROM routines WHERE id = ?', [routineId]);
   });
 }
@@ -274,6 +370,14 @@ export async function dbUpdateDay(routineId: string, day: WorkoutDay): Promise<v
 export async function dbUpsertWorkoutLog(log: WorkoutLog): Promise<void> {
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async txn => {
+    // Borrado explícito de hijos: sin FK on en esta conexión no hay cascada,
+    // y reinsertar el log con sus mismos exercise_logs/cardio chocaría en PK.
+    await txn.runAsync(
+      'DELETE FROM log_sets WHERE exercise_logs_id IN (SELECT id FROM exercise_logs WHERE workout_logs_id = ?)',
+      [log.id]
+    );
+    await txn.runAsync('DELETE FROM exercise_logs WHERE workout_logs_id = ?', [log.id]);
+    await txn.runAsync('DELETE FROM cardio_logs WHERE workout_logs_id = ?', [log.id]);
     await txn.runAsync('DELETE FROM workout_logs WHERE id = ?', [log.id]);
     await insertLogRows(txn, log);
   });

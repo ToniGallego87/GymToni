@@ -1,23 +1,10 @@
 import {
   getEstimatedOneRepMax,
   getBestSetStrengthScore,
+  getTotalSetsStrengthScore,
   buildImprovementFromStrengthScores,
-  getExerciseImprovementPercent,
   FIRST_TIME_IMPROVEMENT_PERCENT,
 } from '../progress';
-import { ExerciseLog } from '../../types';
-
-function exerciseLog(sets: { weight: number; reps: number }[]): ExerciseLog {
-  return {
-    id: 'x',
-    exerciseId: 'x',
-    exerciseName: 'Test',
-    order: 1,
-    rawInput: '',
-    parsedSets: sets,
-    timestamp: 0,
-  };
-}
 
 describe('getEstimatedOneRepMax (Epley)', () => {
   it('devuelve 0 con reps no válidas', () => {
@@ -30,11 +17,11 @@ describe('getEstimatedOneRepMax (Epley)', () => {
   });
 });
 
-describe('getBestSetStrengthScore', () => {
-  it('toma el mejor set', () => {
+describe('getBestSetStrengthScore (1RM estimado)', () => {
+  it('toma el set con mayor 1RM estimado', () => {
     const score = getBestSetStrengthScore([
-      { weight: 60, reps: 8 },
-      { weight: 80, reps: 5 },
+      { weight: 60, reps: 8 }, // e1RM 76.0
+      { weight: 80, reps: 5 }, // e1RM 93.3
     ]);
     expect(score).toBeCloseTo(getEstimatedOneRepMax(80, 5), 5);
   });
@@ -45,6 +32,23 @@ describe('getBestSetStrengthScore', () => {
 
   it('devuelve 0 sin sets', () => {
     expect(getBestSetStrengthScore([])).toBe(0);
+  });
+});
+
+describe('getTotalSetsStrengthScore (1RM estimado)', () => {
+  it('suma el 1RM estimado de todos los sets', () => {
+    expect(
+      getTotalSetsStrengthScore([
+        { weight: 100, reps: 5 },
+        { weight: 100, reps: 5 },
+      ])
+    ).toBeCloseTo(getEstimatedOneRepMax(100, 5) * 2, 5);
+  });
+
+  it('valora subir peso aunque baje alguna repetición', () => {
+    const conMasPeso = getTotalSetsStrengthScore([{ weight: 47.5, reps: 8 }]);
+    const original = getTotalSetsStrengthScore([{ weight: 45, reps: 10 }]);
+    expect(conMasPeso).toBeGreaterThan(original);
   });
 });
 
@@ -70,23 +74,5 @@ describe('buildImprovementFromStrengthScores', () => {
     const result = buildImprovementFromStrengthScores(90, 100);
     expect(result?.isImproved).toBe(false);
     expect(result?.percent).toBeCloseTo(10, 5);
-  });
-});
-
-describe('getExerciseImprovementPercent', () => {
-  it('devuelve null sin sesión anterior', () => {
-    expect(getExerciseImprovementPercent(exerciseLog([{ weight: 60, reps: 8 }]), null)).toBeNull();
-  });
-
-  it('usa el valor de primera vez si la anterior no puntuaba', () => {
-    const current = exerciseLog([{ weight: 60, reps: 8 }]);
-    const previous = exerciseLog([]);
-    expect(getExerciseImprovementPercent(current, previous)).toBe(FIRST_TIME_IMPROVEMENT_PERCENT);
-  });
-
-  it('cuenta las regresiones como 0', () => {
-    const current = exerciseLog([{ weight: 50, reps: 8 }]);
-    const previous = exerciseLog([{ weight: 80, reps: 8 }]);
-    expect(getExerciseImprovementPercent(current, previous)).toBe(0);
   });
 });

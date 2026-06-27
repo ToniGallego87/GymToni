@@ -229,6 +229,9 @@ export function CalendarScreen({
             const routineIndex = primaryLog
               ? state.routines.findIndex((r: WorkoutRoutine) => r.id === primaryLog.routineId)
               : -1;
+            // La rutina activa mantiene el chip amarillo; las no activas, blanco.
+            const isActiveRoutine = !!primaryLog && primaryLog.routineId === state.activeRoutineId;
+            const routineChipColor = isActiveRoutine ? theme.colors.primary : theme.colors.white;
             // Semana (bloque) dentro de la rutina.
             const weekNumber = primaryLog ? logToWeekBlock[primaryLog.id] : undefined;
 
@@ -267,7 +270,13 @@ export function CalendarScreen({
                       <View style={styles.dayWeekSpacer} />
                     )}
                     {routineIndex >= 0 && (
-                      <Text style={styles.dayRoutineChip} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.dayRoutineChip,
+                          { color: routineChipColor, borderColor: routineChipColor },
+                        ]}
+                        numberOfLines={1}
+                      >
                         R{routineIndex + 1}
                       </Text>
                     )}
@@ -395,7 +404,7 @@ const styles = StyleSheet.create({
   },
   dayCellToday: {
     borderWidth: 2.5,
-    borderColor: theme.colors.current,
+    borderColor: theme.colors.primary,
   },
   dayNumber: {
     fontSize: 13,
