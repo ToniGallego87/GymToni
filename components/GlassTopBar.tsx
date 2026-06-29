@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TextStyle, ViewStyle, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextStyle,
+  ViewStyle,
+  Platform,
+} from 'react-native';
 import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import {
@@ -37,9 +44,10 @@ export function GlassTopBar({
 }: GlassTopBarProps) {
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + topInset;
   const topBarPaddingTop = topInset + 6;
-  const topBarBlurIntensity = Platform.OS === 'android'
-    ? Math.max(GLASS_TOP_BAR_BLUR_INTENSITY, 72)
-    : GLASS_TOP_BAR_BLUR_INTENSITY;
+  const topBarBlurIntensity =
+    Platform.OS === 'android'
+      ? Math.max(GLASS_TOP_BAR_BLUR_INTENSITY, 72)
+      : GLASS_TOP_BAR_BLUR_INTENSITY;
 
   // La barra crece con el contenido (minHeight) para que títulos de 2 líneas no
   // empujen el subtítulo contra el borde inferior; el paddingBottom garantiza aire.
@@ -65,12 +73,18 @@ export function GlassTopBar({
             {titleElement ? (
               <View style={styles.titleElementWrap}>{titleElement}</View>
             ) : (
-              <Text style={[styles.title, titleStyle]} numberOfLines={titleNumberOfLines}>
+              <Text
+                style={[styles.title, titleStyle]}
+                numberOfLines={titleNumberOfLines}
+              >
                 {title}
               </Text>
             )}
             {!!subtitle && (
-              <Text style={styles.subtitle} numberOfLines={subtitleNumberOfLines}>
+              <Text
+                style={styles.subtitle}
+                numberOfLines={subtitleNumberOfLines}
+              >
                 {subtitle}
               </Text>
             )}

@@ -38,9 +38,19 @@ import {
 } from '../../components';
 import { parseCardioString, parseSeriesString } from '@lib/parsers';
 import { generateId, getToday } from '@lib/storage';
-import { WorkoutDay, WorkoutLog, ExerciseLog, CardioLog, ParsedSet, WorkoutRoutine } from '../../types';
+import {
+  WorkoutDay,
+  WorkoutLog,
+  ExerciseLog,
+  CardioLog,
+  ParsedSet,
+  WorkoutRoutine,
+} from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
-import { buildImprovementFromStrengthScores, getTotalSetsStrengthScore } from '@lib/progress';
+import {
+  buildImprovementFromStrengthScores,
+  getTotalSetsStrengthScore,
+} from '@lib/progress';
 
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
@@ -84,7 +94,11 @@ function SaveWorkoutButton({ onPress }: { onPress: () => void }) {
           style={styles.saveSheen}
           pointerEvents="none"
         />
-        <MaterialCommunityIcons name="content-save-check" size={22} color={theme.colors.darkGray} />
+        <MaterialCommunityIcons
+          name="content-save-check"
+          size={22}
+          color={theme.colors.darkGray}
+        />
         <Text style={styles.saveText}>Guardar</Text>
       </LinearGradient>
     </AnimatedPressable>
@@ -110,7 +124,7 @@ export function WorkoutLogScreen({
   const [selectedDay, setSelectedDay] = useState(() => {
     if (log) {
       const activeDays = getActiveDays();
-      return activeDays.find(d => d.id === log.dayId) || day;
+      return activeDays.find((d) => d.id === log.dayId) || day;
     }
     return day;
   });
@@ -119,12 +133,12 @@ export function WorkoutLogScreen({
   const getLatestTodayLog = () => {
     const today = getToday();
     const logsForDayToday = state.logs.filter(
-      l => l.dayId === selectedDay.id && l.date === today
+      (l) => l.dayId === selectedDay.id && l.date === today
     );
     if (logsForDayToday.length === 0) return null;
-    
+
     // Retornar el más reciente (createdAt más alto)
-    return logsForDayToday.reduce((latest, current) => 
+    return logsForDayToday.reduce((latest, current) =>
       current.createdAt > latest.createdAt ? current : latest
     );
   };
@@ -133,36 +147,52 @@ export function WorkoutLogScreen({
   const existingLog = log || getLatestTodayLog();
 
   // Cargar datos iniciales del log existente si existe
-  const initialExerciseSets = selectedDay.exercises.reduce((acc, ex) => {
-    if (existingLog) {
-      const exerciseLog = existingLog.exercises.find((e: ExerciseLog) => e.exerciseId === ex.id);
-      if (exerciseLog && exerciseLog.parsedSets && exerciseLog.parsedSets.length > 0) {
-        return { ...acc, [ex.id]: exerciseLog.parsedSets };
-      } else if (exerciseLog && exerciseLog.rawInput) {
-        // Parsear rawInput si no hay parsedSets
-        const parsed = parseSeriesString(exerciseLog.rawInput);
-        return { ...acc, [ex.id]: parsed };
+  const initialExerciseSets = selectedDay.exercises.reduce(
+    (acc, ex) => {
+      if (existingLog) {
+        const exerciseLog = existingLog.exercises.find(
+          (e: ExerciseLog) => e.exerciseId === ex.id
+        );
+        if (
+          exerciseLog &&
+          exerciseLog.parsedSets &&
+          exerciseLog.parsedSets.length > 0
+        ) {
+          return { ...acc, [ex.id]: exerciseLog.parsedSets };
+        } else if (exerciseLog && exerciseLog.rawInput) {
+          // Parsear rawInput si no hay parsedSets
+          const parsed = parseSeriesString(exerciseLog.rawInput);
+          return { ...acc, [ex.id]: parsed };
+        }
       }
-    }
-    return { ...acc, [ex.id]: [] };
-  }, {} as Record<string, ParsedSet[]>);
+      return { ...acc, [ex.id]: [] };
+    },
+    {} as Record<string, ParsedSet[]>
+  );
 
-  const initialNotes = selectedDay.exercises.reduce((acc, ex) => {
-    if (existingLog) {
-      const exerciseLog = existingLog.exercises.find((e: ExerciseLog) => e.exerciseId === ex.id);
-      if (exerciseLog && exerciseLog.notes) {
-        return { ...acc, [ex.id]: exerciseLog.notes };
+  const initialNotes = selectedDay.exercises.reduce(
+    (acc, ex) => {
+      if (existingLog) {
+        const exerciseLog = existingLog.exercises.find(
+          (e: ExerciseLog) => e.exerciseId === ex.id
+        );
+        if (exerciseLog && exerciseLog.notes) {
+          return { ...acc, [ex.id]: exerciseLog.notes };
+        }
       }
-    }
-    return acc;
-  }, {} as Record<string, string>);
+      return acc;
+    },
+    {} as Record<string, string>
+  );
 
   const initialCardioInput = existingLog?.cardio?.rawInput || '';
-  
+
   // Estado para almacenar las series agregadas por cada ejercicio
-  const [exerciseSets, setExerciseSets] = useState<Record<string, ParsedSet[]>>(initialExerciseSets);
-  
-  const [exerciseNotes, setExerciseNotes] = useState<Record<string, string>>(initialNotes);
+  const [exerciseSets, setExerciseSets] =
+    useState<Record<string, ParsedSet[]>>(initialExerciseSets);
+
+  const [exerciseNotes, setExerciseNotes] =
+    useState<Record<string, string>>(initialNotes);
   const [cardioInput, setCardioInput] = useState(initialCardioInput);
   const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
@@ -174,22 +204,29 @@ export function WorkoutLogScreen({
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [timerEndAt, setTimerEndAt] = useState<number | null>(null);
-  const [timerNotificationId, setTimerNotificationId] = useState<string | null>(null);
+  const [timerNotificationId, setTimerNotificationId] = useState<string | null>(
+    null
+  );
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
-  const dayAccent = getTrainingAccent({ emoji: selectedDay.emoji, name: selectedDay.name });
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding =
+    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const dayAccent = getTrainingAccent({
+    emoji: selectedDay.emoji,
+    name: selectedDay.name,
+  });
 
   const getRoutineIdForDay = () => {
-    const owningRoutine = state.routines.find(routine =>
-      routine.days.some(d => d.id === selectedDay.id)
+    const owningRoutine = state.routines.find((routine) =>
+      routine.days.some((d) => d.id === selectedDay.id)
     );
     return owningRoutine?.id || state.activeRoutineId || '';
   };
 
   const getTimerDurationFromRoutine = (): number => {
     const routineId = getRoutineIdForDay();
-    const routine = state.routines.find(r => r.id === routineId);
+    const routine = state.routines.find((r) => r.id === routineId);
     return routine?.timerDuration || 150;
   };
 
@@ -209,7 +246,9 @@ export function WorkoutLogScreen({
 
     try {
       if (timerNotificationId) {
-        await Notifications.cancelScheduledNotificationAsync(timerNotificationId);
+        await Notifications.cancelScheduledNotificationAsync(
+          timerNotificationId
+        );
       }
 
       const triggerDate = new Date(Date.now() + seconds * 1000);
@@ -249,7 +288,10 @@ export function WorkoutLogScreen({
     await clearTimerNotification();
   };
 
-  const startOrResetTimer = async (exerciseId: string, durationSeconds: number) => {
+  const startOrResetTimer = async (
+    exerciseId: string,
+    durationSeconds: number
+  ) => {
     const safeDuration = Math.max(1, durationSeconds);
     const endAt = Date.now() + safeDuration * 1000;
 
@@ -264,7 +306,10 @@ export function WorkoutLogScreen({
     if (!activeTimerId || !timerEndAt) return;
 
     const newEndAt = timerEndAt + extraSeconds * 1000;
-    const remainingSeconds = Math.max(1, Math.ceil((newEndAt - Date.now()) / 1000));
+    const remainingSeconds = Math.max(
+      1,
+      Math.ceil((newEndAt - Date.now()) / 1000)
+    );
 
     setTimerEndAt(newEndAt);
     setTimerSeconds(remainingSeconds);
@@ -283,20 +328,32 @@ export function WorkoutLogScreen({
 
         if (Platform.OS === 'android') {
           // Remove previous channels to avoid stale channel settings kept by Android.
-          await Notifications.deleteNotificationChannelAsync('rest-timer').catch(() => undefined);
-          await Notifications.deleteNotificationChannelAsync('rest-timer-v2').catch(() => undefined);
-          await Notifications.deleteNotificationChannelAsync('rest-timer-v3').catch(() => undefined);
-          await Notifications.deleteNotificationChannelAsync('rest-timer-v4').catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync(
+            'rest-timer'
+          ).catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync(
+            'rest-timer-v2'
+          ).catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync(
+            'rest-timer-v3'
+          ).catch(() => undefined);
+          await Notifications.deleteNotificationChannelAsync(
+            'rest-timer-v4'
+          ).catch(() => undefined);
 
-          await Notifications.setNotificationChannelAsync(REST_TIMER_CHANNEL_ID, {
-            name: 'Rest Timer',
-            importance: Notifications.AndroidImportance.MAX,
-            vibrationPattern: [0, 300, 150, 300, 150, 300],
-            lightColor: '#F9A825',
-            lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
-            bypassDnd: true,
-            sound: 'default',
-          });
+          await Notifications.setNotificationChannelAsync(
+            REST_TIMER_CHANNEL_ID,
+            {
+              name: 'Rest Timer',
+              importance: Notifications.AndroidImportance.MAX,
+              vibrationPattern: [0, 300, 150, 300, 150, 300],
+              lightColor: '#F9A825',
+              lockscreenVisibility:
+                Notifications.AndroidNotificationVisibility.PUBLIC,
+              bypassDnd: true,
+              sound: 'default',
+            }
+          );
         }
       } catch (error) {
         console.error('Error configuring notifications:', error);
@@ -305,7 +362,7 @@ export function WorkoutLogScreen({
 
     configureNotifications();
   }, []);
-  
+
   useEffect(() => {
     if (!activeTimerId || !timerEndAt) return;
 
@@ -353,13 +410,16 @@ export function WorkoutLogScreen({
   useEffect(() => {
     return () => {
       if (timerNotificationId && Notifications) {
-        Notifications.cancelScheduledNotificationAsync(timerNotificationId).catch(() => undefined);
+        Notifications.cancelScheduledNotificationAsync(
+          timerNotificationId
+        ).catch(() => undefined);
       }
     };
   }, [timerNotificationId]);
-  
+
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
-    const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
+    const targetSets =
+      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets || 0;
 
     const updated = {
       ...exerciseSets,
@@ -369,7 +429,8 @@ export function WorkoutLogScreen({
     autoSaveWorkout(updated);
 
     const currentSetsCount = exerciseSets[exerciseId]?.length || 0;
-    const willReachTarget = targetSets > 0 && currentSetsCount + 1 >= targetSets;
+    const willReachTarget =
+      targetSets > 0 && currentSetsCount + 1 >= targetSets;
 
     if (willReachTarget) {
       void stopTimer();
@@ -409,10 +470,17 @@ export function WorkoutLogScreen({
     const logsForDay = state.logs.filter((log) => log.dayId === selectedDay.id);
 
     // Obtener todos los ejercicios de esos logs
-    const allExercisesForDay: (ExerciseLog & { logDate: number; logId: string })[] = [];
+    const allExercisesForDay: (ExerciseLog & {
+      logDate: number;
+      logId: string;
+    })[] = [];
     logsForDay.forEach((log) => {
       log.exercises.forEach((ex) => {
-        allExercisesForDay.push({ ...ex, logDate: log.createdAt, logId: log.id });
+        allExercisesForDay.push({
+          ...ex,
+          logDate: log.createdAt,
+          logId: log.id,
+        });
       });
     });
 
@@ -446,12 +514,15 @@ export function WorkoutLogScreen({
     if (!previousLog) return null;
 
     const currentScore = getTotalSetsStrengthScore(currentSets);
-    const previousScore = getTotalSetsStrengthScore(previousLog.parsedSets || []);
+    const previousScore = getTotalSetsStrengthScore(
+      previousLog.parsedSets || []
+    );
     return buildImprovementFromStrengthScores(currentScore, previousScore);
   };
 
   const handleFinishExercise = (exerciseId: string) => {
-    const targetSets = selectedDay.exercises.find(ex => ex.id === exerciseId)?.targetSets || 0;
+    const targetSets =
+      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets || 0;
     if (targetSets > 0) {
       // Rellenar con guiones cada serie que falte para alcanzar el objetivo
       const currentSets = exerciseSets[exerciseId] || [];
@@ -477,7 +548,9 @@ export function WorkoutLogScreen({
     const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
       const exSets = sets[ex.id] || [];
       const rawInput = exSets
-        .map(s => (s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`))
+        .map((s) =>
+          s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`
+        )
         .join(', ');
 
       return {
@@ -521,7 +594,7 @@ export function WorkoutLogScreen({
 
     const today = getToday();
     const existingLogOfToday = state.logs.find(
-      l => l.dayId === selectedDay.id && l.date === today
+      (l) => l.dayId === selectedDay.id && l.date === today
     );
 
     if (existingLogOfToday) {
@@ -573,13 +646,17 @@ export function WorkoutLogScreen({
   };
 
   const hasExerciseInput = selectedDay.exercises.some(
-    ex => exerciseSets[ex.id]?.length > 0
+    (ex) => exerciseSets[ex.id]?.length > 0
   );
 
   // Fecha mostrada en el subtítulo, en formato dd/mm/aaaa.
   const getSubtitleDate = (): string => {
-    const dateString = log?.date || existingLog?.date
-      || new Date(existingLog?.createdAt || Date.now()).toISOString().split('T')[0];
+    const dateString =
+      log?.date ||
+      existingLog?.date ||
+      new Date(existingLog?.createdAt || Date.now())
+        .toISOString()
+        .split('T')[0];
     return dateString.split('-').reverse().join('/');
   };
 
@@ -601,59 +678,70 @@ export function WorkoutLogScreen({
         {selectedDay.exercises.map((exercise: any) => {
           const previousLog = getPreviousExerciseLog(exercise.id);
           const currentSets = exerciseSets[exercise.id] || [];
-          const improvement = buildExerciseImprovement(currentSets, previousLog);
+          const improvement = buildExerciseImprovement(
+            currentSets,
+            previousLog
+          );
           const isTargetCompleted =
-            exercise.targetSets > 0 && currentSets.length >= exercise.targetSets;
+            exercise.targetSets > 0 &&
+            currentSets.length >= exercise.targetSets;
 
           return (
-          <React.Fragment key={exercise.id}>
-            <ExerciseInputField
-              order={exercise.order}
-              exerciseName={exercise.name}
-              target={{
-                sets: exercise.targetSets,
-                reps: exercise.targetReps,
-              }}
-              addedSets={currentSets}
-              onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
-              onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
-              onFinishExercise={() => handleFinishExercise(exercise.id)}
-              onNotesPress={() => handleExerciseNotesPress(exercise.id)}
-              notes={exerciseNotes[exercise.id]}
-              previousLog={previousLog}
-              improvement={improvement}
-              accent={dayAccent}
-            />
-            {activeTimerId === exercise.id && timerSeconds > 0 && !isTargetCompleted && (
-                <Pressable 
-                style={({ pressed }) => [
-                  styles.timerContainer,
-                  pressed && styles.timerContainerPressed,
-                ]}
-                onPress={() => {
-                  void extendTimerBy(30);
+            <React.Fragment key={exercise.id}>
+              <ExerciseInputField
+                order={exercise.order}
+                exerciseName={exercise.name}
+                target={{
+                  sets: exercise.targetSets,
+                  reps: exercise.targetReps,
                 }}
-                onLongPress={() => {
-                  void stopTimer();
-                }}
-                delayLongPress={1000}
-                disabled={false}
-                >
-                <View style={styles.timerLabelRow}>
-                  <MaterialCommunityIcons
-                    name="timer-sand"
-                    size={16}
-                    color={theme.colors.darkGray}
-                  />
-                  <Text style={styles.timerLabel}>Tiempo hasta la siguiente serie</Text>
-                </View>
-                <Text style={styles.timerText}>
-                  {Math.floor(timerSeconds / 60)}:{(timerSeconds % 60).toString().padStart(2, '0')}
-                </Text>
-                <Text style={styles.timerHint}>Tocar: +30s | Mantener: elimina temporizador</Text>
-                </Pressable>
-            )}
-          </React.Fragment>
+                addedSets={currentSets}
+                onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
+                onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
+                onFinishExercise={() => handleFinishExercise(exercise.id)}
+                onNotesPress={() => handleExerciseNotesPress(exercise.id)}
+                notes={exerciseNotes[exercise.id]}
+                previousLog={previousLog}
+                improvement={improvement}
+                accent={dayAccent}
+              />
+              {activeTimerId === exercise.id &&
+                timerSeconds > 0 &&
+                !isTargetCompleted && (
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.timerContainer,
+                      pressed && styles.timerContainerPressed,
+                    ]}
+                    onPress={() => {
+                      void extendTimerBy(30);
+                    }}
+                    onLongPress={() => {
+                      void stopTimer();
+                    }}
+                    delayLongPress={1000}
+                    disabled={false}
+                  >
+                    <View style={styles.timerLabelRow}>
+                      <MaterialCommunityIcons
+                        name="timer-sand"
+                        size={16}
+                        color={theme.colors.darkGray}
+                      />
+                      <Text style={styles.timerLabel}>
+                        Tiempo hasta la siguiente serie
+                      </Text>
+                    </View>
+                    <Text style={styles.timerText}>
+                      {Math.floor(timerSeconds / 60)}:
+                      {(timerSeconds % 60).toString().padStart(2, '0')}
+                    </Text>
+                    <Text style={styles.timerHint}>
+                      Tocar: +30s | Mantener: elimina temporizador
+                    </Text>
+                  </Pressable>
+                )}
+            </React.Fragment>
           );
         })}
 
@@ -679,7 +767,11 @@ export function WorkoutLogScreen({
         title={selectedDay.name}
         titleElement={
           <View style={styles.topBarTitleRow}>
-            <DayAccentIcon emoji={selectedDay.emoji} name={selectedDay.name} size={16} />
+            <DayAccentIcon
+              emoji={selectedDay.emoji}
+              name={selectedDay.name}
+              size={16}
+            />
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
         }
@@ -864,7 +956,7 @@ const styles = StyleSheet.create({
   timerLabelRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8
+    gap: 8,
   },
   timerLabel: {
     fontSize: 18,

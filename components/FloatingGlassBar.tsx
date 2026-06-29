@@ -19,9 +19,13 @@ export const FLOATING_PRIMARY_NAV_MIN_INSET = 0;
 export const FLOATING_PRIMARY_NAV_SCROLL_EXTRA_PADDING = 28;
 
 export function getFloatingPrimaryNavMetrics(bottomInset: number) {
-  const bottom = Math.max(bottomInset, FLOATING_PRIMARY_NAV_MIN_INSET) + FLOATING_GLASS_BAR_MARGIN;
+  const bottom =
+    Math.max(bottomInset, FLOATING_PRIMARY_NAV_MIN_INSET) +
+    FLOATING_GLASS_BAR_MARGIN;
   const scrollBottomPadding =
-    bottom + FLOATING_GLASS_BAR_HEIGHT + FLOATING_PRIMARY_NAV_SCROLL_EXTRA_PADDING;
+    bottom +
+    FLOATING_GLASS_BAR_HEIGHT +
+    FLOATING_PRIMARY_NAV_SCROLL_EXTRA_PADDING;
 
   return { bottom, scrollBottomPadding };
 }
@@ -32,7 +36,11 @@ interface FloatingGlassBarProps {
   style?: ViewStyle;
 }
 
-export function FloatingGlassBar({ bottom, children, style }: FloatingGlassBarProps) {
+export function FloatingGlassBar({
+  bottom,
+  children,
+  style,
+}: FloatingGlassBarProps) {
   return (
     <View
       style={[

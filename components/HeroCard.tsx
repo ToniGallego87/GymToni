@@ -9,12 +9,18 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 
-export type HeroVariant = 'start' | 'completed' | 'closed' | 'add';
+export type HeroVariant =
+  | 'start'
+  | 'completed'
+  | 'week-completed'
+  | 'closed'
+  | 'add';
 
 interface HeroCardProps {
   variant: HeroVariant;
   icon: string;
   title: string;
+  subtitle?: string;
   onPress: () => void;
 }
 
@@ -22,13 +28,20 @@ interface HeroCardProps {
 const GRADIENTS: Record<HeroVariant, [string, string, string]> = {
   start: ['#F9D85A', '#F7CC3D', '#E0B226'],
   completed: ['#7CD99A', '#52C878', '#3DA866'],
+  'week-completed': ['#F9D85A', '#F2B33D', '#E08A26'],
   closed: ['#F59898', '#F06A6A', '#D85151'],
   add: ['#FFC97A', '#FFB347', '#F2982C'],
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
-export function HeroCard({ variant, icon, title, onPress }: HeroCardProps) {
+export function HeroCard({
+  variant,
+  icon,
+  title,
+  subtitle,
+  onPress,
+}: HeroCardProps) {
   const colors = GRADIENTS[variant];
   const scale = useSharedValue(1);
 
@@ -63,11 +76,20 @@ export function HeroCard({ variant, icon, title, onPress }: HeroCardProps) {
         />
 
         <View style={styles.iconWrap}>
-          <MaterialCommunityIcons name={icon as any} size={38} style={styles.icon} />
+          <MaterialCommunityIcons
+            name={icon as any}
+            size={38}
+            style={styles.icon}
+          />
         </View>
-        <Text style={styles.title} numberOfLines={1}>
+        <Text style={styles.title} numberOfLines={2}>
           {title}
         </Text>
+        {!!subtitle && (
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
       </LinearGradient>
     </AnimatedPressable>
   );
@@ -116,5 +138,14 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     letterSpacing: 0.5,
     textAlign: 'center',
+  },
+  subtitle: {
+    marginTop: 8,
+    color: theme.colors.darkGray,
+    fontFamily: theme.fonts.display,
+    fontSize: 17,
+    letterSpacing: 0.6,
+    textAlign: 'center',
+    opacity: 0.85,
   },
 });

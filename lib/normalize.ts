@@ -5,8 +5,11 @@ import { parseSeriesString } from './parsers';
  * Ensures the isActive flag on each routine matches the given activeRoutineId.
  * Single source of truth for routine activation sync.
  */
-export function syncActiveRoutine(routines: WorkoutRoutine[], activeRoutineId?: string): WorkoutRoutine[] {
-  return routines.map(routine => ({
+export function syncActiveRoutine(
+  routines: WorkoutRoutine[],
+  activeRoutineId?: string
+): WorkoutRoutine[] {
+  return routines.map((routine) => ({
     ...routine,
     isActive: routine.id === activeRoutineId,
   }));
@@ -17,9 +20,9 @@ export function syncActiveRoutine(routines: WorkoutRoutine[], activeRoutineId?: 
  * Parses rawInput only if parsedSets is missing or empty.
  */
 export function ensureParsedSets(logs: WorkoutLog[]): WorkoutLog[] {
-  return logs.map(log => ({
+  return logs.map((log) => ({
     ...log,
-    exercises: (log.exercises || []).map(exercise => ({
+    exercises: (log.exercises || []).map((exercise) => ({
       ...exercise,
       parsedSets: exercise.parsedSets?.length
         ? exercise.parsedSets
@@ -36,10 +39,12 @@ export function resolveActiveRoutineId(
   routines: WorkoutRoutine[],
   explicitId?: string
 ): string | undefined {
-  return explicitId
-    || routines.find(r => r.isActive)?.id
-    || routines[routines.length - 1]?.id
-    || undefined;
+  return (
+    explicitId ||
+    routines.find((r) => r.isActive)?.id ||
+    routines[routines.length - 1]?.id ||
+    undefined
+  );
 }
 
 /**
@@ -50,9 +55,14 @@ export function normalizeAppData(
   payload: Partial<WorkoutAppData> | null | undefined,
   fallback: WorkoutAppData
 ): WorkoutAppData {
-  const routines = Array.isArray(payload?.routines) ? payload.routines : fallback.routines;
+  const routines = Array.isArray(payload?.routines)
+    ? payload.routines
+    : fallback.routines;
   const rawLogs = Array.isArray(payload?.logs) ? payload.logs : fallback.logs;
-  const activeRoutineId = resolveActiveRoutineId(routines, payload?.activeRoutineId);
+  const activeRoutineId = resolveActiveRoutineId(
+    routines,
+    payload?.activeRoutineId
+  );
 
   return {
     routines: syncActiveRoutine(routines, activeRoutineId),

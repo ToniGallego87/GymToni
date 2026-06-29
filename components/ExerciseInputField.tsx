@@ -63,14 +63,16 @@ export function ExerciseInputField({
     };
   }, []);
 
-  const isTimeBased = !!(target?.reps && /\d+\s*(s\b|seg|sec|min)/i.test(target.reps));
+  const isTimeBased = !!(
+    target?.reps && /\d+\s*(s\b|seg|sec|min)/i.test(target.reps)
+  );
 
   const startTimer = () => {
     // Cada inicio arranca desde cero (descarta el valor parado anterior).
     setTimerSeconds(0);
     setTimerRunning(true);
     timerRef.current = setInterval(() => {
-      setTimerSeconds(prev => prev + 1);
+      setTimerSeconds((prev) => prev + 1);
     }, 1000);
   };
 
@@ -93,12 +95,17 @@ export function ExerciseInputField({
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
 
-  const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
+  const formatImprovementDisplay = (imp: {
+    isImproved: boolean;
+    percent: number;
+  }) => {
     const { symbol, display, kind } = getImprovementDisplay(imp);
     const styleKey =
-      kind === 'up' ? 'improvementUp'
-      : kind === 'down' ? 'improvementDown'
-      : 'improvementNeutral';
+      kind === 'up'
+        ? 'improvementUp'
+        : kind === 'down'
+        ? 'improvementDown'
+        : 'improvementNeutral';
     return { symbol, styleKey, display };
   };
 
@@ -120,27 +127,33 @@ export function ExerciseInputField({
     }
   };
 
-  const isMaxSetsReached = target?.sets ? addedSets.length >= target.sets : false;
+  const isMaxSetsReached = target?.sets
+    ? addedSets.length >= target.sets
+    : false;
   const hasAddedSets = addedSets.length > 0;
 
   const getWeightPlaceholder = () => {
     if (addedSets.length > 0) {
       return String(addedSets[addedSets.length - 1].weight);
     }
-    
+
     if (previousLog) {
       if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
         return String(previousLog.parsedSets[0].weight);
       }
-      
-      if (previousLog.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+
+      if (
+        previousLog.rawInput &&
+        previousLog.rawInput.trim() &&
+        previousLog.rawInput !== '-'
+      ) {
         const parsed = parseSeriesString(previousLog.rawInput);
         if (parsed.length > 0) {
           return String(parsed[0].weight);
         }
       }
     }
-    
+
     return '0';
   };
 
@@ -148,44 +161,54 @@ export function ExerciseInputField({
     if (addedSets.length > 0) {
       return String(addedSets[addedSets.length - 1].reps);
     }
-    
+
     if (previousLog) {
       if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
         return String(previousLog.parsedSets[0].reps);
       }
-      
-      if (previousLog.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+
+      if (
+        previousLog.rawInput &&
+        previousLog.rawInput.trim() &&
+        previousLog.rawInput !== '-'
+      ) {
         const parsed = parseSeriesString(previousLog.rawInput);
         if (parsed.length > 0) {
           return String(parsed[0].reps);
         }
       }
     }
-    
+
     return '0';
   };
 
   const getPreviousSetsSummary = () => {
     if (!previousLog) return '';
-    
+
     // Si tiene parsedSets poblados, usa eso
     if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
-      return previousLog.parsedSets.map(s => {
-        if (s.weight === -1 || s.reps === -1) return '—';
-        return `${s.weight}x${s.reps}`;
-      }).join(', ');
+      return previousLog.parsedSets
+        .map((s) => {
+          if (s.weight === -1 || s.reps === -1) return '—';
+          return `${s.weight}x${s.reps}`;
+        })
+        .join(', ');
     }
-    
+
     // Si no, intenta parsear rawInput
-    if (previousLog.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+    if (
+      previousLog.rawInput &&
+      previousLog.rawInput.trim() &&
+      previousLog.rawInput !== '-'
+    ) {
       const parsed = parseSeriesString(previousLog.rawInput);
       if (parsed.length > 0) {
-        return parsed.map(s => `${s.weight}x${s.reps}`).join(', ');
+        return parsed.map((s) => `${s.weight}x${s.reps}`).join(', ');
       }
       // Si no se puede parsear, retorna el rawInput tal como está
       return previousLog.rawInput;
     }
-    
+
     return '';
   };
 
@@ -200,7 +223,9 @@ export function ExerciseInputField({
             color={accent}
             style={styles.titleAccent}
           />
-          <Text style={styles.exerciseName}>{order}.- {exerciseName}</Text>
+          <Text style={styles.exerciseName}>
+            {order}.- {exerciseName}
+          </Text>
         </View>
         <Pressable
           style={({ pressed }) => [
@@ -222,7 +247,9 @@ export function ExerciseInputField({
           <Text style={styles.targetRow}>
             Objetivo: {target.sets}x{target.reps}
           </Text>
-          {improvement && addedSets.length > 0 && isMaxSetsReached && (
+          {improvement &&
+            addedSets.length > 0 &&
+            isMaxSetsReached &&
             (() => {
               const fmt = formatImprovementDisplay(improvement);
               return (
@@ -235,8 +262,7 @@ export function ExerciseInputField({
                   {fmt.symbol} {fmt.display}%
                 </Text>
               );
-            })()
-          )}
+            })()}
         </View>
       )}
 
@@ -245,18 +271,12 @@ export function ExerciseInputField({
           Anterior: {getPreviousSetsSummary() || '-'}
           {'\n'}
           {previousLog?.notes && (
-            <Text style={styles.previousNotesRow}>
-               -{previousLog.notes}-
-            </Text>
+            <Text style={styles.previousNotesRow}>-{previousLog.notes}-</Text>
           )}
         </Text>
       )}
 
-      {notes && (
-        <Text style={styles.notesRow}>
-          Nota: {notes}
-        </Text>
-      )}
+      {notes && <Text style={styles.notesRow}>Nota: {notes}</Text>}
 
       {hasAddedSets && (
         <View style={styles.seriesContainer}>
@@ -266,9 +286,14 @@ export function ExerciseInputField({
             contentContainerStyle={styles.seriesList}
           >
             {addedSets.map((set, idx) => (
-              <View key={idx} style={[styles.serieTag, { borderColor: accent }]}>
+              <View
+                key={idx}
+                style={[styles.serieTag, { borderColor: accent }]}
+              >
                 <Text style={[styles.serieTagText, { color: accent }]}>
-                  {set.weight === -1 || set.reps === -1 ? '—' : `${set.weight}x${set.reps}`}
+                  {set.weight === -1 || set.reps === -1
+                    ? '—'
+                    : `${set.weight}x${set.reps}`}
                 </Text>
               </View>
             ))}
@@ -317,7 +342,11 @@ export function ExerciseInputField({
               onPress={handleAddSet}
             >
               <View style={styles.buttonContent}>
-                <MaterialCommunityIcons name="plus" size={16} color={theme.colors.darkGray} />
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={16}
+                  color={theme.colors.darkGray}
+                />
                 <Text style={styles.buttonText}>Añadir</Text>
               </View>
             </Pressable>
@@ -331,7 +360,11 @@ export function ExerciseInputField({
                 onPress={onRemoveLastSet}
               >
                 <View style={styles.buttonContent}>
-                  <MaterialCommunityIcons name="minus" size={16} color={theme.colors.darkGray} />
+                  <MaterialCommunityIcons
+                    name="minus"
+                    size={16}
+                    color={theme.colors.darkGray}
+                  />
                   <Text style={styles.buttonText}>Borrar</Text>
                 </View>
               </Pressable>
@@ -345,7 +378,11 @@ export function ExerciseInputField({
               onPress={onFinishExercise}
             >
               <View style={styles.buttonContent}>
-                <MaterialCommunityIcons name="check" size={16} color={theme.colors.darkGray} />
+                <MaterialCommunityIcons
+                  name="check"
+                  size={16}
+                  color={theme.colors.darkGray}
+                />
                 <Text style={styles.buttonText}>Terminar</Text>
               </View>
             </Pressable>
@@ -353,11 +390,15 @@ export function ExerciseInputField({
 
           {isTimeBased && (
             <View style={styles.stopwatchContainer}>
-              <Text style={styles.stopwatchDisplay}>{formatTimerDisplay(timerSeconds)}</Text>
+              <Text style={styles.stopwatchDisplay}>
+                {formatTimerDisplay(timerSeconds)}
+              </Text>
               <View style={styles.stopwatchButtons}>
                 <Pressable
                   style={({ pressed }) => [
-                    timerRunning ? styles.stopwatchStopButton : styles.stopwatchStartButton,
+                    timerRunning
+                      ? styles.stopwatchStopButton
+                      : styles.stopwatchStartButton,
                     pressed && styles.buttonPressed,
                   ]}
                   onPress={timerRunning ? stopTimer : startTimer}
@@ -374,11 +415,20 @@ export function ExerciseInputField({
 
                 {timerSeconds > 0 && !timerRunning && (
                   <Pressable
-                    style={({ pressed }) => [styles.stopwatchUseButton, pressed && styles.buttonPressed]}
+                    style={({ pressed }) => [
+                      styles.stopwatchUseButton,
+                      pressed && styles.buttonPressed,
+                    ]}
                     onPress={useTimerAsReps}
                   >
-                    <MaterialCommunityIcons name="check" size={18} color={theme.colors.darkGray} />
-                    <Text style={styles.stopwatchButtonText}>Usar {timerSeconds}s</Text>
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={18}
+                      color={theme.colors.darkGray}
+                    />
+                    <Text style={styles.stopwatchButtonText}>
+                      Usar {timerSeconds}s
+                    </Text>
                   </Pressable>
                 )}
               </View>
@@ -390,7 +440,11 @@ export function ExerciseInputField({
       {isMaxSetsReached && (
         <View style={styles.maxReachedContainer}>
           <View style={styles.maxReachedRow}>
-            <MaterialCommunityIcons name="check-circle" size={18} color={theme.colors.success} />
+            <MaterialCommunityIcons
+              name="check-circle"
+              size={18}
+              color={theme.colors.success}
+            />
             <Text style={styles.maxReachedText}>
               Completado ({addedSets.length}/{target?.sets})
             </Text>
@@ -403,7 +457,11 @@ export function ExerciseInputField({
             onPress={onRemoveLastSet}
           >
             <View style={styles.buttonContent}>
-              <MaterialCommunityIcons name="minus" size={16} color={theme.colors.darkGray} />
+              <MaterialCommunityIcons
+                name="minus"
+                size={16}
+                color={theme.colors.darkGray}
+              />
               <Text style={styles.buttonText}>Borrar</Text>
             </View>
           </Pressable>

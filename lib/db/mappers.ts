@@ -134,7 +134,7 @@ export function dayToRows(routineId: string, day: WorkoutDay): DayRows {
       emoji: day.emoji ?? '',
       description: day.description ?? null,
     },
-    exercises: day.exercises.map(exercise => exerciseToRow(exercise, day.id)),
+    exercises: day.exercises.map((exercise) => exerciseToRow(exercise, day.id)),
   };
 }
 
@@ -164,7 +164,10 @@ export function routineToRows(routine: WorkoutRoutine): RoutineRows {
 // FK directas, sin saneado: en escrituras granulares el contexto garantiza que
 // la rutina/día/ejercicio referenciados existen. El saneado de referencias
 // colgando (datos legacy) lo aplica appDataToRows.
-export function logToRows(log: WorkoutLog, newId: () => string = generateId): LogRows {
+export function logToRows(
+  log: WorkoutLog,
+  newId: () => string = generateId
+): LogRows {
   const exerciseLogs: ExerciseLogRow[] = [];
   const logSets: LogSetRow[] = [];
 
@@ -219,7 +222,10 @@ export function logToRows(log: WorkoutLog, newId: () => string = generateId): Lo
   };
 }
 
-export function appDataToRows(data: WorkoutAppData, newId: () => string = generateId): DbRows {
+export function appDataToRows(
+  data: WorkoutAppData,
+  newId: () => string = generateId
+): DbRows {
   const rows: DbRows = {
     settings: [{ key: SETTING_INITIALIZED, value: '1' }],
     routines: [],
@@ -232,7 +238,10 @@ export function appDataToRows(data: WorkoutAppData, newId: () => string = genera
   };
 
   if (data.activeRoutineId) {
-    rows.settings.push({ key: SETTING_ACTIVE_ROUTINE_ID, value: data.activeRoutineId });
+    rows.settings.push({
+      key: SETTING_ACTIVE_ROUTINE_ID,
+      value: data.activeRoutineId,
+    });
   }
 
   const routineIds = new Set<string>();
@@ -242,8 +251,8 @@ export function appDataToRows(data: WorkoutAppData, newId: () => string = genera
   for (const routine of data.routines) {
     const mapped = routineToRows(routine);
     routineIds.add(mapped.routine.id);
-    mapped.days.forEach(day => dayIds.add(day.id));
-    mapped.exercises.forEach(exercise => exerciseIds.add(exercise.id));
+    mapped.days.forEach((day) => dayIds.add(day.id));
+    mapped.exercises.forEach((exercise) => exerciseIds.add(exercise.id));
     rows.routines.push(mapped.routine);
     rows.workoutDays.push(...mapped.days);
     rows.exercises.push(...mapped.exercises);
@@ -270,7 +279,10 @@ export function appDataToRows(data: WorkoutAppData, newId: () => string = genera
     }
   }
   for (const exerciseLog of rows.exerciseLogs) {
-    if (exerciseLog.exercises_id && !exerciseIds.has(exerciseLog.exercises_id)) {
+    if (
+      exerciseLog.exercises_id &&
+      !exerciseIds.has(exerciseLog.exercises_id)
+    ) {
       exerciseLog.exercises_id = null;
     }
   }
@@ -283,11 +295,14 @@ function byNumber<T>(select: (item: T) => number): (a: T, b: T) => number {
 }
 
 export function rowsToAppData(rows: DbRows): WorkoutAppData {
-  const activeRoutineId = rows.settings
-    .find(setting => setting.key === SETTING_ACTIVE_ROUTINE_ID)?.value;
+  const activeRoutineId = rows.settings.find(
+    (setting) => setting.key === SETTING_ACTIVE_ROUTINE_ID
+  )?.value;
 
   const exercisesByDay = new Map<string, WorkoutExercise[]>();
-  for (const row of [...rows.exercises].sort(byNumber(r => r.exercise_order))) {
+  for (const row of [...rows.exercises].sort(
+    byNumber((r) => r.exercise_order)
+  )) {
     const exercise: WorkoutExercise = {
       id: row.id,
       name: row.name,
@@ -301,7 +316,7 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
   }
 
   const daysByRoutine = new Map<string, WorkoutDay[]>();
-  for (const row of [...rows.workoutDays].sort(byNumber(r => r.day_number))) {
+  for (const row of [...rows.workoutDays].sort(byNumber((r) => r.day_number))) {
     const day: WorkoutDay = {
       id: row.id,
       dayNumber: row.day_number,
@@ -316,8 +331,8 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
   }
 
   const routines: WorkoutRoutine[] = [...rows.routines]
-    .sort(byNumber(r => r.created_at))
-    .map(row => ({
+    .sort(byNumber((r) => r.created_at))
+    .map((row) => ({
       id: row.id,
       name: row.name,
       description: row.description ?? undefined,
@@ -328,22 +343,26 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
     }));
 
   const setsByExerciseLog = new Map<string, LogSetRow[]>();
-  for (const row of [...rows.logSets].sort(byNumber(r => r.set_order))) {
+  for (const row of [...rows.logSets].sort(byNumber((r) => r.set_order))) {
     const list = setsByExerciseLog.get(row.exercise_logs_id) ?? [];
     list.push(row);
     setsByExerciseLog.set(row.exercise_logs_id, list);
   }
 
   const exerciseLogsByLog = new Map<string, ExerciseLog[]>();
-  for (const row of [...rows.exerciseLogs].sort(byNumber(r => r.exercise_order))) {
+  for (const row of [...rows.exerciseLogs].sort(
+    byNumber((r) => r.exercise_order)
+  )) {
     const exerciseLog: ExerciseLog = {
       id: row.id,
       exerciseId: row.exercises_id ?? '',
       exerciseName: row.exercise_name,
       order: row.exercise_order,
       rawInput: row.raw_input,
-      parsedSets: (setsByExerciseLog.get(row.id) ?? [])
-        .map(set => ({ weight: set.weight, reps: set.reps })),
+      parsedSets: (setsByExerciseLog.get(row.id) ?? []).map((set) => ({
+        weight: set.weight,
+        reps: set.reps,
+      })),
       notes: row.notes ?? undefined,
       timestamp: row.created_at,
     };
@@ -366,8 +385,8 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
   }
 
   const logs: WorkoutLog[] = [...rows.workoutLogs]
-    .sort(byNumber(r => r.created_at))
-    .map(row => ({
+    .sort(byNumber((r) => r.created_at))
+    .map((row) => ({
       id: row.id,
       routineId: row.routines_id ?? '',
       dayId: row.workout_days_id ?? '',

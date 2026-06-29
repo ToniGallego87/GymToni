@@ -15,14 +15,16 @@ export function groupLogsIntoWeekBlocks(
   logs: WorkoutLog[],
   getDayNumber: (log: WorkoutLog) => number | undefined
 ): Record<number, WorkoutLog[]> {
-  const sortedByDateAsc = [...logs].sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b));
+  const sortedByDateAsc = [...logs].sort(
+    (a, b) => getLogTimestamp(a) - getLogTimestamp(b)
+  );
   const groupedByBlock: Record<number, WorkoutLog[]> = {};
 
   let block = 1;
   let currentBlockLogs: WorkoutLog[] = [];
   let seenDays: Record<number, boolean> = {};
 
-  sortedByDateAsc.forEach(log => {
+  sortedByDateAsc.forEach((log) => {
     const dayNumber = getDayNumber(log);
 
     if (dayNumber && seenDays[dayNumber] && currentBlockLogs.length > 0) {
@@ -60,7 +62,11 @@ interface WeekScoreOptions {
  */
 export function getWeekStrengthScore(
   weekLogs: WorkoutLog[],
-  { activeDaysCount, restrictToDayIds, applyMissingPenalty = true }: WeekScoreOptions
+  {
+    activeDaysCount,
+    restrictToDayIds,
+    applyMissingPenalty = true,
+  }: WeekScoreOptions
 ): number {
   if (weekLogs.length === 0) return 0;
 
@@ -68,7 +74,7 @@ export function getWeekStrengthScore(
   const latestByDayId: Record<string, WorkoutLog> = {};
   [...weekLogs]
     .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
-    .forEach(log => {
+    .forEach((log) => {
       if (!log.dayId) return;
       if (!latestByDayId[log.dayId]) {
         latestByDayId[log.dayId] = log;
@@ -76,7 +82,7 @@ export function getWeekStrengthScore(
     });
 
   const selectedLogs = Object.values(latestByDayId).filter(
-    log => !restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1
+    (log) => !restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1
   );
 
   const rawStrength = selectedLogs.reduce(
@@ -88,7 +94,9 @@ export function getWeekStrengthScore(
     return rawStrength;
   }
 
-  const expectedCount = restrictToDayIds ? restrictToDayIds.length : Math.max(1, activeDaysCount || 5);
+  const expectedCount = restrictToDayIds
+    ? restrictToDayIds.length
+    : Math.max(1, activeDaysCount || 5);
   const missingDays = Math.max(0, expectedCount - selectedLogs.length);
   const penaltyFactor = Math.max(0, 1 - missingDays * 0.1);
 

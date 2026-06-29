@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "ios"],
+  "android": {
+    "modules": ["expo.modules.videoencoder.VideoEncoderModule"]
+  },
+  "ios": {
+    "modules": ["VideoEncoderModule"]
+  }
+}

@@ -34,7 +34,9 @@ export function DayCard({ emoji, name, description, onPress }: DayCardProps) {
           <Text style={styles.description}>{description}</Text>
         </View>
         <View style={styles.badgeWrap}>
-          <Text style={styles.badgeText}>{name.match(/^Día\s+\d+/i)?.[0] || ''}</Text>
+          <Text style={styles.badgeText}>
+            {name.match(/^Día\s+\d+/i)?.[0] || ''}
+          </Text>
         </View>
       </View>
     </Pressable>

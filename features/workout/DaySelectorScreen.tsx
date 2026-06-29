@@ -1,11 +1,6 @@
 import React from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -34,8 +29,10 @@ export function DaySelectorScreen({
   const insets = useSafeAreaInsets();
   const days = routine?.days || [];
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding =
+    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   return (
     <View style={styles.container}>
@@ -52,10 +49,13 @@ export function DaySelectorScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {days.map(day => (
+        {days.map((day) => (
           <Pressable
             key={day.id}
-            style={({ pressed }) => [styles.dayCard, pressed && styles.dayCardPressed]}
+            style={({ pressed }) => [
+              styles.dayCard,
+              pressed && styles.dayCardPressed,
+            ]}
             onPress={() => onSelectDay(day)}
           >
             <View style={styles.dayLeading}>
@@ -63,7 +63,9 @@ export function DaySelectorScreen({
             </View>
             <View style={styles.dayContent}>
               <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
-              <Text style={styles.dayMeta}>{day.exercises.length} ejercicios</Text>
+              <Text style={styles.dayMeta}>
+                {day.exercises.length} ejercicios
+              </Text>
             </View>
             <Text style={styles.dayBadge}>Día {day.dayNumber}</Text>
           </Pressable>
@@ -72,12 +74,16 @@ export function DaySelectorScreen({
 
       <GlassTopBar
         title="Elige la sesión"
-        titleElement={(
+        titleElement={
           <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="calendar-month-outline"
+              size={18}
+              color={theme.colors.text}
+            />
             <Text style={styles.topBarTitleText}>Elige la sesión</Text>
           </View>
-        )}
+        }
         subtitle="Selecciona el día que vas a registrar"
         topInset={insets.top}
         rightElement={
@@ -172,5 +178,3 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
 });
-
-

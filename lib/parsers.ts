@@ -90,5 +90,5 @@ export function formatParsedSet(set: ParsedSet): string {
  * Formatea array de sets a string
  */
 export function formatSets(sets: ParsedSet[]): string {
-  return sets.map(s => formatParsedSet(s)).join(', ');
+  return sets.map((s) => formatParsedSet(s)).join(', ');
 }

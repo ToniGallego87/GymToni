@@ -1,11 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -62,7 +57,11 @@ export function CalendarScreen({
 
   const titleElement = (
     <View style={styles.topBarTitleRow}>
-      <MaterialCommunityIcons name="calendar-month-outline" size={18} color={theme.colors.text} />
+      <MaterialCommunityIcons
+        name="calendar-month-outline"
+        size={18}
+        color={theme.colors.text}
+      />
       <Text style={styles.topBarTitleText}>Calendario</Text>
     </View>
   );
@@ -80,12 +79,17 @@ export function CalendarScreen({
     const map: Record<string, number> = {};
 
     state.routines.forEach((routine: WorkoutRoutine) => {
-      const routineLogs = state.logs.filter((log: WorkoutLog) => log.routineId === routine.id);
-      const grouped = groupLogsIntoWeekBlocks(routineLogs, log => getDayById(log.dayId)?.dayNumber);
+      const routineLogs = state.logs.filter(
+        (log: WorkoutLog) => log.routineId === routine.id
+      );
+      const grouped = groupLogsIntoWeekBlocks(
+        routineLogs,
+        (log) => getDayById(log.dayId)?.dayNumber
+      );
 
-      Object.keys(grouped).forEach(blockKey => {
+      Object.keys(grouped).forEach((blockKey) => {
         const block = Number(blockKey);
-        grouped[block].forEach(log => {
+        grouped[block].forEach((log) => {
           map[log.id] = block;
         });
       });
@@ -103,14 +107,17 @@ export function CalendarScreen({
   const currentMonth = viewDate.getMonth();
 
   const logsByDate = useMemo(() => {
-    return state.logs.reduce<Record<string, WorkoutLog[]>>((accumulator: Record<string, WorkoutLog[]>, log: WorkoutLog) => {
-      if (!accumulator[log.date]) {
-        accumulator[log.date] = [];
-      }
+    return state.logs.reduce<Record<string, WorkoutLog[]>>(
+      (accumulator: Record<string, WorkoutLog[]>, log: WorkoutLog) => {
+        if (!accumulator[log.date]) {
+          accumulator[log.date] = [];
+        }
 
-      accumulator[log.date].push(log);
-      return accumulator;
-    }, {});
+        accumulator[log.date].push(log);
+        return accumulator;
+      },
+      {}
+    );
   }, [state.logs]);
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
@@ -126,9 +133,10 @@ export function CalendarScreen({
     dayCells.push(null);
   }
 
-  const toDateKey = (dayNumber: number) => (
-    `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`
-  );
+  const toDateKey = (dayNumber: number) =>
+    `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(
+      dayNumber
+    ).padStart(2, '0')}`;
 
   const todayKey = new Date().toISOString().split('T')[0];
 
@@ -137,7 +145,7 @@ export function CalendarScreen({
       <View style={styles.container}>
         <StatusBar style="light" translucent backgroundColor="transparent" />
 
-        <View style={[styles.emptyState, { paddingTop: topBarHeight + 24 }]}> 
+        <View style={[styles.emptyState, { paddingTop: topBarHeight + 24 }]}>
           <MaterialCommunityIcons
             name="inbox-outline"
             size={44}
@@ -190,7 +198,11 @@ export function CalendarScreen({
             style={styles.monthNavButton}
             onPress={() => setMonthOffset((prev: number) => prev - 1)}
           >
-            <MaterialCommunityIcons name="chevron-left" size={22} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="chevron-left"
+              size={22}
+              color={theme.colors.text}
+            />
           </Pressable>
 
           <Text style={styles.monthTitle}>
@@ -201,12 +213,16 @@ export function CalendarScreen({
             style={styles.monthNavButton}
             onPress={() => setMonthOffset((prev: number) => prev + 1)}
           >
-            <MaterialCommunityIcons name="chevron-right" size={22} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={22}
+              color={theme.colors.text}
+            />
           </Pressable>
         </View>
 
         <View style={styles.weekHeader}>
-          {WEEK_DAYS.map(label => (
+          {WEEK_DAYS.map((label) => (
             <Text key={label} style={styles.weekHeaderText}>
               {label}
             </Text>
@@ -216,24 +232,40 @@ export function CalendarScreen({
         <View style={styles.grid}>
           {dayCells.map((dayNumber, index) => {
             if (!dayNumber) {
-              return <View key={`empty-${index}`} style={[styles.dayCell, styles.dayCellEmpty]} />;
+              return (
+                <View
+                  key={`empty-${index}`}
+                  style={[styles.dayCell, styles.dayCellEmpty]}
+                />
+              );
             }
 
             const dateKey = toDateKey(dayNumber);
             const dayLogs = logsByDate[dateKey] || [];
             const primaryLog = dayLogs[0];
-            const primaryDay = primaryLog ? getDayById(primaryLog.dayId) : undefined;
+            const primaryDay = primaryLog
+              ? getDayById(primaryLog.dayId)
+              : undefined;
             const hasLogs = !!primaryLog && !!primaryDay;
             // Color de la celda = color del día de entrenamiento (emoji de la rutina).
-            const dayColor = primaryDay ? getTrainingAccent(primaryDay) : theme.colors.primary;
+            const dayColor = primaryDay
+              ? getTrainingAccent(primaryDay)
+              : theme.colors.primary;
             const routineIndex = primaryLog
-              ? state.routines.findIndex((r: WorkoutRoutine) => r.id === primaryLog.routineId)
+              ? state.routines.findIndex(
+                  (r: WorkoutRoutine) => r.id === primaryLog.routineId
+                )
               : -1;
             // La rutina activa mantiene el chip amarillo; las no activas, blanco.
-            const isActiveRoutine = !!primaryLog && primaryLog.routineId === state.activeRoutineId;
-            const routineChipColor = isActiveRoutine ? theme.colors.primary : theme.colors.white;
+            const isActiveRoutine =
+              !!primaryLog && primaryLog.routineId === state.activeRoutineId;
+            const routineChipColor = isActiveRoutine
+              ? theme.colors.primary
+              : theme.colors.white;
             // Semana (bloque) dentro de la rutina.
-            const weekNumber = primaryLog ? logToWeekBlock[primaryLog.id] : undefined;
+            const weekNumber = primaryLog
+              ? logToWeekBlock[primaryLog.id]
+              : undefined;
 
             return (
               <Pressable
@@ -254,7 +286,9 @@ export function CalendarScreen({
                 {hasLogs ? (
                   <>
                     <GradientFill accent={dayColor} />
-                    <Text style={[styles.dayNumber, { color: theme.colors.white }]}>
+                    <Text
+                      style={[styles.dayNumber, { color: theme.colors.white }]}
+                    >
                       {dayNumber}
                     </Text>
                     {typeof weekNumber === 'number' ? (
@@ -273,7 +307,10 @@ export function CalendarScreen({
                       <Text
                         style={[
                           styles.dayRoutineChip,
-                          { color: routineChipColor, borderColor: routineChipColor },
+                          {
+                            color: routineChipColor,
+                            borderColor: routineChipColor,
+                          },
                         ]}
                         numberOfLines={1}
                       >
@@ -471,5 +508,3 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
 });
-
-

@@ -28,7 +28,13 @@ function buildAppData(): WorkoutAppData {
             emoji: '💪',
             exercises: [
               { id: 'e2', name: 'Aperturas', order: 2 },
-              { id: 'e1', name: 'Press banca', order: 1, targetSets: 4, targetReps: '8-12' },
+              {
+                id: 'e1',
+                name: 'Press banca',
+                order: 1,
+                targetSets: 4,
+                targetReps: '8-12',
+              },
             ],
           },
           {
@@ -84,8 +90,14 @@ describe('appDataToRows', () => {
   it('marca la BD como inicializada y guarda la rutina activa en settings', () => {
     const rows = appDataToRows(buildAppData(), stubId);
 
-    expect(rows.settings).toContainEqual({ key: SETTING_INITIALIZED, value: '1' });
-    expect(rows.settings).toContainEqual({ key: SETTING_ACTIVE_ROUTINE_ID, value: 'r1' });
+    expect(rows.settings).toContainEqual({
+      key: SETTING_INITIALIZED,
+      value: '1',
+    });
+    expect(rows.settings).toContainEqual({
+      key: SETTING_ACTIVE_ROUTINE_ID,
+      value: 'r1',
+    });
   });
 
   it('marca inicializada incluso sin datos (vaciar no resucita seeds)', () => {
@@ -99,19 +111,26 @@ describe('appDataToRows', () => {
     const rows = appDataToRows(buildAppData(), stubId);
 
     expect(rows.routines).toHaveLength(1);
-    expect(rows.workoutDays.map(d => d.routines_id)).toEqual(['r1', 'r1']);
-    expect(rows.exercises.map(e => e.workout_days_id)).toEqual(['d1', 'd1']);
-    expect(rows.workoutLogs[0]).toMatchObject({ routines_id: 'r1', workout_days_id: 'd1' });
+    expect(rows.workoutDays.map((d) => d.routines_id)).toEqual(['r1', 'r1']);
+    expect(rows.exercises.map((e) => e.workout_days_id)).toEqual(['d1', 'd1']);
+    expect(rows.workoutLogs[0]).toMatchObject({
+      routines_id: 'r1',
+      workout_days_id: 'd1',
+    });
     expect(rows.exerciseLogs[0]).toMatchObject({
       workout_logs_id: 'l1',
       exercises_id: 'e1',
       created_at: 250,
     });
-    expect(rows.logSets.map(s => [s.set_order, s.weight, s.reps])).toEqual([
+    expect(rows.logSets.map((s) => [s.set_order, s.weight, s.reps])).toEqual([
       [1, 60, 8],
       [2, 60, 8],
     ]);
-    expect(rows.cardioLogs[0]).toMatchObject({ id: 'c1', workout_logs_id: 'l1', duration: 20 });
+    expect(rows.cardioLogs[0]).toMatchObject({
+      id: 'c1',
+      workout_logs_id: 'l1',
+      duration: 20,
+    });
   });
 
   it('anula referencias colgando a rutinas/días/ejercicios borrados', () => {
@@ -155,7 +174,7 @@ describe('rowsToAppData', () => {
       isActive: true,
       timerDuration: 90,
     });
-    expect(restored.routines[0].days.map(d => d.id)).toEqual(['d1', 'd2']);
+    expect(restored.routines[0].days.map((d) => d.id)).toEqual(['d1', 'd2']);
     expect(restored.logs[0]).toMatchObject({
       id: 'l1',
       routineId: 'r1',
@@ -175,14 +194,21 @@ describe('rowsToAppData', () => {
       { weight: 60, reps: 8 },
       { weight: 60, reps: 8 },
     ]);
-    expect(restored.logs[0].cardio).toMatchObject({ id: 'c1', type: 'cinta', duration: 20 });
+    expect(restored.logs[0].cardio).toMatchObject({
+      id: 'c1',
+      type: 'cinta',
+      duration: 20,
+    });
   });
 
   it('ordena días, ejercicios y series por sus campos de orden', () => {
     const restored = rowsToAppData(appDataToRows(buildAppData(), stubId));
 
     // En el plan, e2 venía antes que e1 pero con order 2 y 1.
-    expect(restored.routines[0].days[0].exercises.map(e => e.id)).toEqual(['e1', 'e2']);
+    expect(restored.routines[0].days[0].exercises.map((e) => e.id)).toEqual([
+      'e1',
+      'e2',
+    ]);
   });
 
   it('mapea FKs NULL del historial a string vacío', () => {
@@ -208,7 +234,7 @@ describe('rowsToAppData', () => {
 
     const restored = rowsToAppData(appDataToRows(data, stubId));
 
-    expect(restored.routines.map(r => [r.id, r.isActive])).toEqual([
+    expect(restored.routines.map((r) => [r.id, r.isActive])).toEqual([
       ['r1', true],
       ['r2', false],
     ]);

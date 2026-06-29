@@ -22,10 +22,12 @@ import {
   NewRoutineScreen,
   QRScannerScreen,
   RoutineDetailScreen,
+  WeekAchievementScreen,
   WorkoutProvider,
   WorkoutLogScreen,
   useWorkout,
 } from '@features/workout';
+import type { WeekAchievements } from '@lib/achievements';
 import {
   clearAppData,
   getSeedAppData,
@@ -58,7 +60,12 @@ type Screen =
   | { type: 'data' }
   | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
   | { type: 'routine-details'; routine: WorkoutRoutine }
-  | { type: 'qr-scanner' };
+  | { type: 'qr-scanner' }
+  | {
+      type: 'week-achievement';
+      achievements: WeekAchievements;
+      routineName?: string;
+    };
 
 function AppContent() {
   const { dispatch, state } = useWorkout();
@@ -354,6 +361,9 @@ function AppContent() {
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
+          onShowWeekAchievement={(achievements, routineName) =>
+            setScreen({ type: 'week-achievement', achievements, routineName })
+          }
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
         />
       )}
@@ -458,6 +468,14 @@ function AppContent() {
             setScreen({ type: 'new-routine', initialDays: shared.days })
           }
           onBack={() => setScreen({ type: 'new-routine' })}
+        />
+      )}
+
+      {screen.type === 'week-achievement' && (
+        <WeekAchievementScreen
+          achievements={screen.achievements}
+          routineName={screen.routineName}
+          onBack={() => setScreen({ type: 'home' })}
         />
       )}
     </View>

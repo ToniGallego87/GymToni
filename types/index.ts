@@ -83,6 +83,9 @@ export type WorkoutAction =
   | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'DELETE_WORKOUT_LOG'; payload: string }
   | { type: 'SET_LOGS'; payload: WorkoutLog[] }
-  | { type: 'UPDATE_DAY'; payload: { routineId: string; dayId: string; day: WorkoutDay } }
+  | {
+      type: 'UPDATE_DAY';
+      payload: { routineId: string; dayId: string; day: WorkoutDay };
+    }
   | { type: 'CLEAR_DATA' }
   | { type: 'SET_CURRENT_DAY'; payload: WorkoutDay | undefined };

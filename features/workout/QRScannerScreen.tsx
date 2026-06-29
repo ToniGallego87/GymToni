@@ -19,7 +19,10 @@ interface QRScannerScreenProps {
   onBack: () => void;
 }
 
-export function QRScannerScreen({ onScanSuccess, onBack }: QRScannerScreenProps) {
+export function QRScannerScreen({
+  onScanSuccess,
+  onBack,
+}: QRScannerScreenProps) {
   const insets = useSafeAreaInsets();
   const [link, setLink] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +37,9 @@ export function QRScannerScreen({ onScanSuccess, onBack }: QRScannerScreenProps)
     if (shared) {
       onScanSuccess(shared);
     } else {
-      setError('Enlace no válido. Usa el enlace copiado desde "Compartir por QR".');
+      setError(
+        'Enlace no válido. Usa el enlace copiado desde "Compartir por QR".'
+      );
     }
   };
 
@@ -62,9 +67,12 @@ export function QRScannerScreen({ onScanSuccess, onBack }: QRScannerScreenProps)
         {/* Instrucciones cámara */}
         <View style={styles.instructionCard}>
           <Text style={styles.instructionIcon}>📷</Text>
-          <Text style={styles.instructionTitle}>Escanea con la cámara del móvil</Text>
+          <Text style={styles.instructionTitle}>
+            Escanea con la cámara del móvil
+          </Text>
           <Text style={styles.instructionText}>
-            Abre la cámara de tu móvil, apunta al código QR de la rutina y GymToni se abrirá automáticamente con la rutina importada.
+            Abre la cámara de tu móvil, apunta al código QR de la rutina y
+            GymToni se abrirá automáticamente con la rutina importada.
           </Text>
         </View>
 
@@ -81,7 +89,10 @@ export function QRScannerScreen({ onScanSuccess, onBack }: QRScannerScreenProps)
           <TextInput
             style={styles.input}
             value={link}
-            onChangeText={(t) => { setLink(t); setError(null); }}
+            onChangeText={(t) => {
+              setLink(t);
+              setError(null);
+            }}
             placeholder="gymtrack://import-routine?data=..."
             placeholderTextColor="rgba(255,255,255,0.3)"
             autoCapitalize="none"

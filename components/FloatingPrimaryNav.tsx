@@ -59,7 +59,7 @@ export function FloatingPrimaryNav({
 
   return (
     <FloatingGlassBar bottom={bottom}>
-      {items.map(item => {
+      {items.map((item) => {
         const isActive = item.key === activeTab;
 
         return (

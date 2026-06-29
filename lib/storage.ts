@@ -55,7 +55,9 @@ async function removeStorageItem(key: string): Promise<void> {
   await AsyncStorage.removeItem(key);
 }
 
-function readLegacyJsonData(fallback: WorkoutAppData): Promise<WorkoutAppData | null> {
+function readLegacyJsonData(
+  fallback: WorkoutAppData
+): Promise<WorkoutAppData | null> {
   return (async () => {
     const appJson = await getStorageItem(APP_STORAGE_KEY);
     if (appJson) {
@@ -64,10 +66,13 @@ function readLegacyJsonData(fallback: WorkoutAppData): Promise<WorkoutAppData | 
 
     const legacyLogsJson = await getStorageItem(LOGS_STORAGE_KEY);
     if (legacyLogsJson) {
-      return normalizeAppData({
-        ...fallback,
-        logs: JSON.parse(legacyLogsJson),
-      }, fallback);
+      return normalizeAppData(
+        {
+          ...fallback,
+          logs: JSON.parse(legacyLogsJson),
+        },
+        fallback
+      );
     }
 
     return null;
@@ -119,7 +124,10 @@ export async function clearAppData(): Promise<void> {
   if (isWeb) {
     // Estado vacío explícito (no ausencia de clave) para que no se resucite la
     // seed al recargar; coherente con el "vacío inicializado" de SQLite.
-    await setStorageItem(APP_STORAGE_KEY, JSON.stringify({ routines: [], logs: [] }));
+    await setStorageItem(
+      APP_STORAGE_KEY,
+      JSON.stringify({ routines: [], logs: [] })
+    );
     await removeStorageItem(LOGS_STORAGE_KEY);
     return;
   }

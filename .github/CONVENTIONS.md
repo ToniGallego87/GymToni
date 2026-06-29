@@ -2,15 +2,15 @@
 
 ## Naming
 
-| Elemento | Convención | Ejemplo |
-|----------|-----------|---------|
-| Componentes | PascalCase | `ExerciseInputField.tsx` |
-| Hooks | camelCase con `use` | `useWorkout.ts` |
-| Archivos lib | camelCase | `parsers.ts`, `storage.ts` |
-| Tipos/Interfaces | PascalCase | `WorkoutLog`, `ParsedSet` |
-| Acciones reducer | UPPER_SNAKE_CASE | `ADD_WORKOUT_LOG` |
-| Props interfaces | PascalCase + Props | `DayCardProps` |
-| IDs | camelCase con prefijo | `day1-ex3`, `routine1` |
+| Elemento         | Convención            | Ejemplo                    |
+| ---------------- | --------------------- | -------------------------- |
+| Componentes      | PascalCase            | `ExerciseInputField.tsx`   |
+| Hooks            | camelCase con `use`   | `useWorkout.ts`            |
+| Archivos lib     | camelCase             | `parsers.ts`, `storage.ts` |
+| Tipos/Interfaces | PascalCase            | `WorkoutLog`, `ParsedSet`  |
+| Acciones reducer | UPPER_SNAKE_CASE      | `ADD_WORKOUT_LOG`          |
+| Props interfaces | PascalCase + Props    | `DayCardProps`             |
+| IDs              | camelCase con prefijo | `day1-ex3`, `routine1`     |
 
 ## Estructura de archivos nuevos
 
@@ -23,21 +23,25 @@
 ## Patrones obligatorios
 
 ### Estado global
+
 - Siempre `useReducer` dentro de un Context Provider
 - Nunca Redux ni librerías externas de estado
 - Nuevo estado → nueva acción en `WorkoutAction` type union
 
 ### Componentes
+
 - Props tipadas con interface explícita
 - Sin lógica de negocio en componentes UI (solo presentación)
 - Lógica compleja → extraer a hook o lib
 
 ### Imports
+
 - Barrel exports desde `components/index.ts` y `features/workout/index.ts`
 - Paths relativos dentro del mismo directorio
 - Alias `@components/*`, `@lib/*` para imports cruzados
 
 ### Estilos
+
 - `StyleSheet.create()` al final del archivo
 - Tokens glass compartidos desde `components/glassTokens.ts`
 - Color primario: variable, no hardcoded (excepto en theme)

@@ -1,4 +1,9 @@
-import { parseSeriesString, parseCardioString, formatParsedSet, formatSets } from '../parsers';
+import {
+  parseSeriesString,
+  parseCardioString,
+  formatParsedSet,
+  formatSets,
+} from '../parsers';
 
 describe('parseSeriesString', () => {
   it('parsea series separadas por comas', () => {
@@ -57,6 +62,11 @@ describe('formatParsedSet / formatSets', () => {
   });
 
   it('une varios sets', () => {
-    expect(formatSets([{ weight: 60, reps: 8 }, { weight: 65, reps: 6 }])).toBe('60x8, 65x6');
+    expect(
+      formatSets([
+        { weight: 60, reps: 8 },
+        { weight: 65, reps: 6 },
+      ])
+    ).toBe('60x8, 65x6');
   });
 });

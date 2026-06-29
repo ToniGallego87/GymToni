@@ -1,10 +1,6 @@
 import React from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  View,
-  Text,
-  StyleSheet,
-} from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -51,31 +47,34 @@ function extractPaceNumber(pace: string): string {
   return match ? match[1] : pace;
 }
 
-export function DetailScreen({
-  log,
-  day,
-  onBack,
-  onEdit,
-}: DetailScreenProps) {
+export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const dayAccent = getTrainingAccent({ emoji: day.emoji, name: day.name });
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding =
+    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const displayedDate = log.date
-    ? new Date(`${log.date}T00:00:00`).toLocaleDateString('es-ES', {
-        weekday: 'long',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-      }).replace(/^[a-z]/, c => c.toUpperCase())
+    ? new Date(`${log.date}T00:00:00`)
+        .toLocaleDateString('es-ES', {
+          weekday: 'long',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        })
+        .replace(/^[a-z]/, (c) => c.toUpperCase())
     : formatDate(log.createdAt);
 
-  const previousLog = [...state.logs]
-    .filter(l => l.dayId === log.dayId && getLogTimestamp(l) < getLogTimestamp(log))
-    .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
+  const previousLog =
+    [...state.logs]
+      .filter(
+        (l) =>
+          l.dayId === log.dayId && getLogTimestamp(l) < getLogTimestamp(log)
+      )
+      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
 
   const detailImprovement = previousLog
     ? buildImprovementFromStrengthScores(
@@ -91,30 +90,35 @@ export function DetailScreen({
     order?: number
   ): ExerciseLog | null => {
     if (!sourceLog || !sourceLog.exercises) return null;
-    
+
     // Buscar por ID de ejercicio
-    let found = sourceLog.exercises.find(e => e.exerciseId === exerciseId);
+    let found = sourceLog.exercises.find((e) => e.exerciseId === exerciseId);
     if (found) return found;
-    
+
     // Buscar por nombre
-    found = sourceLog.exercises.find(e => e.exerciseName === exerciseName);
+    found = sourceLog.exercises.find((e) => e.exerciseName === exerciseName);
     if (found) return found;
-    
+
     // Buscar por orden si todo lo demás falla
     if (order !== undefined) {
-      found = sourceLog.exercises.find(e => e.order === order);
+      found = sourceLog.exercises.find((e) => e.order === order);
       if (found) return found;
     }
-    
+
     return null;
   };
 
-  const formatImprovementDisplay = (imp: { isImproved: boolean; percent: number }) => {
+  const formatImprovementDisplay = (imp: {
+    isImproved: boolean;
+    percent: number;
+  }) => {
     const { symbol, display, kind } = getImprovementDisplay(imp);
     const color =
-      kind === 'up' ? theme.colors.success
-      : kind === 'down' ? theme.colors.error
-      : theme.colors.warning;
+      kind === 'up'
+        ? theme.colors.success
+        : kind === 'down'
+        ? theme.colors.error
+        : theme.colors.warning;
     return { symbol, color, display };
   };
 
@@ -134,18 +138,32 @@ export function DetailScreen({
         showsVerticalScrollIndicator={false}
       >
         {day.exercises.map((exercise, exerciseIndex) => {
-          const currentExercise = getExerciseFromLog(log, exercise.id, exercise.name, exercise.order);
-          
+          const currentExercise = getExerciseFromLog(
+            log,
+            exercise.id,
+            exercise.name,
+            exercise.order
+          );
+
           // Si no encuentra el ejercicio por ID/nombre/order, intenta por índice
-          const fallbackExercise = !currentExercise && log.exercises && log.exercises[exerciseIndex] ? log.exercises[exerciseIndex] : currentExercise;
-          
-          const prevExercise = getExerciseFromLog(previousLog, exercise.id, exercise.name, exercise.order);
-          const exerciseImprovement = (fallbackExercise || currentExercise) && prevExercise
-            ? buildImprovementFromStrengthScores(
-                getExerciseStrengthScore(fallbackExercise || currentExercise),
-                getExerciseStrengthScore(prevExercise)
-              )
-            : null;
+          const fallbackExercise =
+            !currentExercise && log.exercises && log.exercises[exerciseIndex]
+              ? log.exercises[exerciseIndex]
+              : currentExercise;
+
+          const prevExercise = getExerciseFromLog(
+            previousLog,
+            exercise.id,
+            exercise.name,
+            exercise.order
+          );
+          const exerciseImprovement =
+            (fallbackExercise || currentExercise) && prevExercise
+              ? buildImprovementFromStrengthScores(
+                  getExerciseStrengthScore(fallbackExercise || currentExercise),
+                  getExerciseStrengthScore(prevExercise)
+                )
+              : null;
 
           const selectedExercise = fallbackExercise || currentExercise;
 
@@ -159,9 +177,25 @@ export function DetailScreen({
               parsedSets={selectedExercise?.parsedSets || []}
               notes={selectedExercise?.notes}
               previousSets={prevExercise?.parsedSets}
-              improvementText={exerciseImprovement ? (() => { const fmt = formatImprovementDisplay(exerciseImprovement); return `${fmt.symbol} ${fmt.display}%`; })() : undefined}
-              improvementPositive={exerciseImprovement ? exerciseImprovement.isImproved : true}
-              improvementColor={exerciseImprovement ? (() => { const fmt = formatImprovementDisplay(exerciseImprovement); return fmt.color; })() : undefined}
+              improvementText={
+                exerciseImprovement
+                  ? (() => {
+                      const fmt = formatImprovementDisplay(exerciseImprovement);
+                      return `${fmt.symbol} ${fmt.display}%`;
+                    })()
+                  : undefined
+              }
+              improvementPositive={
+                exerciseImprovement ? exerciseImprovement.isImproved : true
+              }
+              improvementColor={
+                exerciseImprovement
+                  ? (() => {
+                      const fmt = formatImprovementDisplay(exerciseImprovement);
+                      return fmt.color;
+                    })()
+                  : undefined
+              }
               isDetail={true}
               accent={dayAccent}
             />
@@ -170,29 +204,54 @@ export function DetailScreen({
 
         {log.cardio && (
           <>
-            <Text style={[styles.sectionTitle, { marginTop: theme.spacing.xl, color: theme.colors.primary }]}>
+            <Text
+              style={[
+                styles.sectionTitle,
+                { marginTop: theme.spacing.xl, color: theme.colors.primary },
+              ]}
+            >
               Cardio
             </Text>
             <View style={[styles.cardioBox, { borderLeftColor: dayAccent }]}>
               <GradientFill accent={dayAccent} />
-              <Text style={styles.cardioLabel}>{log.cardio.type?.toUpperCase()}</Text>
+              <Text style={styles.cardioLabel}>
+                {log.cardio.type?.toUpperCase()}
+              </Text>
               <View style={styles.cardioDetails}>
                 {log.cardio.duration && (
                   <View style={styles.cardioDetailRow}>
-                    <MaterialCommunityIcons name="timer-sand" size={14} color={theme.colors.primary} />
-                    <Text style={styles.cardioDetail}>{log.cardio.duration} min</Text>
+                    <MaterialCommunityIcons
+                      name="timer-sand"
+                      size={14}
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.cardioDetail}>
+                      {log.cardio.duration} min
+                    </Text>
                   </View>
                 )}
                 {log.cardio.pace && (
                   <View style={styles.cardioDetailRow}>
-                    <MaterialCommunityIcons name="map-marker-path" size={14} color={theme.colors.primary} />
-                    <Text style={styles.cardioDetail}>{extractPaceNumber(log.cardio.pace)} km/h</Text>
+                    <MaterialCommunityIcons
+                      name="map-marker-path"
+                      size={14}
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.cardioDetail}>
+                      {extractPaceNumber(log.cardio.pace)} km/h
+                    </Text>
                   </View>
                 )}
                 {log.cardio.rawInput && extractIncline(log.cardio.rawInput) && (
                   <View style={styles.cardioDetailRow}>
-                    <MaterialCommunityIcons name="chart-line" size={14} color={theme.colors.primary} />
-                    <Text style={styles.cardioDetail}>{extractIncline(log.cardio.rawInput)}</Text>
+                    <MaterialCommunityIcons
+                      name="chart-line"
+                      size={14}
+                      color={theme.colors.primary}
+                    />
+                    <Text style={styles.cardioDetail}>
+                      {extractIncline(log.cardio.rawInput)}
+                    </Text>
                   </View>
                 )}
               </View>
@@ -212,12 +271,14 @@ export function DetailScreen({
 
       <GlassTopBar
         title={getDisplayDayName(day.name)}
-        titleElement={(
+        titleElement={
           <View style={styles.topBarTitleRow}>
             <DayAccentIcon emoji={day.emoji} name={day.name} size={16} />
-            <Text style={styles.topBarTitleText}>{getDisplayDayName(day.name)}</Text>
+            <Text style={styles.topBarTitleText}>
+              {getDisplayDayName(day.name)}
+            </Text>
           </View>
-        )}
+        }
         subtitle={displayedDate}
         topInset={insets.top}
       />
@@ -345,5 +406,3 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
 });
-
-

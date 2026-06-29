@@ -55,7 +55,10 @@ export async function readJsonFromFile(): Promise<string> {
   });
 }
 
-export async function downloadJsonFile(fileName: string, json: string): Promise<void> {
+export async function downloadJsonFile(
+  fileName: string,
+  json: string
+): Promise<void> {
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
     const blob = new Blob([json], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -69,7 +72,8 @@ export async function downloadJsonFile(fileName: string, json: string): Promise<
     return;
   }
 
-  const baseDirectory = FileSystem.cacheDirectory || FileSystem.documentDirectory;
+  const baseDirectory =
+    FileSystem.cacheDirectory || FileSystem.documentDirectory;
   if (!baseDirectory) {
     throw new Error('No se encontró una carpeta disponible para exportar');
   }

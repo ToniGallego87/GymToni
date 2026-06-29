@@ -22,7 +22,13 @@ const routine: WorkoutRoutine = {
       name: 'Día 1',
       emoji: '💪',
       exercises: [
-        { id: 'e1', name: 'Press', order: 1, targetSets: 4, targetReps: '8-12' },
+        {
+          id: 'e1',
+          name: 'Press',
+          order: 1,
+          targetSets: 4,
+          targetReps: '8-12',
+        },
         { id: 'e2', name: 'Aperturas', order: 2 },
       ],
     },
@@ -48,12 +54,14 @@ describe('routineToRows', () => {
       timer_duration: 90,
       created_at: 100,
     });
-    expect(rows.days.map(d => [d.id, d.routines_id, d.day_number])).toEqual([
+    expect(rows.days.map((d) => [d.id, d.routines_id, d.day_number])).toEqual([
       ['d1', 'r1', 1],
       ['d2', 'r1', 2],
     ]);
     expect(rows.days[1].description).toBe('opcional');
-    expect(rows.exercises.map(e => [e.id, e.workout_days_id, e.exercise_order])).toEqual([
+    expect(
+      rows.exercises.map((e) => [e.id, e.workout_days_id, e.exercise_order])
+    ).toEqual([
       ['e1', 'd1', 1],
       ['e2', 'd1', 2],
     ]);
@@ -68,7 +76,7 @@ describe('dayToRows', () => {
 
     expect(rows.day.routines_id).toBe('rX');
     expect(rows.exercises).toHaveLength(2);
-    expect(rows.exercises.every(e => e.workout_days_id === 'd1')).toBe(true);
+    expect(rows.exercises.every((e) => e.workout_days_id === 'd1')).toBe(true);
   });
 });
 
@@ -101,22 +109,35 @@ describe('logToRows', () => {
   it('mantiene las FK directas (sin sanear) y numera las series', () => {
     const rows = logToRows(log, stubId);
 
-    expect(rows.log).toMatchObject({ id: 'l1', routines_id: 'r1', workout_days_id: 'd1' });
+    expect(rows.log).toMatchObject({
+      id: 'l1',
+      routines_id: 'r1',
+      workout_days_id: 'd1',
+    });
     expect(rows.exerciseLogs[0]).toMatchObject({
       id: 'el1',
       workout_logs_id: 'l1',
       exercises_id: 'e1',
       created_at: 250,
     });
-    expect(rows.logSets.map(s => [s.id, s.set_order, s.weight, s.reps])).toEqual([
+    expect(
+      rows.logSets.map((s) => [s.id, s.set_order, s.weight, s.reps])
+    ).toEqual([
       ['set-1', 1, 60, 8],
       ['set-2', 2, 60, 8],
     ]);
-    expect(rows.cardio).toMatchObject({ id: 'c1', workout_logs_id: 'l1', duration: 20 });
+    expect(rows.cardio).toMatchObject({
+      id: 'c1',
+      workout_logs_id: 'l1',
+      duration: 20,
+    });
   });
 
   it('convierte routineId/dayId vacíos en NULL y ausencia de cardio en null', () => {
-    const rows = logToRows({ ...log, routineId: '', dayId: '', cardio: undefined }, stubId);
+    const rows = logToRows(
+      { ...log, routineId: '', dayId: '', cardio: undefined },
+      stubId
+    );
 
     expect(rows.log.routines_id).toBeNull();
     expect(rows.log.workout_days_id).toBeNull();
@@ -125,7 +146,11 @@ describe('logToRows', () => {
 
   it('genera id para cardio sin id propio', () => {
     const rows = logToRows(
-      { ...log, exercises: [], cardio: { type: 'bici', rawInput: '' } as WorkoutLog['cardio'] },
+      {
+        ...log,
+        exercises: [],
+        cardio: { type: 'bici', rawInput: '' } as WorkoutLog['cardio'],
+      },
       stubId
     );
 

@@ -36,16 +36,11 @@ export function Toast({
     type === 'success'
       ? theme.colors.success
       : type === 'error'
-        ? theme.colors.error
-        : theme.colors.surfaceAlt;
+      ? theme.colors.error
+      : theme.colors.surfaceAlt;
 
   return (
-    <Animated.View
-      style={[
-        styles.container,
-        { backgroundColor, opacity },
-      ]}
-    >
+    <Animated.View style={[styles.container, { backgroundColor, opacity }]}>
       <Text style={styles.text}>{message}</Text>
     </Animated.View>
   );

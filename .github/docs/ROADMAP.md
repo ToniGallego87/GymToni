@@ -5,10 +5,12 @@
 ## 🔐 1. Autenticación de Usuario
 
 ### Por qué después:
+
 - MVP es local, sin usuarios
 - Añade complejidad (Firebase, Supabase, etc)
 
 ### Cómo implementar:
+
 ```typescript
 // Agregar a tipos
 interface User {
@@ -18,13 +20,14 @@ interface User {
 }
 
 // Crear feature de auth
-features/auth/AuthContext.tsx
-features/auth/LoginScreen.tsx
+features / auth / AuthContext.tsx;
+features / auth / LoginScreen.tsx;
 
 // Proteger rutas con AuthGuard
 ```
 
 ### Stack recomendado:
+
 - Firebase Auth + Firestore (sencillo)
 - Supabase (alternativa open source)
 
@@ -33,11 +36,13 @@ features/auth/LoginScreen.tsx
 ## ☁️ 2. Sincronización en la Nube
 
 ### Plan:
+
 1. Guardar en AsyncStorage (ya hecho)
 2. Sincronizar con cloud cuando haya conexión
 3. Permitir backup/restore
 
 ### Implementación:
+
 ```typescript
 // lib/sync.ts
 export async function syncLogs(logs: WorkoutLog[]): Promise<void> {
@@ -46,9 +51,12 @@ export async function syncLogs(logs: WorkoutLog[]): Promise<void> {
 
 // Llamar en App.tsx periodicamente
 useEffect(() => {
-  const interval = setInterval(() => {
-    syncLogs(state.logs);
-  }, 5 * 60 * 1000); // cada 5 min
+  const interval = setInterval(
+    () => {
+      syncLogs(state.logs);
+    },
+    5 * 60 * 1000
+  ); // cada 5 min
   return () => clearInterval(interval);
 }, [state.logs]);
 ```
@@ -58,16 +66,19 @@ useEffect(() => {
 ## 📊 3. Gráficas de Progreso
 
 ### Features:
+
 - [ ] Gráfico de peso en el tiempo (un ejercicio)
 - [ ] Gráfico de volumen total (sets x reps x peso)
 - [ ] Tabla de PRs (personal records)
 
 ### Lib recomendada:
+
 ```bash
 npm install react-native-svg react-native-chart-kit
 ```
 
 ### Componente ejemplo:
+
 ```typescript
 // components/ProgressChart.tsx
 export function ProgressChart({ exerciseId }: Props) {
@@ -81,11 +92,13 @@ export function ProgressChart({ exerciseId }: Props) {
 ## 💪 4. Cálculo de 1RM (One Rep Max)
 
 ### Fórmula de Epley:
+
 ```
 1RM = peso × (1 + reps/30)
 ```
 
 ### Implementación:
+
 ```typescript
 // lib/calculations.ts
 export function calculateOneRepMax(weight: number, reps: number): number {
@@ -100,11 +113,13 @@ export function calculateOneRepMax(weight: number, reps: number): number {
 ## 📋 5. Planes de Entrenamiento Personalizados
 
 ### Idea:
+
 - Crear planes alternativos a la rutina base
 - Power, hypertrophy, endurance programs
 - Cambiar entre planes
 
 ### Estructura:
+
 ```typescript
 // types/index.ts
 interface WorkoutPlan {
@@ -127,11 +142,13 @@ export const PLANS = {
 ## 🔔 6. Notificaciones / Recordatorios
 
 ### Stack:
+
 ```bash
 npm install expo-notifications
 ```
 
 ### Implementación:
+
 ```typescript
 // hooks/useNotifications.ts
 export function scheduleWorkoutReminder(dayNumber: number, time: string) {
@@ -144,16 +161,19 @@ export function scheduleWorkoutReminder(dayNumber: number, time: string) {
 ## 📤 7. Exportar Datos
 
 ### Formatos:
+
 - CSV (para Excel)
 - PDF (reporte visual)
 - JSON (backup)
 
 ### Lib recomendada:
+
 ```bash
 npm install expo-sharing react-native-csv
 ```
 
 ### Función:
+
 ```typescript
 // lib/export.ts
 export async function exportToCSV(logs: WorkoutLog[]): Promise<void> {
@@ -167,6 +187,7 @@ export async function exportToCSV(logs: WorkoutLog[]): Promise<void> {
 ## 🎨 8. Temas / Modo Oscuro
 
 ### Implementar:
+
 ```typescript
 // hooks/useTheme.ts
 const theme = {
@@ -182,10 +203,12 @@ const theme = {
 ## 🏋️ 9. Diferenciación por Rol (Coach/Atleta)
 
 ### Escenario:
+
 - Coach ve todos los atletas
 - Atleta ve solo su info
 
 ### Rutas protegidas:
+
 ```typescript
 // Agregar rol a User
 interface User {
@@ -205,12 +228,14 @@ if (user.role === 'coach') {
 ## 🤖 10. IA / Análisis Inteligente
 
 ### Ideas:
+
 - Detectar desequilibrios
 - Sugerir progresión de peso
 - Análisis de consistencia
 - Chatbot para recomendaciones
 
 ### Implementación:
+
 ```bash
 npm install openai
 ```
@@ -219,7 +244,7 @@ npm install openai
 // lib/ai.ts
 export async function getSuggestions(logs: WorkoutLog[]): Promise<string> {
   return await openai.generateText({
-    prompt: `Analiza este entrenamiento: ${JSON.stringify(logs)}`
+    prompt: `Analiza este entrenamiento: ${JSON.stringify(logs)}`,
   });
 }
 ```
@@ -229,11 +254,13 @@ export async function getSuggestions(logs: WorkoutLog[]): Promise<string> {
 ## 📱 11. Versión Web (Dashboard)
 
 ### Stack:
+
 ```
 next.js + supabase + tailwindcss
 ```
 
 ### Rutas:
+
 ```
 /dashboard        - Overview
 /workouts         - Historial
@@ -246,6 +273,7 @@ next.js + supabase + tailwindcss
 ## 🧪 12. Testing
 
 ### Unit tests (parsers):
+
 ```bash
 npm install jest @testing-library/react-native
 ```
@@ -256,7 +284,7 @@ describe('parseSeriesString', () => {
   it('should parse "60x8, 65x6"', () => {
     expect(parseSeriesString('60x8, 65x6')).toEqual([
       { weight: 60, reps: 8 },
-      { weight: 65, reps: 6 }
+      { weight: 65, reps: 6 },
     ]);
   });
 });
@@ -267,11 +295,13 @@ describe('parseSeriesString', () => {
 ## 📏 Prioridad Sugerida
 
 1. **Corto plazo** (semana 1):
+
    - Testing
    - Gráficas básicas
    - Exportar a CSV
 
 2. **Mediano plazo** (semana 2-3):
+
    - Autenticación
    - Sincronización en nube
    - Modo oscuro

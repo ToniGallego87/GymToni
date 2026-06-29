@@ -10,12 +10,7 @@ import {
   Toast,
   StretchScrollView,
 } from '@components';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -44,7 +39,9 @@ export function DataScreen({
   const { state } = useWorkout();
   const [showImportModal, setShowImportModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
-  const [busyAction, setBusyAction] = useState<'import' | 'export' | null>(null);
+  const [busyAction, setBusyAction] = useState<'import' | 'export' | null>(
+    null
+  );
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -67,7 +64,10 @@ export function DataScreen({
         type: 'success',
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo completar la acción';
+      const message =
+        error instanceof Error
+          ? error.message
+          : 'No se pudo completar la acción';
       setToast({
         message,
         type: 'error',
@@ -101,7 +101,11 @@ export function DataScreen({
           <View style={styles.summaryCard}>
             <GradientFill accent={theme.colors.primary} />
             <View style={styles.titleRow}>
-              <MaterialCommunityIcons name="chart-box-outline" size={18} color={theme.colors.text} />
+              <MaterialCommunityIcons
+                name="chart-box-outline"
+                size={18}
+                color={theme.colors.text}
+              />
               <Text style={styles.summaryTitle}>Resumen actual</Text>
             </View>
             <View style={styles.summaryRow}>
@@ -122,7 +126,11 @@ export function DataScreen({
           <View style={styles.actionCard}>
             <GradientFill accent={theme.colors.primary} />
             <View style={styles.titleRow}>
-              <MaterialCommunityIcons name="export-variant" size={18} color={theme.colors.text} />
+              <MaterialCommunityIcons
+                name="export-variant"
+                size={18}
+                color={theme.colors.text}
+              />
               <Text style={styles.actionTitle}>Exportar datos</Text>
             </View>
             <Text style={styles.actionSubtitle}>
@@ -140,7 +148,11 @@ export function DataScreen({
         <View style={styles.actionCard}>
           <GradientFill accent={theme.colors.primary} />
           <View style={styles.titleRow}>
-            <MaterialCommunityIcons name="import" size={18} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="import"
+              size={18}
+              color={theme.colors.text}
+            />
             <Text style={styles.actionTitle}>Importar datos</Text>
           </View>
           <Text style={styles.actionSubtitle}>
@@ -159,8 +171,14 @@ export function DataScreen({
           <View style={[styles.actionCard, styles.dangerCard]}>
             <GradientFill accent={theme.colors.error} />
             <View style={styles.titleRow}>
-              <MaterialCommunityIcons name="delete-outline" size={18} color={theme.colors.error} />
-              <Text style={[styles.actionTitle, styles.dangerTitle]}>Limpiar datos</Text>
+              <MaterialCommunityIcons
+                name="delete-outline"
+                size={18}
+                color={theme.colors.error}
+              />
+              <Text style={[styles.actionTitle, styles.dangerTitle]}>
+                Limpiar datos
+              </Text>
             </View>
             <Text style={[styles.actionSubtitle, styles.dangerSubtitle]}>
               Elimina todas las rutinas y entrenamientos guardados.
@@ -177,12 +195,16 @@ export function DataScreen({
 
       <GlassTopBar
         title="Datos"
-        titleElement={(
+        titleElement={
           <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons name="folder-cog-outline" size={18} color={theme.colors.text} />
+            <MaterialCommunityIcons
+              name="folder-cog-outline"
+              size={18}
+              color={theme.colors.text}
+            />
             <Text style={styles.topBarTitle}>Datos</Text>
           </View>
-        )}
+        }
         subtitle="Importa, exporta o limpia la información"
         topInset={insets.top}
       />
@@ -200,11 +222,16 @@ export function DataScreen({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalTitleRow}>
-              <MaterialCommunityIcons name="alert-outline" size={18} color={theme.colors.text} />
+              <MaterialCommunityIcons
+                name="alert-outline"
+                size={18}
+                color={theme.colors.text}
+              />
               <Text style={styles.modalTitle}>Importar datos</Text>
             </View>
             <Text style={styles.modalText}>
-              Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?
+              Esta acción eliminará los datos actuales y los reemplazará con los
+              del fichero. ¿Estás seguro?
             </Text>
 
             <View style={styles.modalButtons}>
@@ -231,7 +258,11 @@ export function DataScreen({
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalTitleRow}>
-              <MaterialCommunityIcons name="alert-outline" size={18} color={theme.colors.text} />
+              <MaterialCommunityIcons
+                name="alert-outline"
+                size={18}
+                color={theme.colors.text}
+              />
               <Text style={styles.modalTitle}>Limpiar datos</Text>
             </View>
             <Text style={styles.modalText}>
@@ -418,5 +449,3 @@ const styles = StyleSheet.create({
     flex: 1,
   },
 });
-
-

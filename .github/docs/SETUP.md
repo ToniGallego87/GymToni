@@ -17,6 +17,7 @@
 **Instalación Local (Con Node.js)**
 
 **Requisitos:**
+
 - Node.js 16+ (https://nodejs.org)
 - npm (viene con Node.js)
 - Expo CLI (se instala con npm)
@@ -33,6 +34,7 @@ npm install
 ```
 
 Esto instalará:
+
 - React Native + Expo
 - React Navigation
 - TypeScript
@@ -128,17 +130,20 @@ GymTrack/
 ## 🎯 Funcionalidades Implementadas
 
 ✅ **3 Rutinas Completas**
+
 - Rutina 1: Push/Pull/Legs clásico
 - Rutina 2: Fuerza y volumen
 - Rutina 3: Tu rutina actual (5 días, 30+ ejercicios)
 
 ✅ **Interfaz UI/UX Redeseñada**
+
 - HomeScreen con botón "🎯 Empezar entrenamiento"
 - Selector de días (DaySelectScreen)
 - Historial rutina-específico en la pantalla principal
 - AllHistoryScreen (ver todos los entrenamientos)
 
 ✅ **Registro de Entrenamientos (Nuevo Flujo)**
+
 - **Agregar series una por una**: Ingresa `60x8` → Click ➕ Añadir
 - **Series se muestran arriba** en tags (60x8, 65x8, 70x6, ...)
 - **Contador de series**: Muestra progreso (Ej: "Series: 3/4")
@@ -149,17 +154,20 @@ GymTrack/
 - Notas por ejercicio (modal 📝)
 
 ✅ **Gestión de Rutinas**
+
 - Cambiar entre 3 rutinas en cualquier momento
 - Historial filtrado por rutina activa
 - Estado persiste en contexto
 
 ✅ **Historial & Detalles**
+
 - Historial rutina-específico (HomeScreen)
 - AllHistoryScreen (todos los entrenamientos)
 - DetailScreen (ver detalles de sesión)
 - Parsing visual de series
 
 ✅ **Arquitectura**
+
 - Context API + useReducer (estado global)
 - TypeScript strict mode
 - Componentes reutilizables
@@ -172,16 +180,19 @@ GymTrack/
 ### **Flujo Principal**
 
 1. **Pantalla Inicio (HomeScreen)**
+
    - Ves el botón **"🎯 Empezar entrenamiento"**
    - Rutina activa mostrada en la cabecera
    - Historial de la rutina activa debajo
 
 2. **Seleccionar Día**
+
    - Click en "Empezar entrenamiento"
    - Elige uno de los 5 días
    - Se abre el formulario de registro
 
 3. **Registrar Entrenamiento (Serie a Serie)**
+
    - Ves "Repeticiones: 4x6-8" (4 series de 6-8 reps)
    - Ingresa **`60x8`** → Click **➕ Añadir**
    - Aparece en tag arriba: "60x8"
@@ -193,6 +204,7 @@ GymTrack/
    - Click en **"💾 Guardar"** → Guarda todas las series registradas
 
 4. **Ver Historial**
+
    - **Historial actual**: En HomeScreen (filtra por rutina activa)
    - **Todos los entrenamientos**: Tab "📊 Historial"
    - Click en un entrenamiento → Ver detalles
@@ -222,6 +234,7 @@ Decimales soportados:
 ```
 
 **Formato de Repeticiones (en la cabecera):**
+
 ```
 4x6-8             ← 4 series de 6-8 repeticiones
 3x12-15           ← 3 series de 12-15 repeticiones
@@ -246,6 +259,7 @@ Elíptica: 20mins, 8.5kmh
 ## 🔧 Cambios Recientes (v1.1)
 
 ### **Nuevo Sistema de Registro (Serie por Serie)**
+
 - ✅ **Input individual**: Ingresa una serie a la vez (Ej: "60x8")
 - ✅ **Botón ➕ Añadir**: Agrega la serie al contador
 - ✅ **Botón ➖ Borrar**: Elimina última serie (solo si hay series)
@@ -256,21 +270,23 @@ Elíptica: 20mins, 8.5kmh
 - ✅ **Formato Repeticiones**: "4x6-8" en lugar de solo "6-8"
 
 ### **Arquitectura Multi-Rutina** (v1.0)
+
 - ✅ Cambio `WorkoutDay[]` → `WorkoutRoutine[]` con días anidados
 - ✅ Nuevo estado `activeRoutineId` para rutina activa
 - ✅ Acciones reducer: `SET_ROUTINES`, `SET_ACTIVE_ROUTINE`
 
 ### **Nuevas Pantallas** (v1.0)
+
 - ✅ **HomeScreen Redeseñada**: Botón principal + historial rutina-específico
 - ✅ **DaySelectScreen**: Selector de días (nueva)
 - ✅ **AllHistoryScreen**: Ver todos entrenamientos (nueva)
 - ✅ Removed: Tab de "Registrar" directo (ahora via botón principal)
 
 ### **Datos**
+
 - ✅ 3 rutinas completas con 5 días cada una
 - ✅ 25-30 ejercicios por rutina
 - ✅ Descripción y emojis para cada día
-
 
 ---
 
@@ -329,9 +345,9 @@ interface ParsedSet {
 
 ```typescript
 interface WorkoutState {
-  routines: WorkoutRoutine[]        // Las 3 rutinas
-  activeRoutineId: string           // Cuál está activa
-  logs: WorkoutLog[]                // Todos los entrenamientos
+  routines: WorkoutRoutine[]; // Las 3 rutinas
+  activeRoutineId: string; // Cuál está activa
+  logs: WorkoutLog[]; // Todos los entrenamientos
 }
 
 // Acciones
@@ -341,7 +357,7 @@ type WorkoutAction =
   | { type: 'ADD_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'SET_LOGS'; payload: WorkoutLog[] }
   | { type: 'DELETE_WORKOUT_LOG'; payload: string }
-  | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog }
+  | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog };
 ```
 
 ---
@@ -385,17 +401,17 @@ npm start
 
 ```typescript
 interface ExerciseInputFieldProps {
-  order: number                          // Número del ejercicio
-  exerciseName: string                   // Nombre del ejercicio
-  repetitions?: string                   // Ej: "4x6-8"
-  addedSets: ParsedSet[]                 // Series ya agregadas
-  targetSets?: number                    // Máximo de series esperadas (Ej: 4)
-  onAddSet: (set: ParsedSet) => void    // Callback: agregar serie
-  onRemoveLastSet: () => void            // Callback: borrar última serie
-  onFinishExercise: () => void           // Callback: finalizar ejercicio
-  onNotesPress: (event) => void          // Callback: abrir modal de notas
-  notesCount?: number                    // Cantidad de notas
-  placeholder?: string                   // Placeholder del input (default: "Ej: 60x8")
+  order: number; // Número del ejercicio
+  exerciseName: string; // Nombre del ejercicio
+  repetitions?: string; // Ej: "4x6-8"
+  addedSets: ParsedSet[]; // Series ya agregadas
+  targetSets?: number; // Máximo de series esperadas (Ej: 4)
+  onAddSet: (set: ParsedSet) => void; // Callback: agregar serie
+  onRemoveLastSet: () => void; // Callback: borrar última serie
+  onFinishExercise: () => void; // Callback: finalizar ejercicio
+  onNotesPress: (event) => void; // Callback: abrir modal de notas
+  notesCount?: number; // Cantidad de notas
+  placeholder?: string; // Placeholder del input (default: "Ej: 60x8")
 }
 ```
 
@@ -426,21 +442,22 @@ interface ExerciseInputFieldProps {
 
 ## � Comparativa: v1.0 vs v1.1
 
-| Característica | v1.0 | v1.1 |
-|---|---|---|
-| **Entrada de series** | Todas de una vez: "60x8, 65x6, 70x4" | Una por una con botones |
-| **Botones** | Solo Guardar/Cancelar | ➕ Añadir, ➖ Borrar, ✓ Fin |
-| **Series visuales** | No | Sí, en tags arriba |
-| **Contador** | No | Sí, "Series: 3/4" |
-| **Flexible** | No (completa todas o nada) | Sí (completa o finaliza) |
-| **Error corrections** | Reescribir todo | Solo borrar la última |
-| **Validación** | Al guardar | En tiempo real |
+| Característica        | v1.0                                 | v1.1                        |
+| --------------------- | ------------------------------------ | --------------------------- |
+| **Entrada de series** | Todas de una vez: "60x8, 65x6, 70x4" | Una por una con botones     |
+| **Botones**           | Solo Guardar/Cancelar                | ➕ Añadir, ➖ Borrar, ✓ Fin |
+| **Series visuales**   | No                                   | Sí, en tags arriba          |
+| **Contador**          | No                                   | Sí, "Series: 3/4"           |
+| **Flexible**          | No (completa todas o nada)           | Sí (completa o finaliza)    |
+| **Error corrections** | Reescribir todo                      | Solo borrar la última       |
+| **Validación**        | Al guardar                           | En tiempo real              |
 
 ---
 
 ## ⚡ Mejoras en v1.1
 
 ### **Experiencia de Usuario**
+
 - ✅ **Menos errores**: Valida mientras escribes, no al guardar
 - ✅ **Correcciones rápidas**: Botón ➖ para borrar último régimen, no todo
 - ✅ **Progreso visual**: Ves las series agregadas en tiempo real con tags
@@ -448,12 +465,14 @@ interface ExerciseInputFieldProps {
 - ✅ **Protección**: El input se deshabilita cuando alcanza el máximo
 
 ### **Facilidad de Uso**
+
 - ✅ **Menos escritura**: "60x8" vs "60x8, 65x6, 70x4" (una a la vez)
 - ✅ **Menos errores de formato**: Validación integrada
 - ✅ **Feedback inmediato**: Ves la serie agregada al instante
 - ✅ **Contador de progreso**: Sabes cuántas series te faltan
 
 ### **Técnicas**
+
 - ✅ Estado `exerciseSets` guarda arrays de `ParsedSet[]` por ejercicio
 - ✅ Series se pasan individuales, no como string parseado
 - ✅ Construcción secuencial desde UI mejora precisión
@@ -469,7 +488,7 @@ En `features/workout/WorkoutContext.tsx`:
 ```typescript
 const initialState: WorkoutState = {
   routines: WORKOUT_ROUTINES,
-  activeRoutineId: 'routine1',  // ← Cambia aquí (routine1, routine2, routine3)
+  activeRoutineId: 'routine1', // ← Cambia aquí (routine1, routine2, routine3)
   logs: [],
 };
 ```
@@ -479,7 +498,7 @@ const initialState: WorkoutState = {
 Busca `#6200ee` (púrpura) en los estilos:
 
 ```typescript
-backgroundColor: '#6200ee'    // Alterna a:
+backgroundColor: '#6200ee'; // Alterna a:
 // #1976d2 (azul)
 // #d32f2f (rojo)
 // #388e3c (verde)
@@ -496,17 +515,18 @@ exercises: [
     id: 'new-ex',
     name: 'Mi nuevo ejercicio',
     order: 6,
-    targetReps: '3x8-10',       // ← Formato: NúmeroSeriesx RangoReps
-    targetSets: 3,              // ← Máximo de series (debe coincidir con el número de series)
+    targetReps: '3x8-10', // ← Formato: NúmeroSeriesx RangoReps
+    targetSets: 3, // ← Máximo de series (debe coincidir con el número de series)
   },
-]
+];
 ```
 
 **Ejemplos de targetReps válidos:**
+
 ```typescript
-'4x6-8'      // 4 series de 6-8 repeticiones
-'3x10-12'    // 3 series de 10-12 repeticiones
-'5x5'        // 5 series de 5 repeticiones exactas
+'4x6-8'; // 4 series de 6-8 repeticiones
+'3x10-12'; // 3 series de 10-12 repeticiones
+'5x5'; // 5 series de 5 repeticiones exactas
 ```
 
 ### **Agregar rutina completa**
@@ -525,13 +545,13 @@ exercises: [
 ```typescript
 import { parseSeriesString } from './lib/parsers';
 
-parseSeriesString('60x8, 65x6')
+parseSeriesString('60x8, 65x6');
 // → [{ weight: 60, reps: 8 }, { weight: 65, reps: 6 }]
 
-parseSeriesString('22.5x10')
+parseSeriesString('22.5x10');
 // → [{ weight: 22.5, reps: 10 }]
 
-parseSeriesString('')
+parseSeriesString('');
 // → []
 ```
 
@@ -547,14 +567,14 @@ parseSeriesString('')
 
 ## 🐛 Troubleshooting
 
-| Problema | Solución |
-|----------|----------|
-| **"npm command not found"** | Instala Node.js desde https://nodejs.org |
-| **"Module not found"** | `npm install` nuevamente |
-| **"Port 3000 en uso"** | `npm start -- --port 3001` (cambia puerto) |
+| Problema                         | Solución                                             |
+| -------------------------------- | ---------------------------------------------------- |
+| **"npm command not found"**      | Instala Node.js desde https://nodejs.org             |
+| **"Module not found"**           | `npm install` nuevamente                             |
+| **"Port 3000 en uso"**           | `npm start -- --port 3001` (cambia puerto)           |
 | **Datos desaparecieron (Snack)** | Normal en Snack. Usa versión local para persistencia |
-| **Compilación lenta (web)** | Espera 10-15s o recarga la página |
-| **TypeScript errors** | Ejecuta `npm run type-check` |
+| **Compilación lenta (web)**      | Espera 10-15s o recarga la página                    |
+| **TypeScript errors**            | Ejecuta `npm run type-check`                         |
 
 ---
 
@@ -619,10 +639,12 @@ Escanea el código QR con la app Expo Go
 ### Flujo básico:
 
 1. **Pantalla Inicio** 💪
+
    - Ves los 5 días de la semana
    - Toca uno para registrar ese entrenamiento
 
 2. **Registrar Entrenamiento** 📝
+
    - Para **cada ejercicio**: Escribe en formato texto
      - `60x8, 65x6, 65x4` ← 3 series
      - `12.5x15` ← 1 serie con decimal
@@ -631,6 +653,7 @@ Escanea el código QR con la app Expo Go
    - Presiona **Guardar**
 
 3. **Historial** 📊
+
    - Ve todos tus entrenamientos guardados
    - Toca uno para ver detalles
    - Total de ejercicios realizados
@@ -699,7 +722,7 @@ const styles = StyleSheet.create({
   button: {
     backgroundColor: '#6200ee', // ← Cambiar color
     // ...
-  }
+  },
 });
 ```
 
@@ -718,10 +741,10 @@ const styles = StyleSheet.create({
 ```typescript
 import { parseSeriesString } from '@lib/parsers';
 
-parseSeriesString('60x8, 65x6')
+parseSeriesString('60x8, 65x6');
 // Retorna: [{ weight: 60, reps: 8 }, { weight: 65, reps: 6 }]
 
-parseSeriesString('12.5x15')
+parseSeriesString('12.5x15');
 // Retorna: [{ weight: 12.5, reps: 15 }]
 ```
 
@@ -730,10 +753,10 @@ parseSeriesString('12.5x15')
 ```typescript
 import { parseCardioString } from '@lib/parsers';
 
-parseCardioString('Cinta: 22.5mins, 11.5kmh')
-// Retorna: { 
-//   type: 'Cinta', 
-//   duration: 22.5, 
+parseCardioString('Cinta: 22.5mins, 11.5kmh');
+// Retorna: {
+//   type: 'Cinta',
+//   duration: 22.5,
 //   pace: '11.5kmh',
 //   rawInput: '...'
 // }
@@ -790,6 +813,7 @@ npm run type-check
 ## ✨ Resumen Final
 
 **GymToni MVP está 100% listo para:**
+
 - ✅ Ejecutar localmente con persistencia de datos
 - ✅ Registrar y guardar entrenamientos
 - ✅ Ver historial completo

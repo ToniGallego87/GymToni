@@ -2,12 +2,12 @@
 
 ## Lanza el proyecto en web
 
-- npx expo start -c 
+- npx expo start -c
 - Pulsa w
 
 ## Reconstruye la apk
 
-- cd "c:\Users\toni_\Desktop\Proyectos Visual Studio Code\GymToni"
+- cd "c:\Users\toni\_\Desktop\Proyectos Visual Studio Code\GymToni"
 - npm run postinstall
 - cd android
 - ./gradlew.bat --stop

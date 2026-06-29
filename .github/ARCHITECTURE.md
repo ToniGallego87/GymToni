@@ -2,14 +2,14 @@
 
 ## Stack
 
-| Capa | Tecnología |
-|------|-----------|
-| Framework | React Native + Expo (SDK 51) |
-| Lenguaje | TypeScript strict |
-| Estado global | Context API + useReducer |
-| Persistencia | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web |
-| Navegación | State-based (sin react-navigation) |
-| UI | Componentes custom + sistema glass |
+| Capa          | Tecnología                                                       |
+| ------------- | ---------------------------------------------------------------- |
+| Framework     | React Native + Expo (SDK 51)                                     |
+| Lenguaje      | TypeScript strict                                                |
+| Estado global | Context API + useReducer                                         |
+| Persistencia  | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web |
+| Navegación    | State-based (sin react-navigation)                               |
+| UI            | Componentes custom + sistema glass                               |
 
 ## Flujo de datos
 
@@ -36,6 +36,7 @@ WorkoutContext (Provider + useReducer)
 ### Principio clave: normalización una sola vez
 
 La función `normalizeAppData()` en `lib/normalize.ts` es la **única fuente de verdad** para:
+
 - Sincronizar flags `isActive` en rutinas (`syncActiveRoutine`)
 - Rellenar `parsedSets` desde `rawInput` si faltan (`ensureParsedSets`)
 - Resolver `activeRoutineId` con fallback (`resolveActiveRoutineId`)
@@ -63,21 +64,21 @@ WorkoutState          // Estado global del reducer
 
 ## Acciones del reducer
 
-| Acción | Efecto |
-|--------|--------|
-| `SET_APP_DATA` | Carga inicial desde storage |
-| `SET_ROUTINES` | Reemplaza todas las rutinas |
-| `ADD_ROUTINE` | Añade rutina nueva |
-| `DELETE_ROUTINE` | Elimina rutina por id |
-| `UPDATE_ROUTINE` | Actualiza rutina existente |
-| `SET_ACTIVE_ROUTINE` | Cambia rutina activa |
-| `ADD_WORKOUT_LOG` | Guarda nuevo registro |
-| `UPDATE_WORKOUT_LOG` | Edita registro existente |
-| `DELETE_WORKOUT_LOG` | Elimina registro |
-| `SET_LOGS` | Reemplaza todos los logs |
-| `UPDATE_DAY` | Modifica un día de una rutina |
-| `CLEAR_DATA` | Borra todo |
-| `SET_CURRENT_DAY` | Establece día de trabajo actual |
+| Acción               | Efecto                          |
+| -------------------- | ------------------------------- |
+| `SET_APP_DATA`       | Carga inicial desde storage     |
+| `SET_ROUTINES`       | Reemplaza todas las rutinas     |
+| `ADD_ROUTINE`        | Añade rutina nueva              |
+| `DELETE_ROUTINE`     | Elimina rutina por id           |
+| `UPDATE_ROUTINE`     | Actualiza rutina existente      |
+| `SET_ACTIVE_ROUTINE` | Cambia rutina activa            |
+| `ADD_WORKOUT_LOG`    | Guarda nuevo registro           |
+| `UPDATE_WORKOUT_LOG` | Edita registro existente        |
+| `DELETE_WORKOUT_LOG` | Elimina registro                |
+| `SET_LOGS`           | Reemplaza todos los logs        |
+| `UPDATE_DAY`         | Modifica un día de una rutina   |
+| `CLEAR_DATA`         | Borra todo                      |
+| `SET_CURRENT_DAY`    | Establece día de trabajo actual |
 
 ## Estructura de carpetas
 

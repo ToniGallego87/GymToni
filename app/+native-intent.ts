@@ -4,7 +4,12 @@
 // pasar, expo-router muestra "Unmatched Route". Lo redirigimos a la raíz (index)
 // para mantener montada la app; el listener de Linking en App.tsx recibe la URL
 // original (Linking.getInitialURL / evento 'url') y procesa los datos.
-export function redirectSystemPath({ path }: { path: string; initial: boolean }): string {
+export function redirectSystemPath({
+  path,
+}: {
+  path: string;
+  initial: boolean;
+}): string {
   try {
     if (path.includes('import-routine')) {
       return '/';

@@ -4,6 +4,7 @@ App de registro de entrenamientos de gimnasio (React Native + Expo SDK 51, expo-
 MVP móvil. Prioridad absoluta: **velocidad de uso > simplicidad > arquitectura clara > mantenibilidad**.
 
 Para detalles técnicos consulta:
+
 - [.github/ARCHITECTURE.md](.github/ARCHITECTURE.md) — stack, flujo de datos, tipos, navegación
 - [.github/CONVENTIONS.md](.github/CONVENTIONS.md) — naming, patrones, reglas de código
 - [.github/docs/frontend-design.md](.github/docs/frontend-design.md) — principios de diseño UI
@@ -69,11 +70,14 @@ Después de modificar cualquiera de estos, verificar que el resto sigue coherent
 ## Cuándo actualizar docs
 
 ### UPDATES.md (`.github/docs/UPDATES.md`)
+
 Después de aplicar mejoras o cambios funcionales. Formato:
+
 - Contenido resumido y directo (2-4 puntos por apartado)
 - Priorizar impacto funcional visible para el usuario
 
 ### SETUP.md (`.github/docs/SETUP.md`)
+
 Cuando cambie: estructura de carpetas, tipos, modelo de datos, flujo de registro, componentes clave.
 
 ---
@@ -81,6 +85,7 @@ Cuando cambie: estructura de carpetas, tipos, modelo de datos, flujo de registro
 ## Restricciones
 
 NO añadir:
+
 - Login / signup / usuarios
 - Backend remoto / sincronización cloud
 - Redux / librerías de estado externas
@@ -92,6 +97,7 @@ NO añadir:
 ## Detección de errores
 
 Antes de finalizar, verificar:
+
 - Todas las funciones/handlers invocados existen
 - No hay props renombradas sin actualizar consumidores
 - No hay cambios en context/reducer sin actualizar dispatch usage

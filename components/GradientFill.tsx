@@ -15,13 +15,22 @@ export function GradientFill({ accent }: GradientFillProps) {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <LinearGradient
-        colors={[theme.colors.surfaceAlt, theme.colors.surface, theme.colors.backgroundElevated]}
+        colors={[
+          theme.colors.surfaceAlt,
+          theme.colors.surface,
+          theme.colors.backgroundElevated,
+        ]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
       {!!accent && (
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: accent, opacity: 0.07 }]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: accent, opacity: 0.07 },
+          ]}
+        />
       )}
       <LinearGradient
         colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']}

@@ -69,7 +69,6 @@ export function ExerciseResultDisplay({
   isDetail = false,
   accent = theme.colors.current,
 }: ExerciseResultDisplayProps) {
-
   const effectiveParsedSets =
     parsedSets && parsedSets.length > 0
       ? parsedSets
@@ -108,7 +107,9 @@ export function ExerciseResultDisplay({
       {/* Header */}
       <View style={[styles.header, isDetail && styles.headerDetail]}>
         <View style={styles.exerciseNameContainer}>
-          <Text style={[styles.exerciseName, isDetail && styles.exerciseNameDetail]}>
+          <Text
+            style={[styles.exerciseName, isDetail && styles.exerciseNameDetail]}
+          >
             {exerciseName}
           </Text>
 
@@ -123,7 +124,11 @@ export function ExerciseResultDisplay({
           <Text
             style={[
               styles.improvementText,
-              improvementColor ? { color: improvementColor } : (improvementPositive ? styles.improvementUp : styles.improvementDown),
+              improvementColor
+                ? { color: improvementColor }
+                : improvementPositive
+                ? styles.improvementUp
+                : styles.improvementDown,
             ]}
           >
             {improvementText}
@@ -133,7 +138,6 @@ export function ExerciseResultDisplay({
 
       {/* Comparison */}
       <View style={styles.resultsContainer}>
-
         <View style={styles.columnHeader}>
           <Text style={styles.columnLabel}>Actual</Text>
           <View style={{ width: 32 }} />
@@ -142,46 +146,37 @@ export function ExerciseResultDisplay({
 
         {rows.map((row, index) => (
           <View key={index} style={styles.row}>
+            <Text style={styles.currentValue}>{row.currentText}</Text>
 
-            <Text style={styles.currentValue}>
-              {row.currentText}
-            </Text>
-
-            <View style={[
-              styles.badge,
-              row.status === 'up' && styles.badgeUp,
-              row.status === 'down' && styles.badgeDown,
-              row.status === 'same' && styles.badgeSame,
-              row.status === 'missing' && styles.badgeMissing,
-            ]}>
+            <View
+              style={[
+                styles.badge,
+                row.status === 'up' && styles.badgeUp,
+                row.status === 'down' && styles.badgeDown,
+                row.status === 'same' && styles.badgeSame,
+                row.status === 'missing' && styles.badgeMissing,
+              ]}
+            >
               <Text style={styles.badgeText}>
                 {getStatusSymbol(row.status)}
               </Text>
             </View>
 
-            <Text style={styles.previousValue}>
-              {row.previousText}
-            </Text>
-
+            <Text style={styles.previousValue}>{row.previousText}</Text>
           </View>
         ))}
-
       </View>
 
       {notes && (
         <View style={styles.notesContainer}>
-          <Text style={styles.notes}>
-            {notes}
-          </Text>
+          <Text style={styles.notes}>{notes}</Text>
         </View>
       )}
-
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-
   container: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
@@ -334,5 +329,4 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     fontStyle: 'italic',
   },
-
 });

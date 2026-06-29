@@ -20,7 +20,13 @@ interface CardioInputFieldProps {
   placeholder?: string;
 }
 
-type CardioType = 'treadmill' | 'outdoor-run' | 'stationary-bike' | 'elliptical' | 'other' | null;
+type CardioType =
+  | 'treadmill'
+  | 'outdoor-run'
+  | 'stationary-bike'
+  | 'elliptical'
+  | 'other'
+  | null;
 
 const CARDIO_OPTIONS = [
   { id: 'treadmill', label: 'Correr en cinta', icon: 'run-fast' },
@@ -39,10 +45,11 @@ export function CardioInputField({
 }: CardioInputFieldProps) {
   const [cardioEntries, setCardioEntries] = useState<string[]>(() => {
     if (!value) return [];
-    return value.split(' | ').filter(e => e.trim());
+    return value.split(' | ').filter((e) => e.trim());
   });
   const [showCardioModal, setShowCardioModal] = useState(false);
-  const [selectedCardioType, setSelectedCardioType] = useState<CardioType>(null);
+  const [selectedCardioType, setSelectedCardioType] =
+    useState<CardioType>(null);
   const [customCardioType, setCustomCardioType] = useState('');
   const [cardioMinutes, setCardioMinutes] = useState('');
   const [cardioSpeed, setCardioSpeed] = useState('');
@@ -74,7 +81,10 @@ export function CardioInputField({
     if (!selectedCardioType || !cardioMinutes) return;
 
     let cardioText = '';
-    let typeLabel = customCardioType || CARDIO_OPTIONS.find(o => o.id === selectedCardioType)?.label || '';
+    let typeLabel =
+      customCardioType ||
+      CARDIO_OPTIONS.find((o) => o.id === selectedCardioType)?.label ||
+      '';
 
     cardioText = `${typeLabel}: ${cardioMinutes}min`;
     if (cardioSpeed) {
@@ -107,7 +117,12 @@ export function CardioInputField({
     <View style={styles.container}>
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <MaterialCommunityIcons name="run" size={20} color={theme.colors.text} style={styles.icon} />
+          <MaterialCommunityIcons
+            name="run"
+            size={20}
+            color={theme.colors.text}
+            style={styles.icon}
+          />
           <Text style={styles.title}>Cardio (opcional)</Text>
         </View>
         {onToggle && (
@@ -129,22 +144,36 @@ export function CardioInputField({
             <View key={index} style={styles.cardioDisplayContainer}>
               <Text style={styles.cardioDisplayText}>{entry}</Text>
               <Pressable
-                style={({ pressed }) => [styles.clearButton, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [
+                  styles.clearButton,
+                  pressed && styles.buttonPressed,
+                ]}
                 onPress={() => handleDeleteEntry(index)}
               >
-                <MaterialCommunityIcons name="close" size={16} color={theme.colors.error} />
+                <MaterialCommunityIcons
+                  name="close"
+                  size={16}
+                  color={theme.colors.error}
+                />
               </Pressable>
             </View>
           ))}
           <Pressable
-            style={({ pressed }) => [styles.addCardioButton, pressed && styles.buttonPressed]}
+            style={({ pressed }) => [
+              styles.addCardioButton,
+              pressed && styles.buttonPressed,
+            ]}
             onPress={() => {
               setShowCardioModal(true);
               setStep('type');
             }}
           >
             <View style={styles.buttonContent}>
-              <MaterialCommunityIcons name="plus" size={16} color={theme.colors.darkGray} />
+              <MaterialCommunityIcons
+                name="plus"
+                size={16}
+                color={theme.colors.darkGray}
+              />
               <Text style={styles.addCardioText}>Añadir</Text>
             </View>
           </Pressable>
@@ -166,21 +195,38 @@ export function CardioInputField({
           <View style={styles.modalContent}>
             {step === 'type' && !selectedCardioType && (
               <>
-                <Text style={styles.modalTitle}>Selecciona el tipo de cardio</Text>
-                <ScrollView style={styles.optionsScroll} showsVerticalScrollIndicator={false}>
-                  {CARDIO_OPTIONS.map(option => (
+                <Text style={styles.modalTitle}>
+                  Selecciona el tipo de cardio
+                </Text>
+                <ScrollView
+                  style={styles.optionsScroll}
+                  showsVerticalScrollIndicator={false}
+                >
+                  {CARDIO_OPTIONS.map((option) => (
                     <Pressable
                       key={option.id}
-                      style={({ pressed }) => [styles.optionButton, pressed && styles.optionButtonPressed]}
+                      style={({ pressed }) => [
+                        styles.optionButton,
+                        pressed && styles.optionButtonPressed,
+                      ]}
                       onPress={() => handleSelectCardioType(option.id)}
                     >
-                      <MaterialCommunityIcons name={option.icon as any} size={20} color={theme.colors.primary} />
-                      <Text style={styles.optionButtonText}>{option.label}</Text>
+                      <MaterialCommunityIcons
+                        name={option.icon as any}
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                      <Text style={styles.optionButtonText}>
+                        {option.label}
+                      </Text>
                     </Pressable>
                   ))}
                 </ScrollView>
                 <Pressable
-                  style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+                  style={({ pressed }) => [
+                    styles.closeButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={() => {
                     setShowCardioModal(false);
                     setStep('type');
@@ -193,7 +239,9 @@ export function CardioInputField({
 
             {step === 'type' && selectedCardioType === 'other' && (
               <>
-                <Text style={styles.modalTitle}>Especifica el tipo de ejercicio</Text>
+                <Text style={styles.modalTitle}>
+                  Especifica el tipo de ejercicio
+                </Text>
                 <TextInput
                   style={styles.customTypeInput}
                   placeholder="Ej: Escalador, Remo, etc."
@@ -202,14 +250,21 @@ export function CardioInputField({
                   onChangeText={setCustomCardioType}
                 />
                 <Pressable
-                  style={({ pressed }) => [styles.confirmButton, !customCardioType && styles.disabledButton, pressed && styles.buttonPressed]}
+                  style={({ pressed }) => [
+                    styles.confirmButton,
+                    !customCardioType && styles.disabledButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={handleCardioTypeConfirm}
                   disabled={!customCardioType}
                 >
                   <Text style={styles.confirmButtonText}>Continuar</Text>
                 </Pressable>
                 <Pressable
-                  style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+                  style={({ pressed }) => [
+                    styles.closeButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={() => {
                     setSelectedCardioType(null);
                     setCustomCardioType('');
@@ -266,14 +321,21 @@ export function CardioInputField({
                   </View>
                 </View>
                 <Pressable
-                  style={({ pressed }) => [styles.saveButton, !cardioMinutes && styles.disabledButton, pressed && styles.buttonPressed]}
+                  style={({ pressed }) => [
+                    styles.saveButton,
+                    !cardioMinutes && styles.disabledButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={handleSaveCardio}
                   disabled={!cardioMinutes}
                 >
                   <Text style={styles.saveButtonText}>Guardar</Text>
                 </Pressable>
                 <Pressable
-                  style={({ pressed }) => [styles.closeButton, pressed && styles.buttonPressed]}
+                  style={({ pressed }) => [
+                    styles.closeButton,
+                    pressed && styles.buttonPressed,
+                  ]}
                   onPress={() => {
                     setSelectedCardioType(null);
                     setCustomCardioType('');

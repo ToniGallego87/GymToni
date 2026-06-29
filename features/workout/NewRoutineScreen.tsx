@@ -1,6 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Pressable,
+  Modal,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -33,13 +40,26 @@ interface NewRoutineScreenProps {
   initialDays?: { title: string; exercisesText: string }[];
 }
 
+type RepUnit = 'reps' | 'seg';
+
+interface ExerciseForm {
+  id: string;
+  name: string;
+  sets: number;
+  // Reps/segundos como texto corto: admite rangos ("6-8") y matices ("10-12/lado").
+  reps: string;
+  unit: RepUnit;
+}
+
 interface NewRoutineDayForm {
   id: string;
   title: string;
-  exercisesText: string;
+  exercises: ExerciseForm[];
 }
 
 const EXTRA_EMOJIS = ['🟡', '🟣', '🟠', '⚪'];
+const MIN_SETS = 1;
+const MAX_SETS = 12;
 
 // Acento por tipo de día, coherente con getTrainingAccent (Inicio).
 const TYPE_ACCENT: Record<string, string> = {
@@ -83,49 +103,106 @@ function getDayAccent(
   return { accent, emoji };
 }
 
+// Formato con corchetes ("Press banca [4x6-8]").
 const EXERCISE_LINE_REGEX = /^(.*?)\s*\[(\d+)\s*x\s*([^\]]+)\]\s*$/i;
+// Formato plano: nombre + separador (raya o espacios) + [series x] reps. La reps
+// admite rango ("6-8") y una "s" final opcional para segundos ("30s", "20-30s").
+const EXERCISE_PLAIN_REGEX =
+  /^(.+?)\s*(?:[—–]\s*|\s+)(?:(\d+)\s*[x×]\s*)?(\d+(?:-\d+)?\s*(?:s|seg|sec)?)\s*$/i;
 
-// Previsualización de ejercicios: confirma que la sintaxis [4x6-8] se entendió.
-function parseExercisePreview(
-  text: string
-): { name: string; scheme: string }[] {
-  return text
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((line: string) => line.trim())
-    .filter(Boolean)
-    .map((line: string) => {
-      const parsed = line.match(EXERCISE_LINE_REGEX);
-      if (parsed) {
-        return {
-          name: parsed[1].trim() || 'Ejercicio',
-          scheme: `${parsed[2]}×${parsed[3].trim()}`,
-        };
-      }
-      return { name: line, scheme: '3×10-12' };
-    });
+function createEmptyExercise(): ExerciseForm {
+  return { id: generateId(), name: '', sets: 3, reps: '10-12', unit: 'reps' };
 }
 
-function parseExerciseLine(line: string, order: number): WorkoutExercise {
-  const parsed = line.match(EXERCISE_LINE_REGEX);
+// Construye una fila a partir de nombre + series + reps (string), detectando segundos.
+function makeExercise(
+  name: string,
+  setsRaw: string,
+  repsRaw: string
+): ExerciseForm {
+  const sets = Math.min(
+    MAX_SETS,
+    Math.max(MIN_SETS, parseInt(setsRaw, 10) || 3)
+  );
+  let reps = repsRaw.trim();
+  let unit: RepUnit = 'reps';
 
-  if (parsed) {
-    return {
-      id: generateId(),
-      name: parsed[1].trim(),
-      order,
-      targetSets: parseInt(parsed[2], 10),
-      targetReps: parsed[3].trim(),
-    };
+  if (/(s|seg|sec)\b/i.test(reps)) {
+    unit = 'seg';
+    reps = reps.replace(/\s*(s|seg|sec)\b/i, '').trim();
   }
 
   return {
     id: generateId(),
-    name: line.trim(),
-    order,
-    targetSets: 3,
-    targetReps: '10-12',
+    name: name.trim(),
+    sets,
+    reps: reps || '10',
+    unit,
   };
+}
+
+// Convierte una línea importada en una fila estructurada. Acepta "Nombre [4x6-8]",
+// "Nombre 4x6-8" o solo "Nombre".
+function parseImportedExercise(line: string): ExerciseForm {
+  const trimmed = line.trim();
+
+  const bracket = trimmed.match(EXERCISE_LINE_REGEX);
+  if (bracket) return makeExercise(bracket[1], bracket[2], bracket[3]);
+
+  const plain = trimmed.match(EXERCISE_PLAIN_REGEX);
+  if (plain && plain[3]) {
+    const name = plain[1].replace(/[—–]\s*$/, '').trim();
+    return makeExercise(name, plain[2] ?? '3', plain[3]);
+  }
+
+  return {
+    id: generateId(),
+    name: trimmed,
+    sets: 3,
+    reps: '10-12',
+    unit: 'reps',
+  };
+}
+
+// Parsea una rutina completa en texto: cada día es un bloque separado por línea en
+// blanco; la primera línea del bloque es el nombre del día y el resto, ejercicios.
+function buildDaysFromRoutineText(text: string): NewRoutineDayForm[] {
+  return text
+    .replace(/\r/g, '')
+    .split(/\n\s*\n+/)
+    .map((block) =>
+      block
+        .split('\n')
+        .map((l) => l.trim())
+        .filter(Boolean)
+    )
+    .filter((lines) => lines.length > 0)
+    .map((lines) => {
+      const [title, ...rest] = lines;
+      const exercises = rest.map(parseImportedExercise);
+      return {
+        id: generateId(),
+        title: title.trim(),
+        exercises: exercises.length ? exercises : [createEmptyExercise()],
+      };
+    });
+}
+
+function buildExercisesFromText(exercisesText: string): ExerciseForm[] {
+  const exercises = exercisesText
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map(parseImportedExercise);
+
+  return exercises.length ? exercises : [createEmptyExercise()];
+}
+
+// targetReps que entiende el resto de la app: añade la unidad de segundos.
+function buildTargetReps(exercise: ExerciseForm): string {
+  const reps = exercise.reps.trim() || (exercise.unit === 'seg' ? '30' : '10');
+  return exercise.unit === 'seg' ? `${reps}s` : reps;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -172,6 +249,144 @@ function CreateRoutineButton({ onPress }: { onPress: () => void }) {
   );
 }
 
+// Editor estructurado de un ejercicio: nombre + stepper de series + reps/segundos.
+function ExerciseRow({
+  exercise,
+  accent,
+  canRemove,
+  onChange,
+  onRemove,
+}: {
+  exercise: ExerciseForm;
+  accent: string;
+  canRemove: boolean;
+  onChange: (changes: Partial<ExerciseForm>) => void;
+  onRemove: () => void;
+}) {
+  const adjustSets = (delta: number) => {
+    const next = Math.min(MAX_SETS, Math.max(MIN_SETS, exercise.sets + delta));
+    onChange({ sets: next });
+  };
+
+  return (
+    <View style={styles.exerciseRow}>
+      <View style={styles.exerciseNameRow}>
+        <TextInput
+          style={styles.exerciseNameInput}
+          placeholder="Ej: Press banca"
+          placeholderTextColor={theme.colors.textSecondary}
+          value={exercise.name}
+          onChangeText={(value) => onChange({ name: value })}
+        />
+        <Pressable
+          style={({ pressed }) => [
+            styles.removeExerciseButton,
+            !canRemove && styles.controlDisabled,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={onRemove}
+          disabled={!canRemove}
+          hitSlop={8}
+        >
+          <MaterialCommunityIcons
+            name="close"
+            size={18}
+            color={canRemove ? theme.colors.error : theme.colors.textSecondary}
+          />
+        </Pressable>
+      </View>
+
+      <View style={styles.exerciseControlsRow}>
+        <View style={styles.controlBlock}>
+          <Text style={styles.controlLabel}>Series</Text>
+          <View style={styles.stepper}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.stepperButton,
+                exercise.sets <= MIN_SETS && styles.controlDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => adjustSets(-1)}
+              disabled={exercise.sets <= MIN_SETS}
+              hitSlop={6}
+            >
+              <MaterialCommunityIcons
+                name="minus"
+                size={18}
+                color={theme.colors.text}
+              />
+            </Pressable>
+            <Text style={styles.stepperValue}>{exercise.sets}</Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.stepperButton,
+                exercise.sets >= MAX_SETS && styles.controlDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => adjustSets(1)}
+              disabled={exercise.sets >= MAX_SETS}
+              hitSlop={6}
+            >
+              <MaterialCommunityIcons
+                name="plus"
+                size={18}
+                color={theme.colors.text}
+              />
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={[styles.controlBlock, styles.controlBlockGrow]}>
+          <Text style={styles.controlLabel}>
+            {exercise.unit === 'seg' ? 'Segundos' : 'Repeticiones'}
+          </Text>
+          <View style={styles.repsRow}>
+            <TextInput
+              style={styles.repsInput}
+              placeholder={exercise.unit === 'seg' ? 'Ej: 30-45' : 'Ej: 10-12'}
+              placeholderTextColor={theme.colors.textSecondary}
+              value={exercise.reps}
+              onChangeText={(value) => onChange({ reps: value })}
+              keyboardType="numbers-and-punctuation"
+              maxLength={10}
+            />
+            <View style={styles.unitToggle}>
+              {(['reps', 'seg'] as RepUnit[]).map((unit) => {
+                const active = exercise.unit === unit;
+                return (
+                  <Pressable
+                    key={unit}
+                    style={[
+                      styles.unitOption,
+                      active && [
+                        styles.unitOptionActive,
+                        { borderColor: accent },
+                      ],
+                    ]}
+                    onPress={() => onChange({ unit })}
+                  >
+                    <Text
+                      style={[
+                        styles.unitOptionText,
+                        active && [
+                          styles.unitOptionTextActive,
+                          { color: accent },
+                        ],
+                      ]}
+                    >
+                      {unit === 'reps' ? 'reps' : 'seg'}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 export function NewRoutineScreen({
   existingRoutineCount,
   onCreateRoutine,
@@ -185,39 +400,91 @@ export function NewRoutineScreen({
       ? initialDays.map((day) => ({
           id: generateId(),
           title: day.title,
-          exercisesText: day.exercisesText,
+          exercises: buildExercisesFromText(day.exercisesText),
         }))
-      : [{ id: generateId(), title: '', exercisesText: '' }]
+      : [{ id: generateId(), title: '', exercises: [createEmptyExercise()] }]
   );
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+
+  const handleImportText = () => {
+    const parsed = buildDaysFromRoutineText(importText);
+    if (!parsed.length) {
+      setToast({
+        message: 'No se reconoció ninguna rutina en el texto',
+        type: 'error',
+      });
+      return;
+    }
+    const limited = parsed.slice(0, 7);
+    setDays(limited);
+    setShowImport(false);
+    setImportText('');
+    setToast({
+      message: `Importados ${limited.length} día${
+        limited.length > 1 ? 's' : ''
+      }`,
+      type: 'success',
+    });
+  };
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
     Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
   const scrollBottomPadding =
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
-  const canAddNewDay = useMemo(
-    () =>
-      days.every(
-        (day: NewRoutineDayForm) => day.title.trim() && day.exercisesText.trim()
-      ),
-    [days]
-  );
+  const isDayComplete = (day: NewRoutineDayForm) =>
+    !!day.title.trim() && day.exercises.some((ex) => ex.name.trim());
+
+  const canAddNewDay = useMemo(() => days.every(isDayComplete), [days]);
   const canRemoveDay = days.length > 1;
   const canAddMoreDays = canAddNewDay && days.length < 7;
 
-  const handleUpdateDay = (
+  const updateDay = (
     dayId: string,
-    key: keyof NewRoutineDayForm,
-    value: string
+    updater: (day: NewRoutineDayForm) => NewRoutineDayForm
   ) => {
-    setDays((previous: NewRoutineDayForm[]) =>
-      previous.map((day: NewRoutineDayForm) =>
-        day.id === dayId ? { ...day, [key]: value } : day
-      )
+    setDays((previous) =>
+      previous.map((day) => (day.id === dayId ? updater(day) : day))
+    );
+  };
+
+  const handleUpdateTitle = (dayId: string, value: string) => {
+    updateDay(dayId, (day) => ({ ...day, title: value }));
+  };
+
+  const handleUpdateExercise = (
+    dayId: string,
+    exerciseId: string,
+    changes: Partial<ExerciseForm>
+  ) => {
+    updateDay(dayId, (day) => ({
+      ...day,
+      exercises: day.exercises.map((ex) =>
+        ex.id === exerciseId ? { ...ex, ...changes } : ex
+      ),
+    }));
+  };
+
+  const handleAddExercise = (dayId: string) => {
+    updateDay(dayId, (day) => ({
+      ...day,
+      exercises: [...day.exercises, createEmptyExercise()],
+    }));
+  };
+
+  const handleRemoveExercise = (dayId: string, exerciseId: string) => {
+    updateDay(dayId, (day) =>
+      day.exercises.length <= 1
+        ? day
+        : {
+            ...day,
+            exercises: day.exercises.filter((ex) => ex.id !== exerciseId),
+          }
     );
   };
 
@@ -227,14 +494,14 @@ export function NewRoutineScreen({
       return;
     }
 
-    setDays((previous: NewRoutineDayForm[]) => [
+    setDays((previous) => [
       ...previous,
-      { id: generateId(), title: '', exercisesText: '' },
+      { id: generateId(), title: '', exercises: [createEmptyExercise()] },
     ]);
   };
 
   const handleRemoveDay = () => {
-    setDays((previous: NewRoutineDayForm[]) => previous.slice(0, -1));
+    setDays((previous) => previous.slice(0, -1));
   };
 
   const buildRoutineDays = (): WorkoutDay[] => {
@@ -244,19 +511,14 @@ export function NewRoutineScreen({
 
     const typeOrder: string[] = [];
 
-    return days.map((entry: NewRoutineDayForm, index: number) => {
+    return days.map((entry, index) => {
       const dayTitle = entry.title.trim();
       if (!dayTitle) {
         throw new Error(`Falta el título del Día ${index + 1}`);
       }
 
-      const exerciseLines = entry.exercisesText
-        .replace(/\r/g, '')
-        .split('\n')
-        .map((line: string) => line.trim())
-        .filter(Boolean);
-
-      if (!exerciseLines.length) {
+      const namedExercises = entry.exercises.filter((ex) => ex.name.trim());
+      if (!namedExercises.length) {
         throw new Error(`Faltan ejercicios en el Día ${index + 1}`);
       }
 
@@ -265,9 +527,14 @@ export function NewRoutineScreen({
         typeOrder.push(dayType);
       }
 
-      const exercises = exerciseLines.map(
-        (line: string, exerciseIndex: number) =>
-          parseExerciseLine(line, exerciseIndex + 1)
+      const exercises: WorkoutExercise[] = namedExercises.map(
+        (ex, exerciseIndex) => ({
+          id: generateId(),
+          name: ex.name.trim(),
+          order: exerciseIndex + 1,
+          targetSets: ex.sets,
+          targetReps: buildTargetReps(ex),
+        })
       );
 
       return {
@@ -316,9 +583,8 @@ export function NewRoutineScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {days.map((day: NewRoutineDayForm, index: number) => {
-          const { accent, emoji } = getDayAccent(day.title, index);
-          const preview = parseExercisePreview(day.exercisesText);
+        {days.map((day, index) => {
+          const { accent } = getDayAccent(day.title, index);
 
           return (
             <View
@@ -334,53 +600,51 @@ export function NewRoutineScreen({
                   color={accent}
                 />
                 <Text style={styles.dayTitleDisplay}>Día {index + 1}</Text>
-                {!!emoji && <Text style={styles.dayTypeEmoji}>{emoji}</Text>}
               </View>
 
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: Push pesado"
-                placeholderTextColor={theme.colors.textSecondary}
-                value={day.title}
-                onChangeText={(value: string) =>
-                  handleUpdateDay(day.id, 'title', value)
-                }
-              />
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej: Push pesado"
+                  placeholderTextColor={theme.colors.textSecondary}
+                  value={day.title}
+                  onChangeText={(value) => handleUpdateTitle(day.id, value)}
+                />
+              </View>
 
               <Text style={styles.label}>Ejercicios</Text>
-              <TextInput
-                style={styles.exercisesInput}
-                placeholder={
-                  'Un ejercicio por línea\nOpcional: Press banca [4x6-8]'
-                }
-                placeholderTextColor={theme.colors.textSecondary}
-                value={day.exercisesText}
-                onChangeText={(value: string) =>
-                  handleUpdateDay(day.id, 'exercisesText', value)
-                }
-                multiline
-                textAlignVertical="top"
-              />
 
-              {preview.length > 0 && (
-                <View style={styles.previewWrap}>
-                  {preview.map(
-                    (ex: { name: string; scheme: string }, exIndex: number) => (
-                      <View
-                        key={exIndex}
-                        style={[styles.previewChip, { borderColor: accent }]}
-                      >
-                        <Text style={styles.previewChipName} numberOfLines={1}>
-                          {ex.name}
-                        </Text>
-                        <Text style={styles.previewChipScheme}>
-                          {ex.scheme}
-                        </Text>
-                      </View>
-                    )
-                  )}
-                </View>
-              )}
+              {day.exercises.map((exercise) => (
+                <ExerciseRow
+                  key={exercise.id}
+                  exercise={exercise}
+                  accent={
+                    accent === theme.colors.border
+                      ? theme.colors.primary
+                      : accent
+                  }
+                  canRemove={day.exercises.length > 1}
+                  onChange={(changes) =>
+                    handleUpdateExercise(day.id, exercise.id, changes)
+                  }
+                  onRemove={() => handleRemoveExercise(day.id, exercise.id)}
+                />
+              ))}
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.addExerciseButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => handleAddExercise(day.id)}
+              >
+                <MaterialCommunityIcons
+                  name="plus-circle-outline"
+                  size={18}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.addExerciseText}>Añadir ejercicio</Text>
+              </Pressable>
             </View>
           );
         })}
@@ -451,6 +715,21 @@ export function NewRoutineScreen({
             <Text style={styles.qrButtonText}>Crear a partir de QR</Text>
           </Pressable>
         )}
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.qrButton,
+            pressed && styles.qrButtonPressed,
+          ]}
+          onPress={() => setShowImport(true)}
+        >
+          <MaterialCommunityIcons
+            name="text-box-plus-outline"
+            size={18}
+            color={theme.colors.primary}
+          />
+          <Text style={styles.qrButtonText}>Crear a partir de texto plano</Text>
+        </Pressable>
       </StretchScrollView>
 
       <GlassTopBar
@@ -470,6 +749,57 @@ export function NewRoutineScreen({
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+
+      <Modal
+        visible={showImport}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowImport(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Crear a partir de texto plano</Text>
+            <Text style={styles.modalHint}>
+              Un día por bloque (sepáralos con una línea en blanco). La primera
+              línea es el nombre del día; debajo, un ejercicio por línea. Añade
+              una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).
+            </Text>
+            <TextInput
+              style={styles.modalTextarea}
+              multiline
+              textAlignVertical="top"
+              placeholder={
+                'Push\nPress banca 4x6-8\nPress militar 3x8-10\n\nPull\nDominadas 4x8\nRemo 4x10-12'
+              }
+              placeholderTextColor={theme.colors.textSecondary}
+              value={importText}
+              onChangeText={setImportText}
+            />
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalButton,
+                  styles.modalCancel,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => setShowImport(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancelar</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.modalButton,
+                  styles.modalConfirm,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={handleImportText}
+              >
+                <Text style={styles.modalConfirmText}>Importar</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {toast && (
         <Toast
@@ -530,7 +860,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     lineHeight: 18,
   },
+  inputRow: {
+    flexDirection: 'row',
+  },
   input: {
+    flex: 1,
     backgroundColor: theme.colors.darkGray,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
@@ -541,53 +875,151 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
-  exercisesInput: {
+  exerciseRow: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 12,
+    gap: 12,
+  },
+  exerciseNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  exerciseNameInput: {
+    flex: 1,
+    minWidth: 0,
     backgroundColor: theme.colors.darkGray,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 10,
     color: theme.colors.text,
-    minHeight: 120,
-    fontSize: 13,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 20,
   },
-  previewWrap: {
+  removeExerciseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  exerciseControlsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    gap: 12,
+    alignItems: 'flex-start',
   },
-  previewChip: {
+  controlBlock: {
+    gap: 6,
+  },
+  controlBlockGrow: {
+    flex: 1,
+    minWidth: 0,
+  },
+  controlLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  stepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.darkGray,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  stepperButton: {
+    width: 32,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperValue: {
+    minWidth: 24,
+    textAlign: 'center',
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  repsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    maxWidth: '100%',
-    paddingLeft: 12,
-    paddingRight: 6,
-    paddingVertical: 5,
-    borderRadius: theme.borderRadius.pill,
+  },
+  repsInput: {
+    flex: 1,
+    minWidth: 0,
+    backgroundColor: theme.colors.darkGray,
+    borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
+    paddingHorizontal: 12,
+    height: 44,
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
   },
-  previewChipName: {
-    flexShrink: 1,
+  unitToggle: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.darkGray,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    overflow: 'hidden',
+  },
+  unitOption: {
+    paddingHorizontal: 12,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderBottomWidth: 2,
+    borderColor: 'transparent',
+  },
+  unitOptionActive: {
+    backgroundColor: theme.colors.surface,
+  },
+  unitOptionText: {
     fontSize: 13,
     fontWeight: '700',
-    color: theme.colors.text,
+    color: theme.colors.textSecondary,
+  },
+  unitOptionTextActive: {
+    color: theme.colors.primary,
+  },
+  addExerciseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  addExerciseText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
     lineHeight: 18,
   },
-  previewChipScheme: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.primaryLight,
-    backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: theme.borderRadius.pill,
-    overflow: 'hidden',
-    lineHeight: 16,
+  buttonPressed: {
+    opacity: 0.85,
+  },
+  controlDisabled: {
+    opacity: 0.4,
   },
   rowButtons: {
     flexDirection: 'row',
@@ -671,6 +1103,73 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '700',
     lineHeight: 20,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalCard: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 18,
+    gap: 12,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.colors.text,
+  },
+  modalHint: {
+    fontSize: 13,
+    color: theme.colors.textSecondary,
+    lineHeight: 18,
+  },
+  modalTextarea: {
+    minHeight: 180,
+    maxHeight: 320,
+    backgroundColor: theme.colors.darkGray,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: 12,
+    color: theme.colors.text,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalButton: {
+    flex: 1,
+    minWidth: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+  },
+  modalCancel: {
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  modalCancelText: {
+    color: theme.colors.textSecondary,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  modalConfirm: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary,
+  },
+  modalConfirmText: {
+    color: theme.colors.darkGray,
+    fontWeight: '800',
+    fontSize: 14,
   },
   topBarTitleRow: {
     flexDirection: 'row',

@@ -73,8 +73,11 @@ export function Button({
           styles.inner,
           getPadding(),
           {
-            backgroundColor: isFilled ? 'transparent' : getFlatBackgroundColor(),
-            borderColor: variant === 'secondary' ? theme.colors.border : 'transparent',
+            backgroundColor: isFilled
+              ? 'transparent'
+              : getFlatBackgroundColor(),
+            borderColor:
+              variant === 'secondary' ? theme.colors.border : 'transparent',
             borderWidth: variant === 'secondary' ? 1 : 0,
           },
         ]}

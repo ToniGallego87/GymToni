@@ -29,7 +29,7 @@ let writeChain: Promise<unknown> = Promise.resolve();
 
 function enqueue(operation: () => Promise<void>): void {
   const run = () =>
-    operation().catch(error => {
+    operation().catch((error) => {
       console.error('Error persisting change:', error);
     });
   writeChain = writeChain.then(run, run);
@@ -48,7 +48,7 @@ function scheduleWebSave(data: WorkoutAppData): void {
     const snapshot = pendingWebData;
     pendingWebData = null;
     if (snapshot) {
-      saveAppData(snapshot).catch(error => {
+      saveAppData(snapshot).catch((error) => {
         console.error('Error persisting change:', error);
       });
     }

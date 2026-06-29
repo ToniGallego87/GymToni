@@ -1,6 +1,6 @@
 {
   "name": "gymtoni",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "description": "App para registrar entrenamientos de gimnasio de forma rápida",
   "main": "expo-router/entry",

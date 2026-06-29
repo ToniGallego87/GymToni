@@ -31,7 +31,7 @@ export const theme = {
     emoji_blue: '#6F8FDF',
     emoji_purple: '#784c9a',
     emoji_green: '#67B58C',
-    emoji_orange: '#FF9500'
+    emoji_orange: '#FF9500',
   },
 
   // Fuente display (Anton) para titulares. Cargada en App.tsx vía expo-font.
@@ -112,10 +112,13 @@ export const theme = {
   },
 };
 
-type DayAccentTarget = {
-  emoji?: string;
-  name?: string;
-} | null | undefined;
+type DayAccentTarget =
+  | {
+      emoji?: string;
+      name?: string;
+    }
+  | null
+  | undefined;
 
 export function getDisplayDayName(name?: string | null) {
   return name ? name.replace(/^Día\s+\d+\s*[-–—]\s*/i, '') : '';
@@ -123,16 +126,16 @@ export function getDisplayDayName(name?: string | null) {
 
 export function getTrainingAccent(target?: DayAccentTarget) {
   if (!target?.emoji) return theme.colors.primary;
-  
+
   // Map all available emojis to accent colors
   const emojiColorMap: Record<string, string> = {
-    '🔴': theme.colors.error,              // Rojo
-    '🟠': theme.colors.emoji_orange,       // Naranja
-    '🟡': theme.colors.primary,            // Amarillo
-    '🟢': theme.colors.emoji_green,        // Verde
-    '🔵': theme.colors.emoji_blue,         // Azul
-    '🟣': theme.colors.emoji_purple,       // Púrpura
+    '🔴': theme.colors.error, // Rojo
+    '🟠': theme.colors.emoji_orange, // Naranja
+    '🟡': theme.colors.primary, // Amarillo
+    '🟢': theme.colors.emoji_green, // Verde
+    '🔵': theme.colors.emoji_blue, // Azul
+    '🟣': theme.colors.emoji_purple, // Púrpura
   };
-  
+
   return emojiColorMap[target.emoji] || theme.colors.primary;
 }

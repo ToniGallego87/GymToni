@@ -23,14 +23,14 @@ npm start          # Expo Go (móvil)
 
 ## Documentación
 
-| Documento | Contenido |
-|-----------|-----------|
+| Documento                                  | Contenido                                |
+| ------------------------------------------ | ---------------------------------------- |
 | [ARCHITECTURE.md](.github/ARCHITECTURE.md) | Stack, flujo de datos, tipos, navegación |
-| [CONVENTIONS.md](.github/CONVENTIONS.md) | Naming, patrones, reglas de código |
-| [SETUP.md](.github/docs/SETUP.md) | Instalación detallada y estructura |
-| [COMMANDS.md](.github/docs/COMMANDS.md) | Comandos de desarrollo y build |
-| [UPDATES.md](.github/docs/UPDATES.md) | Historial de versiones |
-| [ROADMAP.md](.github/docs/ROADMAP.md) | Features futuras (no MVP) |
+| [CONVENTIONS.md](.github/CONVENTIONS.md)   | Naming, patrones, reglas de código       |
+| [SETUP.md](.github/docs/SETUP.md)          | Instalación detallada y estructura       |
+| [COMMANDS.md](.github/docs/COMMANDS.md)    | Comandos de desarrollo y build           |
+| [UPDATES.md](.github/docs/UPDATES.md)      | Historial de versiones                   |
+| [ROADMAP.md](.github/docs/ROADMAP.md)      | Features futuras (no MVP)                |
 
 ## Estructura
 
