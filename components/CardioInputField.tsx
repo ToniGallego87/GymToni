@@ -5,7 +5,6 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  GestureResponderEvent,
   Modal,
   ScrollView,
 } from 'react-native';
@@ -15,9 +14,9 @@ import { theme } from '@lib/theme';
 interface CardioInputFieldProps {
   value: string;
   onChangeText: (text: string) => void;
-  expanded?: boolean;
-  onToggle?: (event: GestureResponderEvent) => void;
   placeholder?: string;
+  // Color de acento del día (push/pull/pierna). Tiñe el borde izquierdo.
+  accent?: string;
 }
 
 type CardioType =
@@ -39,14 +38,16 @@ const CARDIO_OPTIONS = [
 export function CardioInputField({
   value,
   onChangeText,
-  expanded = true,
-  onToggle,
   placeholder = 'Ej: Cinta: 22.5mins, 11.5kmh',
+  accent = theme.colors.primary,
 }: CardioInputFieldProps) {
   const [cardioEntries, setCardioEntries] = useState<string[]>(() => {
     if (!value) return [];
     return value.split(' | ').filter((e) => e.trim());
   });
+  // La tarjeta solo existe cuando hay al menos un cardio guardado; mientras no
+  // lo haya, se muestra el botón "Añadir cardio".
+  const isExpanded = cardioEntries.length > 0;
   const [showCardioModal, setShowCardioModal] = useState(false);
   const [selectedCardioType, setSelectedCardioType] =
     useState<CardioType>(null);
@@ -114,32 +115,41 @@ export function CardioInputField({
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <MaterialCommunityIcons
-            name="run"
-            size={20}
-            color={theme.colors.text}
-            style={styles.icon}
-          />
-          <Text style={styles.title}>Cardio (opcional)</Text>
-        </View>
-        {onToggle && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.toggleButton,
-              pressed && styles.toggleButtonPressed,
-            ]}
-            onPress={onToggle}
-          >
-            <Text style={styles.toggleText}>{expanded ? '▼' : '▶'}</Text>
-          </Pressable>
-        )}
-      </View>
+    <>
+      {!isExpanded ? (
+        <Pressable
+          style={({ pressed }) => [
+            styles.collapsedButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => {
+            setShowCardioModal(true);
+            setStep('type');
+          }}
+        >
+          <View style={styles.buttonContent}>
+            <MaterialCommunityIcons
+              name="run-fast"
+              size={18}
+              color={theme.colors.darkGray}
+            />
+            <Text style={styles.addCardioText}>Añadir cardio</Text>
+          </View>
+        </Pressable>
+      ) : (
+        <View style={[styles.container, { borderLeftColor: accent }]}>
+          <View style={styles.header}>
+            <View style={styles.headerLeft}>
+              <MaterialCommunityIcons
+                name="run"
+                size={20}
+                color={theme.colors.text}
+                style={styles.icon}
+              />
+              <Text style={styles.title}>Cardio</Text>
+            </View>
+          </View>
 
-      {expanded && (
-        <>
           {cardioEntries.map((entry, index) => (
             <View key={index} style={styles.cardioDisplayContainer}>
               <Text style={styles.cardioDisplayText}>{entry}</Text>
@@ -177,7 +187,7 @@ export function CardioInputField({
               <Text style={styles.addCardioText}>Añadir</Text>
             </View>
           </Pressable>
-        </>
+        </View>
       )}
 
       <Modal
@@ -352,7 +362,7 @@ export function CardioInputField({
           </View>
         </View>
       </Modal>
-    </View>
+    </>
   );
 }
 
@@ -428,6 +438,14 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     alignItems: 'center',
     marginTop: 10,
+  },
+  collapsedButton: {
+    backgroundColor: theme.colors.success,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: theme.borderRadius.sm,
+    alignItems: 'center',
+    marginVertical: 12,
   },
   addCardioText: {
     color: theme.colors.darkGray,

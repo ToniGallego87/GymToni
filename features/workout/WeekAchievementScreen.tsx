@@ -50,12 +50,12 @@ interface WeekAchievementScreenProps {
 // Resolución y cadencia del vídeo exportado (16:9 vertical, aptos para H.264).
 const VIDEO_WIDTH = 720;
 const VIDEO_HEIGHT = 1280;
-const VIDEO_FPS = 10;
-// Fotogramas ÚNICOS que se capturan (la animación 0→1). Para no disparar el coste
-// de captura, cada uno se repite en el vídeo final (ralentiza sin recapturar).
-const VIDEO_CAPTURE_FRAMES = 120;
-const VIDEO_FRAME_REPEAT = 4; // 120×4 / 10fps ≈ 48 s → animación ~20× más lenta que la versión inicial (~2,4 s).
-const VIDEO_END_HOLD = 24; // Fotogramas finales estáticos (~2,4 s con el resultado completo).
+const VIDEO_FPS = 30; // 30 fps para que la animación se vea fluida (sin trompicones).
+// Fotogramas ÚNICOS que se capturan (la animación 0→1). A 30 fps y sin repetir,
+// cada uno es un fotograma real → movimiento suave.
+const VIDEO_CAPTURE_FRAMES = 120; // 120 / 30fps = 4 s de animación.
+const VIDEO_FRAME_REPEAT = 1;
+const VIDEO_END_HOLD = 120; // 120 / 30fps = 4 s con el resultado completo → ~8 s totales.
 
 // Carga un asset bundleado como data URI PNG (necesario para que las imágenes se
 // rastericen dentro del SVG al exportarlo con toDataURL, también en web).
@@ -80,6 +80,9 @@ async function loadImageDataUri(moduleRef: number): Promise<string> {
   });
   return `data:image/png;base64,${base64}`;
 }
+
+// Wordmark de la app (logo + "GymToni"). En nativo se pasa tal cual al póster.
+const TITLE_ASSET = require('../../assets/title.png');
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -144,7 +147,12 @@ export function WeekAchievementScreen({
   const [busy, setBusy] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
   const [videoProgress, setVideoProgress] = useState(0);
-  const [titleUri, setTitleUri] = useState<string | undefined>(undefined);
+  // En nativo el wordmark se pasa como módulo de asset (require → número): así
+  // react-native-svg lo rasteriza dentro de toDataURL en Android. En web hace
+  // falta un data URI, que se carga de forma diferida más abajo.
+  const [webTitleUri, setWebTitleUri] = useState<string | undefined>(undefined);
+  const titleUri: string | number | undefined =
+    Platform.OS === 'web' ? webTitleUri : TITLE_ASSET;
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -169,13 +177,14 @@ export function WeekAchievementScreen({
   }, [reveal]);
 
   useEffect(() => {
+    if (Platform.OS !== 'web') return; // En nativo se usa el asset directo.
     let active = true;
     (async () => {
       try {
-        const uri = await loadImageDataUri(require('../../assets/title.png'));
-        if (active) setTitleUri(uri);
+        const uri = await loadImageDataUri(TITLE_ASSET);
+        if (active) setWebTitleUri(uri);
       } catch {
-        // Sin imagen el póster usa el texto "GymToni" de respaldo.
+        // Sin imagen, el póster deja la cabecera vacía.
       }
     })();
     return () => {

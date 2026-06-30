@@ -21,6 +21,11 @@ web-build/
 # Build logs
 buildlog.txt
 
+# Android build outputs (generados)
+android/build/
+android/app/build/
+modules/*/android/build/
+
 # IDE
 .vscode/
 .idea/

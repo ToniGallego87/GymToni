@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -17,11 +17,18 @@ import {
   UIManager,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  withDelay,
+  Easing,
+  runOnJS,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
-import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '../../types';
+import { WorkoutDay, WorkoutRoutine, WorkoutLog, ExerciseLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import {
   buildImprovementFromStrengthScores,
@@ -378,6 +385,103 @@ function animateLayout() {
   );
 }
 
+function CollapsibleWeekLogs({
+  isExpanded,
+  children,
+}: {
+  isExpanded: boolean;
+  children: React.ReactNode;
+}) {
+  const heightValue = useSharedValue(0);
+  const contentHeightRef = useRef<number>(0);
+  const [isMounted, setIsMounted] = useState(isExpanded);
+
+  const animatedStyle = useAnimatedStyle(() => ({
+    height: heightValue.value,
+    overflow: 'hidden',
+  }));
+
+  useEffect(() => {
+    if (isExpanded) {
+      setIsMounted(true);
+      if (contentHeightRef.current > 0) {
+        heightValue.value = withTiming(contentHeightRef.current, {
+          duration: 280,
+          easing: Easing.out(Easing.cubic),
+        });
+      }
+    } else {
+      contentHeightRef.current = 0;
+      heightValue.value = withTiming(
+        0,
+        { duration: 280, easing: Easing.out(Easing.cubic) },
+        (finished) => {
+          if (finished) runOnJS(setIsMounted)(false);
+        }
+      );
+    }
+  }, [isExpanded]);
+
+  return (
+    <Animated.View style={animatedStyle}>
+      {isMounted && (
+        <View
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0 && h !== contentHeightRef.current) {
+              contentHeightRef.current = h;
+              if (isExpanded) {
+                heightValue.value = withTiming(h, {
+                  duration: 280,
+                  easing: Easing.out(Easing.cubic),
+                });
+              }
+            }
+          }}
+        >
+          {children}
+        </View>
+      )}
+    </Animated.View>
+  );
+}
+
+function AnimatedLogItem({
+  isExpanded,
+  index,
+  children,
+}: {
+  isExpanded: boolean;
+  index: number;
+  children: React.ReactNode;
+}) {
+  const opacity = useSharedValue(0);
+  const translateY = useSharedValue(16);
+
+  useEffect(() => {
+    if (isExpanded) {
+      opacity.value = withDelay(
+        index * 60,
+        withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) })
+      );
+      translateY.value = withDelay(
+        index * 60,
+        withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) })
+      );
+    } else {
+      opacity.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
+      translateY.value = withTiming(-16, { duration: 200, easing: Easing.out(Easing.cubic) });
+    }
+  }, [isExpanded]);
+
+  const animStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ translateY: translateY.value }],
+  }));
+
+  return <Animated.View style={animStyle}>{children}</Animated.View>;
+}
+
 type TrendKind = 'up' | 'down' | 'neutral';
 
 // Icono de tendencia coherente (sustituye las flechas Unicode ↑↓=).
@@ -520,26 +624,69 @@ export function HomeScreen({
     return { symbol, styleKey, display, kind };
   };
 
+  const todayWorkoutStatus = useMemo((): 'none' | 'in-progress' | 'completed' => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    const todayLog = displayedRoutineLogs.find((log) =>
+      log.date
+        ? log.date === todayKey
+        : new Date(log.createdAt).toISOString().split('T')[0] === todayKey
+    );
+    if (!todayLog) return 'none';
+
+    let todayDay: WorkoutDay | undefined;
+    for (const routine of state.routines) {
+      const day = routine.days.find((d) => d.id === todayLog.dayId);
+      if (day) { todayDay = day; break; }
+    }
+
+    if (!todayDay || todayDay.exercises.length === 0) return 'completed';
+
+    const allFilled = todayDay.exercises.every((ex) => {
+      const exLog = todayLog.exercises.find(
+        (e: ExerciseLog) => e.exerciseId === ex.id
+      );
+      return exLog && exLog.parsedSets && exLog.parsedSets.length > 0;
+    });
+    return allFilled ? 'completed' : 'in-progress';
+  }, [displayedRoutineLogs, state.routines]);
+
   const handleStartPress = () => {
     if (hasNoRoutines) {
       onCreateRoutine?.();
       return;
     }
 
-    // Semana completada: abrir la imagen de logros en lugar de iniciar entreno.
-    if (isCurrentWeekCompleted) {
+    // Semana completada hoy: abrir la imagen de logros en lugar de iniciar entreno.
+    if (isCurrentWeekCompletedToday) {
       handleShowWeekAchievement();
       return;
     }
 
-    // Si el entrenamiento de hoy ya está completado, no hacer nada
-    if (isTodayWorkoutCompleted()) {
+    // Entrenamiento del día completado: no hacer nada
+    if (todayWorkoutStatus === 'completed') {
       return;
     }
 
     // No permitir iniciar entrenamiento con rutina vieja que NO sea la activa
     if (isRoutineOld && !isDisplayedRoutineActive) {
       return;
+    }
+
+    // Entrenamiento iniciado pero con ejercicios pendientes: abrir directamente
+    if (todayWorkoutStatus === 'in-progress') {
+      const todayKey = new Date().toISOString().split('T')[0];
+      const todayLog = displayedRoutineLogs.find((log) =>
+        log.date
+          ? log.date === todayKey
+          : new Date(log.createdAt).toISOString().split('T')[0] === todayKey
+      );
+      if (todayLog) {
+        const todayDay = getDay(todayLog.dayId);
+        if (todayDay) {
+          onSelectDay(todayDay);
+          return;
+        }
+      }
     }
 
     if (onOpenDaySelector) {
@@ -559,16 +706,6 @@ export function HomeScreen({
       if (day) return day;
     }
     return undefined;
-  };
-
-  const isTodayWorkoutCompleted = (): boolean => {
-    const todayKey = new Date().toISOString().split('T')[0];
-    return displayedRoutineLogs.some((log) => {
-      if (log.date) {
-        return log.date === todayKey;
-      }
-      return new Date(log.createdAt).toISOString().split('T')[0] === todayKey;
-    });
   };
 
   const isWeekCompleted = (weekLogs: WorkoutLog[]): boolean => {
@@ -716,6 +853,19 @@ export function HomeScreen({
   const isCurrentWeekCompleted =
     isDisplayedRoutineActive && isWeekCompleted(currentWeekLogsBlock);
 
+  // El botón/tarjeta "¡Semana completada!" solo está disponible el mismo día en que
+  // se completó la semana (hay algún log del bloque con fecha de hoy). Al día
+  // siguiente la tarjeta vuelve a "Empezar entrenamiento" para iniciar la siguiente.
+  const isCurrentWeekCompletedToday = useMemo(() => {
+    if (!isCurrentWeekCompleted) return false;
+    const todayKey = new Date().toISOString().split('T')[0];
+    return currentWeekLogsBlock.some(
+      (log) =>
+        (log.date ?? new Date(log.createdAt).toISOString().split('T')[0]) ===
+        todayKey
+    );
+  }, [isCurrentWeekCompleted, currentWeekLogsBlock]);
+
   // Racha perfecta: todas las semanas registradas están completas (nunca se ha
   // faltado un solo día de la rutina).
   const streakIsPerfect = useMemo(() => {
@@ -832,7 +982,7 @@ export function HomeScreen({
         title: 'Rutina Cerrada',
       };
     }
-    if (isCurrentWeekCompleted) {
+    if (isCurrentWeekCompletedToday) {
       return {
         variant: 'week-completed',
         icon: 'trophy-variant',
@@ -840,7 +990,14 @@ export function HomeScreen({
         subtitle: 'Pulsa para compartir resultados',
       };
     }
-    if (isTodayWorkoutCompleted()) {
+    if (todayWorkoutStatus === 'in-progress') {
+      return {
+        variant: 'start',
+        icon: 'weight-lifter',
+        title: 'Continuar entrenamiento',
+      };
+    }
+    if (todayWorkoutStatus === 'completed') {
       return {
         variant: 'completed',
         icon: 'check-bold',
@@ -1292,7 +1449,7 @@ export function HomeScreen({
                         setExpandedWeekBlocks(
                           (prev: Record<number, boolean>) => ({
                             ...prev,
-                            [block]: !prev[block],
+                            [block]: !isExpanded,
                           })
                         );
                       }}
@@ -1347,8 +1504,8 @@ export function HomeScreen({
                       </View>
                     </Pressable>
 
-                    {isExpanded &&
-                      weekLogs.map((log: WorkoutLog) => {
+                    <CollapsibleWeekLogs isExpanded={isExpanded}>
+                      {weekLogs.map((log: WorkoutLog, logIndex: number) => {
                         const day = getDay(log.dayId);
                         const improvement = getLogImprovement(log);
                         const improvementFmt = improvement
@@ -1357,15 +1514,28 @@ export function HomeScreen({
                         const isToday = isLogFromToday(log);
                         if (!day) return null;
 
+                        const logBorderColor =
+                          isToday || isCurrentWeek
+                            ? theme.colors.primary
+                            : improvementFmt
+                            ? improvementFmt.kind === 'up'
+                              ? theme.colors.success
+                              : improvementFmt.kind === 'down'
+                              ? theme.colors.error
+                              : theme.colors.warning
+                            : theme.colors.border;
+
                         return (
-                          <Animated.View
+                          <AnimatedLogItem
                             key={log.id}
-                            entering={FadeIn.duration(220)}
+                            isExpanded={isExpanded}
+                            index={logIndex}
                           >
                             <Pressable
                               style={({ pressed }: { pressed: boolean }) => [
                                 styles.historyLogCard,
                                 isToday && styles.historyLogCardToday,
+                                { borderLeftColor: logBorderColor },
                                 pressed && styles.historyLogCardPressed,
                               ]}
                               onPress={() => {
@@ -1428,9 +1598,10 @@ export function HomeScreen({
                                 </Text>
                               </View>
                             </Pressable>
-                          </Animated.View>
+                          </AnimatedLogItem>
                         );
                       })}
+                    </CollapsibleWeekLogs>
                   </View>
                 );
               })}
@@ -1912,7 +2083,7 @@ const styles = StyleSheet.create({
     minHeight: 52,
     borderRadius: theme.borderRadius.sm,
     backgroundColor: 'transparent',
-    borderLeftWidth: 4,
+    borderLeftWidth: 5,
     borderColor: theme.colors.primary,
     overflow: 'hidden',
     flexDirection: 'row',
@@ -1965,11 +2136,11 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   historyLogCardToday: {
-    borderColor: theme.colors.current,
+    borderColor: theme.colors.primary,
     borderWidth: 2.5,
     borderLeftWidth: 2.5,
-    borderLeftColor: theme.colors.current,
-    backgroundColor: 'rgba(111, 143, 223, 0.10)',
+    borderLeftColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryMuted,
   },
   historyLogCardPressed: {
     opacity: 0.8,

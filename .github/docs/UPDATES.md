@@ -1,5 +1,24 @@
 # UPDATES
 
+## Version 0.5.5 - 2026-06-30
+
+### Nuevas funcionalidades
+
+- **Continuar entrenamiento del día**: la tarjeta principal de Inicio distingue ahora tres estados del entreno de hoy (sin empezar / empezado con ejercicios pendientes / completado). Si está a medias muestra "Continuar entrenamiento" y al pulsar abre directamente ese día en vez del selector.
+- **Cardio bajo demanda**: el campo de cardio en el registro deja de ocupar sitio siempre. Mientras no hay cardio guardado se muestra un botón "Añadir cardio"; la tarjeta de cardio solo aparece cuando hay datos y se tiñe con el color de acento del día.
+
+### Cambios
+
+- **Tarjetas de ejercicio plegables y animadas**: `ExerciseInputField` se reorganiza en secciones desplegables (contexto objetivo/anterior arriba, resultados fijos en medio, inputs/completado abajo) con transiciones suaves al expandir, colapsar y al cambiar de contenido.
+- **Historial de semanas con despliegue animado**: en Inicio, abrir o cerrar una semana del historial anima la altura del bloque y la entrada escalonada de cada entrenamiento; los logs muestran un borde de color según el día/progreso.
+- **Semana completada solo el mismo día**: la tarjeta "¡Semana completada!" (con acceso a la imagen/vídeo de logros) solo se ofrece el día en que se cierra la semana; al día siguiente vuelve a "Empezar entrenamiento" para iniciar la siguiente.
+- **Vídeo de logros más fluido**: la exportación pasa a 30 fps con fotogramas reales (sin repetición), animación de ~4 s + 4 s de resultado fijo (~8 s totales), sin trompicones.
+- **Color de día marrón**: el día amarillo 🟡 se sustituye por marrón 🟤 (nuevo `emoji_brown`) y el púrpura se aclara, para no confundirse con el amarillo de acento de la marca.
+
+### Correcciones
+
+- El wordmark del título ("GymToni") ahora rasteriza correctamente dentro de la imagen/vídeo de logros en Android: en nativo se pasa el módulo del asset (`require`) en vez de un data URI, que no se pintaba con `toDataURL`. Eliminado el texto de respaldo "GymToni" del póster.
+
 ## Version 0.5.4 - 2026-06-27
 
 ### Nuevas funcionalidades

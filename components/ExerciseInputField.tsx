@@ -10,11 +10,27 @@ import {
   ScrollView,
   Keyboard,
 } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+  FadeIn,
+  FadeOut,
+  LinearTransition,
+} from 'react-native-reanimated';
 import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
 import { parseSeriesString } from '@lib/parsers';
 import { getImprovementDisplay } from '@lib/utils';
 import { GradientFill } from './GradientFill';
+
+// Transiciones reutilizables para recolocar y mostrar/ocultar contenido
+const layoutTransition = LinearTransition.duration(220).easing(
+  Easing.inOut(Easing.ease)
+);
+const fadeIn = FadeIn.duration(180);
+const fadeOut = FadeOut.duration(140);
 
 interface ExerciseInputFieldProps {
   order: number;
@@ -31,7 +47,6 @@ interface ExerciseInputFieldProps {
   notes?: string;
   previousLog?: ExerciseLog | null;
   improvement?: { isImproved: boolean; percent: number } | null;
-  // Color de acento del día (push/pull/pierna). Tiñe borde, fondo y tags.
   accent?: string;
 }
 
@@ -52,6 +67,57 @@ export function ExerciseInputField({
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
 
+  const [expanded, setExpanded] = useState(false);
+
+  const expandProgress = useSharedValue(0);
+
+  // El cuerpo se divide en dos secciones desplegables: arriba el contexto,
+  // abajo los inputs/completado. El bloque de resultados va en medio, fijo,
+  // y solo se desliza cuando estas secciones crecen o se colapsan.
+  const topHeight = useSharedValue(0);
+  const bottomHeight = useSharedValue(0);
+  const topMeasured = useRef(false);
+  const bottomMeasured = useRef(false);
+
+  useEffect(() => {
+    expandProgress.value = withTiming(expanded ? 1 : 0, {
+      duration: expanded ? 220 : 190,
+      easing: Easing.inOut(Easing.ease),
+    });
+  }, [expanded]);
+
+  const animatedTopStyle = useAnimatedStyle(() => ({
+    height: topHeight.value * expandProgress.value,
+    opacity: expandProgress.value,
+  }));
+
+  const animatedBottomStyle = useAnimatedStyle(() => ({
+    height: bottomHeight.value * expandProgress.value,
+    opacity: expandProgress.value,
+  }));
+
+  const measureSection = (
+    height: typeof topHeight,
+    measuredRef: React.MutableRefObject<boolean>
+  ) => (event: { nativeEvent: { layout: { height: number } } }) => {
+    const measured = event.nativeEvent.layout.height;
+    if (measured <= 0) return;
+    if (!measuredRef.current) {
+      // Primera medición: fijar sin animar (la apertura ya la anima expandProgress)
+      height.value = measured;
+      measuredRef.current = true;
+    } else {
+      // Cambios de contenido posteriores: recolocar de forma animada
+      height.value = withTiming(measured, {
+        duration: 220,
+        easing: Easing.inOut(Easing.ease),
+      });
+    }
+  };
+
+  const onTopLayout = measureSection(topHeight, topMeasured);
+  const onBottomLayout = measureSection(bottomHeight, bottomMeasured);
+
   // Cronómetro para ejercicios medidos en tiempo
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -68,7 +134,6 @@ export function ExerciseInputField({
   );
 
   const startTimer = () => {
-    // Cada inicio arranca desde cero (descarta el valor parado anterior).
     setTimerSeconds(0);
     setTimerRunning(true);
     timerRef.current = setInterval(() => {
@@ -110,19 +175,14 @@ export function ExerciseInputField({
   };
 
   const handleAddSet = () => {
-    // Usar placeholders si los campos están vacíos
     const weightStr = (weightValue.trim() || getWeightPlaceholder()).trim();
     const repsStr = (repsValue.trim() || getRepPlaceholder()).trim();
-
     const weight = parseFloat(weightStr);
     const reps = parseFloat(repsStr);
-
-    // Permitir peso 0 pero reps debe ser > 0
     if (!isNaN(weight) && !isNaN(reps) && weight >= 0 && reps > 0) {
       onAddSet({ weight, reps });
       setWeightValue('');
       setRepsValue('');
-      // Cerrar el teclado después de añadir
       Keyboard.dismiss();
     }
   };
@@ -132,341 +192,332 @@ export function ExerciseInputField({
     : false;
   const hasAddedSets = addedSets.length > 0;
 
+  const wasMaxReachedRef = useRef(isMaxSetsReached);
+  useEffect(() => {
+    if (isMaxSetsReached && !wasMaxReachedRef.current) {
+      setExpanded(false);
+    }
+    wasMaxReachedRef.current = isMaxSetsReached;
+  }, [isMaxSetsReached]);
+
   const getWeightPlaceholder = () => {
-    if (addedSets.length > 0) {
-      return String(addedSets[addedSets.length - 1].weight);
+    if (addedSets.length > 0) return String(addedSets[addedSets.length - 1].weight);
+    if (previousLog?.parsedSets?.length) return String(previousLog.parsedSets[0].weight);
+    if (previousLog?.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+      const parsed = parseSeriesString(previousLog.rawInput);
+      if (parsed.length > 0) return String(parsed[0].weight);
     }
-
-    if (previousLog) {
-      if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
-        return String(previousLog.parsedSets[0].weight);
-      }
-
-      if (
-        previousLog.rawInput &&
-        previousLog.rawInput.trim() &&
-        previousLog.rawInput !== '-'
-      ) {
-        const parsed = parseSeriesString(previousLog.rawInput);
-        if (parsed.length > 0) {
-          return String(parsed[0].weight);
-        }
-      }
-    }
-
     return '0';
   };
 
   const getRepPlaceholder = () => {
-    if (addedSets.length > 0) {
-      return String(addedSets[addedSets.length - 1].reps);
+    if (addedSets.length > 0) return String(addedSets[addedSets.length - 1].reps);
+    if (previousLog?.parsedSets?.length) return String(previousLog.parsedSets[0].reps);
+    if (previousLog?.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+      const parsed = parseSeriesString(previousLog.rawInput);
+      if (parsed.length > 0) return String(parsed[0].reps);
     }
-
-    if (previousLog) {
-      if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
-        return String(previousLog.parsedSets[0].reps);
-      }
-
-      if (
-        previousLog.rawInput &&
-        previousLog.rawInput.trim() &&
-        previousLog.rawInput !== '-'
-      ) {
-        const parsed = parseSeriesString(previousLog.rawInput);
-        if (parsed.length > 0) {
-          return String(parsed[0].reps);
-        }
-      }
-    }
-
     return '0';
   };
 
   const getPreviousSetsSummary = () => {
     if (!previousLog) return '';
-
-    // Si tiene parsedSets poblados, usa eso
-    if (previousLog.parsedSets && previousLog.parsedSets.length > 0) {
+    if (previousLog.parsedSets?.length) {
       return previousLog.parsedSets
-        .map((s) => {
-          if (s.weight === -1 || s.reps === -1) return '—';
-          return `${s.weight}x${s.reps}`;
-        })
-        .join(', ');
+        .map((s) => (s.weight === -1 || s.reps === -1 ? '—' : `${s.weight}×${s.reps}`))
+        .join(' · ');
     }
-
-    // Si no, intenta parsear rawInput
-    if (
-      previousLog.rawInput &&
-      previousLog.rawInput.trim() &&
-      previousLog.rawInput !== '-'
-    ) {
+    if (previousLog.rawInput?.trim() && previousLog.rawInput !== '-') {
       const parsed = parseSeriesString(previousLog.rawInput);
-      if (parsed.length > 0) {
-        return parsed.map((s) => `${s.weight}x${s.reps}`).join(', ');
-      }
-      // Si no se puede parsear, retorna el rawInput tal como está
+      if (parsed.length > 0) return parsed.map((s) => `${s.weight}×${s.reps}`).join(' · ');
       return previousLog.rawInput;
     }
-
     return '';
   };
 
+  const renderImprovementBadge = () => {
+    if (!improvement || !isMaxSetsReached || addedSets.length === 0) return null;
+    const fmt = formatImprovementDisplay(improvement);
+    return (
+      <Animated.Text
+        entering={fadeIn}
+        exiting={fadeOut}
+        layout={layoutTransition}
+        style={[styles.improvementText, styles[fmt.styleKey as keyof typeof styles]]}
+      >
+        {fmt.symbol} {fmt.display}%
+      </Animated.Text>
+    );
+  };
+
+  const renderSeriesRow = () => {
+    if (!hasAddedSets) return null;
+    return (
+      <View style={styles.seriesRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.seriesList}
+          style={styles.seriesScroll}
+        >
+          {addedSets.map((set, idx) => (
+            <Animated.View
+              key={idx}
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={layoutTransition}
+              style={[styles.serieTag, { borderColor: accent + '80' }]}
+            >
+              <Text style={[styles.serieTagText, { color: accent }]}>
+                {set.weight === -1 || set.reps === -1 ? '—' : `${set.weight}×${set.reps}`}
+              </Text>
+            </Animated.View>
+          ))}
+        </ScrollView>
+        {renderImprovementBadge()}
+      </View>
+    );
+  };
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { borderLeftColor: accent }]}>
       <GradientFill accent={accent} />
-      <View style={styles.header}>
+
+      {/* Cabecera: título + flecha */}
+      <Pressable
+        style={[
+          styles.header,
+          // Colapsada: sin margen inferior (el bloque de resultados aporta su
+          // propia separación; evita doble hueco bajo la cabecera).
+          !expanded && styles.headerCollapsedEmpty,
+        ]}
+        onPress={() => setExpanded((prev) => !prev)}
+      >
         <View style={styles.titleSection}>
-          <MaterialCommunityIcons
-            name="circle"
-            size={13}
-            color={accent}
-            style={styles.titleAccent}
-          />
           <Text style={styles.exerciseName}>
             {order}.- {exerciseName}
           </Text>
         </View>
-        <Pressable
-          style={({ pressed }) => [
-            styles.notesButton,
-            pressed && styles.notesButtonPressed,
-          ]}
-          onPress={onNotesPress}
-        >
+        <View style={styles.headerRight}>
           <MaterialCommunityIcons
-            name="pencil-outline"
-            size={16}
-            color={theme.colors.text}
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={26}
+            color={theme.colors.textSecondary}
           />
-        </Pressable>
-      </View>
-
-      {target?.sets && target?.reps && (
-        <View style={styles.targetRowContainer}>
-          <Text style={styles.targetRow}>
-            Objetivo: {target.sets}x{target.reps}
-          </Text>
-          {improvement &&
-            addedSets.length > 0 &&
-            isMaxSetsReached &&
-            (() => {
-              const fmt = formatImprovementDisplay(improvement);
-              return (
-                <Text
-                  style={[
-                    styles.improvementText,
-                    styles[fmt.styleKey as keyof typeof styles],
-                  ]}
-                >
-                  {fmt.symbol} {fmt.display}%
-                </Text>
-              );
-            })()}
         </View>
-      )}
+      </Pressable>
 
-      {previousLog && (
-        <Text style={styles.previousRow}>
-          Anterior: {getPreviousSetsSummary() || '-'}
-          {'\n'}
-          {previousLog?.notes && (
-            <Text style={styles.previousNotesRow}>-{previousLog.notes}-</Text>
-          )}
-        </Text>
-      )}
+      {/* Sección superior desplegable: contexto + nota */}
+      <Animated.View
+        style={[styles.body, animatedTopStyle]}
+        pointerEvents={expanded ? 'auto' : 'none'}
+      >
+        <View onLayout={onTopLayout} style={[styles.bodyMeasure, styles.topMeasure]}>
 
-      {notes && <Text style={styles.notesRow}>Nota: {notes}</Text>}
-
-      {hasAddedSets && (
-        <View style={styles.seriesContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.seriesList}
-          >
-            {addedSets.map((set, idx) => (
-              <View
-                key={idx}
-                style={[styles.serieTag, { borderColor: accent }]}
-              >
-                <Text style={[styles.serieTagText, { color: accent }]}>
-                  {set.weight === -1 || set.reps === -1
-                    ? '—'
-                    : `${set.weight}x${set.reps}`}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        </View>
-      )}
-
-      {!isMaxSetsReached && (
-        <View>
-          <View style={styles.inputRow}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Peso (kg)</Text>
-              <TextInput
-                style={styles.splitInput}
-                placeholder={getWeightPlaceholder()}
-                placeholderTextColor={theme.colors.textSecondary}
-                value={weightValue}
-                onChangeText={setWeightValue}
-                keyboardType="decimal-pad"
-                maxLength={6}
-              />
-            </View>
-
-            <Text style={styles.separator}>×</Text>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Repeticiones</Text>
-              <TextInput
-                style={styles.splitInput}
-                placeholder={getRepPlaceholder()}
-                placeholderTextColor={theme.colors.textSecondary}
-                value={repsValue}
-                onChangeText={setRepsValue}
-                keyboardType="decimal-pad"
-                maxLength={4}
-              />
-            </View>
-          </View>
-
-          <View style={styles.buttonRow}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.addButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={handleAddSet}
+          {/* Bloque de contexto: objetivo + anterior */}
+          {(target?.sets || previousLog) && (
+            <Animated.View
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={layoutTransition}
+              style={styles.contextBlock}
             >
-              <View style={styles.buttonContent}>
-                <MaterialCommunityIcons
-                  name="plus"
-                  size={16}
-                  color={theme.colors.darkGray}
-                />
-                <Text style={styles.buttonText}>Añadir</Text>
-              </View>
-            </Pressable>
-
-            {hasAddedSets && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.deleteButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={onRemoveLastSet}
-              >
-                <View style={styles.buttonContent}>
-                  <MaterialCommunityIcons
-                    name="minus"
-                    size={16}
-                    color={theme.colors.darkGray}
-                  />
-                  <Text style={styles.buttonText}>Borrar</Text>
+              {target?.sets && target?.reps && (
+                <View style={styles.contextItem}>
+                  <MaterialCommunityIcons name="target" size={13} color={theme.colors.textSecondary} />
+                  <Text style={styles.contextLabel}>Objetivo</Text>
+                  <Text style={styles.contextValue}>{target.sets}×{target.reps}</Text>
                 </View>
-              </Pressable>
-            )}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.finishButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={onFinishExercise}
-            >
-              <View style={styles.buttonContent}>
-                <MaterialCommunityIcons
-                  name="check"
-                  size={16}
-                  color={theme.colors.darkGray}
-                />
-                <Text style={styles.buttonText}>Terminar</Text>
-              </View>
-            </Pressable>
-          </View>
-
-          {isTimeBased && (
-            <View style={styles.stopwatchContainer}>
-              <Text style={styles.stopwatchDisplay}>
-                {formatTimerDisplay(timerSeconds)}
-              </Text>
-              <View style={styles.stopwatchButtons}>
-                <Pressable
-                  style={({ pressed }) => [
-                    timerRunning
-                      ? styles.stopwatchStopButton
-                      : styles.stopwatchStartButton,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={timerRunning ? stopTimer : startTimer}
-                >
-                  <MaterialCommunityIcons
-                    name={timerRunning ? 'stop' : 'play'}
-                    size={18}
-                    color={theme.colors.darkGray}
-                  />
-                  <Text style={styles.stopwatchButtonText}>
-                    {timerRunning ? 'Parar' : 'Iniciar'}
+              )}
+              {previousLog && getPreviousSetsSummary() ? (
+                <View style={styles.contextItem}>
+                  <MaterialCommunityIcons name="history" size={13} color={theme.colors.textSecondary} />
+                  <Text style={styles.contextLabel}>Anterior</Text>
+                  <Text style={styles.contextValue} numberOfLines={1}>
+                    {getPreviousSetsSummary()}
                   </Text>
-                </Pressable>
+                </View>
+              ) : null}
+              {previousLog?.notes ? (
+                <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
+              ) : null}
+            </Animated.View>
+          )}
 
-                {timerSeconds > 0 && !timerRunning && (
+          {/* Nota actual */}
+          {notes && (
+            <Animated.View
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={layoutTransition}
+              style={styles.noteOwnBlock}
+            >
+              <MaterialCommunityIcons name="note-text-outline" size={13} color={accent} />
+              <Text style={[styles.noteOwnText, { color: accent }]}>{notes}</Text>
+            </Animated.View>
+          )}
+
+        </View>
+      </Animated.View>
+
+      {/* Resultados insertados: bloque único en posición fija.
+          No cambia de sitio; solo se desliza cuando las secciones de arriba
+          y abajo se despliegan o colapsan. */}
+      {hasAddedSets && (
+        <Animated.View
+          entering={fadeIn}
+          exiting={fadeOut}
+          style={styles.resultsBlock}
+        >
+          {renderSeriesRow()}
+        </Animated.View>
+      )}
+
+      {/* Sección inferior desplegable: inputs / completado */}
+      <Animated.View
+        style={[styles.body, animatedBottomStyle]}
+        pointerEvents={expanded ? 'auto' : 'none'}
+      >
+        <View onLayout={onBottomLayout} style={styles.bodyMeasure}>
+
+          {/* Estado: en progreso */}
+          {!isMaxSetsReached && (
+            <Animated.View
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={layoutTransition}
+              style={styles.inputBlock}
+            >
+              {/* Inputs peso × reps */}
+              <View style={styles.inputRow}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Peso (kg)</Text>
+                  <TextInput
+                    style={styles.splitInput}
+                    placeholder={getWeightPlaceholder()}
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={weightValue}
+                    onChangeText={setWeightValue}
+                    keyboardType="decimal-pad"
+                    maxLength={6}
+                  />
+                </View>
+
+                <Text style={styles.separator}>×</Text>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Reps</Text>
+                  <TextInput
+                    style={styles.splitInput}
+                    placeholder={getRepPlaceholder()}
+                    placeholderTextColor={theme.colors.textSecondary}
+                    value={repsValue}
+                    onChangeText={setRepsValue}
+                    keyboardType="decimal-pad"
+                    maxLength={4}
+                  />
+                </View>
+              </View>
+
+              {/* Botón principal: añadir serie */}
+              <Pressable
+                style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}
+                onPress={handleAddSet}
+              >
+                <MaterialCommunityIcons name="plus" size={18} color={theme.colors.darkGray} />
+                <Text style={styles.addButtonText}>Añadir serie</Text>
+              </Pressable>
+
+              {/* Acciones secundarias */}
+              <View style={styles.secondaryRow}>
+                {hasAddedSets && (
                   <Pressable
-                    style={({ pressed }) => [
-                      styles.stopwatchUseButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={useTimerAsReps}
+                    style={({ pressed }) => [styles.secondaryButton, styles.deleteButton, pressed && styles.buttonPressed]}
+                    onPress={onRemoveLastSet}
                   >
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={18}
-                      color={theme.colors.darkGray}
-                    />
-                    <Text style={styles.stopwatchButtonText}>
-                      Usar {timerSeconds}s
-                    </Text>
+                    <MaterialCommunityIcons name="minus" size={15} color={theme.colors.error} />
+                    <Text style={[styles.secondaryButtonText, { color: theme.colors.error }]}>Borrar</Text>
                   </Pressable>
                 )}
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryButton, styles.finishButton, pressed && styles.buttonPressed]}
+                  onPress={onFinishExercise}
+                >
+                  <MaterialCommunityIcons name="check" size={15} color={theme.colors.success} />
+                  <Text style={[styles.secondaryButtonText, { color: theme.colors.success }]}>Terminar</Text>
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [styles.secondaryButton, styles.notesButton, pressed && styles.buttonPressed]}
+                  onPress={onNotesPress}
+                >
+                  <MaterialCommunityIcons name="pencil-outline" size={15} color={theme.colors.textSecondary} />
+                  <Text style={[styles.secondaryButtonText, { color: theme.colors.textSecondary }]}>Nota</Text>
+                </Pressable>
               </View>
-            </View>
-          )}
-        </View>
-      )}
 
-      {isMaxSetsReached && (
-        <View style={styles.maxReachedContainer}>
-          <View style={styles.maxReachedRow}>
-            <MaterialCommunityIcons
-              name="check-circle"
-              size={18}
-              color={theme.colors.success}
-            />
-            <Text style={styles.maxReachedText}>
-              Completado ({addedSets.length}/{target?.sets})
-            </Text>
-          </View>
-          <Pressable
-            style={({ pressed }) => [
-              styles.deleteLastButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={onRemoveLastSet}
-          >
-            <View style={styles.buttonContent}>
-              <MaterialCommunityIcons
-                name="minus"
-                size={16}
-                color={theme.colors.darkGray}
-              />
-              <Text style={styles.buttonText}>Borrar</Text>
-            </View>
-          </Pressable>
+              {/* Cronómetro (ejercicios basados en tiempo) */}
+              {isTimeBased && (
+                <View style={styles.stopwatchContainer}>
+                  <Text style={styles.stopwatchDisplay}>{formatTimerDisplay(timerSeconds)}</Text>
+                  <View style={styles.stopwatchButtons}>
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.stopwatchBtn,
+                        timerRunning ? styles.stopwatchBtnStop : styles.stopwatchBtnStart,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={timerRunning ? stopTimer : startTimer}
+                    >
+                      <MaterialCommunityIcons
+                        name={timerRunning ? 'stop' : 'play'}
+                        size={16}
+                        color={theme.colors.darkGray}
+                      />
+                      <Text style={styles.stopwatchButtonText}>
+                        {timerRunning ? 'Parar' : 'Iniciar'}
+                      </Text>
+                    </Pressable>
+                    {timerSeconds > 0 && !timerRunning && (
+                      <Pressable
+                        style={({ pressed }) => [styles.stopwatchBtn, styles.stopwatchBtnUse, pressed && styles.buttonPressed]}
+                        onPress={useTimerAsReps}
+                      >
+                        <MaterialCommunityIcons name="check" size={16} color={theme.colors.darkGray} />
+                        <Text style={styles.stopwatchButtonText}>Usar {timerSeconds}s</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                </View>
+              )}
+            </Animated.View>
+          )}
+
+          {/* Estado: completado */}
+          {isMaxSetsReached && (
+            <Animated.View
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={layoutTransition}
+              style={styles.completedBlock}
+            >
+              <View style={styles.completedRow}>
+                <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.success} />
+                <Text style={styles.completedText}>
+                  Completado · {addedSets.length}/{target?.sets ?? addedSets.length} series
+                </Text>
+              </View>
+              <Pressable
+                style={({ pressed }) => [styles.secondaryButton, styles.deleteButton, styles.undoButton, pressed && styles.buttonPressed]}
+                onPress={onRemoveLastSet}
+              >
+                <MaterialCommunityIcons name="minus" size={15} color={theme.colors.error} />
+                <Text style={[styles.secondaryButtonText, { color: theme.colors.error }]}>Borrar</Text>
+              </Pressable>
+            </Animated.View>
+          )}
+
         </View>
-      )}
+      </Animated.View>
     </View>
   );
 }
@@ -475,28 +526,42 @@ const styles = StyleSheet.create({
   container: {
     backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
-    marginTop: 16,
+    marginTop: 8,
     marginBottom: 8,
     padding: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    borderLeftWidth: 3,
     overflow: 'hidden',
     ...theme.shadow.soft,
   },
+  body: {
+    overflow: 'hidden',
+  },
+  bodyMeasure: {
+    position: 'absolute',
+    left: 1,
+    right: 2,
+    top: 0,
+    paddingBottom: 4,
+  },
+
+  // Cabecera
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     marginBottom: 8,
   },
-  titleSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 8,
+  headerCollapsedEmpty: {
+    marginBottom: 0,
   },
-  titleAccent: {
-    marginTop: 2,
+  titleSection: {
+    flex: 1,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    marginLeft: 10,
   },
   exerciseName: {
     fontSize: 20,
@@ -506,108 +571,116 @@ const styles = StyleSheet.create({
     flexShrink: 1,
     lineHeight: 25,
   },
-  targetRowContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  targetRow: {
-    fontSize: 14,
-    fontWeight: '900',
-    color: '#FFD400',
-  },
-  improvementText: {
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 16,
-  },
-  improvementUp: {
-    color: theme.colors.success,
-  },
-  improvementDown: {
-    color: theme.colors.error,
-  },
-  improvementNeutral: {
-    color: theme.colors.warning,
-  },
-  previousRow: {
-    fontSize: 13,
-    color: '#FF8C00',
-    fontStyle: 'italic',
-    marginBottom: 8,
-  },
-  previousNotesRow: {
-    color: '#FFB347',
-    fontStyle: 'italic',
-  },
-  notesRow: {
-    fontSize: 13,
-    color: '#FFD400',
-    marginBottom: 8,
-  },
-  repetitions: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-  },
-  serieCount: {
-    fontSize: 12,
-    color: theme.colors.primaryLight,
-    fontWeight: '700',
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  notesButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    backgroundColor: theme.colors.gray,
-    borderRadius: theme.borderRadius.pill,
-    marginLeft: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  notesButtonPressed: {
-    backgroundColor: theme.colors.mediumGray,
-  },
-  seriesContainer: {
+
+  // Resultados insertados (bloque único, posición fija)
+  resultsBlock: {
+    marginTop: 12,
     marginBottom: 12,
   },
+  // Separación entre contexto y nota dentro de la sección superior
+  topMeasure: {
+    gap: 10,
+  },
+  seriesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  seriesScroll: {
+    flex: 1,
+  },
   seriesList: {
-    paddingRight: 12,
-    gap: 8,
+    gap: 6,
+    paddingRight: 4,
   },
   serieTag: {
     backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
     borderRadius: theme.borderRadius.pill,
-    minWidth: 50,
+    minWidth: 46,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 212, 59, 0.22)',
   },
   serieTagText: {
-    color: theme.colors.primaryLight,
     fontWeight: '700',
     fontSize: 13,
+  },
+  improvementText: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  improvementUp: { color: theme.colors.success },
+  improvementDown: { color: theme.colors.error },
+  improvementNeutral: { color: theme.colors.warning },
+
+  // Bloque de contexto (objetivo + anterior)
+  contextBlock: {
+    backgroundColor: theme.colors.darkGray,
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  contextItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  contextLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    width: 68,
+  },
+  contextValue: {
+    fontSize: 13,
+    color: theme.colors.text,
+    fontWeight: '600',
+    flex: 1,
+  },
+  previousNoteText: {
+    fontSize: 12,
+    color: theme.colors.textSecondary,
+    fontStyle: 'italic',
+    paddingLeft: 19,
+  },
+
+  // Nota propia
+  noteOwnBlock: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+  },
+  noteOwnText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    flex: 1,
+  },
+
+  // Bloque de inputs
+  inputBlock: {
+    gap: 8,
   },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 10,
     gap: 8,
   },
   inputGroup: {
     flex: 1,
+    gap: 4,
   },
   inputLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: '700',
     color: theme.colors.textSecondary,
-    marginBottom: 6,
     textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   splitInput: {
     backgroundColor: theme.colors.darkGray,
@@ -616,94 +689,93 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     minHeight: 54,
     padding: 14,
-    fontSize: 18,
+    fontSize: 20,
     textAlign: 'center',
     textAlignVertical: 'center',
     color: theme.colors.text,
-    fontWeight: '600',
+    fontWeight: '700',
   },
   separator: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    color: theme.colors.primary,
-    marginTop: 10,
+    color: theme.colors.textSecondary,
+    marginTop: 14,
   },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 8,
-    justifyContent: 'space-between',
-  },
+
+  // Botón principal añadir
   addButton: {
-    flex: 1,
     backgroundColor: theme.colors.success,
-    paddingVertical: 12,
     borderRadius: theme.borderRadius.sm,
+    paddingVertical: 14,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
     ...theme.shadow.soft,
   },
-  deleteButton: {
-    flex: 1,
-    backgroundColor: theme.colors.error,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-  },
-  finishButton: {
-    flex: 1,
-    backgroundColor: theme.colors.warning,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-  },
-  finishButtonSmall: {
-    backgroundColor: theme.colors.success,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-    marginTop: 10,
-    alignSelf: 'stretch',
-  },
-  deleteLastButton: {
-    backgroundColor: theme.colors.error,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-    marginTop: 10,
-    alignSelf: 'stretch',
-  },
-  buttonText: {
+  addButtonText: {
     color: theme.colors.darkGray,
     fontWeight: '800',
-    fontSize: 15,
+    fontSize: 16,
   },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  buttonPressed: {
-    opacity: 0.92,
-  },
-  maxReachedContainer: {
-    backgroundColor: theme.colors.darkGray,
-    borderRadius: theme.borderRadius.sm,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-  },
-  maxReachedRow: {
+
+  // Botones secundarios
+  secondaryRow: {
     flexDirection: 'row',
     gap: 8,
   },
-  maxReachedText: {
-    color: theme.colors.primaryLight,
-    fontWeight: '700',
-    fontSize: 12,
-    marginBottom: 8,
+  secondaryButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
   },
+  deleteButton: {
+    borderColor: theme.colors.error + '50',
+    backgroundColor: theme.colors.error + '15',
+  },
+  finishButton: {
+    borderColor: theme.colors.success + '50',
+    backgroundColor: theme.colors.success + '15',
+  },
+  notesButton: {
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.darkGray,
+  },
+  secondaryButtonText: {
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  buttonPressed: {
+    opacity: 0.75,
+  },
+
+  // Completado
+  completedBlock: {
+    gap: 8,
+  },
+  completedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  completedText: {
+    color: theme.colors.success,
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  undoButton: {
+    flex: 0,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 14,
+  },
+
+  // Cronómetro
   stopwatchContainer: {
-    marginTop: 12,
     backgroundColor: theme.colors.darkGray,
     borderRadius: theme.borderRadius.sm,
     padding: 12,
@@ -724,33 +796,17 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
   },
-  stopwatchStartButton: {
+  stopwatchBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: theme.colors.success,
     paddingVertical: 10,
     paddingHorizontal: 16,
     borderRadius: theme.borderRadius.sm,
   },
-  stopwatchStopButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.error,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.sm,
-  },
-  stopwatchUseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: theme.colors.primary,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.sm,
-  },
+  stopwatchBtnStart: { backgroundColor: theme.colors.success },
+  stopwatchBtnStop: { backgroundColor: theme.colors.error },
+  stopwatchBtnUse: { backgroundColor: theme.colors.primary },
   stopwatchButtonText: {
     color: theme.colors.darkGray,
     fontWeight: '800',

@@ -748,7 +748,7 @@ export function WorkoutLogScreen({
         <CardioInputField
           value={cardioInput}
           onChangeText={setCardioInput}
-          expanded={true}
+          accent={dayAccent}
         />
 
         <View style={styles.buttonContainer}>

@@ -188,8 +188,10 @@ function Donut({
 interface AchievementPosterProps {
   achievements: WeekAchievements;
   routineName?: string;
-  // Wordmark de la app (title.png, ya incluye el logo) como data URI.
-  titleUri?: string;
+  // Wordmark de la app (title.png, ya incluye el logo). En nativo es el módulo del
+  // asset (require → número); en web, un data URI. El número rasteriza bien en
+  // toDataURL en Android; el data URI no.
+  titleUri?: string | number;
   // Progreso de la animación de aparición (0 = nada, 1 = todo visible/relleno).
   reveal?: number;
   width?: number;
@@ -232,7 +234,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
     const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
     const fade = (start: number, end: number) => easeOut(seg(start, end));
 
-    const headerOp = fade(0, 0.12);
+    const headerOp = fade(0.9, 1); // Cabecera la última: da tiempo a cargar la imagen del título.
     const semanaOp = fade(0.08, 0.2);
     const completadaOp = fade(0.16, 0.28);
     const subtitleOp = fade(0.26, 0.36);
@@ -303,19 +305,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
               href={titleUri}
               preserveAspectRatio="xMidYMid meet"
             />
-          ) : (
-            <SvgText
-              x={POSTER_WIDTH / 2}
-              y={176}
-              fill={GOLD}
-              fontSize={84}
-              fontFamily={DISPLAY_FONT}
-              letterSpacing={4}
-              textAnchor="middle"
-            >
-              GymToni
-            </SvgText>
-          )}
+          ) : null}
         </G>
 
         {/* Titular */}

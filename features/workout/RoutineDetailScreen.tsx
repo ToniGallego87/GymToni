@@ -32,7 +32,7 @@ interface RoutineDetailScreenProps {
   onBack: () => void;
 }
 
-const EMOJI_CHOICES = ['🔴', '🟠', '🟡', '🟢', '🔵', '🟣'];
+const EMOJI_CHOICES = ['🔴', '🟠', '🟤', '🟢', '🔵', '🟣'];
 
 export function RoutineDetailScreen({
   routine,

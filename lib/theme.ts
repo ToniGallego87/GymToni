@@ -29,9 +29,10 @@ export const theme = {
     accent: '#F7CC3D',
     overlay: 'rgba(6, 8, 12, 0.72)',
     emoji_blue: '#6F8FDF',
-    emoji_purple: '#784c9a',
+    emoji_purple: '#B189DA',
     emoji_green: '#67B58C',
     emoji_orange: '#FF9500',
+    emoji_brown: '#A0633A',
   },
 
   // Fuente display (Anton) para titulares. Cargada en App.tsx vía expo-font.
@@ -131,7 +132,7 @@ export function getTrainingAccent(target?: DayAccentTarget) {
   const emojiColorMap: Record<string, string> = {
     '🔴': theme.colors.error, // Rojo
     '🟠': theme.colors.emoji_orange, // Naranja
-    '🟡': theme.colors.primary, // Amarillo
+    '🟤': theme.colors.emoji_brown, // Marrón
     '🟢': theme.colors.emoji_green, // Verde
     '🔵': theme.colors.emoji_blue, // Azul
     '🟣': theme.colors.emoji_purple, // Púrpura
