@@ -11,9 +11,6 @@ import {
   Keyboard,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
   Easing,
   FadeIn,
   FadeOut,
@@ -67,56 +64,13 @@ export function ExerciseInputField({
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
 
+  // Secciones desplegables (contexto arriba, inputs abajo). Se renderizan de
+  // forma condicional y la tarjeta reajusta su altura con `LinearTransition`
+  // de Reanimated: medir la altura a mano (onLayout) para animarla fallaba en
+  // el build de release (devolvía 0 y dejaba el cuerpo recortado).
   const [expanded, setExpanded] = useState(false);
 
-  const expandProgress = useSharedValue(0);
-
-  // El cuerpo se divide en dos secciones desplegables: arriba el contexto,
-  // abajo los inputs/completado. El bloque de resultados va en medio, fijo,
-  // y solo se desliza cuando estas secciones crecen o se colapsan.
-  const topHeight = useSharedValue(0);
-  const bottomHeight = useSharedValue(0);
-  const topMeasured = useRef(false);
-  const bottomMeasured = useRef(false);
-
-  useEffect(() => {
-    expandProgress.value = withTiming(expanded ? 1 : 0, {
-      duration: expanded ? 220 : 190,
-      easing: Easing.inOut(Easing.ease),
-    });
-  }, [expanded]);
-
-  const animatedTopStyle = useAnimatedStyle(() => ({
-    height: topHeight.value * expandProgress.value,
-    opacity: expandProgress.value,
-  }));
-
-  const animatedBottomStyle = useAnimatedStyle(() => ({
-    height: bottomHeight.value * expandProgress.value,
-    opacity: expandProgress.value,
-  }));
-
-  const measureSection = (
-    height: typeof topHeight,
-    measuredRef: React.MutableRefObject<boolean>
-  ) => (event: { nativeEvent: { layout: { height: number } } }) => {
-    const measured = event.nativeEvent.layout.height;
-    if (measured <= 0) return;
-    if (!measuredRef.current) {
-      // Primera medición: fijar sin animar (la apertura ya la anima expandProgress)
-      height.value = measured;
-      measuredRef.current = true;
-    } else {
-      // Cambios de contenido posteriores: recolocar de forma animada
-      height.value = withTiming(measured, {
-        duration: 220,
-        easing: Easing.inOut(Easing.ease),
-      });
-    }
-  };
-
-  const onTopLayout = measureSection(topHeight, topMeasured);
-  const onBottomLayout = measureSection(bottomHeight, bottomMeasured);
+  const toggleExpanded = () => setExpanded((prev) => !prev);
 
   // Cronómetro para ejercicios medidos en tiempo
   const [timerRunning, setTimerRunning] = useState(false);
@@ -238,15 +192,28 @@ export function ExerciseInputField({
   const renderImprovementBadge = () => {
     if (!improvement || !isMaxSetsReached || addedSets.length === 0) return null;
     const fmt = formatImprovementDisplay(improvement);
+    const badgeBg =
+      fmt.styleKey === 'improvementUp'
+        ? styles.improvementBadgeUp
+        : fmt.styleKey === 'improvementDown'
+        ? styles.improvementBadgeDown
+        : styles.improvementBadgeNeutral;
     return (
-      <Animated.Text
+      <Animated.View
         entering={fadeIn}
         exiting={fadeOut}
         layout={layoutTransition}
-        style={[styles.improvementText, styles[fmt.styleKey as keyof typeof styles]]}
+        style={[styles.improvementBadge, badgeBg]}
       >
-        {fmt.symbol} {fmt.display}%
-      </Animated.Text>
+        <Text
+          style={[
+            styles.improvementText,
+            styles[fmt.styleKey as keyof typeof styles],
+          ]}
+        >
+          {fmt.symbol} {fmt.display}%
+        </Text>
+      </Animated.View>
     );
   };
 
@@ -266,7 +233,7 @@ export function ExerciseInputField({
               entering={fadeIn}
               exiting={fadeOut}
               layout={layoutTransition}
-              style={[styles.serieTag, { borderColor: accent + '80' }]}
+              style={[styles.serieTag, { backgroundColor: accent + '2E' }]}
             >
               <Text style={[styles.serieTagText, { color: accent }]}>
                 {set.weight === -1 || set.reps === -1 ? '—' : `${set.weight}×${set.reps}`}
@@ -280,7 +247,10 @@ export function ExerciseInputField({
   };
 
   return (
-    <View style={[styles.container, { borderLeftColor: accent }]}>
+    <Animated.View
+      layout={layoutTransition}
+      style={[styles.container, { borderColor: accent }]}
+    >
       <GradientFill accent={accent} />
 
       {/* Cabecera: título + flecha */}
@@ -291,31 +261,32 @@ export function ExerciseInputField({
           // propia separación; evita doble hueco bajo la cabecera).
           !expanded && styles.headerCollapsedEmpty,
         ]}
-        onPress={() => setExpanded((prev) => !prev)}
+        onPress={toggleExpanded}
       >
         <View style={styles.titleSection}>
-          <Text style={styles.exerciseName}>
-            {order}.- {exerciseName}
+          <View style={[styles.orderBadge, { backgroundColor: accent }]}>
+            <Text style={styles.orderBadgeText}>{order}</Text>
+          </View>
+          <Text style={styles.exerciseName} numberOfLines={2}>
+            {exerciseName}
           </Text>
         </View>
-        <View style={styles.headerRight}>
+        <View style={[styles.headerRight, { borderColor: accent + '40' }]}>
           <MaterialCommunityIcons
             name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={26}
-            color={theme.colors.textSecondary}
+            size={24}
+            color={accent}
           />
         </View>
       </Pressable>
 
-      {/* Sección superior desplegable: contexto + nota */}
-      <Animated.View
-        style={[styles.body, animatedTopStyle]}
-        pointerEvents={expanded ? 'auto' : 'none'}
-      >
-        <View onLayout={onTopLayout} style={[styles.bodyMeasure, styles.topMeasure]}>
+      {/* Sección superior desplegable: contexto + nota. El wrapper se mantiene
+          montado siempre (solo se alterna el contenido) para que `exiting` se
+          reproduzca al colapsar con un padre estable. */}
+      <View style={styles.topSection}>
 
           {/* Bloque de contexto: objetivo + anterior */}
-          {(target?.sets || previousLog) && (
+          {expanded && (target?.sets || previousLog) && (
             <Animated.View
               entering={fadeIn}
               exiting={fadeOut}
@@ -345,7 +316,7 @@ export function ExerciseInputField({
           )}
 
           {/* Nota actual */}
-          {notes && (
+          {expanded && notes && (
             <Animated.View
               entering={fadeIn}
               exiting={fadeOut}
@@ -357,45 +328,42 @@ export function ExerciseInputField({
             </Animated.View>
           )}
 
-        </View>
-      </Animated.View>
+      </View>
 
-      {/* Resultados insertados: bloque único en posición fija.
-          No cambia de sitio; solo se desliza cuando las secciones de arriba
-          y abajo se despliegan o colapsan. */}
+      {/* Resultados insertados (peso × reps). Posición fija; con `layout` se
+          desliza de forma transicional cuando las secciones de arriba y abajo
+          se despliegan o colapsan. */}
       {hasAddedSets && (
         <Animated.View
           entering={fadeIn}
           exiting={fadeOut}
-          style={styles.resultsBlock}
+          layout={layoutTransition}
+          style={[styles.resultsBlock, !expanded && styles.resultsBlockCollapsed]}
         >
           {renderSeriesRow()}
         </Animated.View>
       )}
 
-      {/* Sección inferior desplegable: inputs / completado */}
-      <Animated.View
-        style={[styles.body, animatedBottomStyle]}
-        pointerEvents={expanded ? 'auto' : 'none'}
-      >
-        <View onLayout={onBottomLayout} style={styles.bodyMeasure}>
+      {/* Sección inferior desplegable: inputs / completado. Wrapper persistente
+          (igual que la superior) para que `exiting` se reproduzca al colapsar. */}
+      <View style={[styles.bottomSection, !expanded && styles.bottomSectionCollapsed]}>
 
           {/* Estado: en progreso */}
-          {!isMaxSetsReached && (
+          {expanded && !isMaxSetsReached && (
             <Animated.View
               entering={fadeIn}
               exiting={fadeOut}
               layout={layoutTransition}
-              style={styles.inputBlock}
+              style={[styles.inputBlock, !hasAddedSets && styles.inputBlockSpaced]}
             >
-              {/* Inputs peso × reps */}
+              {/* Inputs peso / reps: dos campos grandes y espaciados */}
               <View style={styles.inputRow}>
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Peso (kg)</Text>
+                <View style={styles.inputField}>
+                  <Text style={styles.inputLabel}>Peso · kg</Text>
                   <TextInput
-                    style={styles.splitInput}
+                    style={styles.bigInput}
                     placeholder={getWeightPlaceholder()}
-                    placeholderTextColor={theme.colors.textSecondary}
+                    placeholderTextColor={theme.colors.textMuted}
                     value={weightValue}
                     onChangeText={setWeightValue}
                     keyboardType="decimal-pad"
@@ -403,14 +371,14 @@ export function ExerciseInputField({
                   />
                 </View>
 
-                <Text style={styles.separator}>×</Text>
+                <Text style={styles.timesGlyph}>×</Text>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Reps</Text>
+                <View style={styles.inputField}>
+                  <Text style={styles.inputLabel}>Repeticiones</Text>
                   <TextInput
-                    style={styles.splitInput}
+                    style={styles.bigInput}
                     placeholder={getRepPlaceholder()}
-                    placeholderTextColor={theme.colors.textSecondary}
+                    placeholderTextColor={theme.colors.textMuted}
                     value={repsValue}
                     onChangeText={setRepsValue}
                     keyboardType="decimal-pad"
@@ -421,10 +389,18 @@ export function ExerciseInputField({
 
               {/* Botón principal: añadir serie */}
               <Pressable
-                style={({ pressed }) => [styles.addButton, pressed && styles.buttonPressed]}
+                style={({ pressed }) => [
+                  styles.addButton,
+                  { backgroundColor: accent },
+                  pressed && styles.addButtonPressed,
+                ]}
                 onPress={handleAddSet}
               >
-                <MaterialCommunityIcons name="plus" size={18} color={theme.colors.darkGray} />
+                <MaterialCommunityIcons
+                  name="plus-circle"
+                  size={22}
+                  color={theme.colors.darkGray}
+                />
                 <Text style={styles.addButtonText}>Añadir serie</Text>
               </Pressable>
 
@@ -493,7 +469,7 @@ export function ExerciseInputField({
           )}
 
           {/* Estado: completado */}
-          {isMaxSetsReached && (
+          {expanded && isMaxSetsReached && (
             <Animated.View
               entering={fadeIn}
               exiting={fadeOut}
@@ -516,9 +492,8 @@ export function ExerciseInputField({
             </Animated.View>
           )}
 
-        </View>
-      </Animated.View>
-    </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -529,57 +504,76 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 8,
     padding: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderLeftWidth: 3,
+    borderLeftWidth: 5,
     overflow: 'hidden',
     ...theme.shadow.soft,
   },
-  body: {
-    overflow: 'hidden',
+  topSection: {
+    gap: 10,
   },
-  bodyMeasure: {
-    position: 'absolute',
-    left: 1,
-    right: 2,
-    top: 0,
+  bottomSection: {
     paddingBottom: 4,
+  },
+  bottomSectionCollapsed: {
+    paddingBottom: 0,
   },
 
   // Cabecera
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 8,
+    alignItems: 'center',
+    gap: 12,
+    marginBottom: 16,
   },
   headerCollapsedEmpty: {
     marginBottom: 0,
   },
   titleSection: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  orderBadge: {
+    width: 38,
+    height: 38,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  orderBadgeText: {
+    fontSize: 19,
+    fontFamily: theme.fonts.display,
+    color: theme.colors.darkGray,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
   },
   headerRight: {
-    alignItems: 'flex-end',
-    marginLeft: 10,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   exerciseName: {
-    fontSize: 20,
+    flex: 1,
+    fontSize: 19,
     fontFamily: theme.fonts.display,
     letterSpacing: 0.3,
     color: theme.colors.text,
-    flexShrink: 1,
-    lineHeight: 25,
+    lineHeight: 23,
   },
 
   // Resultados insertados (bloque único, posición fija)
   resultsBlock: {
-    marginTop: 12,
-    marginBottom: 12,
+    marginTop: 16,
+    marginBottom: 16,
   },
-  // Separación entre contexto y nota dentro de la sección superior
-  topMeasure: {
-    gap: 10,
+  resultsBlockCollapsed: {
+    marginTop: 12,
+    marginBottom: 4,
   },
   seriesRow: {
     flexDirection: 'row',
@@ -594,21 +588,30 @@ const styles = StyleSheet.create({
     paddingRight: 4,
   },
   serieTag: {
-    backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: theme.borderRadius.pill,
-    minWidth: 46,
+    paddingHorizontal: 13,
+    paddingVertical: 9,
+    borderRadius: 12,
+    minWidth: 56,
     alignItems: 'center',
-    borderWidth: 1,
   },
   serieTagText: {
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  improvementText: {
-    fontSize: 13,
     fontWeight: '800',
+    fontSize: 15,
+    letterSpacing: 0.2,
+  },
+  improvementBadge: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: theme.borderRadius.pill,
+    alignSelf: 'center',
+  },
+  improvementBadgeUp: { backgroundColor: theme.colors.success + '22' },
+  improvementBadgeDown: { backgroundColor: theme.colors.error + '22' },
+  improvementBadgeNeutral: { backgroundColor: theme.colors.warning + '22' },
+  improvementText: {
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   improvementUp: { color: theme.colors.success },
   improvementDown: { color: theme.colors.error },
@@ -664,59 +667,69 @@ const styles = StyleSheet.create({
 
   // Bloque de inputs
   inputBlock: {
-    gap: 8,
+    gap: 16,
+  },
+  // Cuando no hay series arriba, el bloque de inputs necesita su propia
+  // separación respecto al contexto (con series la aporta resultsBlock).
+  inputBlockSpaced: {
+    marginTop: 16,
   },
   inputRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    alignItems: 'flex-end',
+    gap: 12,
   },
-  inputGroup: {
+  inputField: {
     flex: 1,
-    gap: 4,
+    gap: 7,
   },
   inputLabel: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
+    fontWeight: '800',
     color: theme.colors.textSecondary,
     textTransform: 'uppercase',
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
+    textAlign: 'center',
   },
-  splitInput: {
-    backgroundColor: theme.colors.darkGray,
-    borderWidth: 1,
+  bigInput: {
+    backgroundColor: theme.colors.background,
+    borderWidth: 1.5,
     borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    minHeight: 54,
-    padding: 14,
-    fontSize: 20,
+    borderRadius: theme.borderRadius.md,
+    minHeight: 66,
+    paddingHorizontal: 12,
+    fontSize: 30,
     textAlign: 'center',
     textAlignVertical: 'center',
     color: theme.colors.text,
-    fontWeight: '700',
+    fontWeight: '800',
   },
-  separator: {
+  timesGlyph: {
     fontSize: 22,
-    fontWeight: 'bold',
-    color: theme.colors.textSecondary,
-    marginTop: 14,
+    fontWeight: '800',
+    color: theme.colors.textMuted,
+    marginBottom: 18,
   },
 
   // Botón principal añadir
   addButton: {
-    backgroundColor: theme.colors.success,
-    borderRadius: theme.borderRadius.sm,
-    paddingVertical: 14,
+    minHeight: 58,
+    borderRadius: theme.borderRadius.md,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
     ...theme.shadow.soft,
   },
+  addButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
+  },
   addButtonText: {
     color: theme.colors.darkGray,
     fontWeight: '800',
-    fontSize: 16,
+    fontSize: 17,
+    letterSpacing: 0.3,
   },
 
   // Botones secundarios

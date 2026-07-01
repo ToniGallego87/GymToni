@@ -106,6 +106,21 @@ export function CalendarScreen({
   const currentYear = viewDate.getFullYear();
   const currentMonth = viewDate.getMonth();
 
+  // Offset mínimo permitido: mes del primer registro guardado. Máximo: mes actual (0).
+  const minMonthOffset = useMemo(() => {
+    if (state.logs.length === 0) return 0;
+    const earliest = state.logs.reduce(
+      (min: string, log: WorkoutLog) => (log.date < min ? log.date : min),
+      state.logs[0].date
+    );
+    const [year, month] = earliest.split('-').map(Number);
+    const today = new Date();
+    return (year - today.getFullYear()) * 12 + (month - 1 - today.getMonth());
+  }, [state.logs]);
+
+  const canGoPrev = monthOffset > minMonthOffset;
+  const canGoNext = monthOffset < 0;
+
   const logsByDate = useMemo(() => {
     return state.logs.reduce<Record<string, WorkoutLog[]>>(
       (accumulator: Record<string, WorkoutLog[]>, log: WorkoutLog) => {
@@ -195,7 +210,8 @@ export function CalendarScreen({
         <View style={styles.monthCard}>
           <GradientFill accent={theme.colors.primary} />
           <Pressable
-            style={styles.monthNavButton}
+            style={[styles.monthNavButton, !canGoPrev && styles.monthNavButtonDisabled]}
+            disabled={!canGoPrev}
             onPress={() => setMonthOffset((prev: number) => prev - 1)}
           >
             <MaterialCommunityIcons
@@ -210,7 +226,8 @@ export function CalendarScreen({
           </Text>
 
           <Pressable
-            style={styles.monthNavButton}
+            style={[styles.monthNavButton, !canGoNext && styles.monthNavButtonDisabled]}
+            disabled={!canGoNext}
             onPress={() => setMonthOffset((prev: number) => prev + 1)}
           >
             <MaterialCommunityIcons
@@ -364,8 +381,6 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
     overflow: 'hidden',
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,6 +400,9 @@ const styles = StyleSheet.create({
   monthNavButton: {
     paddingHorizontal: 10,
     paddingVertical: 6,
+  },
+  monthNavButtonDisabled: {
+    opacity: 0.25,
   },
   monthNavText: {
     fontSize: 16,

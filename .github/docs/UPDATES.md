@@ -1,23 +1,28 @@
 # UPDATES
 
-## Version 0.5.5 - 2026-06-30
+## Version 0.5.5 - 2026-07-01
 
 ### Nuevas funcionalidades
 
 - **Continuar entrenamiento del día**: la tarjeta principal de Inicio distingue ahora tres estados del entreno de hoy (sin empezar / empezado con ejercicios pendientes / completado). Si está a medias muestra "Continuar entrenamiento" y al pulsar abre directamente ese día en vez del selector.
 - **Cardio bajo demanda**: el campo de cardio en el registro deja de ocupar sitio siempre. Mientras no hay cardio guardado se muestra un botón "Añadir cardio"; la tarjeta de cardio solo aparece cuando hay datos y se tiñe con el color de acento del día.
+- **Crear rutina con ejercicios plegables**: en `NewRoutineScreen`, cada ejercicio ya definido se colapsa a una fila de resumen (nombre · `SxR`) con lápiz para editar y ✓ para plegar; al añadir uno nuevo se abre su editor y los demás quedan colapsados. Cada día arranca con un color de acento propio de una paleta (`DAY_COLOR_PALETTE`) aunque aún no tenga nombre.
 
 ### Cambios
 
-- **Tarjetas de ejercicio plegables y animadas**: `ExerciseInputField` se reorganiza en secciones desplegables (contexto objetivo/anterior arriba, resultados fijos en medio, inputs/completado abajo) con transiciones suaves al expandir, colapsar y al cambiar de contenido.
-- **Historial de semanas con despliegue animado**: en Inicio, abrir o cerrar una semana del historial anima la altura del bloque y la entrada escalonada de cada entrenamiento; los logs muestran un borde de color según el día/progreso.
+- **Tarjetas de ejercicio plegables**: `ExerciseInputField` se reorganiza en secciones desplegables (contexto objetivo/anterior arriba, resultados fijos en medio, inputs/completado abajo). La tarjeta reajusta su altura con `LinearTransition` de Reanimated (render condicional), en vez de medir la altura a mano. Badge de orden y de mejora, borde completo teñido con el acento.
+- **Historial de semanas con despliegue fiable**: en Inicio, abrir/cerrar una semana refluye el layout de forma síncrona y cada entrenamiento anima su entrada con `FadeInDown`; el contenedor se mantiene montado para animar también la salida.
 - **Semana completada solo el mismo día**: la tarjeta "¡Semana completada!" (con acceso a la imagen/vídeo de logros) solo se ofrece el día en que se cierra la semana; al día siguiente vuelve a "Empezar entrenamiento" para iniciar la siguiente.
 - **Vídeo de logros más fluido**: la exportación pasa a 30 fps con fotogramas reales (sin repetición), animación de ~4 s + 4 s de resultado fijo (~8 s totales), sin trompicones.
 - **Color de día marrón**: el día amarillo 🟡 se sustituye por marrón 🟤 (nuevo `emoji_brown`) y el púrpura se aclara, para no confundirse con el amarillo de acento de la marca.
+- **Navegación y botón atrás en blanco**: la barra de navegación inferior y el botón flotante de atrás pasan de amarillo (`primary`) a blanco para mejor legibilidad.
+- **Calendario acotado**: las flechas de mes anterior/siguiente se deshabilitan (atenuadas) al llegar al mes del primer registro guardado o al mes actual, evitando navegar a meses vacíos.
 
 ### Correcciones
 
 - El wordmark del título ("GymToni") ahora rasteriza correctamente dentro de la imagen/vídeo de logros en Android: en nativo se pasa el módulo del asset (`require`) en vez de un data URI, que no se pintaba con `toDataURL`. Eliminado el texto de respaldo "GymToni" del póster.
+- **Arranque sin parpadeo**: el splash nativo se mantiene hasta que los datos reales están hidratados desde almacenamiento; ya no se ven un instante los datos de ejemplo antes de saltar a los reales (`App.tsx`).
+- **Plegado fiable en la build de release**: las animaciones de altura de las tarjetas de ejercicio y de las semanas del historial se reescriben con `LinearTransition`/`FadeInDown` de Reanimated; el método anterior medía la altura con `onLayout` y en release devolvía 0, dejando el cuerpo recortado o sin animar. `versionCode` 6 → 7.
 
 ## Version 0.5.4 - 2026-06-27
 

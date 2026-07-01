@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
   Platform,
@@ -70,6 +70,10 @@ type Screen =
 function AppContent() {
   const { dispatch, state } = useWorkout();
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
+  // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
+  // que esto es true, para no pintar primero los datos semilla y saltar luego
+  // a los reales (el "carga a trompicones" del arranque).
+  const [hydrated, setHydrated] = useState(false);
 
   // Hidratación: carga desde almacenamiento (o migra el JSON legacy). La
   // persistencia de cada cambio la hace el wrapper de dispatch de forma
@@ -92,6 +96,9 @@ function AppContent() {
         }
       } catch (error) {
         console.error('Error loading app data:', error);
+      } finally {
+        // Siempre marcar hidratado (aunque falle) para no dejar el splash colgado.
+        if (isMounted) setHydrated(true);
       }
     };
 
@@ -101,6 +108,13 @@ function AppContent() {
       isMounted = false;
     };
   }, [dispatch]);
+
+  // Oculta el splash nativo una vez los datos reales ya están en pantalla.
+  useEffect(() => {
+    if (hydrated) {
+      SplashScreen.hideAsync().catch(() => {});
+    }
+  }, [hydrated]);
 
   // Manejar botón atrás en móvil
   useEffect(() => {
@@ -489,12 +503,9 @@ export default function App() {
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });
 
-  const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
-      await SplashScreen.hideAsync().catch(() => {});
-    }
-  }, [fontsLoaded]);
-
+  // El splash nativo se mantiene (preventAutoHide) hasta que AppContent termina
+  // de hidratar los datos; allí se llama a SplashScreen.hideAsync(). Así no se
+  // oculta solo con las fuentes cargadas, evitando el parpadeo de datos semilla.
   if (!fontsLoaded) {
     return null;
   }
@@ -507,7 +518,7 @@ export default function App() {
           backgroundColor="transparent"
           translucent
         />
-        <View style={styles.container} onLayout={onLayoutRootView}>
+        <View style={styles.container}>
           <AppContent />
         </View>
       </WorkoutProvider>

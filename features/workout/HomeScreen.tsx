@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -18,12 +18,8 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withDelay,
-  Easing,
-  runOnJS,
+  FadeInDown,
+  LinearTransition,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -385,6 +381,14 @@ function animateLayout() {
   );
 }
 
+// Contenido desplegable de cada semana. El layout refluye de forma síncrona
+// (correcto, sin solapes) y cada día anima su aparición/desaparición con
+// `entering`/`exiting` de Reanimated en el propio item (opacidad + transform
+// sobre el hueco ya reservado). Animar la altura medía 0 en release y
+// LayoutAnimation no refluía bien dentro del ScrollView anidado (las cabeceras
+// tapaban los días); por eso solo animamos opacidad/transform, que es fiable.
+// El contenedor se mantiene montado siempre (solo se alternan los hijos) para
+// que la animación de salida `exiting` se reproduzca con un padre estable.
 function CollapsibleWeekLogs({
   isExpanded,
   children,
@@ -392,94 +396,7 @@ function CollapsibleWeekLogs({
   isExpanded: boolean;
   children: React.ReactNode;
 }) {
-  const heightValue = useSharedValue(0);
-  const contentHeightRef = useRef<number>(0);
-  const [isMounted, setIsMounted] = useState(isExpanded);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    height: heightValue.value,
-    overflow: 'hidden',
-  }));
-
-  useEffect(() => {
-    if (isExpanded) {
-      setIsMounted(true);
-      if (contentHeightRef.current > 0) {
-        heightValue.value = withTiming(contentHeightRef.current, {
-          duration: 280,
-          easing: Easing.out(Easing.cubic),
-        });
-      }
-    } else {
-      contentHeightRef.current = 0;
-      heightValue.value = withTiming(
-        0,
-        { duration: 280, easing: Easing.out(Easing.cubic) },
-        (finished) => {
-          if (finished) runOnJS(setIsMounted)(false);
-        }
-      );
-    }
-  }, [isExpanded]);
-
-  return (
-    <Animated.View style={animatedStyle}>
-      {isMounted && (
-        <View
-          onLayout={(e) => {
-            const h = e.nativeEvent.layout.height;
-            if (h > 0 && h !== contentHeightRef.current) {
-              contentHeightRef.current = h;
-              if (isExpanded) {
-                heightValue.value = withTiming(h, {
-                  duration: 280,
-                  easing: Easing.out(Easing.cubic),
-                });
-              }
-            }
-          }}
-        >
-          {children}
-        </View>
-      )}
-    </Animated.View>
-  );
-}
-
-function AnimatedLogItem({
-  isExpanded,
-  index,
-  children,
-}: {
-  isExpanded: boolean;
-  index: number;
-  children: React.ReactNode;
-}) {
-  const opacity = useSharedValue(0);
-  const translateY = useSharedValue(16);
-
-  useEffect(() => {
-    if (isExpanded) {
-      opacity.value = withDelay(
-        index * 60,
-        withTiming(1, { duration: 220, easing: Easing.out(Easing.cubic) })
-      );
-      translateY.value = withDelay(
-        index * 60,
-        withTiming(0, { duration: 220, easing: Easing.out(Easing.cubic) })
-      );
-    } else {
-      opacity.value = withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) });
-      translateY.value = withTiming(-16, { duration: 200, easing: Easing.out(Easing.cubic) });
-    }
-  }, [isExpanded]);
-
-  const animStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateY: translateY.value }],
-  }));
-
-  return <Animated.View style={animStyle}>{children}</Animated.View>;
+  return <View>{isExpanded ? children : null}</View>;
 }
 
 type TrendKind = 'up' | 'down' | 'neutral';
@@ -1439,13 +1356,19 @@ export function HomeScreen({
                     : theme.colors.white;
 
                 return (
-                  <View key={block}>
+                  <Animated.View
+                    key={block}
+                    layout={LinearTransition.duration(250)}
+                  >
                     <Pressable
                       style={[
                         styles.weekHeaderButton,
                         { borderColor: weekAccent },
                       ]}
                       onPress={() => {
+                        // Sin LayoutAnimation: dentro del ScrollView anidado no
+                        // refluía bien y las cabeceras tapaban los días. Render
+                        // condicional directo → reflujo síncrono correcto.
                         setExpandedWeekBlocks(
                           (prev: Record<number, boolean>) => ({
                             ...prev,
@@ -1514,28 +1437,17 @@ export function HomeScreen({
                         const isToday = isLogFromToday(log);
                         if (!day) return null;
 
-                        const logBorderColor =
-                          isToday || isCurrentWeek
-                            ? theme.colors.primary
-                            : improvementFmt
-                            ? improvementFmt.kind === 'up'
-                              ? theme.colors.success
-                              : improvementFmt.kind === 'down'
-                              ? theme.colors.error
-                              : theme.colors.warning
-                            : theme.colors.border;
-
                         return (
-                          <AnimatedLogItem
+                          <Animated.View
                             key={log.id}
-                            isExpanded={isExpanded}
-                            index={logIndex}
+                            entering={FadeInDown.duration(220).delay(
+                              logIndex * 45
+                            )}
                           >
                             <Pressable
                               style={({ pressed }: { pressed: boolean }) => [
                                 styles.historyLogCard,
                                 isToday && styles.historyLogCardToday,
-                                { borderLeftColor: logBorderColor },
                                 pressed && styles.historyLogCardPressed,
                               ]}
                               onPress={() => {
@@ -1598,11 +1510,11 @@ export function HomeScreen({
                                 </Text>
                               </View>
                             </Pressable>
-                          </AnimatedLogItem>
+                          </Animated.View>
                         );
                       })}
                     </CollapsibleWeekLogs>
-                  </View>
+                  </Animated.View>
                 );
               })}
             </ScrollView>
@@ -1899,6 +1811,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     includeFontPadding: false,
     textAlignVertical: 'center',
+    transform: [{ translateY: 3 }],
   },
   progressLatest: {
     fontSize: 17,
@@ -2101,6 +2014,9 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     color: theme.colors.primary,
     lineHeight: 26,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    transform: [{ translateY: 3 }],
   },
   weekImprovementText: {
     fontSize: 15,
@@ -2129,8 +2045,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary,
     minHeight: 72,
     justifyContent: 'center',
     ...theme.shadow.soft,
@@ -2148,17 +2062,16 @@ const styles = StyleSheet.create({
   historyLogHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: 10,
   },
   historyLogLeft: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flex: 1,
   },
   historyLogAccent: {
     marginRight: 12,
-    paddingTop: 2,
   },
   historyLogNameRow: {
     flexDirection: 'row',

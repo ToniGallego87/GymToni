@@ -662,7 +662,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
-    marginTop: theme.spacing.md,
+    marginTop: 4,
     alignItems: 'center',
     ...theme.shadow.soft,
   },

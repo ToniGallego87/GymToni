@@ -109,7 +109,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   iconActive: {
-    color: theme.colors.primary,
+    color: theme.colors.white,
   },
   label: {
     color: theme.colors.textSecondary,
@@ -120,6 +120,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   labelActive: {
-    color: theme.colors.primary,
+    color: theme.colors.white,
   },
 });

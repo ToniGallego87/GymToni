@@ -61,6 +61,17 @@ const EXTRA_EMOJIS = ['🟡', '🟣', '🟠', '⚪'];
 const MIN_SETS = 1;
 const MAX_SETS = 12;
 
+// Paleta de colores de días de rutina (acentos por emoji). Cada día nuevo
+// arranca con un color distinto de esta paleta según su índice.
+const DAY_COLOR_PALETTE = [
+  theme.colors.emoji_blue,
+  theme.colors.emoji_green,
+  theme.colors.error,
+  theme.colors.emoji_orange,
+  theme.colors.emoji_purple,
+  theme.colors.emoji_brown,
+];
+
 // Acento por tipo de día, coherente con getTrainingAccent (Inicio).
 const TYPE_ACCENT: Record<string, string> = {
   push: theme.colors.emoji_blue,
@@ -95,7 +106,8 @@ function getDayAccent(
   index: number
 ): { accent: string; emoji: string | null } {
   const trimmed = title.trim();
-  if (!trimmed) return { accent: theme.colors.border, emoji: null };
+  const fallbackAccent = DAY_COLOR_PALETTE[index % DAY_COLOR_PALETTE.length];
+  if (!trimmed) return { accent: fallbackAccent, emoji: null };
 
   const type = getNormalizedDayType(trimmed);
   const emoji = getEmojiForDayType(type, index);
@@ -256,17 +268,21 @@ function ExerciseRow({
   canRemove,
   onChange,
   onRemove,
+  onCollapse,
 }: {
   exercise: ExerciseForm;
   accent: string;
   canRemove: boolean;
   onChange: (changes: Partial<ExerciseForm>) => void;
   onRemove: () => void;
+  onCollapse: () => void;
 }) {
   const adjustSets = (delta: number) => {
     const next = Math.min(MAX_SETS, Math.max(MIN_SETS, exercise.sets + delta));
     onChange({ sets: next });
   };
+
+  const hasName = !!exercise.name.trim();
 
   return (
     <View style={styles.exerciseRow}>
@@ -278,6 +294,19 @@ function ExerciseRow({
           value={exercise.name}
           onChangeText={(value) => onChange({ name: value })}
         />
+        {hasName && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.collapseButton,
+              { borderColor: accent },
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={onCollapse}
+            hitSlop={8}
+          >
+            <MaterialCommunityIcons name="check" size={18} color={accent} />
+          </Pressable>
+        )}
         <Pressable
           style={({ pressed }) => [
             styles.removeExerciseButton,
@@ -387,6 +416,63 @@ function ExerciseRow({
   );
 }
 
+// Fila colapsada: muestra el ejercicio ya definido como una sola línea de texto.
+function ExerciseSummaryRow({
+  exercise,
+  accent,
+  canRemove,
+  onEdit,
+  onRemove,
+}: {
+  exercise: ExerciseForm;
+  accent: string;
+  canRemove: boolean;
+  onEdit: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <View style={styles.summaryRow}>
+      <Pressable
+        style={({ pressed }) => [
+          styles.summaryMain,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={onEdit}
+        hitSlop={6}
+      >
+        <Text style={styles.summaryText} numberOfLines={1}>
+          {exercise.name.trim()}
+        </Text>
+        <View style={styles.summaryDivider} />
+        <Text style={styles.summarySets}>
+          {exercise.sets}x{buildTargetReps(exercise)}
+        </Text>
+        <MaterialCommunityIcons
+          name="pencil"
+          size={16}
+          color={theme.colors.textSecondary}
+        />
+      </Pressable>
+      <Pressable
+        style={({ pressed }) => [
+          styles.removeExerciseButton,
+          !canRemove && styles.controlDisabled,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={onRemove}
+        disabled={!canRemove}
+        hitSlop={8}
+      >
+        <MaterialCommunityIcons
+          name="close"
+          size={18}
+          color={canRemove ? theme.colors.error : theme.colors.textSecondary}
+        />
+      </Pressable>
+    </View>
+  );
+}
+
 export function NewRoutineScreen({
   existingRoutineCount,
   onCreateRoutine,
@@ -410,6 +496,10 @@ export function NewRoutineScreen({
   } | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
+  // Ejercicio con el editor abierto; el resto se muestran colapsados si tienen nombre.
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
+    null
+  );
 
   const handleImportText = () => {
     const parsed = buildDaysFromRoutineText(importText);
@@ -471,10 +561,12 @@ export function NewRoutineScreen({
   };
 
   const handleAddExercise = (dayId: string) => {
+    const exercise = createEmptyExercise();
     updateDay(dayId, (day) => ({
       ...day,
-      exercises: [...day.exercises, createEmptyExercise()],
+      exercises: [...day.exercises, exercise],
     }));
+    setEditingExerciseId(exercise.id);
   };
 
   const handleRemoveExercise = (dayId: string, exerciseId: string) => {
@@ -591,7 +683,7 @@ export function NewRoutineScreen({
               key={day.id}
               style={[styles.dayCard, { borderLeftColor: accent }]}
             >
-              <GradientFill accent={day.title.trim() ? accent : undefined} />
+              <GradientFill accent={accent} />
 
               <View style={styles.dayHeaderRow}>
                 <MaterialCommunityIcons
@@ -614,22 +706,33 @@ export function NewRoutineScreen({
 
               <Text style={styles.label}>Ejercicios</Text>
 
-              {day.exercises.map((exercise) => (
-                <ExerciseRow
-                  key={exercise.id}
-                  exercise={exercise}
-                  accent={
-                    accent === theme.colors.border
-                      ? theme.colors.primary
-                      : accent
-                  }
-                  canRemove={day.exercises.length > 1}
-                  onChange={(changes) =>
-                    handleUpdateExercise(day.id, exercise.id, changes)
-                  }
-                  onRemove={() => handleRemoveExercise(day.id, exercise.id)}
-                />
-              ))}
+              {day.exercises.map((exercise) => {
+                const expanded =
+                  editingExerciseId === exercise.id || !exercise.name.trim();
+
+                return expanded ? (
+                  <ExerciseRow
+                    key={exercise.id}
+                    exercise={exercise}
+                    accent={accent}
+                    canRemove={day.exercises.length > 1}
+                    onChange={(changes) =>
+                      handleUpdateExercise(day.id, exercise.id, changes)
+                    }
+                    onRemove={() => handleRemoveExercise(day.id, exercise.id)}
+                    onCollapse={() => setEditingExerciseId(null)}
+                  />
+                ) : (
+                  <ExerciseSummaryRow
+                    key={exercise.id}
+                    exercise={exercise}
+                    accent={accent}
+                    canRemove={day.exercises.length > 1}
+                    onEdit={() => setEditingExerciseId(exercise.id)}
+                    onRemove={() => handleRemoveExercise(day.id, exercise.id)}
+                  />
+                );
+              })}
 
               <Pressable
                 style={({ pressed }) => [
@@ -829,7 +932,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.border,
+    borderTopColor: theme.colors.border,
+    borderRightColor: theme.colors.border,
+    borderBottomColor: theme.colors.border,
     borderLeftWidth: 4,
     borderLeftColor: theme.colors.primary,
     padding: theme.spacing.md,
@@ -910,6 +1015,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.surface,
+  },
+  collapseButton: {
+    width: 38,
+    height: 38,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  summaryMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    paddingHorizontal: 12,
+    height: 44,
+  },
+  summaryText: {
+    flex: 1,
+    minWidth: 0,
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  summaryDivider: {
+    width: 1,
+    alignSelf: 'stretch',
+    marginVertical: 6,
+    backgroundColor: theme.colors.border,
+  },
+  summarySets: {
+    color: theme.colors.textSecondary,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
   },
   exerciseControlsRow: {
     flexDirection: 'row',

@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     pointerEvents: 'none',
   },
   backButtonText: {
-    color: theme.colors.primary,
+    color: theme.colors.white,
     fontWeight: '800',
     fontSize: 16,
     lineHeight: 20,
