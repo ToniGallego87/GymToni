@@ -12,6 +12,7 @@ import {
   StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
+import { hasAnyCardio } from '@lib/cardio';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
@@ -19,6 +20,7 @@ import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
   onNavigateHome?: () => void;
+  onNavigateCardio?: () => void;
   onNavigateRoutines?: () => void;
   onNavigateCalendar?: () => void;
   onNavigateData?: () => void;
@@ -44,6 +46,7 @@ const WEEK_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
 export function CalendarScreen({
   onSelectLog,
   onNavigateHome,
+  onNavigateCardio,
   onNavigateRoutines,
   onNavigateCalendar,
   onNavigateData,
@@ -183,7 +186,9 @@ export function CalendarScreen({
         <FloatingPrimaryNav
           bottom={floatingNavBottom}
           activeTab="calendar"
+          showCardio={hasAnyCardio(state.logs)}
           onPressHome={onNavigateHome}
+          onPressCardio={onNavigateCardio}
           onPressRoutines={onNavigateRoutines}
           onPressCalendar={onNavigateCalendar}
           onPressData={onNavigateData}
@@ -336,7 +341,12 @@ export function CalendarScreen({
                     )}
                   </>
                 ) : (
-                  <Text style={styles.dayNumber}>{dayNumber}</Text>
+                  <>
+                    {dateKey === todayKey && (
+                      <GradientFill accent={theme.colors.primary} />
+                    )}
+                    <Text style={styles.dayNumber}>{dayNumber}</Text>
+                  </>
                 )}
               </Pressable>
             );
@@ -354,7 +364,9 @@ export function CalendarScreen({
       <FloatingPrimaryNav
         bottom={floatingNavBottom}
         activeTab="calendar"
+        showCardio={hasAnyCardio(state.logs)}
         onPressHome={onNavigateHome}
+        onPressCardio={onNavigateCardio}
         onPressRoutines={onNavigateRoutines}
         onPressCalendar={onNavigateCalendar}
         onPressData={onNavigateData}

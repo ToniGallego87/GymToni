@@ -37,6 +37,19 @@ function exerciseToLine(exercise: WorkoutExercise): string {
   return exercise.name;
 }
 
+// Rutina en texto plano, en el mismo formato que entiende "Crear a partir de
+// texto plano" (buildDaysFromRoutineText en NewRoutineScreen): un día por bloque
+// separado por línea en blanco; la primera línea es el nombre del día y debajo,
+// un ejercicio por línea ("Nombre [SxR]"). Round-trip exacto con la importación.
+export function buildRoutineShareText(routine: WorkoutRoutine): string {
+  return routine.days
+    .map((day) => {
+      const title = getDisplayDayName(day.name) || day.name;
+      return [title, ...day.exercises.map(exerciseToLine)].join('\n');
+    })
+    .join('\n\n');
+}
+
 export function buildRoutineShareLink(routine: WorkoutRoutine): string {
   const payload: RoutinePayload = {
     v: 1,

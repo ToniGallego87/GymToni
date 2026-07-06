@@ -200,6 +200,7 @@ export function WorkoutLogScreen({
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
+    duration?: number;
   } | null>(null);
   const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
   const [timerSeconds, setTimerSeconds] = useState(0);
@@ -697,6 +698,13 @@ export function WorkoutLogScreen({
                 }}
                 addedSets={currentSets}
                 onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
+                onInvalidAdd={() =>
+                  setToast({
+                    message: 'Rellena primero los datos',
+                    type: 'error',
+                    duration: 2000,
+                  })
+                }
                 onRemoveLastSet={() => handleRemoveLastSet(exercise.id)}
                 onFinishExercise={() => handleFinishExercise(exercise.id)}
                 onNotesPress={() => handleExerciseNotesPress(exercise.id)}
@@ -785,6 +793,7 @@ export function WorkoutLogScreen({
         <Toast
           message={toast.message}
           type={toast.type}
+          duration={toast.duration}
           onDismiss={() => setToast(null)}
         />
       )}

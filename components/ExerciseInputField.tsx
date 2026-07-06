@@ -38,6 +38,9 @@ interface ExerciseInputFieldProps {
   };
   addedSets: ParsedSet[];
   onAddSet: (set: ParsedSet) => void;
+  // Se invoca al pulsar "Añadir serie" sin datos válidos (p. ej. 0×0 sin caso
+  // anterior que rellene los placeholders). El padre muestra el aviso.
+  onInvalidAdd?: () => void;
   onRemoveLastSet: () => void;
   onFinishExercise: () => void;
   onNotesPress: (event: GestureResponderEvent) => void;
@@ -53,6 +56,7 @@ export function ExerciseInputField({
   target,
   addedSets,
   onAddSet,
+  onInvalidAdd,
   onRemoveLastSet,
   onFinishExercise,
   onNotesPress,
@@ -138,6 +142,8 @@ export function ExerciseInputField({
       setWeightValue('');
       setRepsValue('');
       Keyboard.dismiss();
+    } else {
+      onInvalidAdd?.();
     }
   };
 

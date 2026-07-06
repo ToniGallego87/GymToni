@@ -10,6 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   DayAccentIcon,
@@ -20,11 +21,12 @@ import {
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
   StretchScrollView,
+  Toast,
 } from '../../components';
 import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
 import { generateId } from '@lib/storage';
-import { buildRoutineShareLink } from '@lib/routineShare';
+import { buildRoutineShareLink, buildRoutineShareText } from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
 
 interface RoutineDetailScreenProps {
@@ -47,6 +49,10 @@ export function RoutineDetailScreen({
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
+  const [toast, setToast] = useState<{
+    message: string;
+    type: 'success' | 'error';
+  } | null>(null);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
@@ -63,6 +69,21 @@ export function RoutineDetailScreen({
     () => buildRoutineShareLink(currentRoutine),
     [currentRoutine]
   );
+
+  // Rutina en texto plano, lista para pegar en "Crear a partir de texto plano".
+  const shareText = useMemo(
+    () => buildRoutineShareText(currentRoutine),
+    [currentRoutine]
+  );
+
+  const handleCopyPlainText = async () => {
+    try {
+      await Clipboard.setStringAsync(shareText);
+      setToast({ message: 'Rutina copiada al portapapeles', type: 'success' });
+    } catch {
+      setToast({ message: 'No se pudo copiar la rutina', type: 'error' });
+    }
+  };
 
   const getTimerDurationSeconds = () => {
     return currentRoutine.timerDuration || 150;
@@ -285,6 +306,31 @@ export function RoutineDetailScreen({
             color={theme.colors.textSecondary}
           />
         </Pressable>
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.shareBlock,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={handleCopyPlainText}
+        >
+          <MaterialCommunityIcons
+            name="clipboard-text-outline"
+            size={20}
+            color={theme.colors.text}
+          />
+          <View style={styles.shareBlockTextWrap}>
+            <Text style={styles.shareBlockLabel}>Compartir en texto plano</Text>
+            <Text style={styles.shareBlockHint}>
+              Copia la rutina para pegarla en «Crear a partir de texto plano»
+            </Text>
+          </View>
+          <MaterialCommunityIcons
+            name="content-copy"
+            size={20}
+            color={theme.colors.textSecondary}
+          />
+        </Pressable>
       </StretchScrollView>
 
       <GlassTopBar
@@ -471,6 +517,14 @@ export function RoutineDetailScreen({
           </View>
         </View>
       </Modal>
+
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onDismiss={() => setToast(null)}
+        />
+      )}
     </View>
   );
 }

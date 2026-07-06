@@ -4,12 +4,20 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { FloatingGlassBar } from './FloatingGlassBar';
 
-type FloatingPrimaryNavKey = 'home' | 'routines' | 'calendar' | 'data';
+type FloatingPrimaryNavKey =
+  | 'home'
+  | 'cardio'
+  | 'routines'
+  | 'calendar'
+  | 'data';
 
 interface FloatingPrimaryNavProps {
   bottom: number;
   activeTab: FloatingPrimaryNavKey;
+  /** Oculta el botón de Cardio cuando no hay ningún registro de cardio. */
+  showCardio?: boolean;
   onPressHome?: () => void;
+  onPressCardio?: () => void;
   onPressRoutines?: () => void;
   onPressCalendar?: () => void;
   onPressData?: () => void;
@@ -25,7 +33,9 @@ type NavItem = {
 export function FloatingPrimaryNav({
   bottom,
   activeTab,
+  showCardio = true,
   onPressHome,
+  onPressCardio,
   onPressRoutines,
   onPressCalendar,
   onPressData,
@@ -33,9 +43,15 @@ export function FloatingPrimaryNav({
   const items: NavItem[] = [
     {
       key: 'home',
-      label: 'Entrenar',
+      label: 'Fuerza',
       icon: 'dumbbell',
       onPress: onPressHome,
+    },
+    {
+      key: 'cardio',
+      label: 'Cardio',
+      icon: 'run-fast',
+      onPress: onPressCardio,
     },
     {
       key: 'routines',
@@ -57,9 +73,13 @@ export function FloatingPrimaryNav({
     },
   ];
 
+  const visibleItems = showCardio
+    ? items
+    : items.filter((item) => item.key !== 'cardio');
+
   return (
     <FloatingGlassBar bottom={bottom}>
-      {items.map((item) => {
+      {visibleItems.map((item) => {
         const isActive = item.key === activeTab;
 
         return (

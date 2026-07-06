@@ -3,7 +3,7 @@
     "name": "GymToni",
     "slug": "gymtoni",
     "icon": "./assets/icon.png",
-    "version": "0.5.5",
+    "version": "0.5.6",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": ["**/*"],

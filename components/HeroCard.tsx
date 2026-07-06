@@ -20,6 +20,7 @@ interface HeroCardProps {
   variant: HeroVariant;
   icon: string;
   title: string;
+  titleIcon?: string;
   subtitle?: string;
   onPress: () => void;
 }
@@ -39,6 +40,7 @@ export function HeroCard({
   variant,
   icon,
   title,
+  titleIcon,
   subtitle,
   onPress,
 }: HeroCardProps) {
@@ -78,13 +80,22 @@ export function HeroCard({
         <View style={styles.iconWrap}>
           <MaterialCommunityIcons
             name={icon as any}
-            size={38}
+            size={44}
             style={styles.icon}
           />
         </View>
-        <Text style={styles.title} numberOfLines={2}>
-          {title}
-        </Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.title} numberOfLines={2}>
+            {title}
+          </Text>
+          {!!titleIcon && (
+            <MaterialCommunityIcons
+              name={titleIcon as any}
+              size={26}
+              color={theme.colors.darkGray}
+            />
+          )}
+        </View>
         {!!subtitle && (
           <Text style={styles.subtitle} numberOfLines={1}>
             {subtitle}
@@ -104,9 +115,11 @@ const styles = StyleSheet.create({
   },
   gradient: {
     borderRadius: theme.borderRadius.lg,
-    paddingVertical: 25,
+    paddingVertical: 14,
     paddingHorizontal: 24,
+    minHeight: 172,
     alignItems: 'center',
+    justifyContent: 'center',
     overflow: 'hidden',
   },
   sheen: {
@@ -117,25 +130,38 @@ const styles = StyleSheet.create({
     height: '55%',
   },
   iconWrap: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
+    width: 68,
+    height: 68,
+    borderRadius: 34,
     backgroundColor: 'rgba(16, 19, 24, 0.16)',
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.22)',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16,
+    marginBottom: 10,
   },
   icon: {
-    fontSize: 40,
+    fontSize: 44,
     color: theme.colors.darkGray,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
   },
   title: {
     color: theme.colors.darkGray,
     fontFamily: theme.fonts.display,
     fontSize: 26,
-    lineHeight: 30,
+    lineHeight: 36,
+    // Anton pega el glifo al borde superior de su caja; includeFontPadding:false
+    // + translateY lo centra frente al icono de al lado (mismo patrón que
+    // heroComparePct en CardioScreen).
+    includeFontPadding: false,
+    transform: [{ translateY: 4 }],
     letterSpacing: 0.5,
     textAlign: 'center',
   },
@@ -144,6 +170,8 @@ const styles = StyleSheet.create({
     color: theme.colors.darkGray,
     fontFamily: theme.fonts.display,
     fontSize: 17,
+    lineHeight: 24,
+    includeFontPadding: true,
     letterSpacing: 0.6,
     textAlign: 'center',
     opacity: 0.85,

@@ -32,6 +32,7 @@ import {
   ImprovementResult,
 } from '@lib/progress';
 import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
+import { hasAnyCardio } from '@lib/cardio';
 import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
@@ -55,6 +56,7 @@ interface HomeScreenProps {
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onEditLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onNavigateHome?: () => void;
+  onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
   onNavigateData?: () => void;
   onOpenDaySelector?: () => void;
@@ -425,6 +427,7 @@ export function HomeScreen({
   onSelectLog,
   onEditLog,
   onNavigateHome,
+  onNavigateCardio,
   onNavigateCalendar,
   onNavigateData,
   onOpenDaySelector,
@@ -440,6 +443,7 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
+  const showCardioTab = hasAnyCardio(state.logs);
   const [showRoutineSelector, setShowRoutineSelector] = useState(
     initialShowRoutineSelector
   );
@@ -887,6 +891,7 @@ export function HomeScreen({
     variant: HeroVariant;
     icon: string;
     title: string;
+    titleIcon?: string;
     subtitle?: string;
   } => {
     if (hasNoRoutines) {
@@ -923,8 +928,9 @@ export function HomeScreen({
     }
     return {
       variant: 'start',
-      icon: 'weight-lifter',
+      icon: 'gesture-tap',
       title: 'Empezar entrenamiento',
+      titleIcon: 'weight-lifter',
     };
   };
   const hero = getHeroState();
@@ -1083,7 +1089,9 @@ export function HomeScreen({
         <FloatingPrimaryNav
           bottom={selectorNavBottom}
           activeTab="routines"
+          showCardio={showCardioTab}
           onPressHome={onNavigateHome || handleCloseRoutineSelector}
+          onPressCardio={onNavigateCardio}
           onPressCalendar={onNavigateCalendar}
           onPressData={onNavigateData}
         />
@@ -1171,6 +1179,7 @@ export function HomeScreen({
           variant={hero.variant}
           icon={hero.icon}
           title={hero.title}
+          titleIcon={hero.titleIcon}
           subtitle={hero.subtitle}
           onPress={handleStartPress}
         />
@@ -1186,11 +1195,17 @@ export function HomeScreen({
 
         {filteredWeeklyProgress.length > 0 &&
           (() => {
-            const progressAccent = latestPoint
-              ? latestPoint.improvement >= 0
-                ? theme.colors.success
-                : theme.colors.error
-              : theme.colors.primary;
+            // Primera semana de la rutina: no hay semana previa con la que
+            // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
+            // sin flecha ni porcentaje, solo un mensaje de ánimo.
+            const isFirstWeek = filteredWeeklyProgress.length <= 1;
+            const progressAccent = isFirstWeek
+              ? theme.colors.white
+              : !latestPoint
+              ? theme.colors.primary
+              : latestPoint.improvement >= 0
+              ? theme.colors.success
+              : theme.colors.error;
             return (
               <View
                 style={[styles.progressCard, { borderColor: progressAccent }]}
@@ -1198,10 +1213,15 @@ export function HomeScreen({
                 <GradientFill accent={progressAccent} />
                 <TouchableOpacity
                   style={styles.progressToggleButton}
-                  onPress={() => {
-                    animateLayout();
-                    setShowWeeklyProgressChart((prev: boolean) => !prev);
-                  }}
+                  onPress={
+                    isFirstWeek
+                      ? undefined
+                      : () => {
+                          animateLayout();
+                          setShowWeeklyProgressChart((prev: boolean) => !prev);
+                        }
+                  }
+                  disabled={isFirstWeek}
                   activeOpacity={0.85}
                 >
                   <View style={styles.progressHeaderRow}>
@@ -1217,17 +1237,26 @@ export function HomeScreen({
                           (r: WorkoutRoutine) => r.id === displayedRoutineId
                         ) + 1}
                       </Text>
-                      <MaterialCommunityIcons
-                        name={
-                          showWeeklyProgressChart
-                            ? 'chevron-up'
-                            : 'chevron-down'
-                        }
-                        size={20}
-                        color={theme.colors.text}
-                      />
+                      {!isFirstWeek && (
+                        <MaterialCommunityIcons
+                          name={
+                            showWeeklyProgressChart
+                              ? 'chevron-up'
+                              : 'chevron-down'
+                          }
+                          size={20}
+                          color={theme.colors.text}
+                        />
+                      )}
                     </View>
-                    {latestPoint ? (
+                    {isFirstWeek ? (
+                      <Text
+                        style={styles.progressEncourage}
+                        numberOfLines={2}
+                      >
+                        ¡Ánimo con tu nueva rutina!
+                      </Text>
+                    ) : latestPoint ? (
                       <View style={styles.deltaRow}>
                         <TrendIcon
                           kind={latestPoint.improvement >= 0 ? 'up' : 'down'}
@@ -1260,7 +1289,8 @@ export function HomeScreen({
                   </View>
                 </TouchableOpacity>
 
-                {showWeeklyProgressChart &&
+                {!isFirstWeek &&
+                  showWeeklyProgressChart &&
                   (() => {
                     // Un único botón que rota entre "Semana completa" y cada día de la
                     // rutina a cada pulsación (vuelve al principio al llegar al final).
@@ -1467,6 +1497,9 @@ export function HomeScreen({
                               }}
                               delayLongPress={1000}
                             >
+                              {isToday && (
+                                <GradientFill accent={theme.colors.primary} />
+                              )}
                               <View style={styles.historyLogHeader}>
                                 <View style={styles.historyLogLeft}>
                                   <View style={styles.historyLogAccent}>
@@ -1637,7 +1670,9 @@ export function HomeScreen({
         <FloatingPrimaryNav
           bottom={floatingNavBottom}
           activeTab="home"
+          showCardio={showCardioTab}
           onPressHome={onNavigateHome}
+          onPressCardio={onNavigateCardio}
           onPressRoutines={() => {
             if (onOpenRoutineSelector) {
               onOpenRoutineSelector();
@@ -1740,8 +1775,8 @@ const styles = StyleSheet.create({
   },
   progressCard: {
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+    marginBottom: 0,
     backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
     borderWidth: 2,
@@ -1799,8 +1834,8 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
   },
   progressToggleButton: {
-    paddingVertical: 6,
-    paddingHorizontal: 10,
+    paddingVertical: 0,
+    paddingHorizontal: 16,
     width: '100%',
   },
   progressTitle: {
@@ -1818,6 +1853,15 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 20,
   },
+  progressEncourage: {
+    flexShrink: 1,
+    marginLeft: 12,
+    fontSize: 13,
+    fontWeight: '700',
+    color: theme.colors.white,
+    lineHeight: 17,
+    textAlign: 'right',
+  },
   progressLatestUp: {
     color: theme.colors.success,
   },
@@ -1830,6 +1874,7 @@ const styles = StyleSheet.create({
     width: '100%',
     overflow: 'hidden',
     flexDirection: 'row',
+    marginTop: 12,
   },
   chartFilterButton: {
     flexDirection: 'row',
@@ -1837,7 +1882,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignSelf: 'center',
     gap: 8,
-    marginTop: 12,
+    marginTop: 18,
     paddingVertical: 9,
     paddingHorizontal: 16,
     borderRadius: theme.borderRadius.pill,
@@ -2047,6 +2092,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     minHeight: 72,
     justifyContent: 'center',
+    overflow: 'hidden',
     ...theme.shadow.soft,
   },
   historyLogCardToday: {
@@ -2054,7 +2100,6 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderLeftWidth: 2.5,
     borderLeftColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryMuted,
   },
   historyLogCardPressed: {
     opacity: 0.8,

@@ -14,6 +14,7 @@ import { View, Text, StyleSheet, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
+import { hasAnyCardio } from '@lib/cardio';
 import { theme } from '@lib/theme';
 
 interface DataScreenProps {
@@ -21,6 +22,7 @@ interface DataScreenProps {
   onExportData: () => Promise<void>;
   onClearData: () => Promise<void> | void;
   onNavigateHome?: () => void;
+  onNavigateCardio?: () => void;
   onNavigateRoutines?: () => void;
   onNavigateCalendar?: () => void;
   onNavigateData?: () => void;
@@ -31,6 +33,7 @@ export function DataScreen({
   onExportData,
   onClearData,
   onNavigateHome,
+  onNavigateCardio,
   onNavigateRoutines,
   onNavigateCalendar,
   onNavigateData,
@@ -212,7 +215,9 @@ export function DataScreen({
       <FloatingPrimaryNav
         bottom={floatingNavBottom}
         activeTab="data"
+        showCardio={hasAnyCardio(state.logs)}
         onPressHome={onNavigateHome}
+        onPressCardio={onNavigateCardio}
         onPressRoutines={onNavigateRoutines}
         onPressCalendar={onNavigateCalendar}
         onPressData={onNavigateData}

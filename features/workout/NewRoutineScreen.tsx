@@ -1231,9 +1231,10 @@ const styles = StyleSheet.create({
     fontFamily: theme.fonts.display,
     fontSize: 22,
     letterSpacing: 0.5,
-    lineHeight: 26,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
+    // Anton pega los glifos al borde superior de su caja de línea; con
+    // includeFontPadding y lineHeight holgado se reserva sitio y no se corta arriba.
+    lineHeight: 30,
+    includeFontPadding: true,
   },
   qrButton: {
     flexDirection: 'row',

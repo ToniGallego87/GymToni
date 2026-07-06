@@ -15,6 +15,7 @@ const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
 import {
   CalendarScreen,
+  CardioScreen,
   DataScreen,
   DaySelectorScreen,
   DetailScreen,
@@ -47,6 +48,7 @@ import {
 
 type Screen =
   | { type: 'home' }
+  | { type: 'cardio' }
   | { type: 'routine-selector' }
   | { type: 'day-selector' }
   | { type: 'workout-log'; day: WorkoutDay; log?: WorkoutLog }
@@ -330,6 +332,7 @@ function AppContent() {
           }
           onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
           onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateData={() => setScreen({ type: 'data' })}
           onOpenDaySelector={() => {
@@ -359,6 +362,7 @@ function AppContent() {
           }
           onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
           onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateData={() => setScreen({ type: 'data' })}
           onOpenDaySelector={() => {
@@ -379,6 +383,16 @@ function AppContent() {
             setScreen({ type: 'week-achievement', achievements, routineName })
           }
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
+        />
+      )}
+
+      {screen.type === 'cardio' && (
+        <CardioScreen
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
+          onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateData={() => setScreen({ type: 'data' })}
         />
       )}
 
@@ -434,6 +448,7 @@ function AppContent() {
             setScreen({ type: 'detail', log, day, origin: 'calendar' })
           }
           onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateData={() => setScreen({ type: 'data' })}
@@ -446,6 +461,7 @@ function AppContent() {
           onExportData={handleExportData}
           onClearData={handleClearData}
           onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateData={() => setScreen({ type: 'data' })}

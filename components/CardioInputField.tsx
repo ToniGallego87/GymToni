@@ -21,14 +21,19 @@ interface CardioInputFieldProps {
 
 type CardioType =
   | 'treadmill'
+  | 'treadmill-walk'
   | 'outdoor-run'
   | 'stationary-bike'
   | 'elliptical'
   | 'other'
   | null;
 
+// Disciplinas de cinta: muestran el campo de pendiente.
+const TREADMILL_TYPES: CardioType[] = ['treadmill', 'treadmill-walk'];
+
 const CARDIO_OPTIONS = [
   { id: 'treadmill', label: 'Correr en cinta', icon: 'run-fast' },
+  { id: 'treadmill-walk', label: 'Andar en cinta', icon: 'walk' },
   { id: 'outdoor-run', label: 'Correr en exterior', icon: 'run' },
   { id: 'stationary-bike', label: 'Bici estática', icon: 'bicycle' },
   { id: 'elliptical', label: 'Elíptica', icon: 'human-handsup' },
@@ -91,7 +96,7 @@ export function CardioInputField({
     if (cardioSpeed) {
       cardioText += `, ${cardioSpeed}kmh`;
     }
-    if (cardioPendiente && selectedCardioType === 'treadmill') {
+    if (cardioPendiente && TREADMILL_TYPES.includes(selectedCardioType)) {
       cardioText += `, ${cardioPendiente}%`;
     }
 
@@ -314,7 +319,7 @@ export function CardioInputField({
                         maxLength={5}
                       />
                     </View>
-                    {selectedCardioType === 'treadmill' && (
+                    {TREADMILL_TYPES.includes(selectedCardioType) && (
                       <View style={styles.inputGroupCardio}>
                         <Text style={styles.labelCardio}>Pendiente %</Text>
                         <TextInput

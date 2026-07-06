@@ -1,5 +1,24 @@
 # UPDATES
 
+## Version 0.5.6 - 2026-07-06
+
+### Nuevas funcionalidades
+
+- **Cardio como sección propia**: nueva pantalla `CardioScreen` con su pestaña "Cardio" en la barra inferior (`FloatingPrimaryNav`), que aparece solo cuando existe algún registro de cardio (`hasAnyCardio`). Reinterpreta los cardios ya guardados dentro de los días de fuerza (`WorkoutLog.cardio.rawInput`) como una experiencia independiente: sesiones agrupadas por semana ISO y por mes, con kcal quemadas, minutos, distancia y velocidad, mejora semana a semana y gráfica mensual por métrica.
+- **Estimación de kcal por disciplina y peso**: nuevo `lib/cardio.ts` (lógica pura con tests en `lib/__tests__/cardio.test.ts`) que estima calorías con ecuaciones ACSM (VO2, incorporando la pendiente) para andar/correr y un modelo distancia × factor para bici/elíptica. El usuario puede fijar su peso, con tramos históricos (`WeightSegment`) para que cada cardio use el peso vigente cuando se registró.
+- **Andar en cinta**: `CardioInputField` añade la disciplina "Andar en cinta" (con campo de pendiente), separada de "Correr en cinta". Los cardios antiguos con pendiente se reclasifican retroactivamente como "andar" hasta la fecha de corte.
+- **Compartir rutina en texto plano**: `RoutineDetailScreen` añade un botón que copia la rutina al portapapeles (`buildRoutineShareText` + `expo-clipboard`) en el mismo formato que entiende "Crear a partir de texto plano", con aviso `Toast` al copiar.
+
+### Cambios
+
+- **Toast flotante global**: `Toast` pasa a posición absoluta sobre la barra inferior (respetando `safe-area`), con soporte de duración configurable; se usa el aviso "Rellena primero los datos" al intentar añadir una serie vacía (`ExerciseInputField.onInvalidAdd` → `WorkoutLogScreen`).
+- **Tarjeta de progreso semanal en la primera semana**: en Inicio, la primera semana de una rutina no se despliega (no hay semana previa con la que comparar) y muestra un mensaje de ánimo en lugar de flecha y porcentaje.
+- **Hero de Inicio y día actual resaltados**: la tarjeta "Empezar entrenamiento" se rediseña (icono de toque + pesa junto al título) y el día de hoy se resalta con gradiente tanto en el calendario como en el historial de Inicio.
+
+### Correcciones
+
+- **Títulos con tipografía Anton sin recortar**: se ajusta el interlineado y el padding de fuente en `HeroCard` y en el título de `NewRoutineScreen` para que los glifos de Anton no se corten por arriba. `versionCode` 7 → 8.
+
 ## Version 0.5.5 - 2026-07-01
 
 ### Nuevas funcionalidades

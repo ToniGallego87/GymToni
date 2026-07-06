@@ -1,6 +1,7 @@
 export { WorkoutProvider, WorkoutContext } from './WorkoutContext';
 export { useWorkout } from '@hooks/useWorkout';
 export { HomeScreen } from './HomeScreen';
+export { CardioScreen } from './CardioScreen';
 export { WorkoutLogScreen } from './WorkoutLogScreen';
 export { DetailScreen } from './DetailScreen';
 export { CalendarScreen } from './CalendarScreen';
