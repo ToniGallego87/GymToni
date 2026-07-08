@@ -11,8 +11,8 @@ export { generateId, formatDate, getToday } from './utils';
 // Claves del almacenamiento JSON. En nativo son legacy: solo se leen una vez
 // para migrar a SQLite. En web siguen siendo el almacenamiento principal
 // (expo-sqlite no está soportado en web en SDK 51).
-const APP_STORAGE_KEY = 'gymtrack_app_data';
-const LOGS_STORAGE_KEY = 'gymtrack_logs';
+const APP_STORAGE_KEY = 'gymbro_app_data';
+const LOGS_STORAGE_KEY = 'gymbro_logs';
 
 const isWeb = Platform.OS === 'web';
 

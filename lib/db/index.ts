@@ -63,7 +63,7 @@ async function bulkInsert<T>(
   }
 }
 
-const DB_NAME = 'gymtoni.db';
+const DB_NAME = 'gymbro.db';
 
 let dbPromise: Promise<SQLiteDatabase> | null = null;
 

@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "GymToni",
-    "slug": "gymtoni",
+    "name": "GymBro",
+    "slug": "gymbro",
     "icon": "./assets/icon.png",
     "version": "0.5.7",
     "orientation": "portrait",
@@ -9,10 +9,10 @@
     "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.gymtrack.app"
+      "bundleIdentifier": "com.tonigallego.gymbro"
     },
     "android": {
-      "package": "com.gymtrack.app",
+      "package": "com.tonigallego.gymbro",
       "permissions": []
     },
     "androidStatusBar": {
@@ -38,7 +38,7 @@
         }
       ]
     ],
-    "scheme": "gymtrack",
+    "scheme": "gymbro",
     "extra": {
       "eas": {
         "projectId": "66ab349f-bf74-4fa9-b4af-263fc087d9b5"

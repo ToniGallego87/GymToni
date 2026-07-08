@@ -324,4 +324,4 @@ Elige **uno** de estos features y:
 
 ---
 
-**¡Que disfrutes expandiendo GymTrack! 💪**
+**¡Que disfrutes expandiendo GymBro! 💪**

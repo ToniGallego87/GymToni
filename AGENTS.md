@@ -1,4 +1,4 @@
-# GymToni / GymTrack
+# GymBro
 
 App de registro de entrenamientos de gimnasio (React Native + Expo SDK 51, expo-router).
 MVP móvil. Prioridad absoluta: **velocidad de uso > simplicidad > arquitectura clara > mantenibilidad**.

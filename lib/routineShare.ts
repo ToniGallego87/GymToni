@@ -3,10 +3,10 @@ import { WorkoutExercise, WorkoutRoutine } from '../types';
 import { getDisplayDayName } from './theme';
 import { GymIconName, isGymIconName, resolveDayIcon } from './gymIcons';
 
-// Ruta del deep link de importación: gymtrack://import-routine?data=...
-// El esquema (gymtrack) está declarado en app.json → expo.scheme.
+// Ruta del deep link de importación: gymbro://import-routine?data=...
+// El esquema (gymbro) está declarado en app.json → expo.scheme.
 export const ROUTINE_IMPORT_PATH = 'import-routine';
-const SHARE_SCHEME = 'gymtrack';
+const SHARE_SCHEME = 'gymbro';
 
 // Forma que consume NewRoutineScreen para prerrellenar el formulario.
 export interface SharedRoutineDay {

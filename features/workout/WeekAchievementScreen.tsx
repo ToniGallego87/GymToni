@@ -222,7 +222,7 @@ export function WeekAchievementScreen({
             async (base64: string) => {
               try {
                 await shareBase64Png(
-                  `gymtoni-semana-${achievements.weekNumber}.png`,
+                  `gymbro-semana-${achievements.weekNumber}.png`,
                   base64
                 );
               } catch (error) {
@@ -267,7 +267,7 @@ export function WeekAchievementScreen({
     setVideoProgress(0);
     animationRef.current?.stop();
 
-    const framesDir = `${FileSystem.cacheDirectory}gymtoni-frames/`;
+    const framesDir = `${FileSystem.cacheDirectory}gymbro-frames/`;
     try {
       await FileSystem.makeDirectoryAsync(framesDir, {
         intermediates: true,
@@ -295,7 +295,7 @@ export function WeekAchievementScreen({
       const lastPath = uniquePaths[uniquePaths.length - 1];
       for (let h = 0; h < VIDEO_END_HOLD; h++) framePaths.push(lastPath);
 
-      const outputUri = `${FileSystem.cacheDirectory}gymtoni-semana-${achievements.weekNumber}.mp4`;
+      const outputUri = `${FileSystem.cacheDirectory}gymbro-semana-${achievements.weekNumber}.mp4`;
       await encodeFramesToMp4(framePaths, outputUri, VIDEO_FPS);
 
       const canShare = await Sharing.isAvailableAsync();

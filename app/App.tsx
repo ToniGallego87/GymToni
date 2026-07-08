@@ -227,7 +227,7 @@ function AppContent() {
     return () => subscription.remove();
   }, [dispatch, state.activeRoutineId, state.routines]);
 
-  // Deep link de importación (QR): gymtrack://import-routine?data=...
+  // Deep link de importación (QR): gymbro://import-routine?data=...
   // Abre Nueva rutina con los días prerrellenados desde el código escaneado.
   useEffect(() => {
     const handleUrl = (url: string | null) => {
@@ -277,7 +277,7 @@ function AppContent() {
       logs: state.logs,
     };
 
-    const fileName = `gymtrack-backup-${new Date()
+    const fileName = `gymbro-backup-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
     await downloadJsonFile(fileName, JSON.stringify(payload, null, 2));

@@ -1,4 +1,4 @@
-// Configuración de tema GymToni
+// Configuración de tema GymBro
 export const theme = {
   colors: {
     primary: '#F7CC3D',

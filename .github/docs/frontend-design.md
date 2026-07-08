@@ -1,4 +1,4 @@
-# Skill — frontend design (adaptada a GymTrack)
+# Skill — frontend design (adaptada a GymBro)
 
 Objetivo:
 diseñar interfaces rápidas, claras y móviles
@@ -11,7 +11,7 @@ Principios:
 - jerarquía clara
 - feedback inmediato
 
-En GymTrack:
+En GymBro:
 
 - inputs rápidos (ej: 60x8)
 - botones grandes (➕ ➖ ✓)

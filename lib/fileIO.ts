@@ -87,7 +87,7 @@ export async function downloadJsonFile(
   if (canShare) {
     await Sharing.shareAsync(fileUri, {
       mimeType: 'application/json',
-      dialogTitle: 'Exportar datos de GymTrack',
+      dialogTitle: 'Exportar datos de GymBro',
       UTI: 'public.json',
     });
     return;

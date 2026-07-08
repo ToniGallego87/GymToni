@@ -1,5 +1,28 @@
 # UPDATES
 
+## Version 0.5.7 - 2026-07-09
+
+### Nuevas funcionalidades
+
+- **Rebranding a GymBro**: la app cambia de nombre en toda la interfaz, documentación y comentarios de código (`GymToni`/`GymTrack` → `GymBro`); nuevo `assets/title.png` (744×158) con el wordmark actualizado.
+- **Iconos nuevos**: diseño renovado (mancuernas + check, negro sólido con detalle amarillo/dorado) para `assets/icon.png` y las 5 densidades del adaptive icon de Android (mdpi/hdpi/xhdpi/xxhdpi/xxxhdpi), generado desde un master de 432×432.
+- **Nuevo `privacy-policy.html`** en la raíz del repo con la política de privacidad (la app no recopila ningún dato, todo se guarda localmente), pensado para publicarse vía GitHub Pages y cumplir el requisito de ficha de Google Play Console.
+
+### Arquitectura
+
+- **Nuevo package Android**: `com.gymtrack.app` → `com.tonigallego.gymbro` (colisión con el paquete antiguo ya registrado en Play Console). Afecta `app.json` (`android.package`, `ios.bundleIdentifier`, `scheme`, `slug`), `android/app/build.gradle` (`namespace`, `applicationId`), `android/settings.gradle` (`rootProject.name`), `AndroidManifest.xml` y la carpeta Java, movida con `git mv` de `com/gymtrack/app/` a `com/tonigallego/gymbro/` (`MainActivity.kt`, `MainApplication.kt`).
+- **Adaptive icon de Android arreglado**: el icono adaptativo nunca estuvo realmente cableado (`mipmap-anydpi-v26` vacía y `iconBackground` en `colors.xml` sin uso en ningún XML). Se añade `mipmap-anydpi-v26/ic_launcher.xml` y se cambia `iconBackground` a `#000000`.
+- **Identificadores internos renombrados**: BD SQLite `gymtoni.db` → `gymbro.db` (`lib/db/index.ts`), claves de AsyncStorage `gymtrack_app_data`/`gymtrack_logs` → `gymbro_app_data`/`gymbro_logs` (`lib/storage.ts`), deep link scheme `gymtrack://` → `gymbro://` (`app.json`, `lib/routineShare.ts`, `app/+native-intent.ts`, `app/App.tsx`).
+- `assets/splash.png` eliminado (no se usa: el splash nativo de Android es solo color de fondo vía `splashscreen.xml`).
+
+### Cambios
+
+- Nombres de fichero de exportación con el nuevo prefijo `gymbro-` (backup JSON, imagen/vídeo de logros semanales en `WeekAchievementScreen`).
+
+### Correcciones
+
+- Ninguna pendiente relevante para el usuario en este cierre; verificado `npm run type-check` y `npm test` (60/60) en verde.
+
 ## Version 0.5.7 - 2026-07-08
 
 ### Nuevas funcionalidades

@@ -1,8 +1,8 @@
-# 🚀 SETUP GymTrack MVP - Guía de Instalación y Uso
+# 🚀 SETUP GymBro MVP - Guía de Instalación y Uso
 
 ## ⚡ Resumen Rápido
 
-**GymTrack** es un MVP de app para registrar entrenamientos de gimnasio de forma rápida y moderna.
+**GymBro** es un MVP de app para registrar entrenamientos de gimnasio de forma rápida y moderna.
 
 - **Stack**: React Native + Expo + TypeScript
 - **Persistencia**: SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web
@@ -175,7 +175,7 @@ GymTrack/
 
 ---
 
-## 🎮 Cómo Usar GymTrack
+## 🎮 Cómo Usar GymBro
 
 ### **Flujo Principal**
 
@@ -815,7 +815,7 @@ npm run type-check
 
 ## ✨ Resumen Final
 
-**GymToni MVP está 100% listo para:**
+**GymBro MVP está 100% listo para:**
 
 - ✅ Ejecutar localmente con persistencia de datos
 - ✅ Registrar y guardar entrenamientos

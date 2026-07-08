@@ -1,4 +1,4 @@
-# Convenciones — GymTrack
+# Convenciones — GymBro
 
 ## Naming
 

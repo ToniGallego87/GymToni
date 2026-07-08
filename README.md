@@ -1,4 +1,4 @@
-# GymTrack
+# GymBro
 
 App móvil para registrar entrenamientos de gimnasio de forma rápida y eficiente.
 

@@ -1,4 +1,4 @@
-# Arquitectura — GymTrack
+# Arquitectura — GymBro
 
 ## Stack
 
@@ -148,7 +148,7 @@ parseCardioString('Cinta: 22.5mins, 11.5kmh')
 
 ## Persistencia
 
-- **Nativo**: SQLite (`expo-sqlite`, BD `gymtoni.db`) via `lib/db/`. Esquema relacional:
+- **Nativo**: SQLite (`expo-sqlite`, BD `gymbro.db`) via `lib/db/`. Esquema relacional:
   - Plan: `routines` → `workout_days` → `exercises` (FK `NOT NULL` + `ON DELETE CASCADE`).
   - Historial: `workout_logs` → `exercise_logs` → `log_sets`, más `cardio_logs` (1:1 con log). Referencias al plan débiles (`ON DELETE SET NULL`) para que el historial sobreviva a cambios de rutina; `exercise_name` es snapshot intencionado.
   - `settings` (clave/valor): `active_routine_id` y la marca `initialized`.

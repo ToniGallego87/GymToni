@@ -1,4 +1,4 @@
-# GymTrack — Instrucciones para GitHub Copilot
+# GymBro — Instrucciones para GitHub Copilot
 
 Las instrucciones del proyecto están centralizadas en un único archivo:
 [../AGENTS.md](../AGENTS.md).

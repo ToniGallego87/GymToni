@@ -1,4 +1,4 @@
-package com.gymtrack.app
+package com.tonigallego.gymbro
 
 import android.app.Application
 import android.content.res.Configuration

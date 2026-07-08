@@ -1,4 +1,4 @@
-package com.gymtrack.app
+package com.tonigallego.gymbro
 
 import android.os.Build
 import android.os.Bundle

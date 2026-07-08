@@ -72,7 +72,7 @@ export function QRScannerScreen({
           </Text>
           <Text style={styles.instructionText}>
             Abre la cámara de tu móvil, apunta al código QR de la rutina y
-            GymToni se abrirá automáticamente con la rutina importada.
+            GymBro se abrirá automáticamente con la rutina importada.
           </Text>
         </View>
 
@@ -93,7 +93,7 @@ export function QRScannerScreen({
               setLink(t);
               setError(null);
             }}
-            placeholder="gymtrack://import-routine?data=..."
+            placeholder="gymbro://import-routine?data=..."
             placeholderTextColor="rgba(255,255,255,0.3)"
             autoCapitalize="none"
             autoCorrect={false}
