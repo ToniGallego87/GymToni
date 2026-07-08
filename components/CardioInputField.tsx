@@ -229,7 +229,7 @@ export function CardioInputField({
                       <MaterialCommunityIcons
                         name={option.icon as any}
                         size={20}
-                        color={theme.colors.primary}
+                        color={theme.colors.white}
                       />
                       <Text style={styles.optionButtonText}>
                         {option.label}
@@ -398,18 +398,6 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     lineHeight: 22,
   },
-  toggleButton: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  toggleButtonPressed: {
-    opacity: 0.6,
-  },
-  toggleText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    lineHeight: 18,
-  },
   icon: {
     marginRight: 8,
   },
@@ -437,7 +425,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
   },
   addCardioButton: {
-    backgroundColor: theme.colors.success,
+    backgroundColor: theme.colors.accent,
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: theme.borderRadius.sm,
@@ -445,7 +433,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   collapsedButton: {
-    backgroundColor: theme.colors.success,
+    backgroundColor: theme.colors.accent,
     paddingVertical: 14,
     paddingHorizontal: 16,
     borderRadius: theme.borderRadius.sm,
@@ -510,7 +498,7 @@ const styles = StyleSheet.create({
   optionButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.primary,
+    color: theme.colors.white,
   },
   customTypeInput: {
     backgroundColor: theme.colors.darkGray,
@@ -553,7 +541,7 @@ const styles = StyleSheet.create({
     minHeight: 40,
   },
   saveButton: {
-    backgroundColor: theme.colors.success,
+    backgroundColor: theme.colors.accent,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 14,
     paddingHorizontal: 16,

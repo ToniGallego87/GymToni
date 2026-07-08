@@ -85,10 +85,3 @@ export function formatParsedSet(set: ParsedSet): string {
   }
   return `${set.weight}x${set.reps}`;
 }
-
-/**
- * Formatea array de sets a string
- */
-export function formatSets(sets: ParsedSet[]): string {
-  return sets.map((s) => formatParsedSet(s)).join(', ');
-}

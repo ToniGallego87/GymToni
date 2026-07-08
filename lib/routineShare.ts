@@ -1,6 +1,7 @@
 import * as Linking from 'expo-linking';
 import { WorkoutExercise, WorkoutRoutine } from '../types';
 import { getDisplayDayName } from './theme';
+import { GymIconName, isGymIconName, resolveDayIcon } from './gymIcons';
 
 // Ruta del deep link de importación: gymtrack://import-routine?data=...
 // El esquema (gymtrack) está declarado en app.json → expo.scheme.
@@ -11,6 +12,7 @@ const SHARE_SCHEME = 'gymtrack';
 export interface SharedRoutineDay {
   title: string;
   exercisesText: string;
+  icon?: GymIconName;
 }
 
 export interface SharedRoutine {
@@ -26,7 +28,24 @@ interface RoutinePayload {
   v: 1;
   n?: string;
   t?: number;
-  d: { t: string; e: string[] }[];
+  d: { t: string; e: string[]; i?: string }[];
+}
+
+// Etiqueta de icono al final de la línea de título en el texto plano, p. ej.
+// "Día de brazo [#biceps]". Se extrae al importar y se oculta del título.
+const ICON_TAG_REGEX = /\s*\[#([a-z]+)\]\s*$/i;
+
+// Separa la etiqueta de icono del título de un día en texto plano.
+export function stripIconTag(titleLine: string): {
+  title: string;
+  icon?: GymIconName;
+} {
+  const match = titleLine.match(ICON_TAG_REGEX);
+  const tag = match?.[1]?.toLowerCase();
+  if (match && isGymIconName(tag)) {
+    return { title: titleLine.replace(ICON_TAG_REGEX, '').trim(), icon: tag };
+  }
+  return { title: titleLine.trim() };
 }
 
 // Línea de ejercicio en el formato que entiende NewRoutineScreen: "Nombre [SxR]".
@@ -45,7 +64,10 @@ export function buildRoutineShareText(routine: WorkoutRoutine): string {
   return routine.days
     .map((day) => {
       const title = getDisplayDayName(day.name) || day.name;
-      return [title, ...day.exercises.map(exerciseToLine)].join('\n');
+      const icon = resolveDayIcon(day.emoji, day.name);
+      return [`${title} [#${icon}]`, ...day.exercises.map(exerciseToLine)].join(
+        '\n'
+      );
     })
     .join('\n\n');
 }
@@ -58,6 +80,7 @@ export function buildRoutineShareLink(routine: WorkoutRoutine): string {
     d: routine.days.map((day) => ({
       t: getDisplayDayName(day.name) || day.name,
       e: day.exercises.map(exerciseToLine),
+      i: resolveDayIcon(day.emoji, day.name),
     })),
   };
 
@@ -85,6 +108,7 @@ export function parseRoutineShareLink(url: string): SharedRoutine | null {
         exercisesText: day.e
           .filter((line) => typeof line === 'string')
           .join('\n'),
+        icon: isGymIconName(day.i) ? day.i : undefined,
       }));
 
     if (!days.length) return null;

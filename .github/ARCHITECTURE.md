@@ -94,9 +94,17 @@ lib/                    → Lógica compartida
   ├── db/               → Capa SQLite: schema.ts (DDL+migraciones), mappers.ts (AppData↔filas + por entidad), index.ts (repositorio + escrituras granulares)
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
   ├── parsers.ts        → Parsers de series y cardio
-  ├── progress.ts       → Cálculos de progreso y 1RM
+  ├── progress.ts       → Cálculos de progreso y 1RM estimado (Epley)
+  ├── weeks.ts          → Agrupación de logs en bloques/semanas y puntuación semanal
+  ├── cardio.ts         → Cardio como experiencia propia: sesiones, semanas ISO, kcal
+  ├── achievements.ts   → Logros semanales (récords, rachas)
+  ├── routineShare.ts   → Compartir rutina (QR / texto plano)
+  ├── imageShare.ts     → Compartir imagen de logros
+  ├── videoExport.ts    → Vídeo de logros (módulo nativo video-encoder)
+  ├── layoutAnimation.ts→ animateLayout compartido (habilita LayoutAnimation en Android)
   ├── utils.ts          → Utilidades genéricas (generateId, formatDate, getToday)
   └── theme.ts          → Colores, tipografía, spacing
+lib/__tests__/          → Tests Jest de la lógica pura (npm test)
 types/                  → Definiciones TypeScript centralizadas
 data/                   → Seed data (rutinas iniciales + logs demo)
 ```
@@ -107,11 +115,19 @@ data/                   → Seed data (rutinas iniciales + logs demo)
 HomeScreen
   ├─→ DaySelectorScreen (elegir día)
   │     └─→ WorkoutLogScreen (registrar)
-  ├─→ RoutineDetailScreen (ver rutina)
+  ├─→ RoutineDetailScreen (ver/editar rutina, compartir QR)
   ├─→ NewRoutineScreen (crear rutina)
-  ├─→ CalendarScreen (vista calendario)
-  ├─→ DataScreen (exportar/importar/limpiar)
+  ├─→ QRScannerScreen (importar rutina por QR/texto)
+  ├─→ WeekAchievementScreen (imagen/vídeo de logros semanales)
   └─→ DetailScreen (ver log guardado)
+
+FloatingPrimaryNav (barra inferior, desde cualquier pantalla principal)
+  ├─→ HomeScreen
+  ├─→ CardioScreen (semanas de cardio, kcal, peso corporal)
+  ├─→ CalendarScreen (vista calendario)
+  └─→ DataScreen (exportar/importar/limpiar)
+
+DetailScreen recuerda su origen (home / calendar / cardio) para volver a él.
 ```
 
 ## Sistema visual (Glass UI)

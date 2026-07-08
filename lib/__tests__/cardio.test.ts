@@ -6,17 +6,13 @@ import {
   buildCardioWeeks,
   buildCardioMonths,
   mergeSessionEntries,
-  formatMergedCardio,
+  formatMergedResults,
   estimateEntryKcal,
   weightForTimestamp,
 } from '../cardio';
 import { WorkoutLog } from '../../types';
 
-const makeLog = (
-  id: string,
-  date: string,
-  rawInput: string
-): WorkoutLog => ({
+const makeLog = (id: string, date: string, rawInput: string): WorkoutLog => ({
   id,
   routineId: 'r1',
   dayId: 'd1',
@@ -66,7 +62,9 @@ describe('cardioSessionFromLog', () => {
   });
 
   it('calcula la distancia total en km (velocidad × tiempo)', () => {
-    const s = cardioSessionFromLog(makeLog('d', '2026-07-01', 'Cinta: 30min, 12kmh'));
+    const s = cardioSessionFromLog(
+      makeLog('d', '2026-07-01', 'Cinta: 30min, 12kmh')
+    );
     expect(s!.totalKm).toBeCloseTo(6); // 12 km/h × 0.5 h
   });
 });
@@ -136,19 +134,21 @@ describe('mergeSessionEntries', () => {
   });
 });
 
-describe('formatMergedCardio', () => {
+describe('formatMergedResults', () => {
   it('formatea con espacios y rango de velocidad', () => {
     const [merged] = mergeSessionEntries(
       parseCardioEntries('Cinta: 20min, 12kmh | Cinta: 24min, 12.6kmh')
     );
-    expect(formatMergedCardio(merged)).toBe('Cinta: 44 min, 12-12.6 km/h');
+    expect(formatMergedResults(merged)).toBe('44 min, 12-12.6 km/h');
   });
 
   it('velocidad única sin rango, y sin velocidad omite km/h', () => {
-    const [cinta] = mergeSessionEntries(parseCardioEntries('Cinta: 20min, 10kmh'));
-    expect(formatMergedCardio(cinta)).toBe('Cinta: 20 min, 10 km/h');
+    const [cinta] = mergeSessionEntries(
+      parseCardioEntries('Cinta: 20min, 10kmh')
+    );
+    expect(formatMergedResults(cinta)).toBe('20 min, 10 km/h');
     const [bici] = mergeSessionEntries(parseCardioEntries('Bici: 30min'));
-    expect(formatMergedCardio(bici)).toBe('Bici: 30 min');
+    expect(formatMergedResults(bici)).toBe('30 min');
   });
 });
 
@@ -180,7 +180,7 @@ describe('pendiente y kcal', () => {
     const [m] = mergeSessionEntries(
       parseCardioEntries('Andar en cinta: 20min, 5kmh, 3%')
     );
-    expect(formatMergedCardio(m)).toBe('Andar en cinta: 20 min, 5 km/h, 3%');
+    expect(formatMergedResults(m)).toBe('20 min, 5 km/h, 3%');
   });
 
   it('estima kcal para correr y 0 si no hay velocidad', () => {

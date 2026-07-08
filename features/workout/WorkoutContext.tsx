@@ -15,15 +15,14 @@ import {
 } from '@lib/normalize';
 import { persistAction } from '@lib/persistence';
 
+const initialActiveRoutineId = resolveActiveRoutineId(
+  WORKOUT_ROUTINES,
+  DEFAULT_ACTIVE_ROUTINE_ID
+);
+
 const initialState: WorkoutState = {
-  routines: syncActiveRoutine(
-    WORKOUT_ROUTINES,
-    DEFAULT_ACTIVE_ROUTINE_ID ||
-      WORKOUT_ROUTINES[WORKOUT_ROUTINES.length - 1]?.id
-  ),
-  activeRoutineId:
-    DEFAULT_ACTIVE_ROUTINE_ID ||
-    WORKOUT_ROUTINES[WORKOUT_ROUTINES.length - 1]?.id,
+  routines: syncActiveRoutine(WORKOUT_ROUTINES, initialActiveRoutineId),
+  activeRoutineId: initialActiveRoutineId,
   logs: ensureParsedSets(INITIAL_LOGS),
 };
 

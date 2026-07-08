@@ -14,7 +14,7 @@ import { View, Text, StyleSheet, Modal } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
-import { hasAnyCardio } from '@lib/cardio';
+import { hasAnyCardio, cardioSessionFromLog } from '@lib/cardio';
 import { theme } from '@lib/theme';
 
 interface DataScreenProps {
@@ -49,6 +49,10 @@ export function DataScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+  // Sesiones de cardio: 1 por log con cardio (igual que la vista Cardio).
+  const cardioSessionsCount = state.logs.filter(
+    (l) => cardioSessionFromLog(l) != null
+  ).length;
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { bottom: floatingNavBottom, scrollBottomPadding } =
     getFloatingPrimaryNavMetrics(insets.bottom);
@@ -109,7 +113,7 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.text}
               />
-              <Text style={styles.summaryTitle}>Resumen actual</Text>
+              <Text style={styles.summaryTitle}>Resumen</Text>
             </View>
             <View style={styles.summaryRow}>
               <View style={styles.summaryItem}>
@@ -120,6 +124,11 @@ export function DataScreen({
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{state.logs.length}</Text>
                 <Text style={styles.summaryLabel}>Entrenamientos</Text>
+              </View>
+              <View style={styles.summaryDivider} />
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{cardioSessionsCount}</Text>
+                <Text style={styles.summaryLabel}>Sesiones cardio</Text>
               </View>
             </View>
           </View>

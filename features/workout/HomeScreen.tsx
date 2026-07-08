@@ -12,9 +12,6 @@ import {
   Modal,
   Alert,
   Image,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Animated, {
@@ -24,7 +21,12 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
-import { WorkoutDay, WorkoutRoutine, WorkoutLog, ExerciseLog } from '../../types';
+import {
+  WorkoutDay,
+  WorkoutRoutine,
+  WorkoutLog,
+  ExerciseLog,
+} from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import {
   buildImprovementFromStrengthScores,
@@ -33,6 +35,7 @@ import {
 } from '@lib/progress';
 import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { hasAnyCardio } from '@lib/cardio';
+import { animateLayout } from '@lib/layoutAnimation';
 import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
@@ -365,24 +368,6 @@ function ProgressBarChart({
   );
 }
 
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-// Animación suave para expandir/colapsar secciones (semanas, gráfico).
-function animateLayout() {
-  LayoutAnimation.configureNext(
-    LayoutAnimation.create(
-      220,
-      LayoutAnimation.Types.easeInEaseOut,
-      LayoutAnimation.Properties.opacity
-    )
-  );
-}
-
 // Contenido desplegable de cada semana. El layout refluye de forma síncrona
 // (correcto, sin solapes) y cada día anima su aparición/desaparición con
 // `entering`/`exiting` de Reanimated en el propio item (opacidad + transform
@@ -545,7 +530,10 @@ export function HomeScreen({
     return { symbol, styleKey, display, kind };
   };
 
-  const todayWorkoutStatus = useMemo((): 'none' | 'in-progress' | 'completed' => {
+  const todayWorkoutStatus = useMemo(():
+    | 'none'
+    | 'in-progress'
+    | 'completed' => {
     const todayKey = new Date().toISOString().split('T')[0];
     const todayLog = displayedRoutineLogs.find((log) =>
       log.date
@@ -557,7 +545,10 @@ export function HomeScreen({
     let todayDay: WorkoutDay | undefined;
     for (const routine of state.routines) {
       const day = routine.days.find((d) => d.id === todayLog.dayId);
-      if (day) { todayDay = day; break; }
+      if (day) {
+        todayDay = day;
+        break;
+      }
     }
 
     if (!todayDay || todayDay.exercises.length === 0) return 'completed';
@@ -1199,13 +1190,9 @@ export function HomeScreen({
             // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
             // sin flecha ni porcentaje, solo un mensaje de ánimo.
             const isFirstWeek = filteredWeeklyProgress.length <= 1;
-            const progressAccent = isFirstWeek
-              ? theme.colors.white
-              : !latestPoint
-              ? theme.colors.primary
-              : latestPoint.improvement >= 0
-              ? theme.colors.success
-              : theme.colors.error;
+            // El borde de la tarjeta de la gráfica es siempre blanco. El
+            // verde/rojo solo aparece en el dato de subida/bajada de dentro.
+            const progressAccent = theme.colors.white;
             return (
               <View
                 style={[styles.progressCard, { borderColor: progressAccent }]}
@@ -1250,10 +1237,7 @@ export function HomeScreen({
                       )}
                     </View>
                     {isFirstWeek ? (
-                      <Text
-                        style={styles.progressEncourage}
-                        numberOfLines={2}
-                      >
+                      <Text style={styles.progressEncourage} numberOfLines={2}>
                         ¡Ánimo con tu nueva rutina!
                       </Text>
                     ) : latestPoint ? (
@@ -1301,9 +1285,7 @@ export function HomeScreen({
                       },
                       ...activeDays.map((day: WorkoutDay, index: number) => ({
                         id: day.id,
-                        label: `${day.emoji ? `${day.emoji} ` : ''}${
-                          getDisplayDayName(day.name) || `Día ${index + 1}`
-                        }`,
+                        label: getDisplayDayName(day.name) || `Día ${index + 1}`,
                       })),
                     ];
                     const currentIndex = Math.max(
@@ -1367,23 +1349,11 @@ export function HomeScreen({
                 );
                 const isCurrentWeek =
                   isDisplayedRoutineActive && block === currentWeekBlock;
-                // Color de la semana en el listado:
-                // - Semana en curso (no completada): amarillo.
-                // - Semana 1: blanca.
-                // - Cualquier otra semana sin completar: azul.
-                // - Semanas completadas: color de mejora (verde/rojo).
-                const weekAccent =
-                  isCurrentWeek && !weekCompleted
-                    ? theme.colors.primary
-                    : block === 1
-                    ? theme.colors.white
-                    : !weekCompleted
-                    ? theme.colors.emoji_blue
-                    : weekImprovement
-                    ? weekImprovement.isImproved
-                      ? theme.colors.success
-                      : theme.colors.error
-                    : theme.colors.white;
+                // Tarjeta: siempre blanca salvo la semana en curso (amarilla).
+                // El verde/rojo solo se usa en el dato de subida/bajada.
+                const weekAccent = isCurrentWeek
+                  ? theme.colors.primary
+                  : theme.colors.white;
 
                 return (
                   <Animated.View
@@ -1506,7 +1476,7 @@ export function HomeScreen({
                                     <DayAccentIcon
                                       emoji={day.emoji}
                                       name={day.name}
-                                      size={18}
+                                      size={36}
                                     />
                                   </View>
                                   <View>
@@ -1756,18 +1726,6 @@ const styles = StyleSheet.create({
   homeScrollContent: {
     flexGrow: 1,
   },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: theme.typography.h1.fontSize,
-    fontWeight: '800',
-    color: theme.colors.text,
-    letterSpacing: -0.8,
-  },
   titleImage: {
     width: 115,
     height: 24,
@@ -1858,7 +1816,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
     fontSize: 13,
     fontWeight: '700',
-    color: theme.colors.white,
+    color: theme.colors.primary,
     lineHeight: 17,
     textAlign: 'right',
   },
@@ -1956,82 +1914,10 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     lineHeight: 16,
   },
-  routineButton: {
-    backgroundColor: theme.colors.surface,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.borderRadius.pill,
-    maxWidth: 180,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  routineButtonText: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
   weeksSection: {
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.sm,
     marginBottom: theme.spacing.md,
-  },
-  homeHistorySection: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  homeHistoryHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  homeActionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 10,
-  },
-  actionChip: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  actionChipText: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  actionChipDanger: {
-    borderColor: 'rgba(240, 106, 106, 0.4)',
-    backgroundColor: 'rgba(240, 106, 106, 0.08)',
-  },
-  actionChipDangerText: {
-    color: theme.colors.error,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  homeHistoryTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  homeHistoryCount: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.primaryLight,
-    backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: theme.borderRadius.pill,
-    lineHeight: 16,
-  },
-  homeHistoryScroll: {
-    maxHeight: 300,
   },
   weekHeaderButton: {
     marginTop: 12,
@@ -2074,9 +1960,6 @@ const styles = StyleSheet.create({
   weekImprovementDown: {
     color: theme.colors.error,
   },
-  weekImprovementNeutral: {
-    color: theme.colors.warning,
-  },
   weekHeaderMeta: {
     fontSize: 14,
     color: theme.colors.textSecondary,
@@ -2116,6 +1999,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   historyLogAccent: {
+    marginLeft: -4,
     marginRight: 12,
   },
   historyLogNameRow: {
@@ -2123,24 +2007,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 4,
   },
   historyLogDayName: {
     fontSize: 19,
     fontFamily: theme.fonts.display,
     letterSpacing: 0.3,
     color: theme.colors.text,
-    lineHeight: 23,
-  },
-  historyLogImprovementText: {
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 18,
+    lineHeight: 22,
   },
   historyLogDate: {
     fontSize: 14,
-    color: theme.colors.primaryLight,
-    marginTop: 4,
+    color: theme.colors.textSecondary,
+    marginTop: 2,
     lineHeight: 16,
     fontWeight: '500',
   },
@@ -2168,22 +2046,6 @@ const styles = StyleSheet.create({
   historyLogBadgeNeutral: {
     color: theme.colors.warning,
     backgroundColor: 'rgba(255, 196, 0, 0.12)',
-  },
-  emptyHistoryBox: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  emptyHistoryText: {
-    color: theme.colors.textSecondary,
-    fontSize: 15,
-    textAlign: 'center',
-  },
-  list: {
-    paddingTop: 0,
-    paddingBottom: theme.spacing.xl,
   },
   routineListContainer: {
     paddingHorizontal: theme.spacing.md,
@@ -2253,21 +2115,6 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontSize: 17,
     fontWeight: '800',
-  },
-  newRoutineQRCard: {
-    marginTop: 6,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    borderStyle: 'dashed',
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  newRoutineQRCardText: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    fontWeight: '700',
   },
   selectorDetailsButton: {
     marginTop: 4,

@@ -27,7 +27,7 @@ export function DayCard({ emoji, name, description, onPress }: DayCardProps) {
       <View style={styles.content}>
         <View style={styles.leading}>
           <View style={[styles.dot, { backgroundColor: accentColor }]} />
-          <DayAccentIcon emoji={emoji} name={name} size={22} />
+          <DayAccentIcon emoji={emoji} name={name} size={38} />
         </View>
         <View style={styles.textContainer}>
           <Text style={styles.name}>{getDisplayDayName(name)}</Text>

@@ -1,6 +1,5 @@
 import {
   getEstimatedOneRepMax,
-  getBestSetStrengthScore,
   getTotalSetsStrengthScore,
   buildImprovementFromStrengthScores,
   FIRST_TIME_IMPROVEMENT_PERCENT,
@@ -17,25 +16,15 @@ describe('getEstimatedOneRepMax (Epley)', () => {
   });
 });
 
-describe('getBestSetStrengthScore (1RM estimado)', () => {
-  it('toma el set con mayor 1RM estimado', () => {
-    const score = getBestSetStrengthScore([
-      { weight: 60, reps: 8 }, // e1RM 76.0
-      { weight: 80, reps: 5 }, // e1RM 93.3
-    ]);
-    expect(score).toBeCloseTo(getEstimatedOneRepMax(80, 5), 5);
-  });
-
+describe('getTotalSetsStrengthScore (1RM estimado)', () => {
   it('cuenta reps cuando no hay carga externa', () => {
-    expect(getBestSetStrengthScore([{ weight: 0, reps: 20 }])).toBe(20);
+    expect(getTotalSetsStrengthScore([{ weight: 0, reps: 20 }])).toBe(20);
   });
 
   it('devuelve 0 sin sets', () => {
-    expect(getBestSetStrengthScore([])).toBe(0);
+    expect(getTotalSetsStrengthScore([])).toBe(0);
   });
-});
 
-describe('getTotalSetsStrengthScore (1RM estimado)', () => {
   it('suma el 1RM estimado de todos los sets', () => {
     expect(
       getTotalSetsStrengthScore([

@@ -55,28 +55,26 @@ async function removeStorageItem(key: string): Promise<void> {
   await AsyncStorage.removeItem(key);
 }
 
-function readLegacyJsonData(
+async function readLegacyJsonData(
   fallback: WorkoutAppData
 ): Promise<WorkoutAppData | null> {
-  return (async () => {
-    const appJson = await getStorageItem(APP_STORAGE_KEY);
-    if (appJson) {
-      return normalizeAppData(JSON.parse(appJson), fallback);
-    }
+  const appJson = await getStorageItem(APP_STORAGE_KEY);
+  if (appJson) {
+    return normalizeAppData(JSON.parse(appJson), fallback);
+  }
 
-    const legacyLogsJson = await getStorageItem(LOGS_STORAGE_KEY);
-    if (legacyLogsJson) {
-      return normalizeAppData(
-        {
-          ...fallback,
-          logs: JSON.parse(legacyLogsJson),
-        },
-        fallback
-      );
-    }
+  const legacyLogsJson = await getStorageItem(LOGS_STORAGE_KEY);
+  if (legacyLogsJson) {
+    return normalizeAppData(
+      {
+        ...fallback,
+        logs: JSON.parse(legacyLogsJson),
+      },
+      fallback
+    );
+  }
 
-    return null;
-  })();
+  return null;
 }
 
 export async function saveAppData(data: WorkoutAppData): Promise<void> {

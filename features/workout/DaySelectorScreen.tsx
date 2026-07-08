@@ -59,7 +59,7 @@ export function DaySelectorScreen({
             onPress={() => onSelectDay(day)}
           >
             <View style={styles.dayLeading}>
-              <DayAccentIcon emoji={day.emoji} name={day.name} size={20} />
+              <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />
             </View>
             <View style={styles.dayContent}>
               <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>

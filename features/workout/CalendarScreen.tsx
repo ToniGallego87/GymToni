@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  DayAccentIcon,
   FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -12,10 +13,13 @@ import {
   StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
-import { hasAnyCardio } from '@lib/cardio';
+import { hasAnyCardio, cardioSessionFromLog, CardioSession } from '@lib/cardio';
+import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
+
+type CalendarMode = 'fuerza' | 'cardio';
 
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
@@ -54,6 +58,8 @@ export function CalendarScreen({
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const [monthOffset, setMonthOffset] = useState(0);
+  const [mode, setMode] = useState<CalendarMode>('fuerza');
+  const cardioAvailable = hasAnyCardio(state.logs);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { bottom: floatingNavBottom, scrollBottomPadding } =
     getFloatingPrimaryNavMetrics(insets.bottom);
@@ -138,6 +144,22 @@ export function CalendarScreen({
     );
   }, [state.logs]);
 
+  // Sesión de cardio por fecha (el cardio se registra dentro del log de fuerza).
+  // Se guarda también el día para poder abrir su detalle al pulsar la celda.
+  const cardioByDate = useMemo(() => {
+    const map: Record<
+      string,
+      { log: WorkoutLog; day: WorkoutDay; session: CardioSession }
+    > = {};
+    state.logs.forEach((log: WorkoutLog) => {
+      const session = cardioSessionFromLog(log);
+      if (!session) return;
+      const day = getDayById(log.dayId);
+      if (day) map[log.date] = { log, day, session };
+    });
+    return map;
+  }, [state.logs, state.routines]);
+
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
   const firstWeekDay = (firstDayOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -215,7 +237,10 @@ export function CalendarScreen({
         <View style={styles.monthCard}>
           <GradientFill accent={theme.colors.primary} />
           <Pressable
-            style={[styles.monthNavButton, !canGoPrev && styles.monthNavButtonDisabled]}
+            style={[
+              styles.monthNavButton,
+              !canGoPrev && styles.monthNavButtonDisabled,
+            ]}
             disabled={!canGoPrev}
             onPress={() => setMonthOffset((prev: number) => prev - 1)}
           >
@@ -231,7 +256,10 @@ export function CalendarScreen({
           </Text>
 
           <Pressable
-            style={[styles.monthNavButton, !canGoNext && styles.monthNavButtonDisabled]}
+            style={[
+              styles.monthNavButton,
+              !canGoNext && styles.monthNavButtonDisabled,
+            ]}
             disabled={!canGoNext}
             onPress={() => setMonthOffset((prev: number) => prev + 1)}
           >
@@ -263,6 +291,71 @@ export function CalendarScreen({
             }
 
             const dateKey = toDateKey(dayNumber);
+
+            // Modo cardio: la celda refleja la sesión de cardio del día (icono
+            // + minutos), no el día de fuerza.
+            if (mode === 'cardio') {
+              const cardio = cardioByDate[dateKey];
+              const hasCardio = !!cardio;
+
+              return (
+                <Pressable
+                  key={dateKey}
+                  disabled={!hasCardio}
+                  onPress={() => {
+                    if (cardio) onSelectLog(cardio.log, cardio.day);
+                  }}
+                  style={[
+                    styles.dayCell,
+                    hasCardio && styles.dayCellActive,
+                    hasCardio && { borderColor: theme.colors.white },
+                    dateKey === todayKey && styles.dayCellToday,
+                  ]}
+                >
+                  {hasCardio ? (
+                    <>
+                      <GradientFill accent={theme.colors.white} />
+                      <View style={styles.dayHeaderRow}>
+                        <Text
+                          style={[
+                            styles.dayNumber,
+                            { color: theme.colors.white },
+                          ]}
+                        >
+                          {dayNumber}
+                        </Text>
+                      </View>
+                      <View style={styles.dayIconSlot}>
+                        <MaterialCommunityIcons
+                          name="run-fast"
+                          size={28}
+                          color={theme.colors.white}
+                        />
+                      </View>
+                      <Text
+                        style={[
+                          styles.dayWeekLabel,
+                          { color: theme.colors.textSecondary },
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.6}
+                      >
+                        {Math.round(cardio.session.totalMinutes)}'
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      {dateKey === todayKey && (
+                        <GradientFill accent={theme.colors.primary} />
+                      )}
+                      <Text style={styles.dayNumber}>{dayNumber}</Text>
+                    </>
+                  )}
+                </Pressable>
+              );
+            }
+
             const dayLogs = logsByDate[dateKey] || [];
             const primaryLog = dayLogs[0];
             const primaryDay = primaryLog
@@ -278,12 +371,12 @@ export function CalendarScreen({
                   (r: WorkoutRoutine) => r.id === primaryLog.routineId
                 )
               : -1;
-            // La rutina activa mantiene el chip amarillo; las no activas, blanco.
+            // La rutina activa mantiene el texto amarillo; las no activas, gris.
             const isActiveRoutine =
               !!primaryLog && primaryLog.routineId === state.activeRoutineId;
             const routineChipColor = isActiveRoutine
               ? theme.colors.primary
-              : theme.colors.white;
+              : theme.colors.textSecondary;
             // Semana (bloque) dentro de la rutina.
             const weekNumber = primaryLog
               ? logToWeekBlock[primaryLog.id]
@@ -308,14 +401,44 @@ export function CalendarScreen({
                 {hasLogs ? (
                   <>
                     <GradientFill accent={dayColor} />
-                    <Text
-                      style={[styles.dayNumber, { color: theme.colors.white }]}
-                    >
-                      {dayNumber}
-                    </Text>
+                    {/* Cabecera: número de día (izq) + chip de rutina (der). */}
+                    <View style={styles.dayHeaderRow}>
+                      <Text
+                        style={[
+                          styles.dayNumber,
+                          { color: theme.colors.white },
+                        ]}
+                      >
+                        {dayNumber}
+                      </Text>
+                      {routineIndex >= 0 && (
+                        <Text
+                          style={[
+                            styles.dayRoutineChip,
+                            { color: routineChipColor },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          R{routineIndex + 1}
+                        </Text>
+                      )}
+                    </View>
+                    {/* Protagonista: icono del día de la rutina (qué entreno es). */}
+                    <View style={styles.dayIconSlot}>
+                      <DayAccentIcon
+                        emoji={primaryDay?.emoji}
+                        name={primaryDay?.name}
+                        size={30}
+                        color={theme.colors.white}
+                      />
+                    </View>
+                    {/* Pie: semana (bloque) dentro de la rutina. */}
                     {typeof weekNumber === 'number' ? (
                       <Text
-                        style={[styles.dayWeekLabel, { color: dayColor }]}
+                        style={[
+                          styles.dayWeekLabel,
+                          { color: theme.colors.textSecondary },
+                        ]}
                         numberOfLines={1}
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
@@ -324,20 +447,6 @@ export function CalendarScreen({
                       </Text>
                     ) : (
                       <View style={styles.dayWeekSpacer} />
-                    )}
-                    {routineIndex >= 0 && (
-                      <Text
-                        style={[
-                          styles.dayRoutineChip,
-                          {
-                            color: routineChipColor,
-                            borderColor: routineChipColor,
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        R{routineIndex + 1}
-                      </Text>
                     )}
                   </>
                 ) : (
@@ -352,6 +461,40 @@ export function CalendarScreen({
             );
           })}
         </View>
+
+        {cardioAvailable && (
+          <View style={styles.modeToggle}>
+            {(['fuerza', 'cardio'] as CalendarMode[]).map((m) => {
+              const active = mode === m;
+              const color = active
+                ? theme.colors.background
+                : theme.colors.textSecondary;
+              return (
+                <Pressable
+                  key={m}
+                  style={[
+                    styles.modeButton,
+                    active && styles.modeButtonActive,
+                  ]}
+                  onPress={() => {
+                    if (m === mode) return;
+                    animateLayout();
+                    setMode(m);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name={m === 'fuerza' ? 'dumbbell' : 'run-fast'}
+                    size={16}
+                    color={color}
+                  />
+                  <Text style={[styles.modeButtonText, { color }]}>
+                    {m === 'fuerza' ? 'Fuerza' : 'Cardio'}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -416,9 +559,6 @@ const styles = StyleSheet.create({
   monthNavButtonDisabled: {
     opacity: 0.25,
   },
-  monthNavText: {
-    fontSize: 16,
-  },
   topBarTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -473,47 +613,76 @@ const styles = StyleSheet.create({
     borderWidth: 2.5,
     borderColor: theme.colors.primary,
   },
+  // Cabecera del cell: número de día (izq) y chip de rutina (der) en una fila.
+  dayHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   dayNumber: {
     fontSize: 13,
     fontWeight: '800',
     color: theme.colors.text,
     lineHeight: 16,
   },
-  // Chip de rutina (R1, R2...): pequeño, blanco, centrado en la parte inferior.
-  // includeFontPadding:false + textAlignVertical centran el texto dentro de la
-  // pastilla en Android (si no, queda desplazado hacia arriba).
+  // Slot del icono: protagonista, ocupa el espacio central y centra la silueta.
+  dayIconSlot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  // Rutina (R1, R2...): texto suelto en la esquina superior derecha. Amarillo
+  // si es la rutina activa, gris en el resto (color inline).
   dayRoutineChip: {
-    alignSelf: 'center',
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.2,
-    lineHeight: 12,
-    color: theme.colors.primary,
-    borderColor: theme.colors.primary,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderWidth: 1,
-    borderRadius: theme.borderRadius.pill,
-    overflow: 'hidden',
+    lineHeight: 13,
     textAlign: 'center',
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
-  // Número de semana (S1, S2...): protagonista, centrado en el espacio restante.
-  // lineHeight con holgura sobre fontSize: Anton tiene ascendentes altas y, si
-  // van muy pegados, el glifo se recorta por arriba.
+  // Número de semana (S1, S2...): metadato de pie, discreto y centrado.
   dayWeekLabel: {
-    flex: 1,
     fontFamily: theme.fonts.display,
-    fontSize: 26,
+    fontSize: 15,
     letterSpacing: 0.5,
-    lineHeight: 32,
+    lineHeight: 19,
     textAlign: 'center',
     textAlignVertical: 'center',
     includeFontPadding: false,
   },
   dayWeekSpacer: {
+    height: 19,
+  },
+  // Toggle Fuerza/Cardio bajo el calendario: dos segmentos; el activo se rellena
+  // de amarillo (primary) con texto oscuro, el inactivo va gris sobre surface.
+  modeToggle: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 16,
+    padding: 4,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+  },
+  modeButton: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    borderRadius: theme.borderRadius.sm,
+  },
+  modeButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  modeButtonText: {
+    fontSize: 14,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
   emptyState: {
     flex: 1,

@@ -207,12 +207,12 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
             <Text
               style={[
                 styles.sectionTitle,
-                { marginTop: theme.spacing.xl, color: theme.colors.primary },
+                { marginTop: theme.spacing.xl, color: theme.colors.white },
               ]}
             >
               Cardio
             </Text>
-            <View style={[styles.cardioBox, { borderLeftColor: dayAccent }]}>
+            <View style={styles.cardioBox}>
               <GradientFill accent={dayAccent} />
               <Text style={styles.cardioLabel}>
                 {log.cardio.type?.toUpperCase()}
@@ -223,7 +223,7 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
                     <MaterialCommunityIcons
                       name="timer-sand"
                       size={14}
-                      color={theme.colors.primary}
+                      color={theme.colors.textSecondary}
                     />
                     <Text style={styles.cardioDetail}>
                       {log.cardio.duration} min
@@ -235,7 +235,7 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
                     <MaterialCommunityIcons
                       name="map-marker-path"
                       size={14}
-                      color={theme.colors.primary}
+                      color={theme.colors.textSecondary}
                     />
                     <Text style={styles.cardioDetail}>
                       {extractPaceNumber(log.cardio.pace)} km/h
@@ -247,7 +247,7 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
                     <MaterialCommunityIcons
                       name="chart-line"
                       size={14}
-                      color={theme.colors.primary}
+                      color={theme.colors.textSecondary}
                     />
                     <Text style={styles.cardioDetail}>
                       {extractIncline(log.cardio.rawInput)}
@@ -273,7 +273,7 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
         title={getDisplayDayName(day.name)}
         titleElement={
           <View style={styles.topBarTitleRow}>
-            <DayAccentIcon emoji={day.emoji} name={day.name} size={16} />
+            <DayAccentIcon emoji={day.emoji} name={day.name} size={24} />
             <Text style={styles.topBarTitleText}>
               {getDisplayDayName(day.name)}
             </Text>
@@ -293,23 +293,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: theme.colors.background,
   },
-  detailTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  detailImprovementText: {
-    fontSize: 13,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  detailImprovementUp: {
-    color: theme.colors.success,
-  },
-  detailImprovementDown: {
-    color: theme.colors.error,
-  },
   topBarTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -321,12 +304,6 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: theme.colors.text,
     lineHeight: 24,
-  },
-  date: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginTop: 4,
-    lineHeight: 18,
   },
   scrollView: {
     flex: 1,
@@ -350,8 +327,6 @@ const styles = StyleSheet.create({
     marginVertical: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
     overflow: 'hidden',
     ...theme.shadow.soft,
   },
@@ -363,16 +338,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     lineHeight: 16,
   },
-  cardioRaw: {
-    fontSize: 14,
-    color: theme.colors.text,
-    fontFamily: 'monospace',
-    backgroundColor: theme.colors.darkGray,
-    padding: 8,
-    borderRadius: 4,
-    marginBottom: 8,
-    lineHeight: 20,
-  },
   cardioDetails: {
     flexDirection: 'row',
     gap: 16,
@@ -381,7 +346,7 @@ const styles = StyleSheet.create({
   },
   cardioDetail: {
     fontSize: 13,
-    color: theme.colors.primary,
+    color: theme.colors.white,
     fontWeight: '500',
     lineHeight: 18,
   },
@@ -389,18 +354,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  footer: {
-    marginTop: 32,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    lineHeight: 18,
   },
   editButtonContainer: {
     marginTop: 20,

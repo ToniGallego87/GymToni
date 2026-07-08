@@ -646,6 +646,18 @@ export function WorkoutLogScreen({
     setNotesText('');
   };
 
+  const handleDeleteNotes = () => {
+    if (showNotesModal) {
+      setExerciseNotes((prev: any) => {
+        const next = { ...prev };
+        delete next[showNotesModal];
+        return next;
+      });
+    }
+    setShowNotesModal(null);
+    setNotesText('');
+  };
+
   const hasExerciseInput = selectedDay.exercises.some(
     (ex) => exerciseSets[ex.id]?.length > 0
   );
@@ -778,7 +790,7 @@ export function WorkoutLogScreen({
             <DayAccentIcon
               emoji={selectedDay.emoji}
               name={selectedDay.name}
-              size={16}
+              size={24}
             />
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
@@ -823,6 +835,14 @@ export function WorkoutLogScreen({
                 variant="primary"
                 size="medium"
               />
+              {showNotesModal && exerciseNotes[showNotesModal] ? (
+                <Button
+                  title="Borrar"
+                  onPress={handleDeleteNotes}
+                  variant="danger"
+                  size="medium"
+                />
+              ) : null}
               <Button
                 title="Cancelar"
                 onPress={() => setShowNotesModal(null)}
@@ -894,15 +914,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: theme.colors.background,
-  },
-  sectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: theme.colors.primary,
-    marginVertical: 12,
-  },
-  saveButton: {
-    marginBottom: 8,
   },
   modalOverlay: {
     flex: 1,

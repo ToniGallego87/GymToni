@@ -9,6 +9,15 @@ export {
 export { GradientFill } from './GradientFill';
 export { AnimatedCounter } from './AnimatedCounter';
 export { DayAccentIcon } from './DayAccentIcon';
+export {
+  GymIcon,
+  GYM_ICON_NAMES,
+  GYM_ICON_LABELS,
+  isGymIconName,
+  detectGymIcon,
+  resolveDayIcon,
+} from './GymIcon';
+export type { GymIconName } from './GymIcon';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export { CardioInputField } from './CardioInputField';

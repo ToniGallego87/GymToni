@@ -56,8 +56,8 @@
 
 - TypeScript strict (no `any`, no `as` innecesarios)
 - Null checks explícitos (strict null checks habilitado)
-- Funciones puras en `lib/` (sin side effects)
-- Side effects solo en hooks o Context
+- Lógica pura y testeable en `lib/` (`parsers.ts`, `progress.ts`, `weeks.ts`, `cardio.ts`, `achievements.ts`, `utils.ts`); la persistencia (`storage.ts`, `persistence.ts`, `db/`) es la excepción con side effects
+- Side effects de UI solo en hooks o Context
 
 ## Lo que NO se hace
 
@@ -66,4 +66,9 @@
 - No Redux
 - No librerías UI externas (todo custom)
 - No sobre-abstracciones (si solo se usa una vez, no crear helper)
-- No tests por ahora (ver ROADMAP)
+
+## Tests
+
+- Jest (ts-jest) sobre la lógica pura de `lib/`: suites en `lib/__tests__/`
+- `npm test` debe pasar antes de cerrar cualquier cambio en `lib/`
+- No se testean componentes UI ni pantallas

@@ -2,7 +2,6 @@ import {
   parseSeriesString,
   parseCardioString,
   formatParsedSet,
-  formatSets,
 } from '../parsers';
 
 describe('parseSeriesString', () => {
@@ -52,21 +51,12 @@ describe('parseCardioString', () => {
   });
 });
 
-describe('formatParsedSet / formatSets', () => {
+describe('formatParsedSet', () => {
   it('formatea un set normal', () => {
     expect(formatParsedSet({ weight: 60, reps: 8 })).toBe('60x8');
   });
 
   it('muestra guion para sets centinela', () => {
     expect(formatParsedSet({ weight: -1, reps: -1 })).toBe('—');
-  });
-
-  it('une varios sets', () => {
-    expect(
-      formatSets([
-        { weight: 60, reps: 8 },
-        { weight: 65, reps: 6 },
-      ])
-    ).toBe('60x8, 65x6');
   });
 });

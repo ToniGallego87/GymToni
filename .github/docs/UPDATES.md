@@ -1,6 +1,28 @@
 # UPDATES
 
-## Version 0.5.6 - 2026-07-06
+## Version 0.5.7 - 2026-07-08
+
+### Nuevas funcionalidades
+
+- **Iconos de grupo muscular / tipo de sesión**: nuevo sistema de siluetas monocromo (`components/GymIcon.tsx` + lógica pura en `lib/gymIcons.ts`, con `GymIconName`, `detectGymIcon` y `resolveDayIcon`) que sustituye a los puntos de color para distinguir los días. Cada día se identifica por su icono (pecho, hombro, espalda, bíceps, tríceps, abdominales, piernas, push, pull, torso, full body) en lugar del emoji de color.
+- **Selector de icono al crear rutina**: en `NewRoutineScreen` cada día tiene un selector de icono (modal con todas las siluetas). El icono se autodetecta a partir del nombre del día (`detectGymIcon`) y, si no puede inferirse, se obliga a elegirlo a mano antes de guardar.
+- **Calendario con vista Fuerza / Cardio**: `CalendarScreen` añade un conmutador que alterna entre fuerza (icono del día + semana de la rutina + chip R1/R2 de rutina) y cardio (icono de carrera + minutos de la sesión); el toggle solo aparece si hay cardio registrado (`cardioByDate`, `cardioSessionFromLog`). Cada celda de cardio abre el detalle de ese día al pulsarla.
+- **Compartir rutina con icono**: `buildRoutineShareText` añade una etiqueta `[#icono]` al final del título de cada día y `parseRoutineShareLink` la interpreta (`stripIconTag`), de modo que el icono viaja tanto en el texto plano como en el QR (`icon` en el payload).
+
+### Arquitectura
+
+- Nuevo `lib/layoutAnimation.ts`: se centraliza `animateLayout()` (activación de `LayoutAnimation` en Android incluida), antes duplicada en `HomeScreen`, para reutilizarla en el conmutador del calendario.
+- `getTrainingAccent` deja de mapear emojis a colores: el acento visual (bordes, degradados, puntos, calendario) pasa a blanco uniforme y la distinción es por icono. Se conserva la firma para no tocar los ~40 consumidores del acento.
+- Limpieza de lógica muerta en `lib/parsers.ts` y `lib/progress.ts` (`formatMergedCardio`, `formatSets`, `getBestSetStrengthScore` sin uso); `readLegacyJsonData` pasa a `async` en `lib/storage.ts`. `versionCode` 8 → 9.
+
+### Cambios
+
+- **Registro de ejercicio más claro**: `ExerciseInputField` sugiere peso y repeticiones automáticamente (última serie hecha, historial previo o tope del rango objetivo), muestra las notas del ejercicio y del entrenamiento anterior, y representa las series de peso corporal / asistidas con "—" en vez de valores negativos.
+- **`DayAccentIcon` admite color** y tamaños mayores en tarjetas, detalle y calendario; el día activo y los acentos en detalle pasan a gris/blanco para no competir con el icono.
+
+### Correcciones
+
+- La rutina activa se distingue en el calendario por el color del texto del chip R (amarillo) frente a las no activas (gris), en vez de por borde de pastilla, evitando el desalineado del texto en Android.
 
 ### Nuevas funcionalidades
 

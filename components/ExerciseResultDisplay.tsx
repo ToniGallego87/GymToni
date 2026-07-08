@@ -95,13 +95,7 @@ export function ExerciseResultDisplay({
   });
 
   return (
-    <View
-      style={[
-        styles.container,
-        isDetail && styles.containerDetail,
-        isDetail && { borderLeftColor: accent },
-      ]}
-    >
+    <View style={[styles.container, isDetail && styles.containerDetail]}>
       {isDetail && <GradientFill accent={accent} />}
 
       {/* Header */}
@@ -189,8 +183,6 @@ const styles = StyleSheet.create({
 
   containerDetail: {
     backgroundColor: 'transparent',
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.current,
     overflow: 'hidden',
   },
 
@@ -275,7 +267,7 @@ const styles = StyleSheet.create({
   currentValue: {
     flex: 1,
     fontFamily: 'monospace',
-    color: theme.colors.current,
+    color: theme.colors.white,
     fontSize: 15,
   },
 

@@ -558,9 +558,12 @@ parseSeriesString('');
 ### **Cardio**
 
 ```typescript
-// Nota: En versión Snack, no está parseado
-// Se guarda el rawInput como string
-// Próxima versión: agregar parseCardioString
+// Se guarda el rawInput como string y se parsea al leer:
+// - parseCardioString (lib/parsers.ts): primera entrada, para resúmenes.
+// - parseCardioEntries (lib/cardio.ts): todas las entradas ("A | B"),
+//   base de la pantalla de Cardio (sesiones, semanas ISO, kcal).
+parseCardioString('Cinta: 22.5mins, 11.5kmh');
+// → { type: 'Cinta', duration: 22.5, pace: '11.5kmh' }
 ```
 
 ---

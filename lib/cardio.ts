@@ -220,7 +220,8 @@ export function cardioSessionFromLog(
   const totalMinutes = entries.reduce((sum, e) => sum + (e.minutes ?? 0), 0);
   const totalKm = entries.reduce(
     (sum, e) =>
-      sum + (e.speed != null && e.minutes != null ? e.speed * (e.minutes / 60) : 0),
+      sum +
+      (e.speed != null && e.minutes != null ? e.speed * (e.minutes / 60) : 0),
     0
   );
   const speeds = entries
@@ -406,11 +407,6 @@ export function formatMergedResults(m: MergedCardioEntry): string {
     parts.push(`${rangeStr(m.minPendiente, m.maxPendiente)}%`);
   }
   return parts.join(', ');
-}
-
-/** Formatea una disciplina fusionada: "Cinta: 44 min, 12-12.6 km/h, 2%". */
-export function formatMergedCardio(m: MergedCardioEntry): string {
-  return `${m.type}: ${formatMergedResults(m)}`;
 }
 
 /** Agrupa las sesiones por mes natural con sus kcal (para la gráfica). */

@@ -56,7 +56,7 @@ type Screen =
       type: 'detail';
       log: WorkoutLog;
       day: WorkoutDay;
-      origin: 'home' | 'calendar';
+      origin: 'home' | 'calendar' | 'cardio';
     }
   | { type: 'calendar' }
   | { type: 'data' }
@@ -388,6 +388,9 @@ function AppContent() {
 
       {screen.type === 'cardio' && (
         <CardioScreen
+          onSelectLog={(log, day) =>
+            setScreen({ type: 'detail', log, day, origin: 'cardio' })
+          }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
@@ -435,7 +438,12 @@ function AppContent() {
           day={screen.day}
           onBack={() =>
             setScreen({
-              type: screen.origin === 'calendar' ? 'calendar' : 'home',
+              type:
+                screen.origin === 'calendar'
+                  ? 'calendar'
+                  : screen.origin === 'cardio'
+                  ? 'cardio'
+                  : 'home',
             })
           }
           onEdit={(log, day) => setScreen({ type: 'workout-log', day, log })}

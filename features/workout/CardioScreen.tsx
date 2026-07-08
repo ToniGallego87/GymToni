@@ -9,9 +9,6 @@ import {
   TouchableOpacity,
   Pressable,
   useWindowDimensions,
-  LayoutAnimation,
-  Platform,
-  UIManager,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
@@ -19,6 +16,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
+import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
 import {
   buildCardioWeeks,
@@ -35,6 +33,7 @@ import {
   GradientFill,
   StretchScrollView,
 } from '../../components';
+import { WorkoutDay, WorkoutLog } from '../../types';
 
 interface CardioScreenProps {
   onNavigateHome?: () => void;
@@ -42,27 +41,12 @@ interface CardioScreenProps {
   onNavigateRoutines?: () => void;
   onNavigateCalendar?: () => void;
   onNavigateData?: () => void;
+  // Abre la vista de resultados (DetailScreen) del día de cardio pulsado.
+  onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
 }
 
 // Cuántas semanas se muestran de inicio y cuántas añade "Cargar más".
 const WEEKS_PAGE = 5;
-
-if (
-  Platform.OS === 'android' &&
-  UIManager.setLayoutAnimationEnabledExperimental
-) {
-  UIManager.setLayoutAnimationEnabledExperimental(true);
-}
-
-function animateLayout() {
-  LayoutAnimation.configureNext(
-    LayoutAnimation.create(
-      220,
-      LayoutAnimation.Types.easeInEaseOut,
-      LayoutAnimation.Properties.opacity
-    )
-  );
-}
 
 // "29 jun" a partir de YYYY-MM-DD.
 const dayMonth = (dateStr: string) =>
@@ -266,6 +250,7 @@ export function CardioScreen({
   onNavigateRoutines,
   onNavigateCalendar,
   onNavigateData,
+  onSelectLog,
 }: CardioScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -352,6 +337,22 @@ export function CardioScreen({
     () => buildCardioWeeks(state.logs, weightHistory),
     [state.logs, weightHistory]
   );
+
+  // Pulsar un día de cardio abre su vista de resultados (DetailScreen). Se
+  // resuelve el log completo por id y su día dentro de las rutinas.
+  const handleSessionPress = (logId: string) => {
+    const log = state.logs.find((l) => l.id === logId);
+    if (!log) return;
+    let day: WorkoutDay | undefined;
+    for (const routine of state.routines) {
+      const found = routine.days.find((d) => d.id === log.dayId);
+      if (found) {
+        day = found;
+        break;
+      }
+    }
+    if (day) onSelectLog?.(log, day);
+  };
   const months = useMemo(
     () => buildCardioMonths(state.logs, weightHistory),
     [state.logs, weightHistory]
@@ -495,7 +496,9 @@ export function CardioScreen({
               <View style={styles.heroStatDivider} />
               <View style={styles.heroStat}>
                 <Text style={styles.heroStatValue}>
-                  {avgWeekKcal != null ? `${Math.round(avgWeekKcal)} kcal` : '—'}
+                  {avgWeekKcal != null
+                    ? `${Math.round(avgWeekKcal)} kcal`
+                    : '—'}
                 </Text>
                 <Text style={styles.heroStatLabel}>media/sem</Text>
               </View>
@@ -510,7 +513,9 @@ export function CardioScreen({
           <Pressable
             style={styles.heroWeightRow}
             onPress={() => {
-              setWeightInput(currentWeight != null ? String(currentWeight) : '');
+              setWeightInput(
+                currentWeight != null ? String(currentWeight) : ''
+              );
               setShowWeightModal(true);
             }}
           >
@@ -553,7 +558,12 @@ export function CardioScreen({
                   />
                 </View>
                 {latestMonthValue != null && (
-                  <Text style={styles.progressLatestKcal}>
+                  <Text
+                    style={[
+                      styles.progressLatestKcal,
+                      metric.id === 'kcal' && { color: theme.colors.primary },
+                    ]}
+                  >
                     {metric.fmt(latestMonthValue)} {metric.unit}
                   </Text>
                 )}
@@ -595,14 +605,12 @@ export function CardioScreen({
         )}
 
         {visibleWeeks.map((week) => {
-          const isExpanded = expandedWeeks[week.weekKey] ?? false;
+          const isExpanded = expandedWeeks[week.weekKey] ?? week.isCurrent;
+          // Tarjeta: siempre blanca salvo la semana en curso (amarilla). El
+          // verde/rojo solo se usa en el dato de subida/bajada (kcalDelta).
           const accent = week.isCurrent
             ? theme.colors.primary
-            : week.improvement == null
-            ? theme.colors.white
-            : week.improvement >= 0
-            ? theme.colors.success
-            : theme.colors.error;
+            : theme.colors.white;
 
           return (
             <View key={week.weekKey} style={styles.weekBlock}>
@@ -625,40 +633,31 @@ export function CardioScreen({
                     {dayMonth(week.weekStart)} – {dayMonth(week.weekEnd)}
                   </Text>
                   {/* Arriba a la derecha: diferencia de kcal vs semana anterior.
-                      Semana en curso: en amarillo, sin flecha. */}
-                  {week.kcalDelta != null && (
+                      La semana en curso no la muestra (aún está acumulando). */}
+                  {week.kcalDelta != null && !week.isCurrent && (
                     <View style={styles.deltaRow}>
-                      {!week.isCurrent && (
-                        <MaterialCommunityIcons
-                          name={
-                            week.kcalDelta >= 0
-                              ? 'arrow-up-bold'
-                              : 'arrow-down-bold'
-                          }
-                          size={15}
-                          color={
-                            week.kcalDelta >= 0
-                              ? theme.colors.success
-                              : theme.colors.error
-                          }
-                        />
-                      )}
+                      <MaterialCommunityIcons
+                        name={
+                          week.kcalDelta >= 0
+                            ? 'arrow-up-bold'
+                            : 'arrow-down-bold'
+                        }
+                        size={15}
+                        color={
+                          week.kcalDelta >= 0
+                            ? theme.colors.success
+                            : theme.colors.error
+                        }
+                      />
                       <Text
                         style={[
                           styles.weekDelta,
-                          week.isCurrent
-                            ? styles.weekDeltaCurrent
-                            : week.kcalDelta >= 0
+                          week.kcalDelta >= 0
                             ? styles.progressLatestUp
                             : styles.progressLatestDown,
                         ]}
                       >
-                        {week.isCurrent
-                          ? `${week.kcalDelta >= 0 ? '+' : ''}${Math.round(
-                              week.kcalDelta
-                            )}`
-                          : Math.round(Math.abs(week.kcalDelta))}{' '}
-                        kcal
+                        {Math.round(Math.abs(week.kcalDelta))} kcal
                       </Text>
                     </View>
                   )}
@@ -696,69 +695,77 @@ export function CardioScreen({
                         <Animated.View
                           key={`${session.logId}-${eIdx}`}
                           entering={FadeInDown.duration(200).delay(sIdx * 40)}
-                          style={[
-                            styles.dailyCard,
-                            isToday && styles.dailyCardToday,
-                          ]}
                         >
-                          <View style={styles.dailyHeader}>
-                            <View style={styles.dailyLeft}>
-                              <MaterialCommunityIcons
-                                name={disciplineIcon(entry.type, hasIncline)}
-                                size={20}
-                                color={theme.colors.primary}
-                                style={styles.dailyAccent}
-                              />
-                              <View style={styles.dailyInfo}>
+                          <Pressable
+                            onPress={() => handleSessionPress(session.logId)}
+                            style={({ pressed }) => [
+                              styles.dailyCard,
+                              isToday && styles.dailyCardToday,
+                              pressed && { opacity: 0.7 },
+                            ]}
+                          >
+                            <View style={styles.dailyHeader}>
+                              <View style={styles.dailyLeft}>
+                                <MaterialCommunityIcons
+                                  name={disciplineIcon(entry.type, hasIncline)}
+                                  size={30}
+                                  color={theme.colors.white}
+                                  style={styles.dailyAccent}
+                                />
+                                <View style={styles.dailyInfo}>
+                                  <Text
+                                    style={[
+                                      styles.dailyName,
+                                      isToday && styles.dailyTextToday,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {entry.type}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.dailyResults,
+                                      isToday && styles.dailyTextToday,
+                                    ]}
+                                    numberOfLines={1}
+                                  >
+                                    {formatMergedResults(entry)}
+                                  </Text>
+                                </View>
+                              </View>
+                              <View style={styles.dailyRight}>
                                 <Text
-                                  style={[
-                                    styles.dailyName,
-                                    isToday && styles.dailyTextToday,
-                                  ]}
+                                  style={styles.dailyDate}
                                   numberOfLines={1}
                                 >
-                                  {entry.type}
+                                  <Text
+                                    style={[
+                                      styles.dailyWeekday,
+                                      isToday && styles.dailyTextToday,
+                                    ]}
+                                  >
+                                    {weekdayCap}{' '}
+                                  </Text>
+                                  <Text
+                                    style={[
+                                      styles.dailyDateBold,
+                                      isToday && styles.dailyTextToday,
+                                    ]}
+                                  >
+                                    {dateStr}
+                                  </Text>
                                 </Text>
                                 <Text
                                   style={[
-                                    styles.dailyResults,
+                                    styles.dailyBadge,
                                     isToday && styles.dailyTextToday,
                                   ]}
-                                  numberOfLines={1}
                                 >
-                                  {formatMergedResults(entry)}
+                                  {Math.round(entry.kcal)} kcal
                                 </Text>
                               </View>
                             </View>
-                            <View style={styles.dailyRight}>
-                              <Text style={styles.dailyDate} numberOfLines={1}>
-                                <Text
-                                  style={[
-                                    styles.dailyWeekday,
-                                    isToday && styles.dailyTextToday,
-                                  ]}
-                                >
-                                  {weekdayCap}{' '}
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.dailyDateBold,
-                                    isToday && styles.dailyTextToday,
-                                  ]}
-                                >
-                                  {dateStr}
-                                </Text>
-                              </Text>
-                              <Text
-                                style={[
-                                  styles.dailyBadge,
-                                  isToday && styles.dailyTextToday,
-                                ]}
-                              >
-                                {Math.round(entry.kcal)} kcal
-                              </Text>
-                            </View>
-                          </View>
+                          </Pressable>
                         </Animated.View>
                       );
                     });
@@ -1014,10 +1021,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 2,
   },
-  progressLatest: {
-    fontSize: 16,
-    fontWeight: '800',
-  },
   progressLatestKcal: {
     fontSize: 17,
     fontWeight: '800',
@@ -1123,12 +1126,6 @@ const styles = StyleSheet.create({
   weekDelta: {
     fontSize: 14,
     fontWeight: '800',
-  },
-  weekDeltaNeutral: {
-    color: theme.colors.text,
-  },
-  weekDeltaCurrent: {
-    color: theme.colors.primary,
   },
   weekMetaRow: {
     flexDirection: 'row',

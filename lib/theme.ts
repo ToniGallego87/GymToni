@@ -125,18 +125,9 @@ export function getDisplayDayName(name?: string | null) {
   return name ? name.replace(/^Día\s+\d+\s*[-–—]\s*/i, '') : '';
 }
 
-export function getTrainingAccent(target?: DayAccentTarget) {
-  if (!target?.emoji) return theme.colors.primary;
-
-  // Map all available emojis to accent colors
-  const emojiColorMap: Record<string, string> = {
-    '🔴': theme.colors.error, // Rojo
-    '🟠': theme.colors.emoji_orange, // Naranja
-    '🟤': theme.colors.emoji_brown, // Marrón
-    '🟢': theme.colors.emoji_green, // Verde
-    '🔵': theme.colors.emoji_blue, // Azul
-    '🟣': theme.colors.emoji_purple, // Púrpura
-  };
-
-  return emojiColorMap[target.emoji] || theme.colors.primary;
+// Los días ya no se distinguen por color sino por icono (ver GymIcon). El
+// acento visual (bordes, degradados, calendario, puntos) es blanco uniforme.
+// Se mantiene la firma para no tocar los ~40 consumidores del acento.
+export function getTrainingAccent(_target?: DayAccentTarget) {
+  return theme.colors.white;
 }

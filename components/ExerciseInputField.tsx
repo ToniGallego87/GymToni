@@ -110,6 +110,7 @@ export function ExerciseInputField({
   const useTimerAsReps = () => {
     stopTimer();
     setRepsValue(String(timerSeconds));
+    setTimerSeconds(0);
   };
 
   const formatTimerDisplay = (seconds: number) => {
@@ -152,6 +153,11 @@ export function ExerciseInputField({
     : false;
   const hasAddedSets = addedSets.length > 0;
 
+  // Al completarse (todas las series hechas) la tarjeta se colapsa sola: en ese
+  // estado se tiñe de verde para marcarla como terminada.
+  const isCompletedCollapsed = isMaxSetsReached && !expanded;
+  const cardAccent = isCompletedCollapsed ? theme.colors.success : accent;
+
   const wasMaxReachedRef = useRef(isMaxSetsReached);
   useEffect(() => {
     if (isMaxSetsReached && !wasMaxReachedRef.current) {
@@ -161,42 +167,67 @@ export function ExerciseInputField({
   }, [isMaxSetsReached]);
 
   const getWeightPlaceholder = () => {
-    if (addedSets.length > 0) return String(addedSets[addedSets.length - 1].weight);
-    if (previousLog?.parsedSets?.length) return String(previousLog.parsedSets[0].weight);
-    if (previousLog?.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+    if (addedSets.length > 0)
+      return String(addedSets[addedSets.length - 1].weight);
+    if (previousLog?.parsedSets?.length)
+      return String(previousLog.parsedSets[0].weight);
+    if (
+      previousLog?.rawInput &&
+      previousLog.rawInput.trim() &&
+      previousLog.rawInput !== '-'
+    ) {
       const parsed = parseSeriesString(previousLog.rawInput);
       if (parsed.length > 0) return String(parsed[0].weight);
     }
     return '0';
   };
 
+  // Máximo del rango objetivo (p. ej. '6-8' → 8, '30-45s' → 45, '10-12/lado'
+  // → 12). Se usa como sugerencia cuando no hay historial que rellenar.
+  const getTargetMaxRep = () => {
+    const nums = target?.reps?.match(/\d+/g);
+    if (!nums?.length) return null;
+    return String(Math.max(...nums.map(Number)));
+  };
+
   const getRepPlaceholder = () => {
-    if (addedSets.length > 0) return String(addedSets[addedSets.length - 1].reps);
-    if (previousLog?.parsedSets?.length) return String(previousLog.parsedSets[0].reps);
-    if (previousLog?.rawInput && previousLog.rawInput.trim() && previousLog.rawInput !== '-') {
+    if (addedSets.length > 0)
+      return String(addedSets[addedSets.length - 1].reps);
+    if (previousLog?.parsedSets?.length)
+      return String(previousLog.parsedSets[0].reps);
+    if (
+      previousLog?.rawInput &&
+      previousLog.rawInput.trim() &&
+      previousLog.rawInput !== '-'
+    ) {
       const parsed = parseSeriesString(previousLog.rawInput);
       if (parsed.length > 0) return String(parsed[0].reps);
     }
-    return '0';
+    // Sin historial: sugerir el tope del rango objetivo del ejercicio.
+    return getTargetMaxRep() ?? '0';
   };
 
   const getPreviousSetsSummary = () => {
     if (!previousLog) return '';
     if (previousLog.parsedSets?.length) {
       return previousLog.parsedSets
-        .map((s) => (s.weight === -1 || s.reps === -1 ? '—' : `${s.weight}×${s.reps}`))
+        .map((s) =>
+          s.weight === -1 || s.reps === -1 ? '—' : `${s.weight}×${s.reps}`
+        )
         .join(' · ');
     }
     if (previousLog.rawInput?.trim() && previousLog.rawInput !== '-') {
       const parsed = parseSeriesString(previousLog.rawInput);
-      if (parsed.length > 0) return parsed.map((s) => `${s.weight}×${s.reps}`).join(' · ');
+      if (parsed.length > 0)
+        return parsed.map((s) => `${s.weight}×${s.reps}`).join(' · ');
       return previousLog.rawInput;
     }
     return '';
   };
 
   const renderImprovementBadge = () => {
-    if (!improvement || !isMaxSetsReached || addedSets.length === 0) return null;
+    if (!improvement || !isMaxSetsReached || addedSets.length === 0)
+      return null;
     const fmt = formatImprovementDisplay(improvement);
     const badgeBg =
       fmt.styleKey === 'improvementUp'
@@ -239,10 +270,12 @@ export function ExerciseInputField({
               entering={fadeIn}
               exiting={fadeOut}
               layout={layoutTransition}
-              style={[styles.serieTag, { backgroundColor: accent + '2E' }]}
+              style={[styles.serieTag, { backgroundColor: cardAccent + '2E' }]}
             >
-              <Text style={[styles.serieTagText, { color: accent }]}>
-                {set.weight === -1 || set.reps === -1 ? '—' : `${set.weight}×${set.reps}`}
+              <Text style={[styles.serieTagText, { color: cardAccent }]}>
+                {set.weight === -1 || set.reps === -1
+                  ? '—'
+                  : `${set.weight}×${set.reps}`}
               </Text>
             </Animated.View>
           ))}
@@ -255,9 +288,9 @@ export function ExerciseInputField({
   return (
     <Animated.View
       layout={layoutTransition}
-      style={[styles.container, { borderColor: accent }]}
+      style={[styles.container, { borderColor: cardAccent }]}
     >
-      <GradientFill accent={accent} />
+      <GradientFill accent={cardAccent} />
 
       {/* Cabecera: título + flecha */}
       <Pressable
@@ -270,18 +303,18 @@ export function ExerciseInputField({
         onPress={toggleExpanded}
       >
         <View style={styles.titleSection}>
-          <View style={[styles.orderBadge, { backgroundColor: accent }]}>
+          <View style={[styles.orderBadge, { backgroundColor: cardAccent }]}>
             <Text style={styles.orderBadgeText}>{order}</Text>
           </View>
           <Text style={styles.exerciseName} numberOfLines={2}>
             {exerciseName}
           </Text>
         </View>
-        <View style={[styles.headerRight, { borderColor: accent + '40' }]}>
+        <View style={[styles.headerRight, { borderColor: cardAccent + '40' }]}>
           <MaterialCommunityIcons
             name={expanded ? 'chevron-up' : 'chevron-down'}
             size={24}
-            color={accent}
+            color={cardAccent}
           />
         </View>
       </Pressable>
@@ -290,50 +323,71 @@ export function ExerciseInputField({
           montado siempre (solo se alterna el contenido) para que `exiting` se
           reproduzca al colapsar con un padre estable. */}
       <View style={styles.topSection}>
+        {/* Bloque de contexto: objetivo + anterior */}
+        {expanded && (target?.sets || previousLog) && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+            style={styles.contextBlock}
+          >
+            {target?.sets && target?.reps && (
+              <View style={styles.contextItem}>
+                <MaterialCommunityIcons
+                  name="target"
+                  size={13}
+                  color={theme.colors.textSecondary}
+                />
+                <Text style={styles.contextLabel}>Objetivo</Text>
+                <Text style={styles.contextValue}>
+                  {target.sets}×{target.reps}
+                </Text>
+              </View>
+            )}
+            {previousLog && getPreviousSetsSummary() ? (
+              <View style={styles.contextItem}>
+                <MaterialCommunityIcons
+                  name="history"
+                  size={13}
+                  color={theme.colors.textSecondary}
+                />
+                <Text style={styles.contextLabel}>Anterior</Text>
+                <Text style={styles.contextValue} numberOfLines={1}>
+                  {getPreviousSetsSummary()}
+                </Text>
+              </View>
+            ) : null}
+            {previousLog?.notes ? (
+              <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
+            ) : null}
+          </Animated.View>
+        )}
 
-          {/* Bloque de contexto: objetivo + anterior */}
-          {expanded && (target?.sets || previousLog) && (
-            <Animated.View
-              entering={fadeIn}
-              exiting={fadeOut}
-              layout={layoutTransition}
-              style={styles.contextBlock}
+        {/* Nota actual (pulsable: abre el editor de nota) */}
+        {expanded && notes && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+          >
+            <Pressable
+              style={({ pressed }) => [
+                styles.noteOwnBlock,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onNotesPress}
             >
-              {target?.sets && target?.reps && (
-                <View style={styles.contextItem}>
-                  <MaterialCommunityIcons name="target" size={13} color={theme.colors.textSecondary} />
-                  <Text style={styles.contextLabel}>Objetivo</Text>
-                  <Text style={styles.contextValue}>{target.sets}×{target.reps}</Text>
-                </View>
-              )}
-              {previousLog && getPreviousSetsSummary() ? (
-                <View style={styles.contextItem}>
-                  <MaterialCommunityIcons name="history" size={13} color={theme.colors.textSecondary} />
-                  <Text style={styles.contextLabel}>Anterior</Text>
-                  <Text style={styles.contextValue} numberOfLines={1}>
-                    {getPreviousSetsSummary()}
-                  </Text>
-                </View>
-              ) : null}
-              {previousLog?.notes ? (
-                <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
-              ) : null}
-            </Animated.View>
-          )}
-
-          {/* Nota actual */}
-          {expanded && notes && (
-            <Animated.View
-              entering={fadeIn}
-              exiting={fadeOut}
-              layout={layoutTransition}
-              style={styles.noteOwnBlock}
-            >
-              <MaterialCommunityIcons name="note-text-outline" size={13} color={accent} />
-              <Text style={[styles.noteOwnText, { color: accent }]}>{notes}</Text>
-            </Animated.View>
-          )}
-
+              <MaterialCommunityIcons
+                name="note-text-outline"
+                size={13}
+                color={accent}
+              />
+              <Text style={[styles.noteOwnText, { color: accent }]}>
+                {notes}
+              </Text>
+            </Pressable>
+          </Animated.View>
+        )}
       </View>
 
       {/* Resultados insertados (peso × reps). Posición fija; con `layout` se
@@ -344,7 +398,10 @@ export function ExerciseInputField({
           entering={fadeIn}
           exiting={fadeOut}
           layout={layoutTransition}
-          style={[styles.resultsBlock, !expanded && styles.resultsBlockCollapsed]}
+          style={[
+            styles.resultsBlock,
+            !expanded && styles.resultsBlockCollapsed,
+          ]}
         >
           {renderSeriesRow()}
         </Animated.View>
@@ -352,152 +409,240 @@ export function ExerciseInputField({
 
       {/* Sección inferior desplegable: inputs / completado. Wrapper persistente
           (igual que la superior) para que `exiting` se reproduzca al colapsar. */}
-      <View style={[styles.bottomSection, !expanded && styles.bottomSectionCollapsed]}>
-
-          {/* Estado: en progreso */}
-          {expanded && !isMaxSetsReached && (
-            <Animated.View
-              entering={fadeIn}
-              exiting={fadeOut}
-              layout={layoutTransition}
-              style={[styles.inputBlock, !hasAddedSets && styles.inputBlockSpaced]}
-            >
-              {/* Inputs peso / reps: dos campos grandes y espaciados */}
-              <View style={styles.inputRow}>
-                <View style={styles.inputField}>
-                  <Text style={styles.inputLabel}>Peso · kg</Text>
-                  <TextInput
-                    style={styles.bigInput}
-                    placeholder={getWeightPlaceholder()}
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={weightValue}
-                    onChangeText={setWeightValue}
-                    keyboardType="decimal-pad"
-                    maxLength={6}
-                  />
-                </View>
-
-                <Text style={styles.timesGlyph}>×</Text>
-
-                <View style={styles.inputField}>
-                  <Text style={styles.inputLabel}>Repeticiones</Text>
-                  <TextInput
-                    style={styles.bigInput}
-                    placeholder={getRepPlaceholder()}
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={repsValue}
-                    onChangeText={setRepsValue}
-                    keyboardType="decimal-pad"
-                    maxLength={4}
-                  />
-                </View>
+      <View
+        style={[
+          styles.bottomSection,
+          !expanded && styles.bottomSectionCollapsed,
+        ]}
+      >
+        {/* Estado: en progreso */}
+        {expanded && !isMaxSetsReached && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+            style={[
+              styles.inputBlock,
+              !hasAddedSets && styles.inputBlockSpaced,
+            ]}
+          >
+            {/* Inputs peso / reps: dos campos grandes y espaciados */}
+            <View style={styles.inputRow}>
+              <View style={styles.inputField}>
+                <Text style={styles.inputLabel}>Peso · kg</Text>
+                <TextInput
+                  style={styles.bigInput}
+                  placeholder={getWeightPlaceholder()}
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={weightValue}
+                  onChangeText={setWeightValue}
+                  keyboardType="decimal-pad"
+                  maxLength={6}
+                />
               </View>
 
-              {/* Botón principal: añadir serie */}
+              <Text style={styles.timesGlyph}>×</Text>
+
+              <View style={styles.inputField}>
+                <Text style={styles.inputLabel}>
+                  {isTimeBased ? 'Segundos' : 'Repeticiones'}
+                </Text>
+                <TextInput
+                  style={styles.bigInput}
+                  placeholder={getRepPlaceholder()}
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={repsValue}
+                  onChangeText={setRepsValue}
+                  keyboardType="decimal-pad"
+                  maxLength={4}
+                />
+              </View>
+            </View>
+
+            {/* Botón principal: añadir serie */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.addButton,
+                { backgroundColor: theme.colors.accent },
+                pressed && styles.addButtonPressed,
+              ]}
+              onPress={handleAddSet}
+            >
+              <MaterialCommunityIcons
+                name="plus-circle"
+                size={22}
+                color={theme.colors.darkGray}
+              />
+              <Text style={styles.addButtonText}>Añadir serie</Text>
+            </Pressable>
+
+            {/* Acciones secundarias */}
+            <View style={styles.secondaryRow}>
+              {hasAddedSets && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.secondaryButton,
+                    styles.deleteButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={onRemoveLastSet}
+                >
+                  <MaterialCommunityIcons
+                    name="minus"
+                    size={15}
+                    color={theme.colors.error}
+                  />
+                  <Text
+                    style={[
+                      styles.secondaryButtonText,
+                      { color: theme.colors.error },
+                    ]}
+                  >
+                    Borrar
+                  </Text>
+                </Pressable>
+              )}
               <Pressable
                 style={({ pressed }) => [
-                  styles.addButton,
-                  { backgroundColor: accent },
-                  pressed && styles.addButtonPressed,
+                  styles.secondaryButton,
+                  styles.finishButton,
+                  pressed && styles.buttonPressed,
                 ]}
-                onPress={handleAddSet}
+                onPress={onFinishExercise}
               >
                 <MaterialCommunityIcons
-                  name="plus-circle"
-                  size={22}
-                  color={theme.colors.darkGray}
+                  name="check"
+                  size={15}
+                  color={theme.colors.accent}
                 />
-                <Text style={styles.addButtonText}>Añadir serie</Text>
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    { color: theme.colors.accent },
+                  ]}
+                >
+                  Terminar
+                </Text>
               </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  styles.notesButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={onNotesPress}
+              >
+                <MaterialCommunityIcons
+                  name="pencil-outline"
+                  size={15}
+                  color={theme.colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  Nota
+                </Text>
+              </Pressable>
+            </View>
 
-              {/* Acciones secundarias */}
-              <View style={styles.secondaryRow}>
-                {hasAddedSets && (
+            {/* Cronómetro (ejercicios basados en tiempo) */}
+            {isTimeBased && (
+              <View style={styles.stopwatchContainer}>
+                <Text style={styles.stopwatchDisplay}>
+                  {formatTimerDisplay(timerSeconds)}
+                </Text>
+                <View style={styles.stopwatchButtons}>
                   <Pressable
-                    style={({ pressed }) => [styles.secondaryButton, styles.deleteButton, pressed && styles.buttonPressed]}
-                    onPress={onRemoveLastSet}
+                    style={({ pressed }) => [
+                      styles.stopwatchBtn,
+                      timerRunning
+                        ? styles.stopwatchBtnStop
+                        : styles.stopwatchBtnStart,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={timerRunning ? stopTimer : startTimer}
                   >
-                    <MaterialCommunityIcons name="minus" size={15} color={theme.colors.error} />
-                    <Text style={[styles.secondaryButtonText, { color: theme.colors.error }]}>Borrar</Text>
+                    <MaterialCommunityIcons
+                      name={timerRunning ? 'stop' : 'play'}
+                      size={16}
+                      color={theme.colors.darkGray}
+                    />
+                    <Text style={styles.stopwatchButtonText}>
+                      {timerRunning ? 'Parar' : 'Iniciar'}
+                    </Text>
                   </Pressable>
-                )}
-                <Pressable
-                  style={({ pressed }) => [styles.secondaryButton, styles.finishButton, pressed && styles.buttonPressed]}
-                  onPress={onFinishExercise}
-                >
-                  <MaterialCommunityIcons name="check" size={15} color={theme.colors.success} />
-                  <Text style={[styles.secondaryButtonText, { color: theme.colors.success }]}>Terminar</Text>
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [styles.secondaryButton, styles.notesButton, pressed && styles.buttonPressed]}
-                  onPress={onNotesPress}
-                >
-                  <MaterialCommunityIcons name="pencil-outline" size={15} color={theme.colors.textSecondary} />
-                  <Text style={[styles.secondaryButtonText, { color: theme.colors.textSecondary }]}>Nota</Text>
-                </Pressable>
-              </View>
-
-              {/* Cronómetro (ejercicios basados en tiempo) */}
-              {isTimeBased && (
-                <View style={styles.stopwatchContainer}>
-                  <Text style={styles.stopwatchDisplay}>{formatTimerDisplay(timerSeconds)}</Text>
-                  <View style={styles.stopwatchButtons}>
+                  {timerSeconds > 0 && !timerRunning && (
                     <Pressable
                       style={({ pressed }) => [
                         styles.stopwatchBtn,
-                        timerRunning ? styles.stopwatchBtnStop : styles.stopwatchBtnStart,
+                        styles.stopwatchBtnUse,
                         pressed && styles.buttonPressed,
                       ]}
-                      onPress={timerRunning ? stopTimer : startTimer}
+                      onPress={useTimerAsReps}
                     >
                       <MaterialCommunityIcons
-                        name={timerRunning ? 'stop' : 'play'}
+                        name="check"
                         size={16}
                         color={theme.colors.darkGray}
                       />
                       <Text style={styles.stopwatchButtonText}>
-                        {timerRunning ? 'Parar' : 'Iniciar'}
+                        Usar {timerSeconds}s
                       </Text>
                     </Pressable>
-                    {timerSeconds > 0 && !timerRunning && (
-                      <Pressable
-                        style={({ pressed }) => [styles.stopwatchBtn, styles.stopwatchBtnUse, pressed && styles.buttonPressed]}
-                        onPress={useTimerAsReps}
-                      >
-                        <MaterialCommunityIcons name="check" size={16} color={theme.colors.darkGray} />
-                        <Text style={styles.stopwatchButtonText}>Usar {timerSeconds}s</Text>
-                      </Pressable>
-                    )}
-                  </View>
+                  )}
                 </View>
-              )}
-            </Animated.View>
-          )}
-
-          {/* Estado: completado */}
-          {expanded && isMaxSetsReached && (
-            <Animated.View
-              entering={fadeIn}
-              exiting={fadeOut}
-              layout={layoutTransition}
-              style={styles.completedBlock}
-            >
-              <View style={styles.completedRow}>
-                <MaterialCommunityIcons name="check-circle" size={16} color={theme.colors.success} />
-                <Text style={styles.completedText}>
-                  Completado · {addedSets.length}/{target?.sets ?? addedSets.length} series
-                </Text>
               </View>
-              <Pressable
-                style={({ pressed }) => [styles.secondaryButton, styles.deleteButton, styles.undoButton, pressed && styles.buttonPressed]}
-                onPress={onRemoveLastSet}
-              >
-                <MaterialCommunityIcons name="minus" size={15} color={theme.colors.error} />
-                <Text style={[styles.secondaryButtonText, { color: theme.colors.error }]}>Borrar</Text>
-              </Pressable>
-            </Animated.View>
-          )}
+            )}
+          </Animated.View>
+        )}
 
+        {/* Estado: completado */}
+        {expanded && isMaxSetsReached && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+            style={styles.completedBlock}
+          >
+            <View style={styles.completedRow}>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={16}
+                color={theme.colors.success}
+              />
+              <Text style={styles.completedText}>
+                Completado · {addedSets.length}/
+                {target?.sets ?? addedSets.length} series
+              </Text>
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.secondaryButton,
+                styles.deleteButton,
+                styles.undoButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onRemoveLastSet}
+            >
+              <MaterialCommunityIcons
+                name="minus"
+                size={15}
+                color={theme.colors.error}
+              />
+              <Text
+                style={[
+                  styles.secondaryButtonText,
+                  { color: theme.colors.error },
+                ]}
+              >
+                Borrar
+              </Text>
+            </Pressable>
+          </Animated.View>
+        )}
       </View>
     </Animated.View>
   );
@@ -758,8 +903,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.error + '15',
   },
   finishButton: {
-    borderColor: theme.colors.success + '50',
-    backgroundColor: theme.colors.success + '15',
+    borderColor: theme.colors.accent + '50',
+    backgroundColor: theme.colors.accent + '15',
   },
   notesButton: {
     borderColor: theme.colors.border,

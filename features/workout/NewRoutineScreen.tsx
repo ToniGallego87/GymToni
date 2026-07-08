@@ -23,11 +23,17 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  GymIcon,
+  GYM_ICON_NAMES,
+  GYM_ICON_LABELS,
+  detectGymIcon,
   Toast,
   StretchScrollView,
 } from '../../components';
+import type { GymIconName } from '../../components';
 import { generateId } from '@lib/storage';
-import { theme, getTrainingAccent } from '@lib/theme';
+import { theme } from '@lib/theme';
+import { stripIconTag } from '@lib/routineShare';
 import { WorkoutDay, WorkoutExercise, WorkoutRoutine } from '../../types';
 
 interface NewRoutineScreenProps {
@@ -37,7 +43,7 @@ interface NewRoutineScreenProps {
   // Abre el escáner de QR para importar una rutina compartida.
   onScanRoutineQR?: () => void;
   // Días con los que arrancar el formulario (importación por QR/deep link).
-  initialDays?: { title: string; exercisesText: string }[];
+  initialDays?: { title: string; exercisesText: string; icon?: GymIconName }[];
 }
 
 type RepUnit = 'reps' | 'seg';
@@ -55,64 +61,18 @@ interface NewRoutineDayForm {
   id: string;
   title: string;
   exercises: ExerciseForm[];
+  // Icono elegido a mano. Si es undefined, se autodetecta por el título; si no
+  // se puede detectar, la creación obliga a elegirlo.
+  icon?: GymIconName;
 }
 
-const EXTRA_EMOJIS = ['🟡', '🟣', '🟠', '⚪'];
 const MIN_SETS = 1;
 const MAX_SETS = 12;
 
-// Paleta de colores de días de rutina (acentos por emoji). Cada día nuevo
-// arranca con un color distinto de esta paleta según su índice.
-const DAY_COLOR_PALETTE = [
-  theme.colors.emoji_blue,
-  theme.colors.emoji_green,
-  theme.colors.error,
-  theme.colors.emoji_orange,
-  theme.colors.emoji_purple,
-  theme.colors.emoji_brown,
-];
-
-// Acento por tipo de día, coherente con getTrainingAccent (Inicio).
-const TYPE_ACCENT: Record<string, string> = {
-  push: theme.colors.emoji_blue,
-  pull: theme.colors.error,
-  legs: theme.colors.emoji_green,
-  mixed: theme.colors.primary,
-};
-
-function getNormalizedDayType(value: string) {
-  const normalized = value.trim().toLowerCase();
-
-  if (/push|pecho|hombro|tr[ií]ceps/.test(normalized)) return 'push';
-  if (/pull|espalda|b[ií]ceps/.test(normalized)) return 'pull';
-  if (/pierna|legs?|cu[aá]driceps|femoral|gl[uú]teo/.test(normalized))
-    return 'legs';
-  if (/torso|upper/.test(normalized)) return 'mixed';
-
-  return normalized;
-}
-
-function getEmojiForDayType(type: string, fallbackIndex: number) {
-  if (type === 'push') return '🔵';
-  if (type === 'pull') return '🔴';
-  if (type === 'legs') return '🟢';
-  if (type === 'mixed') return '🔵🔴';
-  return EXTRA_EMOJIS[fallbackIndex % EXTRA_EMOJIS.length];
-}
-
-// Color y emoji en vivo para pintar la card mientras se escribe el título.
-function getDayAccent(
-  title: string,
-  index: number
-): { accent: string; emoji: string | null } {
-  const trimmed = title.trim();
-  const fallbackAccent = DAY_COLOR_PALETTE[index % DAY_COLOR_PALETTE.length];
-  if (!trimmed) return { accent: fallbackAccent, emoji: null };
-
-  const type = getNormalizedDayType(trimmed);
-  const emoji = getEmojiForDayType(type, index);
-  const accent = TYPE_ACCENT[type] ?? getTrainingAccent({ emoji });
-  return { accent, emoji };
+// Icono efectivo de un día en el formulario: el elegido a mano o, si no, el
+// autodetectado por el título. null si aún no se puede determinar.
+function effectiveDayIcon(day: NewRoutineDayForm): GymIconName | null {
+  return day.icon ?? detectGymIcon(day.title);
 }
 
 // Formato con corchetes ("Press banca [4x6-8]").
@@ -190,11 +150,13 @@ function buildDaysFromRoutineText(text: string): NewRoutineDayForm[] {
     )
     .filter((lines) => lines.length > 0)
     .map((lines) => {
-      const [title, ...rest] = lines;
+      const [titleLine, ...rest] = lines;
+      const { title, icon } = stripIconTag(titleLine);
       const exercises = rest.map(parseImportedExercise);
       return {
         id: generateId(),
-        title: title.trim(),
+        title,
+        icon,
         exercises: exercises.length ? exercises : [createEmptyExercise()],
       };
     });
@@ -486,6 +448,7 @@ export function NewRoutineScreen({
       ? initialDays.map((day) => ({
           id: generateId(),
           title: day.title,
+          icon: day.icon,
           exercises: buildExercisesFromText(day.exercisesText),
         }))
       : [{ id: generateId(), title: '', exercises: [createEmptyExercise()] }]
@@ -500,6 +463,8 @@ export function NewRoutineScreen({
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
+  // Día cuyo selector de icono está abierto.
+  const [iconPickerDayId, setIconPickerDayId] = useState<string | null>(null);
 
   const handleImportText = () => {
     const parsed = buildDaysFromRoutineText(importText);
@@ -545,6 +510,11 @@ export function NewRoutineScreen({
 
   const handleUpdateTitle = (dayId: string, value: string) => {
     updateDay(dayId, (day) => ({ ...day, title: value }));
+  };
+
+  const handleSelectIcon = (dayId: string, icon: GymIconName) => {
+    updateDay(dayId, (day) => ({ ...day, icon }));
+    setIconPickerDayId(null);
   };
 
   const handleUpdateExercise = (
@@ -601,8 +571,6 @@ export function NewRoutineScreen({
       throw new Error('Añade al menos un día');
     }
 
-    const typeOrder: string[] = [];
-
     return days.map((entry, index) => {
       const dayTitle = entry.title.trim();
       if (!dayTitle) {
@@ -614,9 +582,9 @@ export function NewRoutineScreen({
         throw new Error(`Faltan ejercicios en el Día ${index + 1}`);
       }
 
-      const dayType = getNormalizedDayType(dayTitle);
-      if (!typeOrder.includes(dayType)) {
-        typeOrder.push(dayType);
+      const icon = effectiveDayIcon(entry);
+      if (!icon) {
+        throw new Error(`Elige un icono para el Día ${index + 1}`);
       }
 
       const exercises: WorkoutExercise[] = namedExercises.map(
@@ -633,7 +601,8 @@ export function NewRoutineScreen({
         id: generateId(),
         dayNumber: index + 1,
         name: `Día ${index + 1} - ${dayTitle}`,
-        emoji: getEmojiForDayType(dayType, typeOrder.indexOf(dayType)),
+        // `emoji` guarda ahora el nombre del icono (ver GymIcon/DayAccentIcon).
+        emoji: icon,
         exercises,
       };
     });
@@ -676,7 +645,8 @@ export function NewRoutineScreen({
         showsVerticalScrollIndicator={false}
       >
         {days.map((day, index) => {
-          const { accent } = getDayAccent(day.title, index);
+          const accent = theme.colors.white;
+          const dayIcon = effectiveDayIcon(day);
 
           return (
             <View
@@ -686,12 +656,40 @@ export function NewRoutineScreen({
               <GradientFill accent={accent} />
 
               <View style={styles.dayHeaderRow}>
-                <MaterialCommunityIcons
-                  name="circle"
-                  size={15}
-                  color={accent}
-                />
                 <Text style={styles.dayTitleDisplay}>Día {index + 1}</Text>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.dayIconPick,
+                    !dayIcon && styles.dayIconPickEmpty,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => setIconPickerDayId(day.id)}
+                >
+                  {dayIcon ? (
+                    <>
+                      <GymIcon name={dayIcon} size={18} color={theme.colors.white} />
+                      <Text style={styles.dayIconPickText}>
+                        {GYM_ICON_LABELS[dayIcon]}
+                      </Text>
+                    </>
+                  ) : (
+                    <>
+                      <MaterialCommunityIcons
+                        name="help-circle-outline"
+                        size={18}
+                        color={theme.colors.primary}
+                      />
+                      <Text
+                        style={[
+                          styles.dayIconPickText,
+                          { color: theme.colors.primary },
+                        ]}
+                      >
+                        Elegir icono
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
               </View>
 
               <View style={styles.inputRow}>
@@ -904,6 +902,67 @@ export function NewRoutineScreen({
         </View>
       </Modal>
 
+      <Modal
+        visible={iconPickerDayId !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setIconPickerDayId(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={[styles.modalTitle, styles.iconPickerTitle]}>
+              Selecciona un icono para este día
+            </Text>
+            <View style={styles.iconGrid}>
+              {GYM_ICON_NAMES.map((iconName) => {
+                const day = days.find((d) => d.id === iconPickerDayId);
+                const active = day ? effectiveDayIcon(day) === iconName : false;
+                return (
+                  <Pressable
+                    key={iconName}
+                    style={({ pressed }) => [
+                      styles.iconButton,
+                      active && styles.iconButtonActive,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() =>
+                      iconPickerDayId &&
+                      handleSelectIcon(iconPickerDayId, iconName)
+                    }
+                  >
+                    <GymIcon
+                      name={iconName}
+                      size={30}
+                      color={active ? theme.colors.primary : theme.colors.white}
+                    />
+                    <Text
+                      style={[
+                        styles.iconButtonLabel,
+                        active && { color: theme.colors.primary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {GYM_ICON_LABELS[iconName]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Pressable
+              style={({ pressed }) => [
+                styles.modalButton,
+                styles.modalCancel,
+                styles.iconModalClose,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => setIconPickerDayId(null)}
+            >
+              <Text style={styles.modalCancelText}>Cerrar</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {toast && (
         <Toast
           message={toast.message}
@@ -945,6 +1004,7 @@ const styles = StyleSheet.create({
   dayHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
   dayTitleDisplay: {
@@ -954,9 +1014,25 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     lineHeight: 26,
   },
-  dayTypeEmoji: {
-    fontSize: 15,
-    lineHeight: 20,
+  dayIconPick: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.darkGray,
+  },
+  dayIconPickEmpty: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '1A',
+  },
+  dayIconPickText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: theme.colors.text,
   },
   label: {
     fontSize: 13,
@@ -1306,6 +1382,40 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
+  },
+  iconGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+  },
+  iconButton: {
+    width: '30%',
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.darkGray,
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconButtonActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '1A',
+  },
+  iconButtonLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
+  },
+  iconPickerTitle: {
+    marginBottom: 6,
+  },
+  iconModalClose: {
+    flex: 0,
+    marginTop: 4,
+    alignSelf: 'center',
+    paddingHorizontal: 28,
   },
   modalCancel: {
     borderColor: theme.colors.border,

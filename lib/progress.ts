@@ -56,15 +56,6 @@ export function getEstimatedOneRepMax(weight: number, reps: number): number {
   return weight * (1 + reps / 30);
 }
 
-export function getBestSetStrengthScore(parsedSets: ParsedSet[] = []): number {
-  if (!parsedSets || parsedSets.length === 0) return 0;
-
-  return parsedSets.reduce((bestScore, setItem) => {
-    const setScore = getSetPerformanceScore(setItem);
-    return Math.max(bestScore, setScore);
-  }, 0);
-}
-
 export function getTotalSetsStrengthScore(
   parsedSets: ParsedSet[] = []
 ): number {

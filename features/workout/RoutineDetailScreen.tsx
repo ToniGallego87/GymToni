@@ -20,13 +20,20 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  GymIcon,
+  GYM_ICON_NAMES,
+  GYM_ICON_LABELS,
+  resolveDayIcon,
   StretchScrollView,
   Toast,
 } from '../../components';
 import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
 import { generateId } from '@lib/storage';
-import { buildRoutineShareLink, buildRoutineShareText } from '@lib/routineShare';
+import {
+  buildRoutineShareLink,
+  buildRoutineShareText,
+} from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
 
 interface RoutineDetailScreenProps {
@@ -34,7 +41,6 @@ interface RoutineDetailScreenProps {
   onBack: () => void;
 }
 
-const EMOJI_CHOICES = ['🔴', '🟠', '🟤', '🟢', '🔵', '🟣'];
 
 export function RoutineDetailScreen({
   routine,
@@ -240,7 +246,7 @@ export function RoutineDetailScreen({
                     <DayAccentIcon
                       emoji={day.emoji}
                       name={day.name}
-                      size={16}
+                      size={32}
                     />
                   </View>
                   <Text style={styles.dayName}>
@@ -359,19 +365,43 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecciona un color</Text>
-            <View style={styles.emojiGrid}>
-              {EMOJI_CHOICES.map((emoji) => (
-                <Pressable
-                  key={emoji}
-                  style={({ pressed }) => [
-                    styles.emojiButton,
-                    { backgroundColor: getTrainingAccent({ emoji }) },
-                    pressed && styles.emojiButtonPressed,
-                  ]}
-                  onPress={() => handleSelectEmoji(emoji)}
-                />
-              ))}
+            <Text style={styles.modalTitle}>Selecciona un icono</Text>
+            <View style={styles.iconGrid}>
+              {GYM_ICON_NAMES.map((iconName) => {
+                const selectedDay = currentRoutine.days.find(
+                  (d) => d.id === selectedDayId
+                );
+                const current = selectedDay
+                  ? resolveDayIcon(selectedDay.emoji, selectedDay.name)
+                  : null;
+                const active = current === iconName;
+                return (
+                  <Pressable
+                    key={iconName}
+                    style={({ pressed }) => [
+                      styles.iconButton,
+                      active && styles.iconButtonActive,
+                      pressed && styles.emojiButtonPressed,
+                    ]}
+                    onPress={() => handleSelectEmoji(iconName)}
+                  >
+                    <GymIcon
+                      name={iconName}
+                      size={30}
+                      color={active ? theme.colors.primary : theme.colors.white}
+                    />
+                    <Text
+                      style={[
+                        styles.iconButtonLabel,
+                        active && { color: theme.colors.primary },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {GYM_ICON_LABELS[iconName]}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
             <Pressable
               style={({ pressed }) => [
@@ -641,19 +671,31 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     textAlign: 'center',
   },
-  emojiGrid: {
+  iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
     justifyContent: 'center',
-    marginBottom: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
-  emojiButton: {
+  iconButton: {
     width: '30%',
-    height: 48,
+    paddingVertical: 12,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    backgroundColor: theme.colors.darkGray,
+    alignItems: 'center',
+    gap: 6,
+  },
+  iconButtonActive: {
+    borderColor: theme.colors.primary,
+    backgroundColor: theme.colors.primary + '1A',
+  },
+  iconButtonLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: theme.colors.textSecondary,
   },
   emojiButtonPressed: {
     opacity: 0.85,
