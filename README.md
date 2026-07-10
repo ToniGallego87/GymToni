@@ -4,7 +4,7 @@ App móvil para registrar entrenamientos de gimnasio de forma rápida y eficient
 
 ## Stack
 
-React Native + Expo · TypeScript · Context API + useReducer · AsyncStorage
+React Native + Expo (SDK 51) · TypeScript · Context API + useReducer · SQLite local (`expo-sqlite`) en nativo / localStorage en web
 
 ## Inicio rápido
 
@@ -23,14 +23,15 @@ npm start          # Expo Go (móvil)
 
 ## Documentación
 
-| Documento                                  | Contenido                                |
-| ------------------------------------------ | ---------------------------------------- |
-| [ARCHITECTURE.md](.github/ARCHITECTURE.md) | Stack, flujo de datos, tipos, navegación |
-| [CONVENTIONS.md](.github/CONVENTIONS.md)   | Naming, patrones, reglas de código       |
-| [SETUP.md](.github/docs/SETUP.md)          | Instalación detallada y estructura       |
-| [COMMANDS.md](.github/docs/COMMANDS.md)    | Comandos de desarrollo y build           |
-| [UPDATES.md](.github/docs/UPDATES.md)      | Historial de versiones                   |
-| [ROADMAP.md](.github/docs/ROADMAP.md)      | Features futuras (no MVP)                |
+| Documento                                             | Contenido                                |
+| ----------------------------------------------------- | ---------------------------------------- |
+| [ARCHITECTURE.md](.github/ARCHITECTURE.md)            | Stack, flujo de datos, tipos, navegación |
+| [CONVENTIONS.md](.github/CONVENTIONS.md)              | Naming, patrones, reglas de código       |
+| [frontend-design.md](.github/docs/frontend-design.md) | Sistema de diseño UI (colores, tipos)    |
+| [SETUP.md](.github/docs/SETUP.md)                     | Instalación detallada y estructura       |
+| [COMMANDS.md](.github/docs/COMMANDS.md)               | Comandos de desarrollo y build           |
+| [UPDATES.md](.github/docs/UPDATES.md)                 | Historial de versiones                   |
+| [ROADMAP.md](.github/docs/ROADMAP.md)                 | Features futuras (no MVP)                |
 
 ## Estructura
 

@@ -14,6 +14,7 @@ import {
   Image,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import Constants from 'expo-constants';
 import Animated, {
   FadeInDown,
   LinearTransition,
@@ -39,6 +40,7 @@ import { animateLayout } from '@lib/layoutAnimation';
 import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
+  ConfirmModal,
   DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
@@ -514,7 +516,7 @@ export function HomeScreen({
   const selectorNavBottom = floatingNavBottom;
   const selectorScrollBottomPadding = floatingNavScrollBottomPadding;
   const homeScrollBottomPadding = floatingNavScrollBottomPadding;
-  const appVersion = require('../../app.json').expo.version;
+  const appVersion = Constants.expoConfig?.version ?? '';
 
   const formatImprovementDisplay = (imp: {
     isImproved: boolean;
@@ -1062,17 +1064,8 @@ export function HomeScreen({
         </StretchScrollView>
 
         <GlassTopBar
-          title="Rutina"
-          titleElement={
-            <View style={styles.selectorTitleRow}>
-              <MaterialCommunityIcons
-                name="book-open-variant"
-                size={18}
-                color={theme.colors.text}
-              />
-              <Text style={styles.selectorTitleText}>Rutinas</Text>
-            </View>
-          }
+          title="Rutinas"
+          icon="book-open-variant"
           subtitle="Consulta la que desees o crea una nueva"
           topInset={insets.top}
         />
@@ -1087,65 +1080,23 @@ export function HomeScreen({
           onPressData={onNavigateData}
         />
 
-        <Modal
+        <ConfirmModal
           visible={!!routineToDeleteId}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setRoutineToDeleteId(undefined)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>¿Eliminar rutina?</Text>
-              <Text style={styles.modalMessage}>
-                Esta acción no se puede deshacer. ¿Estás seguro?
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalButtonCancel}
-                  onPress={() => setRoutineToDeleteId(undefined)}
-                >
-                  <Text style={styles.modalButtonCancelText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalButtonDelete}
-                  onPress={handleDeleteRoutine}
-                >
-                  <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+          title="¿Eliminar rutina?"
+          message="Esta acción no se puede deshacer. ¿Estás seguro?"
+          confirmLabel="Eliminar"
+          onConfirm={handleDeleteRoutine}
+          onCancel={() => setRoutineToDeleteId(undefined)}
+        />
 
-        <Modal
+        <ConfirmModal
           visible={!!logToDeleteId}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setLogToDeleteId(undefined)}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>¿Eliminar entrenamiento?</Text>
-              <Text style={styles.modalMessage}>
-                Esta acción no se puede deshacer. ¿Estás seguro?
-              </Text>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalButtonCancel}
-                  onPress={() => setLogToDeleteId(undefined)}
-                >
-                  <Text style={styles.modalButtonCancelText}>Cancelar</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalButtonDelete}
-                  onPress={handleDeleteLog}
-                >
-                  <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </Modal>
+          title="¿Eliminar entrenamiento?"
+          message="Esta acción no se puede deshacer. ¿Estás seguro?"
+          confirmLabel="Eliminar"
+          onConfirm={handleDeleteLog}
+          onCancel={() => setLogToDeleteId(undefined)}
+        />
       </View>
     );
   }
@@ -1285,7 +1236,8 @@ export function HomeScreen({
                       },
                       ...activeDays.map((day: WorkoutDay, index: number) => ({
                         id: day.id,
-                        label: getDisplayDayName(day.name) || `Día ${index + 1}`,
+                        label:
+                          getDisplayDayName(day.name) || `Día ${index + 1}`,
                       })),
                     ];
                     const currentIndex = Math.max(
@@ -1606,35 +1558,14 @@ export function HomeScreen({
         </View>
       </Modal>
 
-      <Modal
+      <ConfirmModal
         visible={!!logToDeleteId}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setLogToDeleteId(undefined)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>¿Eliminar entrenamiento?</Text>
-            <Text style={styles.modalMessage}>
-              Esta acción no se puede deshacer. ¿Estás seguro?
-            </Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity
-                style={styles.modalButtonCancel}
-                onPress={() => setLogToDeleteId(undefined)}
-              >
-                <Text style={styles.modalButtonCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalButtonDelete}
-                onPress={handleDeleteLog}
-              >
-                <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        title="¿Eliminar entrenamiento?"
+        message="Esta acción no se puede deshacer. ¿Estás seguro?"
+        confirmLabel="Eliminar"
+        onConfirm={handleDeleteLog}
+        onCancel={() => setLogToDeleteId(undefined)}
+      />
 
       {!hasNoRoutines && (
         <FloatingPrimaryNav
@@ -2132,20 +2063,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 20,
   },
-  selectorTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  selectorTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
-  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: theme.spacing.md,
@@ -2161,16 +2081,18 @@ const styles = StyleSheet.create({
     ...theme.shadow.card,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '800',
     color: theme.colors.text,
+    textAlign: 'center',
     marginBottom: theme.spacing.sm,
   },
   modalMessage: {
-    fontSize: 16,
+    fontSize: 14,
     color: theme.colors.textSecondary,
+    textAlign: 'center',
     marginBottom: theme.spacing.md,
-    lineHeight: 20,
+    lineHeight: 19,
   },
   modalButtonsContainer: {
     flexDirection: 'column',

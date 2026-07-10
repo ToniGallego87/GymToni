@@ -103,13 +103,13 @@ export function weightForTimestamp(
 }
 
 /** Redondea a 1 decimal y quita el ".0" innecesario. */
-const fmtNum = (n: number): string => {
+export const fmtNum = (n: number): string => {
   const r = Math.round(n * 10) / 10;
   return Number.isInteger(r) ? String(r) : r.toFixed(1);
 };
 
 /** "12" o "12-12.6" según coincidan mín y máx. */
-const rangeStr = (min: number, max: number): string =>
+export const rangeStr = (min: number, max: number): string =>
   min === max ? fmtNum(min) : `${fmtNum(min)}-${fmtNum(max)}`;
 
 /** Factor kcal/kg/km aproximado por disciplina. */

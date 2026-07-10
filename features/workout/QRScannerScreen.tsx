@@ -117,7 +117,7 @@ export function QRScannerScreen({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#0A0A0A',
+    backgroundColor: theme.colors.background,
   },
   container: {
     flexGrow: 1,
@@ -138,12 +138,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   closeBtnText: {
-    color: '#fff',
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: '700',
   },
   headerTitle: {
-    color: '#fff',
+    color: theme.colors.text,
     fontSize: 18,
     fontWeight: '700',
   },
@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     fontSize: 48,
   },
   instructionTitle: {
-    color: '#fff',
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: '700',
     textAlign: 'center',
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.15)',
-    color: '#fff',
+    color: theme.colors.text,
     fontSize: 13,
     fontFamily: 'monospace',
     paddingHorizontal: 14,
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   errorText: {
-    color: '#FF6B6B',
+    color: theme.colors.error,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   importBtnText: {
-    color: '#fff',
+    color: theme.colors.darkGray,
     fontSize: 16,
     fontWeight: '700',
   },

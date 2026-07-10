@@ -103,10 +103,11 @@ lib/                    → Lógica compartida
   ├── videoExport.ts    → Vídeo de logros (módulo nativo video-encoder)
   ├── layoutAnimation.ts→ animateLayout compartido (habilita LayoutAnimation en Android)
   ├── utils.ts          → Utilidades genéricas (generateId, formatDate, getToday)
-  └── theme.ts          → Colores, tipografía, spacing
+  └── theme.ts          → Colores, degradados (gradients), tipografía, spacing
 lib/__tests__/          → Tests Jest de la lógica pura (npm test)
 types/                  → Definiciones TypeScript centralizadas
-data/                   → Seed data (rutinas iniciales + logs demo)
+data/                   → Seed data (rutinas iniciales + logs demo) y changelog.ts
+                          (novedades por versión para el popup WhatsNewModal)
 ```
 
 ## Pantallas y navegación
@@ -132,11 +133,20 @@ DetailScreen recuerda su origen (home / calendar / cardio) para volver a él.
 
 ## Sistema visual (Glass UI)
 
-- Top bar fija con efecto blur (`GlassTopBar`)
+- Top bar fija con efecto blur (`GlassTopBar`); el título estándar se declara con
+  el prop `icon` (icono 18px + texto 20/800), `titleElement` solo para casos
+  especiales (logo de Inicio, icono del día)
 - Barra flotante de navegación primaria (`FloatingPrimaryNav`)
 - Botón flotante de volver (`FloatingBackButton`)
 - Tokens compartidos en `glassTokens.ts` (blur, opacidad, bordes)
+- Colores y degradados centralizados en `lib/theme.ts` (`theme.colors`,
+  `theme.gradients`); ningún hex suelto en pantallas
+- Diálogo de confirmación único: `ConfirmModal` (overlay `theme.colors.overlay`,
+  tarjeta surface, botones `Button`)
+- Popup de novedades tras actualizar: `WhatsNewModal` (lee `data/changelog.ts`,
+  se controla desde `App.tsx` comparando con la última versión vista)
 - Diseño edge-to-edge en todas las pantallas
+- Guía completa: [docs/frontend-design.md](docs/frontend-design.md)
 
 ## Parsers
 

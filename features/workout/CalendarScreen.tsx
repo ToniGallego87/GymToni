@@ -64,17 +64,6 @@ export function CalendarScreen({
   const { bottom: floatingNavBottom, scrollBottomPadding } =
     getFloatingPrimaryNavMetrics(insets.bottom);
 
-  const titleElement = (
-    <View style={styles.topBarTitleRow}>
-      <MaterialCommunityIcons
-        name="calendar-month-outline"
-        size={18}
-        color={theme.colors.text}
-      />
-      <Text style={styles.topBarTitleText}>Calendario</Text>
-    </View>
-  );
-
   const getDayById = (dayId: string) => {
     for (const routine of state.routines) {
       const day = routine.days.find((item: WorkoutDay) => item.id === dayId);
@@ -200,7 +189,7 @@ export function CalendarScreen({
 
         <GlassTopBar
           title="Calendario"
-          titleElement={titleElement}
+          icon="calendar-month-outline"
           subtitle="Tu historial mensual"
           topInset={insets.top}
         />
@@ -472,10 +461,7 @@ export function CalendarScreen({
               return (
                 <Pressable
                   key={m}
-                  style={[
-                    styles.modeButton,
-                    active && styles.modeButtonActive,
-                  ]}
+                  style={[styles.modeButton, active && styles.modeButtonActive]}
                   onPress={() => {
                     if (m === mode) return;
                     animateLayout();
@@ -499,7 +485,7 @@ export function CalendarScreen({
 
       <GlassTopBar
         title="Calendario"
-        titleElement={titleElement}
+        icon="calendar-month-outline"
         subtitle="Repasa tus ejercicios mes por mes"
         topInset={insets.top}
       />
@@ -559,17 +545,6 @@ const styles = StyleSheet.create({
   monthNavButtonDisabled: {
     opacity: 0.25,
   },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
-  },
   weekHeader: {
     flexDirection: 'row',
     marginBottom: 8,
@@ -592,7 +567,9 @@ const styles = StyleSheet.create({
   dayCell: {
     flex: 1,
     minWidth: '12.8%',
-    minHeight: 80,
+    // Altura FIJA (no mínima) para que las filas midan lo mismo en los modos
+    // fuerza y cardio, independientemente del contenido de cada celda.
+    height: 80,
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,

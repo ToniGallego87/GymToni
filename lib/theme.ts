@@ -40,6 +40,22 @@ export const theme = {
     display: 'Anton',
   },
 
+  // Degradados de marca (claro → base → oscuro, diagonal). Única fuente para
+  // todos los LinearGradient de acción/estado: no duplicar estos tríos en
+  // pantallas ni componentes.
+  gradients: {
+    primary: ['#F9D85A', '#F7CC3D', '#E0B226'] as [string, string, string],
+    success: ['#7CD99A', '#52C878', '#3DA866'] as [string, string, string],
+    danger: ['#F59898', '#F06A6A', '#D85151'] as [string, string, string],
+    warning: ['#FFC97A', '#FFB347', '#F2982C'] as [string, string, string],
+    amber: ['#F9D85A', '#F2B33D', '#E08A26'] as [string, string, string],
+    // Brillo superior (sheen) que da volumen a los botones/tarjetas con gradiente.
+    sheen: ['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)'] as [
+      string,
+      string,
+    ],
+  },
+
   typography: {
     h1: {
       fontSize: 28,

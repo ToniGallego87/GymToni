@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
 import { WorkoutAppData } from '../types';
+import { WeightSegment } from './cardio';
 import { clearAppDataInDb, loadAppDataFromDb, saveAppDataToDb } from './db';
 import { normalizeAppData } from './normalize';
 
@@ -25,8 +26,15 @@ function getDefaultAppData(): WorkoutAppData {
   };
 }
 
-// Datos de fábrica para sembrar el almacenamiento en el primer arranque.
+// Datos de fábrica para sembrar el almacenamiento en el PRIMER arranque
+// (solo corre si no hay datos previos; ver App.tsx). En builds de release
+// (APK/AAB) __DEV__ es false: la app se instala completamente vacía, sin
+// rutinas ni historial de ejemplo. Los datos seed solo se cargan en
+// desarrollo. Esto no afecta a usuarios con datos: si ya existen, no se siembra.
 export function getSeedAppData(): WorkoutAppData {
+  if (!__DEV__) {
+    return { routines: [], logs: [] };
+  }
   return getDefaultAppData();
 }
 
@@ -117,6 +125,58 @@ export async function loadAppData(): Promise<WorkoutAppData | null> {
     console.error('Error loading app data:', error);
     return null;
   }
+}
+
+// Historial de tramos de peso corporal (para estimar kcal del cardio). Se
+// guarda siempre en AsyncStorage (funciona también en web), misma clave que
+// venía usando CardioScreen.
+const CARDIO_WEIGHT_HISTORY_KEY = 'cardioWeightHistory';
+const LEGACY_CARDIO_WEIGHT_KEY = 'cardioWeightKg';
+
+export function isValidWeightSegments(
+  value: unknown
+): value is WeightSegment[] {
+  return (
+    Array.isArray(value) &&
+    value.every(
+      (segment) =>
+        segment &&
+        typeof segment.weight === 'number' &&
+        segment.weight > 0 &&
+        typeof segment.appliesFrom === 'number' &&
+        typeof segment.setAt === 'number'
+    )
+  );
+}
+
+export async function getCardioWeightHistory(): Promise<WeightSegment[]> {
+  try {
+    const raw = await AsyncStorage.getItem(CARDIO_WEIGHT_HISTORY_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (isValidWeightSegments(parsed) && parsed.length) {
+        return parsed;
+      }
+    }
+
+    // Migración del peso único antiguo a un primer tramo.
+    const legacy = await AsyncStorage.getItem(LEGACY_CARDIO_WEIGHT_KEY);
+    const n = legacy ? parseFloat(legacy) : NaN;
+    if (Number.isFinite(n) && n > 0) {
+      return [{ weight: n, appliesFrom: 0, setAt: 0 }];
+    }
+  } catch {}
+
+  return [];
+}
+
+export async function setCardioWeightHistory(
+  segments: WeightSegment[]
+): Promise<void> {
+  await AsyncStorage.setItem(
+    CARDIO_WEIGHT_HISTORY_KEY,
+    JSON.stringify(segments)
+  );
 }
 
 // Versión de la app que el usuario ya ha visto en el popup de novedades

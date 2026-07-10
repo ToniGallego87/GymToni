@@ -25,6 +25,7 @@ import {
   CardioMonth,
   WeightSegment,
 } from '@lib/cardio';
+import { getCardioWeightHistory, setCardioWeightHistory } from '@lib/storage';
 import {
   FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
@@ -268,24 +269,11 @@ export function CardioScreen({
   const [weightInput, setWeightInput] = useState('');
 
   useEffect(() => {
-    (async () => {
-      try {
-        const raw = await AsyncStorage.getItem('cardioWeightHistory');
-        if (raw) {
-          const parsed = JSON.parse(raw) as WeightSegment[];
-          if (Array.isArray(parsed) && parsed.length) {
-            setWeightHistory(parsed);
-            return;
-          }
-        }
-        // Migración del peso único antiguo a un primer tramo.
-        const legacy = await AsyncStorage.getItem('cardioWeightKg');
-        const n = legacy ? parseFloat(legacy) : NaN;
-        if (Number.isFinite(n) && n > 0) {
-          setWeightHistory([{ weight: n, appliesFrom: 0, setAt: 0 }]);
-        }
-      } catch {}
-    })();
+    getCardioWeightHistory()
+      .then((history) => {
+        if (history.length) setWeightHistory(history);
+      })
+      .catch(() => {});
   }, []);
 
   // Recuperar la métrica de la gráfica guardada.
@@ -329,7 +317,7 @@ export function CardioScreen({
     setWeightHistory(next);
     setShowWeightModal(false);
     try {
-      await AsyncStorage.setItem('cardioWeightHistory', JSON.stringify(next));
+      await setCardioWeightHistory(next);
     } catch {}
   };
 
@@ -436,13 +424,13 @@ export function CardioScreen({
             gradiente opaco, sin borde y tipografía display. El cardio se registra
             dentro del día de fuerza, así que aquí solo resumimos. */}
         <LinearGradient
-          colors={['#F9D85A', '#F7CC3D', '#E0B226']}
+          colors={theme.gradients.primary}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.hero}
         >
           <LinearGradient
-            colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+            colors={theme.gradients.sheen}
             start={{ x: 0, y: 0 }}
             end={{ x: 0, y: 1 }}
             style={styles.heroSheen}
@@ -805,16 +793,7 @@ export function CardioScreen({
 
       <GlassTopBar
         title="Cardio"
-        titleElement={
-          <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons
-              name="run-fast"
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.topBarTitleText}>Cardio</Text>
-          </View>
-        }
+        icon="run-fast"
         subtitle="Consulta tus resultados"
         topInset={insets.top}
       />
@@ -874,17 +853,6 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     paddingHorizontal: theme.spacing.md,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
   },
   hero: {
     borderRadius: theme.borderRadius.lg,

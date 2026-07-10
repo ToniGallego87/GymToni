@@ -31,12 +31,16 @@ import {
 } from '@features/workout';
 import { WhatsNewModal } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
+import type { WeightSegment } from '@lib/cardio';
 import {
   clearAppData,
+  getCardioWeightHistory,
   getLastSeenVersion,
   getSeedAppData,
+  isValidWeightSegments,
   loadAppData,
   saveAppData,
+  setCardioWeightHistory,
   setLastSeenVersion,
 } from '@lib/storage';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
@@ -100,10 +104,14 @@ function AppContent() {
         if (savedData) {
           dispatch({ type: 'SET_APP_DATA', payload: savedData });
         } else {
-          // Primer arranque: sembrar el almacenamiento con los datos de fábrica
-          // que el reducer ya muestra, para que las escrituras granulares
-          // posteriores tengan base (rutinas + marca de inicialización).
-          await saveAppData(getSeedAppData());
+          // Primer arranque: sembrar el almacenamiento y reflejar ese seed en
+          // el estado. El reducer parte de datos de fábrica (WORKOUT_ROUTINES /
+          // INITIAL_LOGS), así que hay que sobrescribirlo con dispatch; si no,
+          // en release (seed vacío) la UI seguiría mostrando las rutinas de
+          // ejemplo del estado inicial en lugar de arrancar vacía.
+          const seed = getSeedAppData();
+          await saveAppData(seed);
+          dispatch({ type: 'SET_APP_DATA', payload: seed });
           setIsFirstInstall(true);
         }
       } catch (error) {
@@ -323,12 +331,20 @@ function AppContent() {
   };
 
   const handleExportData = async () => {
-    const payload: WorkoutAppData & { version: number; exportedAt: string } = {
-      version: 1,
+    // Incluye el historial de pesos corporales: las kcal del cardio dependen
+    // del peso vigente en cada tramo.
+    const cardioWeightHistory = await getCardioWeightHistory();
+    const payload: WorkoutAppData & {
+      version: number;
+      exportedAt: string;
+      cardioWeightHistory: WeightSegment[];
+    } = {
+      version: 2,
       exportedAt: new Date().toISOString(),
       routines: state.routines,
       activeRoutineId: state.activeRoutineId,
       logs: state.logs,
+      cardioWeightHistory,
     };
 
     const fileName = `gymbro-backup-${new Date()
@@ -339,7 +355,9 @@ function AppContent() {
 
   const handleImportData = async () => {
     const raw = await readJsonFromFile();
-    const payload = JSON.parse(raw) as Partial<WorkoutAppData>;
+    const payload = JSON.parse(raw) as Partial<WorkoutAppData> & {
+      cardioWeightHistory?: unknown;
+    };
 
     if (!Array.isArray(payload?.routines) || !Array.isArray(payload?.logs)) {
       throw new Error('El fichero no tiene el formato esperado');
@@ -372,6 +390,15 @@ function AppContent() {
     // SET_APP_DATA no se persiste en el wrapper (es también la acción de
     // hidratación): la importación guarda explícitamente el conjunto completo.
     await saveAppData(importedData);
+
+    // Historial de pesos (backups v2+): sin él las kcal del cardio se
+    // calcularían con el peso por defecto. Los backups antiguos no lo traen.
+    if (
+      isValidWeightSegments(payload.cardioWeightHistory) &&
+      payload.cardioWeightHistory.length > 0
+    ) {
+      await setCardioWeightHistory(payload.cardioWeightHistory);
+    }
 
     setScreen({ type: 'home' });
   };

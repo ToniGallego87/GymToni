@@ -15,6 +15,7 @@ import {
   StretchScrollView,
 } from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
+import { cardioSessionFromLog, fmtNum, rangeStr } from '@lib/cardio';
 import { formatDate } from '@lib/storage';
 import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
@@ -56,6 +57,9 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
     Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
   const scrollBottomPadding =
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+
+  // Sesión de cardio parseada del log (null si no hay cardio parseable).
+  const cardioSession = log.cardio ? cardioSessionFromLog(log) : null;
 
   const displayedDate = log.date
     ? new Date(`${log.date}T00:00:00`)
@@ -212,50 +216,111 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
             >
               Cardio
             </Text>
-            <View style={styles.cardioBox}>
-              <GradientFill accent={dayAccent} />
-              <Text style={styles.cardioLabel}>
-                {log.cardio.type?.toUpperCase()}
-              </Text>
-              <View style={styles.cardioDetails}>
-                {log.cardio.duration && (
-                  <View style={styles.cardioDetailRow}>
-                    <MaterialCommunityIcons
-                      name="timer-sand"
-                      size={14}
-                      color={theme.colors.textSecondary}
-                    />
-                    <Text style={styles.cardioDetail}>
-                      {log.cardio.duration} min
-                    </Text>
+            {cardioSession ? (
+              // Todas las disciplinas registradas en el día (el rawInput puede
+              // traer varias entradas unidas por " | "), una caja por disciplina.
+              cardioSession.disciplines.map((discipline) => (
+                <View key={discipline.type} style={styles.cardioBox}>
+                  <GradientFill accent={dayAccent} />
+                  <Text style={styles.cardioLabel}>
+                    {discipline.type.toUpperCase()}
+                  </Text>
+                  <View style={styles.cardioDetails}>
+                    {discipline.totalMinutes > 0 && (
+                      <View style={styles.cardioDetailRow}>
+                        <MaterialCommunityIcons
+                          name="timer-sand"
+                          size={14}
+                          color={theme.colors.textSecondary}
+                        />
+                        <Text style={styles.cardioDetail}>
+                          {fmtNum(discipline.totalMinutes)} min
+                        </Text>
+                      </View>
+                    )}
+                    {discipline.minSpeed != null &&
+                      discipline.maxSpeed != null && (
+                        <View style={styles.cardioDetailRow}>
+                          <MaterialCommunityIcons
+                            name="map-marker-path"
+                            size={14}
+                            color={theme.colors.textSecondary}
+                          />
+                          <Text style={styles.cardioDetail}>
+                            {rangeStr(discipline.minSpeed, discipline.maxSpeed)}{' '}
+                            km/h
+                          </Text>
+                        </View>
+                      )}
+                    {discipline.minPendiente != null &&
+                      discipline.maxPendiente != null && (
+                        <View style={styles.cardioDetailRow}>
+                          <MaterialCommunityIcons
+                            name="chart-line"
+                            size={14}
+                            color={theme.colors.textSecondary}
+                          />
+                          <Text style={styles.cardioDetail}>
+                            {rangeStr(
+                              discipline.minPendiente,
+                              discipline.maxPendiente
+                            )}
+                            %
+                          </Text>
+                        </View>
+                      )}
                   </View>
-                )}
-                {log.cardio.pace && (
-                  <View style={styles.cardioDetailRow}>
-                    <MaterialCommunityIcons
-                      name="map-marker-path"
-                      size={14}
-                      color={theme.colors.textSecondary}
-                    />
-                    <Text style={styles.cardioDetail}>
-                      {extractPaceNumber(log.cardio.pace)} km/h
-                    </Text>
-                  </View>
-                )}
-                {log.cardio.rawInput && extractIncline(log.cardio.rawInput) && (
-                  <View style={styles.cardioDetailRow}>
-                    <MaterialCommunityIcons
-                      name="chart-line"
-                      size={14}
-                      color={theme.colors.textSecondary}
-                    />
-                    <Text style={styles.cardioDetail}>
-                      {extractIncline(log.cardio.rawInput)}
-                    </Text>
-                  </View>
-                )}
+                </View>
+              ))
+            ) : (
+              // Fallback legado: rawInput no parseable, se muestra el resumen
+              // simple del primer registro como antes.
+              <View style={styles.cardioBox}>
+                <GradientFill accent={dayAccent} />
+                <Text style={styles.cardioLabel}>
+                  {log.cardio.type?.toUpperCase()}
+                </Text>
+                <View style={styles.cardioDetails}>
+                  {log.cardio.duration && (
+                    <View style={styles.cardioDetailRow}>
+                      <MaterialCommunityIcons
+                        name="timer-sand"
+                        size={14}
+                        color={theme.colors.textSecondary}
+                      />
+                      <Text style={styles.cardioDetail}>
+                        {log.cardio.duration} min
+                      </Text>
+                    </View>
+                  )}
+                  {log.cardio.pace && (
+                    <View style={styles.cardioDetailRow}>
+                      <MaterialCommunityIcons
+                        name="map-marker-path"
+                        size={14}
+                        color={theme.colors.textSecondary}
+                      />
+                      <Text style={styles.cardioDetail}>
+                        {extractPaceNumber(log.cardio.pace)} km/h
+                      </Text>
+                    </View>
+                  )}
+                  {log.cardio.rawInput &&
+                    extractIncline(log.cardio.rawInput) && (
+                      <View style={styles.cardioDetailRow}>
+                        <MaterialCommunityIcons
+                          name="chart-line"
+                          size={14}
+                          color={theme.colors.textSecondary}
+                        />
+                        <Text style={styles.cardioDetail}>
+                          {extractIncline(log.cardio.rawInput)}
+                        </Text>
+                      </View>
+                    )}
+                </View>
               </View>
-            </View>
+            )}
           </>
         )}
 

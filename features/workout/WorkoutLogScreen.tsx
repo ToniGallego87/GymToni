@@ -82,13 +82,13 @@ function SaveWorkoutButton({ onPress }: { onPress: () => void }) {
       }}
     >
       <LinearGradient
-        colors={['#F9D85A', '#F7CC3D', '#E0B226']}
+        colors={theme.gradients.primary}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.saveGradient}
       >
         <LinearGradient
-          colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+          colors={theme.gradients.sheen}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.saveSheen}
@@ -259,7 +259,7 @@ export function WorkoutLogScreen({
           title: 'Descanso finalizado',
           body: 'Es hora de tu siguiente serie',
           icon: 'notification_icon',
-          color: '#F9A825',
+          color: theme.colors.primary,
           sound: 'default',
           vibrate: [0, 300, 150, 300, 150, 300],
           priority: Notifications.AndroidNotificationPriority.MAX,
@@ -348,7 +348,7 @@ export function WorkoutLogScreen({
               name: 'Rest Timer',
               importance: Notifications.AndroidImportance.MAX,
               vibrationPattern: [0, 300, 150, 300, 150, 300],
-              lightColor: '#F9A825',
+              lightColor: theme.colors.primary,
               lockscreenVisibility:
                 Notifications.AndroidNotificationVisibility.PUBLIC,
               bypassDnd: true,

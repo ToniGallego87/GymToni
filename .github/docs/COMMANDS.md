@@ -7,17 +7,32 @@
 
 ## Reconstruye la apk
 
-- cd "c:\Users\toni\_\Desktop\Proyectos Visual Studio Code\GymToni"
-- npm run postinstall
-- cd android
-- ./gradlew.bat --stop
-- ./gradlew.bat assembleRelease --no-configuration-cache
-- & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r app/build/outputs/apk/release/app-release.apk
+```powershell
+cd "c:\Users\toni_\Desktop\Proyectos Visual Studio Code\GymToni"
+npm run postinstall
+cd android
+./gradlew.bat --stop
+./gradlew.bat assembleRelease --no-configuration-cache
+& "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" install -r app/build/outputs/apk/release/app-release.apk
+```
 
 ## Hacer la apk (sin reconstrucción)
 
-- ./gradlew.bat assembleRelease
+```powershell
+cd android
+./gradlew.bat assembleRelease
+```
 
 ## Depurar en móvil
 
-- adb devices
+```powershell
+adb devices
+```
+
+## Verificación
+
+```bash
+npm run type-check   # TypeScript
+npm test             # Jest (lib/)
+npm run format       # Prettier
+```

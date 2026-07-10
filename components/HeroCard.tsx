@@ -27,11 +27,11 @@ interface HeroCardProps {
 
 // Paletas de gradiente por estado. El orden es claro→base→oscuro (diagonal).
 const GRADIENTS: Record<HeroVariant, [string, string, string]> = {
-  start: ['#F9D85A', '#F7CC3D', '#E0B226'],
-  completed: ['#7CD99A', '#52C878', '#3DA866'],
-  'week-completed': ['#F9D85A', '#F2B33D', '#E08A26'],
-  closed: ['#F59898', '#F06A6A', '#D85151'],
-  add: ['#FFC97A', '#FFB347', '#F2982C'],
+  start: theme.gradients.primary,
+  completed: theme.gradients.success,
+  'week-completed': theme.gradients.amber,
+  closed: theme.gradients.danger,
+  add: theme.gradients.warning,
 };
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -70,7 +70,7 @@ export function HeroCard({
       >
         {/* Brillo superior (sheen) para dar volumen */}
         <LinearGradient
-          colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+          colors={theme.gradients.sheen}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.sheen}

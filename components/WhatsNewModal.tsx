@@ -14,7 +14,12 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
   if (!entry) return null;
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onClose}
+    >
       <View style={styles.overlay}>
         <View style={styles.content}>
           <View style={styles.iconWrap}>
@@ -24,7 +29,9 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
               color={theme.colors.primary}
             />
           </View>
-          <Text style={styles.title}>Novedades de la versión {entry.version}</Text>
+          <Text style={styles.title}>
+            Novedades de la versión {entry.version}
+          </Text>
           <View style={styles.list}>
             {entry.items.map((item, index) => (
               <View key={index} style={styles.itemRow}>
@@ -51,7 +58,7 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: theme.colors.overlay,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 16,

@@ -41,15 +41,26 @@ Cuando se solicite un cambio:
 
 ## Al subir de versión (IMPORTANTE)
 
-Cuando se suba la versión del proyecto, hay que tocar SIEMPRE estos tres puntos:
+Cuando se suba la versión del proyecto, hay que tocar SIEMPRE estos **cinco** puntos:
 
 1. `app.json` → `expo.version` (es la versión que se muestra al usuario en Inicio).
 2. `package.json` → `version` (usar semver válido, p. ej. `0.4.6`).
-3. **`.github/docs/UPDATES.md`** → añadir una nueva entrada al principio
+3. `android/app/build.gradle` → `versionCode` (+1) y `versionName` (misma semver).
+4. **`.github/docs/UPDATES.md`** → añadir una nueva entrada al principio
    (`## Version X.Y.Z - AAAA-MM-DD`) describiendo los cambios, siguiendo el formato de las
    entradas existentes (secciones: `Arquitectura` / `Nuevas funcionalidades` / `Correcciones` / `Cambios`).
+5. **`data/changelog.ts`** → añadir la entrada `{ version, items }` al principio de `CHANGELOG`
+   (alimenta el popup de novedades in-app, `WhatsNewModal`; redactar para usuario final, sin tecnicismos).
 
-No dar por terminada una subida de versión sin actualizar `UPDATES.md`.
+No dar por terminada una subida de versión sin actualizar `UPDATES.md` y `data/changelog.ts`.
+
+El cierre completo de una versión (bump + UPDATES + changelog + commit + push + APK)
+lo hace de principio a fin el subagente **close-version** cuando se pide
+"cierra la versión X.Y.Z".
+
+Los cambios aplicados entre versiones se anotan en `UPDATES.md` bajo una sección
+`## Sin publicar` al principio; el cierre de versión la convierte en la entrada
+de la nueva versión.
 
 ---
 
@@ -111,6 +122,10 @@ Antes de finalizar, verificar:
 - Uso con una mano, navegación simple
 - Evitar modales innecesarios y formularios largos
 - Sistema glass: usar tokens de `glassTokens.ts`
+- Colores y degradados SIEMPRE desde `theme.ts` (`theme.colors`, `theme.gradients`); no hex sueltos en pantallas
+- Confirmaciones (eliminar/importar/limpiar): componente compartido `ConfirmModal`
+- Título de pantalla: prop `icon` de `GlassTopBar` (no recrear el row icono+texto a mano)
+- Detalle completo del sistema en [.github/docs/frontend-design.md](.github/docs/frontend-design.md)
 
 ---
 

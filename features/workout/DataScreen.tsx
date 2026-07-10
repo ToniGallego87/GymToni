@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
+  ConfirmModal,
   FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -10,7 +11,7 @@ import {
   Toast,
   StretchScrollView,
 } from '@components';
-import { View, Text, StyleSheet, Modal } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -207,16 +208,7 @@ export function DataScreen({
 
       <GlassTopBar
         title="Datos"
-        titleElement={
-          <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons
-              name="folder-cog-outline"
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.topBarTitle}>Datos</Text>
-          </View>
-        }
+        icon="folder-cog-outline"
         subtitle="Importa, exporta o limpia la información"
         topInset={insets.top}
       />
@@ -232,80 +224,29 @@ export function DataScreen({
         onPressData={onNavigateData}
       />
 
-      <Modal visible={showImportModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalTitleRow}>
-              <MaterialCommunityIcons
-                name="alert-outline"
-                size={18}
-                color={theme.colors.text}
-              />
-              <Text style={styles.modalTitle}>Importar datos</Text>
-            </View>
-            <Text style={styles.modalText}>
-              Esta acción eliminará los datos actuales y los reemplazará con los
-              del fichero. ¿Estás seguro?
-            </Text>
+      <ConfirmModal
+        visible={showImportModal}
+        title="Importar datos"
+        message="Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?"
+        confirmLabel="Importar"
+        confirmVariant="primary"
+        busy={busyAction === 'import'}
+        onConfirm={handleImportPress}
+        onCancel={() => setShowImportModal(false)}
+      />
 
-            <View style={styles.modalButtons}>
-              <Button
-                title="Cancelar"
-                onPress={() => setShowImportModal(false)}
-                variant="secondary"
-                size="medium"
-                style={styles.modalButton}
-              />
-              <Button
-                title="Importar"
-                onPress={handleImportPress}
-                disabled={busyAction === 'import'}
-                size="medium"
-                style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showClearModal} animationType="fade" transparent>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalTitleRow}>
-              <MaterialCommunityIcons
-                name="alert-outline"
-                size={18}
-                color={theme.colors.text}
-              />
-              <Text style={styles.modalTitle}>Limpiar datos</Text>
-            </View>
-            <Text style={styles.modalText}>
-              Esta acción borrará toda la información guardada en la app.
-            </Text>
-
-            <View style={styles.modalButtons}>
-              <Button
-                title="Cancelar"
-                onPress={() => setShowClearModal(false)}
-                variant="secondary"
-                size="medium"
-                style={styles.modalButton}
-              />
-              <Button
-                title="Limpiar"
-                onPress={async () => {
-                  setShowClearModal(false);
-                  await onClearData();
-                  setToast({ message: 'Datos eliminados', type: 'success' });
-                }}
-                variant="danger"
-                size="medium"
-                style={styles.modalButton}
-              />
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <ConfirmModal
+        visible={showClearModal}
+        title="Limpiar datos"
+        message="Esta acción borrará toda la información guardada en la app."
+        confirmLabel="Limpiar"
+        onConfirm={async () => {
+          setShowClearModal(false);
+          await onClearData();
+          setToast({ message: 'Datos eliminados', type: 'success' });
+        }}
+        onCancel={() => setShowClearModal(false)}
+      />
 
       {toast && (
         <Toast
@@ -353,17 +294,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
   },
   summaryRow: {
     flexDirection: 'row',
@@ -421,45 +351,5 @@ const styles = StyleSheet.create({
   },
   dangerSubtitle: {
     color: theme.colors.errorLight,
-  },
-  modalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    backgroundColor: theme.colors.overlay,
-    paddingHorizontal: 20,
-  },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-    marginBottom: 0,
-    lineHeight: 24,
-  },
-  modalTitleRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  modalText: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 16,
-  },
-  modalButton: {
-    flex: 1,
   },
 });

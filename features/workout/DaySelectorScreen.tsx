@@ -1,5 +1,4 @@
 import React from 'react';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -74,16 +73,7 @@ export function DaySelectorScreen({
 
       <GlassTopBar
         title="Elige la sesión"
-        titleElement={
-          <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons
-              name="calendar-month-outline"
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.topBarTitleText}>Elige la sesión</Text>
-          </View>
-        }
+        icon="calendar-month-outline"
         subtitle="Selecciona el día que vas a registrar"
         topInset={insets.top}
         rightElement={
@@ -110,14 +100,15 @@ const styles = StyleSheet.create({
   },
   badge: {
     backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderRadius: theme.borderRadius.pill,
   },
   badgeText: {
     color: theme.colors.primaryLight,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 20,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
@@ -136,17 +127,6 @@ const styles = StyleSheet.create({
   },
   dayCardPressed: {
     opacity: 0.85,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
   },
   dayLeading: {
     marginRight: 12,
@@ -169,12 +149,12 @@ const styles = StyleSheet.create({
   dayBadge: {
     color: theme.colors.primaryLight,
     backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 14,
+    fontWeight: '800',
     overflow: 'hidden',
-    lineHeight: 16,
+    lineHeight: 18,
   },
 });

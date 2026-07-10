@@ -12,19 +12,22 @@ import Svg, {
   Image as SvgImage,
 } from 'react-native-svg';
 import { WeekAchievements } from '@lib/achievements';
+import { theme } from '@lib/theme';
 
 // Lienzo vertical 9:16, ideal para historias/stories de redes.
 export const POSTER_WIDTH = 1080;
 export const POSTER_HEIGHT = 1920;
 
-const GOLD = '#F7CC3D';
-const GOLD_SOFT = '#F9D85A';
-const GREEN = '#52C878';
-const RED = '#F06A6A';
+// Alias locales de la paleta del tema (el póster se renderiza en SVG con los
+// mismos colores de la app). PANEL_BORDER/TRACK son tonos propios del póster.
+const GOLD = theme.colors.primary;
+const GOLD_SOFT = theme.colors.primaryLight;
+const GREEN = theme.colors.success;
+const RED = theme.colors.error;
 const PANEL_BORDER = '#2A2F3A';
 const TRACK = '#262B36';
-const TEXT = '#F5F7FA';
-const MUTED = '#98A0AE';
+const TEXT = theme.colors.text;
+const MUTED = theme.colors.textSecondary;
 
 // Fuente display de la app (Anton, cargada en App.tsx). Se usa en los titulares,
 // números y etiquetas para que el póster sea coherente con el resto de la app.

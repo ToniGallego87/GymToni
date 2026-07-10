@@ -22,8 +22,8 @@ interface ButtonProps {
 // Degradado por variante: da sensación de volumen (claro arriba → oscuro abajo),
 // igual que el botón "Guardar" de registrar un día.
 const GRADIENTS: Record<'primary' | 'danger', [string, string, string]> = {
-  primary: ['#F9D85A', '#F7CC3D', '#E0B226'],
-  danger: ['#F59898', '#F06A6A', '#D85555'],
+  primary: theme.gradients.primary,
+  danger: theme.gradients.danger,
 };
 
 export function Button({
@@ -91,7 +91,7 @@ export function Button({
               style={StyleSheet.absoluteFill}
             />
             <LinearGradient
-              colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+              colors={theme.gradients.sheen}
               start={{ x: 0, y: 0 }}
               end={{ x: 0, y: 1 }}
               style={styles.sheen}

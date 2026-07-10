@@ -200,13 +200,13 @@ function CreateRoutineButton({ onPress }: { onPress: () => void }) {
       }}
     >
       <LinearGradient
-        colors={['#F9D85A', '#F7CC3D', '#E0B226']}
+        colors={theme.gradients.primary}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.createGradient}
       >
         <LinearGradient
-          colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+          colors={theme.gradients.sheen}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.createSheen}
@@ -667,7 +667,11 @@ export function NewRoutineScreen({
                 >
                   {dayIcon ? (
                     <>
-                      <GymIcon name={dayIcon} size={18} color={theme.colors.white} />
+                      <GymIcon
+                        name={dayIcon}
+                        size={18}
+                        color={theme.colors.white}
+                      />
                       <Text style={styles.dayIconPickText}>
                         {GYM_ICON_LABELS[dayIcon]}
                       </Text>
@@ -835,16 +839,7 @@ export function NewRoutineScreen({
 
       <GlassTopBar
         title="Nueva rutina"
-        titleElement={
-          <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons
-              name="playlist-plus"
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.topBarTitleText}>Nueva rutina</Text>
-          </View>
-        }
+        icon="playlist-plus"
         subtitle="Define los ejercicios que realizarás cada día"
         topInset={insets.top}
       />
@@ -1434,16 +1429,5 @@ const styles = StyleSheet.create({
     color: theme.colors.darkGray,
     fontWeight: '800',
     fontSize: 14,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
   },
 });

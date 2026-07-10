@@ -24,6 +24,7 @@ export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
 export { WhatsNewModal } from './WhatsNewModal';
 export { Button } from './Button';
+export { ConfirmModal } from './ConfirmModal';
 export { GlassTopBar, GLASS_TOP_BAR_BASE_HEIGHT } from './GlassTopBar';
 export {
   FloatingBackButton,

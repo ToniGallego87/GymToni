@@ -1,5 +1,42 @@
 # UPDATES
 
+## Version 0.5.9 - 2026-07-10
+
+### Nuevas funcionalidades
+
+- **Backup completo con historial de peso corporal**: la exportación de datos (`app/App.tsx`) pasa a formato `version: 2` e incluye `cardioWeightHistory`; la importación lo restaura si viene (backups v1 siguen funcionando). Sin él, las kcal del cardio se recalculaban con el peso por defecto tras restaurar.
+- **Detalle de entrenamiento con cardio por disciplina**: `DetailScreen` parsea el cardio con `cardioSessionFromLog` y muestra una caja por disciplina (minutos totales, rango de velocidad y de pendiente con `fmtNum`/`rangeStr`, ahora exportados de `lib/cardio.ts`); si el `rawInput` no es parseable cae al resumen simple anterior.
+
+### Arquitectura
+
+- **Historial de peso corporal centralizado en `lib/storage.ts`**: nuevas `getCardioWeightHistory`/`setCardioWeightHistory`/`isValidWeightSegments` (con migración del `cardioWeightKg` legado); `CardioScreen` deja de acceder a AsyncStorage directamente y las usa igual que la import/export de `App.tsx`.
+
+- **Degradados centralizados en el tema**: nuevo `theme.gradients` (`primary`, `success`, `danger`, `warning`, `amber`, `sheen`) en `lib/theme.ts`. Sustituye los tríos de color duplicados a mano en 6 archivos (`Button`, `HeroCard`, `WorkoutLogScreen`, `CardioScreen`, `WeekAchievementScreen`, `NewRoutineScreen`); el danger de `Button` divergía del resto (`#D85555` vs `#D85151`) y queda unificado.
+- **Nuevo `components/ConfirmModal.tsx`**: diálogo de confirmación único (overlay `theme.colors.overlay`, tarjeta surface, botones `Button`). Reemplaza los 5 modales de confirmación duplicados de `HomeScreen` (eliminar rutina/entrenamiento) y `DataScreen` (importar/limpiar), que tenían overlays y tipografías distintas entre sí (0.5/0.6/0.7 de opacidad, títulos 18/20px).
+- **`GlassTopBar` con prop `icon`**: el patrón "icono 18px + título 20/800" que cada pantalla recreaba a mano con `titleElement` pasa a ser un prop; migradas 9 pantallas (Datos, Calendario, Cardio, Nueva rutina, Rutina, Elige la sesión, Logros, selector de Rutinas) y eliminados sus estilos locales duplicados. `titleElement` queda solo para el logo de Inicio y el icono de día.
+- `HomeScreen` lee la versión desde `Constants.expoConfig` (como `App.tsx`) en lugar de `require('app.json')`; `AchievementPoster` toma sus colores del tema en vez de constantes locales duplicadas.
+
+### Cambios
+
+- **Tarjetas de comparación rediseñadas** (`ExerciseResultDisplay`): nombre del ejercicio en fuente display (como en la vista de inserción), objetivo `series×reps` centrado entre las columnas Actual/Anterior, flechas de estado coloreadas (verde/rojo/gris) en lugar de badges con fondo, filas con separador fino.
+- **Iconos launcher regenerados** con nuevo `scripts/regen-icons.js`: recalcula todas las densidades `mipmap-*` desde `assets/adaptive-icon.png` con escala 0.52 y centrado vertical sobre la pesa (antes el contenido llenaba el viewport del icono borde a borde).
+- **QRScannerScreen alineada con el tema**: fondo `background` (antes `#0A0A0A`), error `colors.error`, y el texto del botón "Importar rutina" pasa a oscuro sobre amarillo (antes blanco, sin contraste; en el resto de la app el texto sobre amarillo es oscuro).
+- Notificación del timer de descanso con el amarillo de marca (`colors.primary`) en color e LED (antes `#F9A825`, ajeno a la paleta).
+- Overlays de modal unificados a `theme.colors.overlay` (`WhatsNewModal`, modal de opciones de Inicio); el modal de opciones de Inicio adopta la tipografía del `ConfirmModal` (título 18 centrado); badges de "Elige la sesión" más grandes y legibles.
+- `versionCode` 13 en `android/app/build.gradle`.
+
+### Correcciones
+
+- **El primer arranque en release ya no muestra rutinas de ejemplo**: `getSeedAppData` devuelve datos vacíos cuando `__DEV__` es false y `App.tsx` refleja el seed en el estado con dispatch (antes el reducer seguía enseñando las rutinas de fábrica aunque el almacenamiento quedara vacío). Los datos seed solo se cargan en desarrollo; usuarios con datos no se ven afectados.
+- Celdas del calendario con altura fija (80) para que las filas midan lo mismo en los modos Fuerza y Cardio.
+
+### Documentación
+
+- `AGENTS.md`: la subida de versión documenta los **5** puntos reales (faltaban `android/app/build.gradle` y `data/changelog.ts`), referencia al subagente close-version y la convención de sección `## Sin publicar` en este archivo.
+- `frontend-design.md` reescrito como sistema de diseño completo (paleta, degradados, tipografía Anton, glass, patrones de componentes, checklist visual).
+- `SETUP.md` reescrito (estaba obsoleto: pantallas inexistentes, rutas de otro equipo, colores de una versión antigua); `ROADMAP.md` podado (separa lo ya implementado y lo incompatible con las restricciones); `README.md` corrige el stack (SQLite, no AsyncStorage); `CONVENTIONS.md` y `ARCHITECTURE.md` recogen los nuevos patrones.
+- Verificado `npm run type-check` y `npm test` (60/60) en verde.
+
 ## Version 0.5.8 - 2026-07-10
 
 ### Nuevas funcionalidades

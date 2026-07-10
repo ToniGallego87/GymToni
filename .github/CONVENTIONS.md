@@ -44,7 +44,19 @@
 
 - `StyleSheet.create()` al final del archivo
 - Tokens glass compartidos desde `components/glassTokens.ts`
-- Color primario: variable, no hardcoded (excepto en theme)
+- Colores SIEMPRE desde `theme.colors`; nada de hex sueltos en pantallas/componentes
+  (los únicos hex viven en `lib/theme.ts` y `components/glassTokens.ts`)
+- Degradados desde `theme.gradients` (`primary`, `success`, `danger`, `warning`, `amber`, `sheen`);
+  no duplicar los tríos de color
+- Texto/iconos sobre fondo amarillo (`primary`): siempre `theme.colors.darkGray` (contraste)
+
+### Patrones UI compartidos
+
+- Confirmaciones destructivas o de reemplazo → `components/ConfirmModal.tsx`
+  (overlay, tarjeta y botones unificados); no montar `Modal` a mano para un confirm
+- Título de pantalla → prop `icon` de `GlassTopBar` (icono 18px + texto 20/800);
+  `titleElement` solo para casos especiales (logo de Inicio, `DayAccentIcon` del día)
+- Botones de acción → `components/Button.tsx` (variants `primary`/`secondary`/`danger`)
 
 ## Formato de entrada (parsers)
 

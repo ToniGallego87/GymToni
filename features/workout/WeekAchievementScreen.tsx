@@ -113,13 +113,13 @@ function ShareButton({
       }}
     >
       <LinearGradient
-        colors={['#F9D85A', '#F7CC3D', '#E0B226']}
+        colors={theme.gradients.primary}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
         style={styles.shareGradient}
       >
         <LinearGradient
-          colors={['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)']}
+          colors={theme.gradients.sheen}
           start={{ x: 0, y: 0 }}
           end={{ x: 0, y: 1 }}
           style={styles.shareSheen}
@@ -376,17 +376,8 @@ export function WeekAchievementScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title="Logros"
-        titleElement={
-          <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons
-              name="trophy-variant"
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.topBarTitleText}>Logros de la semana</Text>
-          </View>
-        }
+        title="Logros de la semana"
+        icon="trophy-variant"
         subtitle="Comparte tus resultados en redes"
         topInset={insets.top}
       />
@@ -450,16 +441,5 @@ const styles = StyleSheet.create({
     fontSize: 22,
     letterSpacing: 0.5,
     lineHeight: 26,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
   },
 });

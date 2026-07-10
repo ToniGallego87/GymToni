@@ -8,6 +8,7 @@ import {
   Platform,
 } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import {
   GLASS_TOP_BAR_BLUR_INTENSITY,
@@ -21,6 +22,12 @@ export const GLASS_TOP_BAR_BASE_HEIGHT = 50;
 
 interface GlassTopBarProps {
   title: string;
+  /**
+   * Icono MaterialCommunityIcons junto al título. Es la forma estándar de
+   * titular una pantalla (icono 18px + texto 20/800); usar `titleElement`
+   * solo para casos especiales (logo de Inicio, icono de día).
+   */
+  icon?: string;
   titleElement?: React.ReactNode;
   subtitle?: string;
   topInset: number;
@@ -33,6 +40,7 @@ interface GlassTopBarProps {
 
 export function GlassTopBar({
   title,
+  icon,
   titleElement,
   subtitle,
   topInset,
@@ -72,6 +80,20 @@ export function GlassTopBar({
           <View style={styles.textWrap}>
             {titleElement ? (
               <View style={styles.titleElementWrap}>{titleElement}</View>
+            ) : icon ? (
+              <View style={styles.iconTitleRow}>
+                <MaterialCommunityIcons
+                  name={icon as any}
+                  size={18}
+                  color={theme.colors.text}
+                />
+                <Text
+                  style={[styles.iconTitle, titleStyle]}
+                  numberOfLines={titleNumberOfLines}
+                >
+                  {title}
+                </Text>
+              </View>
             ) : (
               <Text
                 style={[styles.title, titleStyle]}
@@ -136,6 +158,18 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: '800',
     color: theme.colors.text,
+  },
+  iconTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  iconTitle: {
+    flexShrink: 1,
+    fontSize: 20,
+    fontWeight: '800',
+    color: theme.colors.text,
+    lineHeight: 24,
   },
   subtitle: {
     marginTop: 4,

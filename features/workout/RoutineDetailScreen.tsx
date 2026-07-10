@@ -41,7 +41,6 @@ interface RoutineDetailScreenProps {
   onBack: () => void;
 }
 
-
 export function RoutineDetailScreen({
   routine,
   onBack,
@@ -341,16 +340,7 @@ export function RoutineDetailScreen({
 
       <GlassTopBar
         title="Rutina"
-        titleElement={
-          <View style={styles.topBarTitleRow}>
-            <MaterialCommunityIcons
-              name="file-document-edit-outline"
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.topBarTitleText}>Rutina</Text>
-          </View>
-        }
+        icon="file-document-edit-outline"
         subtitle={currentRoutine.name}
         topInset={insets.top}
       />
@@ -566,17 +556,6 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
   },
   content: {
     paddingHorizontal: theme.spacing.md,
