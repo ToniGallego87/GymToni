@@ -1,5 +1,22 @@
 # UPDATES
 
+## Version 0.5.8 - 2026-07-10
+
+### Nuevas funcionalidades
+
+- **Popup "Qué hay de nuevo"**: al abrir la app tras una actualización se muestra un modal (`components/WhatsNewModal.tsx`) con las novedades de la versión, leídas de `data/changelog.ts` (array `CHANGELOG` con `{version, items}`). `app/App.tsx` compara la versión actual (`Constants.expoConfig.version`) contra `gymbro_last_seen_version` (nuevas `getLastSeenVersion`/`setLastSeenVersion` en `lib/storage.ts`); en instalación nueva no se muestra nada, solo se marca la versión como vista.
+- **Icono adaptativo de Android configurado vía Expo**: `app.json` añade `expo.android.adaptiveIcon` (`foregroundImage: assets/adaptive-icon.png`, fondo negro), sustituyendo el cableado manual de `mipmap-anydpi-v26/ic_launcher.xml` de 0.5.7 por la vía estándar de Expo; icono e iconos de todas las densidades (mdpi a xxxhdpi) recomprimidos y `title.png` ajustado.
+
+### Arquitectura
+
+- **Firma release real**: `android/app/build.gradle` añade soporte de `keystore.properties` (fuera de git) para firmar el APK/AAB con el keystore de publicación; si no existe el archivo, sigue cayendo a la firma debug para compilar en local sin configuración adicional. `.gitignore` excluye `android/keystore.properties` y `android/app/*-release.keystore`. `versionCode` 9 → 10.
+- **Capturas de pantalla para la ficha de Play Store**: nuevos scripts de Playwright (`scripts/capture-phone*.js`) que navegan la app en Expo web y generan capturas automáticas en `store-assets/screenshots/` (móvil y tablet 7"/10"), junto con el icono de 512px y el feature graphic de la ficha.
+
+### Correcciones
+
+- **Parche a `react-native-screens`**: `patches/react-native-screens+3.31.1.patch` (vía `patch-package`) corrige un crash nativo en `ScreenStack.kt` (`removeLast()` no disponible en la versión de Kotlin del proyecto), sustituido por `removeAt(lastIndex)`.
+- Verificado `npm run type-check` y `npm test` (60/60) en verde tras estos cambios.
+
 ## Version 0.5.7 - 2026-07-09
 
 ### Nuevas funcionalidades

@@ -3,7 +3,7 @@
     "name": "GymBro",
     "slug": "gymbro",
     "icon": "./assets/icon.png",
-    "version": "0.5.7",
+    "version": "0.5.8",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": ["**/*"],
@@ -13,7 +13,11 @@
     },
     "android": {
       "package": "com.tonigallego.gymbro",
-      "permissions": []
+      "permissions": [],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#000000"
+      }
     },
     "androidStatusBar": {
       "backgroundColor": "transparent",

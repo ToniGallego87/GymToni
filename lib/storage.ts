@@ -13,6 +13,7 @@ export { generateId, formatDate, getToday } from './utils';
 // (expo-sqlite no está soportado en web en SDK 51).
 const APP_STORAGE_KEY = 'gymbro_app_data';
 const LOGS_STORAGE_KEY = 'gymbro_logs';
+const LAST_SEEN_VERSION_KEY = 'gymbro_last_seen_version';
 
 const isWeb = Platform.OS === 'web';
 
@@ -116,6 +117,16 @@ export async function loadAppData(): Promise<WorkoutAppData | null> {
     console.error('Error loading app data:', error);
     return null;
   }
+}
+
+// Versión de la app que el usuario ya ha visto en el popup de novedades
+// (components/WhatsNewModal.tsx). Independiente de los datos de entreno.
+export async function getLastSeenVersion(): Promise<string | null> {
+  return getStorageItem(LAST_SEEN_VERSION_KEY);
+}
+
+export async function setLastSeenVersion(version: string): Promise<void> {
+  await setStorageItem(LAST_SEEN_VERSION_KEY, version);
 }
 
 export async function clearAppData(): Promise<void> {

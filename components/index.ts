@@ -22,6 +22,7 @@ export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
+export { WhatsNewModal } from './WhatsNewModal';
 export { Button } from './Button';
 export { GlassTopBar, GLASS_TOP_BAR_BASE_HEIGHT } from './GlassTopBar';
 export {

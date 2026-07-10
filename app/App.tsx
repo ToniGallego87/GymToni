@@ -9,6 +9,7 @@ import {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
+import Constants from 'expo-constants';
 import * as SplashScreen from 'expo-splash-screen';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
@@ -28,17 +29,21 @@ import {
   WorkoutLogScreen,
   useWorkout,
 } from '@features/workout';
+import { WhatsNewModal } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
 import {
   clearAppData,
+  getLastSeenVersion,
   getSeedAppData,
   loadAppData,
   saveAppData,
+  setLastSeenVersion,
 } from '@lib/storage';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
 import { theme } from '@lib/theme';
+import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import {
   WorkoutAppData,
   WorkoutDay,
@@ -76,6 +81,10 @@ function AppContent() {
   // que esto es true, para no pintar primero los datos semilla y saltar luego
   // a los reales (el "carga a trompicones" del arranque).
   const [hydrated, setHydrated] = useState(false);
+  const [isFirstInstall, setIsFirstInstall] = useState(false);
+  const [whatsNewEntry, setWhatsNewEntry] = useState<ChangelogEntry | null>(
+    null
+  );
 
   // Hidratación: carga desde almacenamiento (o migra el JSON legacy). La
   // persistencia de cada cambio la hace el wrapper de dispatch de forma
@@ -95,6 +104,7 @@ function AppContent() {
           // que el reducer ya muestra, para que las escrituras granulares
           // posteriores tengan base (rutinas + marca de inicialización).
           await saveAppData(getSeedAppData());
+          setIsFirstInstall(true);
         }
       } catch (error) {
         console.error('Error loading app data:', error);
@@ -110,6 +120,50 @@ function AppContent() {
       isMounted = false;
     };
   }, [dispatch]);
+
+  // Popup de novedades: se muestra la primera vez que se abre la app tras
+  // actualizar a una versión con changelog. En una instalación nueva no hay
+  // nada que anunciar, así que solo se marca la versión actual como vista.
+  useEffect(() => {
+    if (!hydrated) return;
+
+    const checkWhatsNew = async () => {
+      const currentVersion = Constants.expoConfig?.version;
+      if (!currentVersion) return;
+
+      try {
+        const lastSeenVersion = await getLastSeenVersion();
+
+        if (lastSeenVersion === currentVersion) return;
+
+        if (lastSeenVersion === null && isFirstInstall) {
+          await setLastSeenVersion(currentVersion);
+          return;
+        }
+
+        const entry = CHANGELOG.find((item) => item.version === currentVersion);
+        if (entry) {
+          setWhatsNewEntry(entry);
+        } else {
+          await setLastSeenVersion(currentVersion);
+        }
+      } catch (error) {
+        console.error('Error checking novedades de versión:', error);
+      }
+    };
+
+    checkWhatsNew();
+  }, [hydrated, isFirstInstall]);
+
+  const handleCloseWhatsNew = () => {
+    const currentVersion = Constants.expoConfig?.version;
+    setWhatsNewEntry(null);
+    if (currentVersion) {
+      setLastSeenVersion(currentVersion).catch((error) =>
+        console.error('Error guardando versión vista:', error)
+      );
+    }
+  };
 
   // Oculta el splash nativo una vez los datos reales ya están en pantalla.
   useEffect(() => {
@@ -324,6 +378,12 @@ function AppContent() {
 
   return (
     <View style={styles.container}>
+      <WhatsNewModal
+        visible={whatsNewEntry !== null}
+        entry={whatsNewEntry}
+        onClose={handleCloseWhatsNew}
+      />
+
       {screen.type === 'routine-selector' && (
         <HomeScreen
           onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
