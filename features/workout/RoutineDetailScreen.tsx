@@ -29,6 +29,7 @@ import {
 } from '../../components';
 import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { generateId } from '@lib/storage';
 import {
   buildRoutineShareLink,
@@ -54,6 +55,9 @@ export function RoutineDetailScreen({
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+  const [nameInput, setNameInput] = useState('');
+  const [descriptionInput, setDescriptionInput] = useState('');
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -68,6 +72,34 @@ export function RoutineDetailScreen({
   // Obtener la rutina actualizada del estado
   const currentRoutine =
     state.routines.find((r) => r.id === routine.id) || routine;
+
+  // Rutina cerrada: tiene entrenamientos y ya no es la activa (misma regla que
+  // la tarjeta "Rutina Cerrada" de Inicio). No se permite editar su información.
+  const isClosed =
+    state.logs.some((log) => log.routineId === currentRoutine.id) &&
+    currentRoutine.id !== state.activeRoutineId;
+
+  const handleOpenInfoModal = () => {
+    if (isClosed) return;
+    setNameInput(currentRoutine.name);
+    setDescriptionInput(currentRoutine.description ?? '');
+    setShowInfoModal(true);
+  };
+
+  const handleSaveInfo = () => {
+    const name = nameInput.trim();
+    if (name) {
+      dispatch({
+        type: 'UPDATE_ROUTINE',
+        payload: {
+          ...currentRoutine,
+          name,
+          description: descriptionInput.trim() || undefined,
+        },
+      });
+    }
+    setShowInfoModal(false);
+  };
 
   // Enlace que codifica la rutina para compartir por QR (deep link).
   const shareLink = useMemo(
@@ -84,9 +116,12 @@ export function RoutineDetailScreen({
   const handleCopyPlainText = async () => {
     try {
       await Clipboard.setStringAsync(shareText);
-      setToast({ message: 'Rutina copiada al portapapeles', type: 'success' });
+      setToast({
+        message: t('Rutina copiada al portapapeles'),
+        type: 'success',
+      });
     } catch {
-      setToast({ message: 'No se pudo copiar la rutina', type: 'error' });
+      setToast({ message: t('No se pudo copiar la rutina'), type: 'error' });
     }
   };
 
@@ -214,7 +249,11 @@ export function RoutineDetailScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -227,6 +266,40 @@ export function RoutineDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <Pressable
+          style={styles.infoBlock}
+          onPress={handleOpenInfoModal}
+          disabled={isClosed}
+        >
+          <View style={styles.infoTopRow}>
+            <View style={styles.infoBadge}>
+              <MaterialCommunityIcons
+                name="clipboard-text-outline"
+                size={22}
+                color={theme.colors.primary}
+              />
+            </View>
+            <View style={styles.infoTextWrap}>
+              <Text style={styles.infoEyebrow}>{t('Rutina')}</Text>
+              <Text style={styles.infoName}>{currentRoutine.name}</Text>
+            </View>
+            <View style={styles.infoEditChip}>
+              <MaterialCommunityIcons
+                name={isClosed ? 'lock-outline' : 'pencil'}
+                size={16}
+                color={
+                  isClosed ? theme.colors.textSecondary : theme.colors.primary
+                }
+              />
+            </View>
+          </View>
+          {!!currentRoutine.description && (
+            <Text style={styles.infoDescription}>
+              {currentRoutine.description}
+            </Text>
+          )}
+        </Pressable>
+
         {currentRoutine.days.map((day) => {
           const accent = getTrainingAccent(day);
 
@@ -252,7 +325,9 @@ export function RoutineDetailScreen({
                     {getDisplayDayName(day.name)}
                   </Text>
                 </View>
-                <Text style={styles.dayBadge}>Día {day.dayNumber}</Text>
+                <Text style={styles.dayBadge}>
+                  {t('Día')} {day.dayNumber}
+                </Text>
               </View>
 
               <View style={styles.exerciseList}>
@@ -277,14 +352,16 @@ export function RoutineDetailScreen({
             <MaterialCommunityIcons
               name="timer-sand"
               size={16}
-              color={theme.colors.background}
+              color={theme.colors.onGold}
             />
-            <Text style={styles.timerBlockLabel}>Temporizador de descanso</Text>
+            <Text style={styles.timerBlockLabel}>
+              {t('Temporizador de descanso')}
+            </Text>
           </View>
           <Text style={styles.timerBlockValue}>
             {formatTime(getTimerDurationSeconds())}
           </Text>
-          <Text style={styles.timerBlockHint}>Toca para editar</Text>
+          <Text style={styles.timerBlockHint}>{t('Toca para editar')}</Text>
         </Pressable>
 
         <Pressable
@@ -300,9 +377,9 @@ export function RoutineDetailScreen({
             color={theme.colors.text}
           />
           <View style={styles.shareBlockTextWrap}>
-            <Text style={styles.shareBlockLabel}>Compartir por QR</Text>
+            <Text style={styles.shareBlockLabel}>{t('Compartir por QR')}</Text>
             <Text style={styles.shareBlockHint}>
-              Otro móvil escanea y carga la rutina
+              {t('Otro móvil escanea y carga la rutina')}
             </Text>
           </View>
           <MaterialCommunityIcons
@@ -325,9 +402,13 @@ export function RoutineDetailScreen({
             color={theme.colors.text}
           />
           <View style={styles.shareBlockTextWrap}>
-            <Text style={styles.shareBlockLabel}>Compartir en texto plano</Text>
+            <Text style={styles.shareBlockLabel}>
+              {t('Compartir en texto plano')}
+            </Text>
             <Text style={styles.shareBlockHint}>
-              Copia la rutina para pegarla en «Crear a partir de texto plano»
+              {t(
+                'Copia la rutina para pegarla en «Crear a partir de texto plano»'
+              )}
             </Text>
           </View>
           <MaterialCommunityIcons
@@ -339,7 +420,7 @@ export function RoutineDetailScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title="Rutina"
+        title={t('Rutina')}
         icon="file-document-edit-outline"
         subtitle={currentRoutine.name}
         topInset={insets.top}
@@ -355,7 +436,7 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Selecciona un icono</Text>
+            <Text style={styles.modalTitle}>{t('Selecciona un icono')}</Text>
             <View style={styles.iconGrid}>
               {GYM_ICON_NAMES.map((iconName) => {
                 const selectedDay = currentRoutine.days.find(
@@ -387,7 +468,7 @@ export function RoutineDetailScreen({
                       ]}
                       numberOfLines={1}
                     >
-                      {GYM_ICON_LABELS[iconName]}
+                      {t(GYM_ICON_LABELS[iconName])}
                     </Text>
                   </Pressable>
                 );
@@ -400,7 +481,7 @@ export function RoutineDetailScreen({
               ]}
               onPress={() => setShowEmojiModal(false)}
             >
-              <Text style={styles.cancelButtonText}>Cancelar</Text>
+              <Text style={styles.cancelButtonText}>{t('Cancelar')}</Text>
             </Pressable>
           </View>
         </View>
@@ -418,13 +499,13 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Ejercicios</Text>
+            <Text style={styles.modalTitle}>{t('Editar Ejercicios')}</Text>
             <Text style={styles.editExercisesLabel}>
-              Formato: Nombre — SetsxReps
+              {t('Formato: Nombre — SetsxReps')}
             </Text>
             <TextInput
               style={styles.editExercisesInput}
-              placeholder="Ej: Sentadilla — 4x8&#10;Prensa — 3x10"
+              placeholder={t('Ej: Sentadilla — 4x8\nPrensa — 3x10')}
               placeholderTextColor={theme.colors.textSecondary}
               value={exercisesEditText}
               onChangeText={setExercisesEditText}
@@ -439,7 +520,7 @@ export function RoutineDetailScreen({
                 ]}
                 onPress={handleSaveExercises}
               >
-                <Text style={styles.editButtonText}>Editar</Text>
+                <Text style={styles.editButtonText}>{t('Editar')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
@@ -452,7 +533,63 @@ export function RoutineDetailScreen({
                   setExercisesEditText('');
                 }}
               >
-                <Text style={styles.cancelButtonText}>Volver</Text>
+                <Text style={styles.cancelButtonText}>{t('Volver')}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showInfoModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('Editar rutina')}</Text>
+            <Text style={styles.timerModalLabel}>{t('Nombre:')}</Text>
+            <TextInput
+              style={styles.timerModalInput}
+              placeholder={t('Nombre de la rutina')}
+              placeholderTextColor={theme.colors.textSecondary}
+              value={nameInput}
+              onChangeText={setNameInput}
+              maxLength={40}
+            />
+            <Text style={styles.timerModalLabel}>{t('Descripción:')}</Text>
+            <TextInput
+              style={styles.timerModalInput}
+              placeholder={t('Descripción (opcional)')}
+              placeholderTextColor={theme.colors.textSecondary}
+              value={descriptionInput}
+              onChangeText={setDescriptionInput}
+              maxLength={80}
+            />
+            <View style={styles.timerModalButtons}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.timerModalButton,
+                  !nameInput.trim() && styles.infoSaveDisabled,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={handleSaveInfo}
+                disabled={!nameInput.trim()}
+              >
+                <Text style={styles.timerModalButtonText}>{t('Guardar')}</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.timerModalButton,
+                  styles.timerModalButtonCancel,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => setShowInfoModal(false)}
+              >
+                <Text style={styles.timerModalButtonTextCancel}>
+                  {t('Cancelar')}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -467,8 +604,10 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Editar Temporizador</Text>
-            <Text style={styles.timerModalLabel}>Duración en segundos:</Text>
+            <Text style={styles.modalTitle}>{t('Editar Temporizador')}</Text>
+            <Text style={styles.timerModalLabel}>
+              {t('Duración en segundos:')}
+            </Text>
             <TextInput
               style={styles.timerModalInput}
               keyboardType="number-pad"
@@ -477,7 +616,7 @@ export function RoutineDetailScreen({
               onChangeText={setTimerInput}
             />
             <Text style={styles.timerModalFormat}>
-              Equivalente: {formatTime(parseInt(timerInput, 10) || 0)}
+              {t('Equivalente:')} {formatTime(parseInt(timerInput, 10) || 0)}
             </Text>
             <View style={styles.timerModalButtons}>
               <Pressable
@@ -487,7 +626,7 @@ export function RoutineDetailScreen({
                 ]}
                 onPress={handleSaveTimer}
               >
-                <Text style={styles.timerModalButtonText}>Guardar</Text>
+                <Text style={styles.timerModalButtonText}>{t('Guardar')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
@@ -497,7 +636,9 @@ export function RoutineDetailScreen({
                 ]}
                 onPress={() => setShowTimerModal(false)}
               >
-                <Text style={styles.timerModalButtonTextCancel}>Cancelar</Text>
+                <Text style={styles.timerModalButtonTextCancel}>
+                  {t('Cancelar')}
+                </Text>
               </Pressable>
             </View>
           </View>
@@ -512,10 +653,16 @@ export function RoutineDetailScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Compartir rutina</Text>
+            <Text style={styles.modalTitle}>{t('Compartir rutina')}</Text>
             <Text style={styles.qrModalHint}>
-              Escanea este código con la cámara de otro móvil para cargar «
-              {getDisplayDayName(currentRoutine.name) || currentRoutine.name}».
+              {t(
+                'Escanea este código con la cámara de otro móvil para cargar «{name}».',
+                {
+                  name:
+                    getDisplayDayName(currentRoutine.name) ||
+                    currentRoutine.name,
+                }
+              )}
             </Text>
             <View style={styles.qrCanvas}>
               <QRCode
@@ -532,7 +679,7 @@ export function RoutineDetailScreen({
               ]}
               onPress={() => setShowQrModal(false)}
             >
-              <Text style={styles.cancelButtonText}>Cerrar</Text>
+              <Text style={styles.cancelButtonText}>{t('Cerrar')}</Text>
             </Pressable>
           </View>
         </View>
@@ -560,6 +707,70 @@ const styles = StyleSheet.create({
   content: {
     paddingHorizontal: theme.spacing.md,
     marginTop: 0,
+  },
+  // Cabecera de la rutina: banner con fondo dorado tenue, insignia e "eyebrow".
+  // Deliberadamente distinto de las tarjetas de día (que son transparentes con
+  // borde izquierdo de acento) para que no se lea como un día más.
+  infoBlock: {
+    backgroundColor: theme.colors.primaryMuted,
+    borderRadius: theme.borderRadius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '55',
+    padding: theme.spacing.md,
+    marginBottom: 16,
+    gap: 10,
+  },
+  infoTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  infoBadge: {
+    width: 44,
+    height: 44,
+    borderRadius: theme.borderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.primary + '55',
+  },
+  infoTextWrap: {
+    flex: 1,
+    minWidth: 0,
+  },
+  infoEyebrow: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+    color: theme.colors.primary,
+    marginBottom: 2,
+  },
+  infoName: {
+    fontSize: 22,
+    fontFamily: theme.fonts.display,
+    letterSpacing: 0.3,
+    color: theme.colors.text,
+    lineHeight: 27,
+  },
+  infoEditChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  infoDescription: {
+    fontSize: 14,
+    lineHeight: 19,
+    color: theme.colors.textSecondary,
+  },
+  infoSaveDisabled: {
+    opacity: 0.5,
   },
   dayBlock: {
     backgroundColor: 'transparent',
@@ -663,7 +874,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     alignItems: 'center',
     gap: 6,
   },
@@ -686,7 +897,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   editExercisesInput: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
@@ -713,7 +924,7 @@ const styles = StyleSheet.create({
   editButtonText: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   cancelButton: {
     backgroundColor: theme.colors.surfaceAlt,
@@ -734,7 +945,7 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   timerBlock: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryDark,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
     marginTop: 4,
@@ -750,17 +961,17 @@ const styles = StyleSheet.create({
   timerBlockLabel: {
     fontSize: 14,
     fontWeight: '700',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   timerBlockValue: {
     fontSize: 32,
     fontWeight: '800',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
     marginBottom: 4,
   },
   timerBlockHint: {
     fontSize: 12,
-    color: theme.colors.background,
+    color: theme.colors.onGold,
     opacity: 0.8,
   },
   shareBlock: {
@@ -846,7 +1057,7 @@ const styles = StyleSheet.create({
   timerModalButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   timerModalButtonTextCancel: {
     fontSize: 15,

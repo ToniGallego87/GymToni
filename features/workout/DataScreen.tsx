@@ -3,8 +3,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
   ConfirmModal,
-  FloatingPrimaryNav,
-  getFloatingPrimaryNavMetrics,
+  FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
@@ -15,29 +16,21 @@ import { View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
-import { hasAnyCardio, cardioSessionFromLog } from '@lib/cardio';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 interface DataScreenProps {
   onImportData: () => Promise<void>;
   onExportData: () => Promise<void>;
   onClearData: () => Promise<void> | void;
-  onNavigateHome?: () => void;
-  onNavigateCardio?: () => void;
-  onNavigateRoutines?: () => void;
-  onNavigateCalendar?: () => void;
-  onNavigateData?: () => void;
+  onBack: () => void;
 }
 
 export function DataScreen({
   onImportData,
   onExportData,
   onClearData,
-  onNavigateHome,
-  onNavigateCardio,
-  onNavigateRoutines,
-  onNavigateCalendar,
-  onNavigateData,
+  onBack,
 }: DataScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -50,13 +43,9 @@ export function DataScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
-  // Sesiones de cardio: 1 por log con cardio (igual que la vista Cardio).
-  const cardioSessionsCount = state.logs.filter(
-    (l) => cardioSessionFromLog(l) != null
-  ).length;
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const { bottom: floatingNavBottom, scrollBottomPadding } =
-    getFloatingPrimaryNavMetrics(insets.bottom);
+  const backBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding = backBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const hasNoData = state.routines.length === 0 && state.logs.length === 0;
 
@@ -68,14 +57,15 @@ export function DataScreen({
       setBusyAction(action);
       await callback();
       setToast({
-        message: action === 'import' ? 'Datos importados' : 'Datos exportados',
+        message:
+          action === 'import' ? t('Datos importados') : t('Datos exportados'),
         type: 'success',
       });
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : 'No se pudo completar la acción';
+          : t('No se pudo completar la acción');
       setToast({
         message,
         type: 'error',
@@ -92,7 +82,11 @@ export function DataScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -106,36 +100,6 @@ export function DataScreen({
         showsVerticalScrollIndicator={false}
       >
         {!hasNoData && (
-          <View style={styles.summaryCard}>
-            <GradientFill accent={theme.colors.primary} />
-            <View style={styles.titleRow}>
-              <MaterialCommunityIcons
-                name="chart-box-outline"
-                size={18}
-                color={theme.colors.text}
-              />
-              <Text style={styles.summaryTitle}>Resumen</Text>
-            </View>
-            <View style={styles.summaryRow}>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{state.routines.length}</Text>
-                <Text style={styles.summaryLabel}>Rutinas</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{state.logs.length}</Text>
-                <Text style={styles.summaryLabel}>Entrenamientos</Text>
-              </View>
-              <View style={styles.summaryDivider} />
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{cardioSessionsCount}</Text>
-                <Text style={styles.summaryLabel}>Sesiones cardio</Text>
-              </View>
-            </View>
-          </View>
-        )}
-
-        {!hasNoData && (
           <View style={styles.actionCard}>
             <GradientFill accent={theme.colors.primary} />
             <View style={styles.titleRow}>
@@ -144,13 +108,13 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.text}
               />
-              <Text style={styles.actionTitle}>Exportar datos</Text>
+              <Text style={styles.actionTitle}>{t('Exportar datos')}</Text>
             </View>
             <Text style={styles.actionSubtitle}>
-              Descarga un fichero con todas las rutinas y entrenamientos.
+              {t('Descarga un fichero con todas las rutinas y entrenamientos.')}
             </Text>
             <Button
-              title={busyAction === 'export' ? 'Exportando…' : 'Exportar'}
+              title={busyAction === 'export' ? t('Exportando…') : t('Exportar')}
               onPress={() => handleAction('export', onExportData)}
               disabled={busyAction !== null}
               size="large"
@@ -166,13 +130,13 @@ export function DataScreen({
               size={18}
               color={theme.colors.text}
             />
-            <Text style={styles.actionTitle}>Importar datos</Text>
+            <Text style={styles.actionTitle}>{t('Importar datos')}</Text>
           </View>
           <Text style={styles.actionSubtitle}>
-            Carga un fichero exportado con rutinas y entrenamientos.
+            {t('Carga un fichero exportado con rutinas y entrenamientos.')}
           </Text>
           <Button
-            title={busyAction === 'import' ? 'Importando…' : 'Importar'}
+            title={busyAction === 'import' ? t('Importando…') : t('Importar')}
             onPress={() => setShowImportModal(true)}
             disabled={busyAction !== null}
             variant="primary"
@@ -190,14 +154,14 @@ export function DataScreen({
                 color={theme.colors.error}
               />
               <Text style={[styles.actionTitle, styles.dangerTitle]}>
-                Limpiar datos
+                {t('Limpiar datos')}
               </Text>
             </View>
             <Text style={[styles.actionSubtitle, styles.dangerSubtitle]}>
-              Elimina todas las rutinas y entrenamientos guardados.
+              {t('Elimina todas las rutinas y entrenamientos guardados.')}
             </Text>
             <Button
-              title="Limpiar"
+              title={t('Limpiar')}
               onPress={() => setShowClearModal(true)}
               variant="danger"
               size="large"
@@ -207,28 +171,21 @@ export function DataScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title="Datos"
+        title={t('Datos')}
         icon="folder-cog-outline"
-        subtitle="Importa, exporta o limpia la información"
+        subtitle={t('Importa, exporta o limpia la información')}
         topInset={insets.top}
       />
 
-      <FloatingPrimaryNav
-        bottom={floatingNavBottom}
-        activeTab="data"
-        showCardio={hasAnyCardio(state.logs)}
-        onPressHome={onNavigateHome}
-        onPressCardio={onNavigateCardio}
-        onPressRoutines={onNavigateRoutines}
-        onPressCalendar={onNavigateCalendar}
-        onPressData={onNavigateData}
-      />
+      <FloatingBackButton onPress={onBack} bottom={backBottom} />
 
       <ConfirmModal
         visible={showImportModal}
-        title="Importar datos"
-        message="Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?"
-        confirmLabel="Importar"
+        title={t('Importar datos')}
+        message={t(
+          'Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?'
+        )}
+        confirmLabel={t('Importar')}
         confirmVariant="primary"
         busy={busyAction === 'import'}
         onConfirm={handleImportPress}
@@ -237,13 +194,15 @@ export function DataScreen({
 
       <ConfirmModal
         visible={showClearModal}
-        title="Limpiar datos"
-        message="Esta acción borrará toda la información guardada en la app."
-        confirmLabel="Limpiar"
+        title={t('Limpiar datos')}
+        message={t(
+          'Esta acción borrará toda la información guardada en la app.'
+        )}
+        confirmLabel={t('Limpiar')}
         onConfirm={async () => {
           setShowClearModal(false);
           await onClearData();
-          setToast({ message: 'Datos eliminados', type: 'success' });
+          setToast({ message: t('Datos eliminados'), type: 'success' });
         }}
         onCancel={() => setShowClearModal(false)}
       />
@@ -273,53 +232,10 @@ const styles = StyleSheet.create({
     marginTop: 0,
     gap: 20,
   },
-  summaryCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    gap: 12,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  summaryTitle: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.text,
-    lineHeight: 26,
-  },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryValue: {
-    fontSize: 32,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.primary,
-    lineHeight: 38,
-  },
-  summaryLabel: {
-    marginTop: 4,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    lineHeight: 19,
-  },
-  summaryDivider: {
-    width: 1,
-    height: 42,
-    backgroundColor: theme.colors.border,
   },
   actionCard: {
     backgroundColor: 'transparent',

@@ -21,6 +21,7 @@ import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
+import { t, dateLocale } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   getExerciseStrengthScore,
@@ -63,7 +64,7 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
 
   const displayedDate = log.date
     ? new Date(`${log.date}T00:00:00`)
-        .toLocaleDateString('es-ES', {
+        .toLocaleDateString(dateLocale, {
           weekday: 'long',
           year: 'numeric',
           month: '2-digit',
@@ -128,7 +129,11 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scrollView}
@@ -214,7 +219,7 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
                 { marginTop: theme.spacing.xl, color: theme.colors.white },
               ]}
             >
-              Cardio
+              {t('Cardio')}
             </Text>
             {cardioSession ? (
               // Todas las disciplinas registradas en el día (el rawInput puede

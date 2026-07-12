@@ -13,6 +13,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { parseRoutineShareLink, SharedRoutine } from '@lib/routineShare';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 interface QRScannerScreenProps {
   onScanSuccess: (shared: SharedRoutine) => void;
@@ -30,7 +31,7 @@ export function QRScannerScreen({
   const handleImport = () => {
     const trimmed = link.trim();
     if (!trimmed) {
-      setError('Pega el enlace del QR aquí.');
+      setError(t('Pega el enlace del QR aquí.'));
       return;
     }
     const shared = parseRoutineShareLink(trimmed);
@@ -38,7 +39,7 @@ export function QRScannerScreen({
       onScanSuccess(shared);
     } else {
       setError(
-        'Enlace no válido. Usa el enlace copiado desde "Compartir por QR".'
+        t('Enlace no válido. Usa el enlace copiado desde "Compartir por QR".')
       );
     }
   };
@@ -48,7 +49,7 @@ export function QRScannerScreen({
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <StatusBar style="light" />
+      <StatusBar style={theme.statusBarStyle} />
       <ScrollView
         contentContainerStyle={[
           styles.container,
@@ -61,40 +62,41 @@ export function QRScannerScreen({
           <TouchableOpacity style={styles.closeBtn} onPress={onBack}>
             <Text style={styles.closeBtnText}>✕</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Importar rutina por QR</Text>
+          <Text style={styles.headerTitle}>{t('Importar rutina por QR')}</Text>
         </View>
 
         {/* Instrucciones cámara */}
         <View style={styles.instructionCard}>
           <Text style={styles.instructionIcon}>📷</Text>
           <Text style={styles.instructionTitle}>
-            Escanea con la cámara del móvil
+            {t('Escanea con la cámara del móvil')}
           </Text>
           <Text style={styles.instructionText}>
-            Abre la cámara de tu móvil, apunta al código QR de la rutina y
-            GymBro se abrirá automáticamente con la rutina importada.
+            {t(
+              'Abre la cámara de tu móvil, apunta al código QR de la rutina y GymBro se abrirá automáticamente con la rutina importada.'
+            )}
           </Text>
         </View>
 
         {/* Separador */}
         <View style={styles.separator}>
           <View style={styles.separatorLine} />
-          <Text style={styles.separatorText}>o pega el enlace</Text>
+          <Text style={styles.separatorText}>{t('o pega el enlace')}</Text>
           <View style={styles.separatorLine} />
         </View>
 
         {/* Pegar enlace */}
         <View style={styles.pasteSection}>
-          <Text style={styles.pasteLabel}>Enlace del QR</Text>
+          <Text style={styles.pasteLabel}>{t('Enlace del QR')}</Text>
           <TextInput
             style={styles.input}
             value={link}
-            onChangeText={(t) => {
-              setLink(t);
+            onChangeText={(value) => {
+              setLink(value);
               setError(null);
             }}
             placeholder="gymbro://import-routine?data=..."
-            placeholderTextColor="rgba(255,255,255,0.3)"
+            placeholderTextColor={theme.colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
             multiline
@@ -106,7 +108,7 @@ export function QRScannerScreen({
             onPress={handleImport}
             activeOpacity={0.8}
           >
-            <Text style={styles.importBtnText}>Importar rutina</Text>
+            <Text style={styles.importBtnText}>{t('Importar rutina')}</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -133,7 +135,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: theme.colors.surfaceAlt,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -148,13 +150,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   instructionCard: {
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: theme.colors.surface,
     borderRadius: 16,
     padding: 24,
     alignItems: 'center',
     gap: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: theme.colors.border,
   },
   instructionIcon: {
     fontSize: 48,
@@ -166,7 +168,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   instructionText: {
-    color: 'rgba(255,255,255,0.65)',
+    color: theme.colors.textSecondary,
     fontSize: 14,
     textAlign: 'center',
     lineHeight: 20,
@@ -179,27 +181,27 @@ const styles = StyleSheet.create({
   separatorLine: {
     flex: 1,
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: theme.colors.surfaceAlt,
   },
   separatorText: {
-    color: 'rgba(255,255,255,0.4)',
+    color: theme.colors.textMuted,
     fontSize: 13,
   },
   pasteSection: {
     gap: 12,
   },
   pasteLabel: {
-    color: 'rgba(255,255,255,0.7)',
+    color: theme.colors.textSecondary,
     fontSize: 13,
     fontWeight: '600',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   input: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: theme.colors.surfaceAlt,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: theme.colors.border,
     color: theme.colors.text,
     fontSize: 13,
     fontFamily: 'monospace',
@@ -223,7 +225,7 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   importBtnText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontSize: 16,
     fontWeight: '700',
   },

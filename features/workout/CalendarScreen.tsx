@@ -17,6 +17,7 @@ import { hasAnyCardio, cardioSessionFromLog, CardioSession } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 type CalendarMode = 'fuerza' | 'cardio';
@@ -25,35 +26,41 @@ interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
-  onNavigateRoutines?: () => void;
   onNavigateCalendar?: () => void;
-  onNavigateData?: () => void;
+  onNavigateProfile?: () => void;
 }
 
 const MONTH_NAMES = [
-  'Enero',
-  'Febrero',
-  'Marzo',
-  'Abril',
-  'Mayo',
-  'Junio',
-  'Julio',
-  'Agosto',
-  'Septiembre',
-  'Octubre',
-  'Noviembre',
-  'Diciembre',
+  t('Enero'),
+  t('Febrero'),
+  t('Marzo'),
+  t('Abril'),
+  t('Mayo'),
+  t('Junio'),
+  t('Julio'),
+  t('Agosto'),
+  t('Septiembre'),
+  t('Octubre'),
+  t('Noviembre'),
+  t('Diciembre'),
 ];
 
-const WEEK_DAYS = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+const WEEK_DAYS = [
+  t('Lun'),
+  t('Mar'),
+  t('Mié'),
+  t('Jue'),
+  t('Vie'),
+  t('Sáb'),
+  t('Dom'),
+];
 
 export function CalendarScreen({
   onSelectLog,
   onNavigateHome,
   onNavigateCardio,
-  onNavigateRoutines,
   onNavigateCalendar,
-  onNavigateData,
+  onNavigateProfile,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -172,7 +179,11 @@ export function CalendarScreen({
   if (state.logs.length === 0) {
     return (
       <View style={styles.container}>
-        <StatusBar style="light" translucent backgroundColor="transparent" />
+        <StatusBar
+          style={theme.statusBarStyle}
+          translucent
+          backgroundColor="transparent"
+        />
 
         <View style={[styles.emptyState, { paddingTop: topBarHeight + 24 }]}>
           <MaterialCommunityIcons
@@ -181,16 +192,16 @@ export function CalendarScreen({
             color={theme.colors.textSecondary}
             style={styles.emptyEmoji}
           />
-          <Text style={styles.emptyTitle}>Sin entrenamientos</Text>
+          <Text style={styles.emptyTitle}>{t('Sin entrenamientos')}</Text>
           <Text style={styles.emptyText}>
-            Guarda una sesión para verla reflejada en el calendario.
+            {t('Guarda una sesión para verla reflejada en el calendario.')}
           </Text>
         </View>
 
         <GlassTopBar
-          title="Calendario"
+          title={t('Calendario')}
           icon="calendar-month-outline"
-          subtitle="Tu historial mensual"
+          subtitle={t('Tu historial mensual')}
           topInset={insets.top}
         />
 
@@ -200,9 +211,8 @@ export function CalendarScreen({
           showCardio={hasAnyCardio(state.logs)}
           onPressHome={onNavigateHome}
           onPressCardio={onNavigateCardio}
-          onPressRoutines={onNavigateRoutines}
           onPressCalendar={onNavigateCalendar}
-          onPressData={onNavigateData}
+          onPressProfile={onNavigateProfile}
         />
       </View>
     );
@@ -210,7 +220,11 @@ export function CalendarScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -474,7 +488,7 @@ export function CalendarScreen({
                     color={color}
                   />
                   <Text style={[styles.modeButtonText, { color }]}>
-                    {m === 'fuerza' ? 'Fuerza' : 'Cardio'}
+                    {m === 'fuerza' ? t('Fuerza') : t('Cardio')}
                   </Text>
                 </Pressable>
               );
@@ -484,9 +498,9 @@ export function CalendarScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title="Calendario"
+        title={t('Calendario')}
         icon="calendar-month-outline"
-        subtitle="Repasa tus ejercicios mes por mes"
+        subtitle={t('Repasa tus ejercicios mes por mes')}
         topInset={insets.top}
       />
 
@@ -496,9 +510,8 @@ export function CalendarScreen({
         showCardio={hasAnyCardio(state.logs)}
         onPressHome={onNavigateHome}
         onPressCardio={onNavigateCardio}
-        onPressRoutines={onNavigateRoutines}
         onPressCalendar={onNavigateCalendar}
-        onPressData={onNavigateData}
+        onPressProfile={onNavigateProfile}
       />
     </View>
   );

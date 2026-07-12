@@ -40,6 +40,7 @@ import { WeekAchievements } from '@lib/achievements';
 import { shareBase64Png } from '@lib/imageShare';
 import { encodeFramesToMp4, isVideoEncoderAvailable } from '@lib/videoExport';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 interface WeekAchievementScreenProps {
   achievements: WeekAchievements;
@@ -70,7 +71,7 @@ async function loadImageDataUri(moduleRef: number): Promise<string> {
     return new Promise<string>((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result || ''));
-      reader.onerror = () => reject(new Error('No se pudo leer la imagen'));
+      reader.onerror = () => reject(new Error(t('No se pudo leer la imagen')));
       reader.readAsDataURL(blob);
     });
   }
@@ -128,7 +129,7 @@ function ShareButton({
         <MaterialCommunityIcons
           name={busy ? 'progress-download' : 'share-variant'}
           size={22}
-          color={theme.colors.darkGray}
+          color={theme.colors.onGold}
         />
         <Text style={styles.shareText}>{label}</Text>
       </LinearGradient>
@@ -227,7 +228,7 @@ export function WeekAchievementScreen({
                 );
               } catch (error) {
                 setToast({
-                  message: 'No se pudo compartir la imagen.',
+                  message: t('No se pudo compartir la imagen.'),
                   type: 'error',
                 });
               } finally {
@@ -238,7 +239,10 @@ export function WeekAchievementScreen({
           );
         } catch (error) {
           setBusy(false);
-          setToast({ message: 'No se pudo generar la imagen.', type: 'error' });
+          setToast({
+            message: t('No se pudo generar la imagen.'),
+            type: 'error',
+          });
         }
       });
     });
@@ -254,7 +258,7 @@ export function WeekAchievementScreen({
   const capturePng = (w: number, h: number) =>
     new Promise<string>((resolve, reject) => {
       const node = posterRef.current;
-      if (!node) return reject(new Error('Póster no disponible'));
+      if (!node) return reject(new Error(t('Póster no disponible')));
       node.toDataURL((data: string) => resolve(data), { width: w, height: h });
     });
 
@@ -302,7 +306,7 @@ export function WeekAchievementScreen({
       if (canShare) {
         await Sharing.shareAsync(outputUri, {
           mimeType: 'video/mp4',
-          dialogTitle: 'Compartir logros de la semana',
+          dialogTitle: t('Compartir logros de la semana'),
           UTI: 'public.mpeg-4',
         });
       }
@@ -311,7 +315,7 @@ export function WeekAchievementScreen({
         () => undefined
       );
     } catch (error) {
-      setToast({ message: 'No se pudo generar el vídeo.', type: 'error' });
+      setToast({ message: t('No se pudo generar el vídeo.'), type: 'error' });
     } finally {
       setVideoBusy(false);
       setVideoProgress(0);
@@ -331,14 +335,18 @@ export function WeekAchievementScreen({
   };
 
   const shareLabel = videoBusy
-    ? `Generando vídeo… ${Math.round(videoProgress * 100)}%`
+    ? t('Generando vídeo… {p}%', { p: Math.round(videoProgress * 100) })
     : busy
-    ? 'Generando…'
-    : 'Compartir resultados';
+    ? t('Generando…')
+    : t('Compartir resultados');
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -376,9 +384,9 @@ export function WeekAchievementScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title="Logros de la semana"
+        title={t('Logros de la semana')}
         icon="trophy-variant"
-        subtitle="Comparte tus resultados en redes"
+        subtitle={t('Comparte tus resultados en redes')}
         topInset={insets.top}
       />
 
@@ -436,7 +444,7 @@ const styles = StyleSheet.create({
     height: '55%',
   },
   shareText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontFamily: theme.fonts.display,
     fontSize: 22,
     letterSpacing: 0.5,

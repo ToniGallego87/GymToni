@@ -9,6 +9,7 @@ import {
   GLASS_FLOATING_HIGHLIGHT,
   GLASS_FLOATING_INNER_STROKE,
   GLASS_FLOATING_OVERLAY,
+  GLASS_TINT,
 } from './glassTokens';
 
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
@@ -55,7 +56,7 @@ export function FloatingGlassBar({
       ]}
     >
       <FrostedBlur
-        tint="dark"
+        tint={GLASS_TINT}
         intensity={GLASS_BLUR_INTENSITY}
         experimentalBlurMethod="dimezisBlurView"
         style={styles.blur}

@@ -33,6 +33,7 @@ import {
 import type { GymIconName } from '../../components';
 import { generateId } from '@lib/storage';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { stripIconTag } from '@lib/routineShare';
 import { WorkoutDay, WorkoutExercise, WorkoutRoutine } from '../../types';
 
@@ -215,9 +216,9 @@ function CreateRoutineButton({ onPress }: { onPress: () => void }) {
         <MaterialCommunityIcons
           name="check-bold"
           size={22}
-          color={theme.colors.darkGray}
+          color={theme.colors.onGold}
         />
-        <Text style={styles.createText}>Crear rutina</Text>
+        <Text style={styles.createText}>{t('Crear rutina')}</Text>
       </LinearGradient>
     </AnimatedPressable>
   );
@@ -251,7 +252,7 @@ function ExerciseRow({
       <View style={styles.exerciseNameRow}>
         <TextInput
           style={styles.exerciseNameInput}
-          placeholder="Ej: Press banca"
+          placeholder={t('Ej: Press banca')}
           placeholderTextColor={theme.colors.textSecondary}
           value={exercise.name}
           onChangeText={(value) => onChange({ name: value })}
@@ -289,7 +290,7 @@ function ExerciseRow({
 
       <View style={styles.exerciseControlsRow}>
         <View style={styles.controlBlock}>
-          <Text style={styles.controlLabel}>Series</Text>
+          <Text style={styles.controlLabel}>{t('Series')}</Text>
           <View style={styles.stepper}>
             <Pressable
               style={({ pressed }) => [
@@ -329,12 +330,14 @@ function ExerciseRow({
 
         <View style={[styles.controlBlock, styles.controlBlockGrow]}>
           <Text style={styles.controlLabel}>
-            {exercise.unit === 'seg' ? 'Segundos' : 'Repeticiones'}
+            {exercise.unit === 'seg' ? t('Segundos') : t('Repeticiones')}
           </Text>
           <View style={styles.repsRow}>
             <TextInput
               style={styles.repsInput}
-              placeholder={exercise.unit === 'seg' ? 'Ej: 30-45' : 'Ej: 10-12'}
+              placeholder={
+                exercise.unit === 'seg' ? t('Ej: 30-45') : t('Ej: 10-12')
+              }
               placeholderTextColor={theme.colors.textSecondary}
               value={exercise.reps}
               onChangeText={(value) => onChange({ reps: value })}
@@ -365,7 +368,7 @@ function ExerciseRow({
                         ],
                       ]}
                     >
-                      {unit === 'reps' ? 'reps' : 'seg'}
+                      {unit === 'reps' ? t('reps') : t('seg')}
                     </Text>
                   </Pressable>
                 );
@@ -443,6 +446,10 @@ export function NewRoutineScreen({
   initialDays,
 }: NewRoutineScreenProps) {
   const insets = useSafeAreaInsets();
+  // Nombre y descripción de la rutina. Si se dejan vacíos se generan como antes
+  // ("Rutina N" / "Rutina personalizada (N días)").
+  const [routineName, setRoutineName] = useState('');
+  const [routineDescription, setRoutineDescription] = useState('');
   const [days, setDays] = useState<NewRoutineDayForm[]>(() =>
     initialDays && initialDays.length
       ? initialDays.map((day) => ({
@@ -470,7 +477,7 @@ export function NewRoutineScreen({
     const parsed = buildDaysFromRoutineText(importText);
     if (!parsed.length) {
       setToast({
-        message: 'No se reconoció ninguna rutina en el texto',
+        message: t('No se reconoció ninguna rutina en el texto'),
         type: 'error',
       });
       return;
@@ -480,9 +487,12 @@ export function NewRoutineScreen({
     setShowImport(false);
     setImportText('');
     setToast({
-      message: `Importados ${limited.length} día${
-        limited.length > 1 ? 's' : ''
-      }`,
+      message: t(
+        limited.length > 1 ? 'Importados {n} días' : 'Importado 1 día',
+        {
+          n: limited.length,
+        }
+      ),
       type: 'success',
     });
   };
@@ -552,7 +562,7 @@ export function NewRoutineScreen({
 
   const handleAddDay = () => {
     if (days.length >= 7) {
-      setToast({ message: 'Máximo 7 días', type: 'error' });
+      setToast({ message: t('Máximo 7 días'), type: 'error' });
       return;
     }
 
@@ -568,23 +578,23 @@ export function NewRoutineScreen({
 
   const buildRoutineDays = (): WorkoutDay[] => {
     if (!days.length) {
-      throw new Error('Añade al menos un día');
+      throw new Error(t('Añade al menos un día'));
     }
 
     return days.map((entry, index) => {
       const dayTitle = entry.title.trim();
       if (!dayTitle) {
-        throw new Error(`Falta el título del Día ${index + 1}`);
+        throw new Error(t('Falta el título del Día {n}', { n: index + 1 }));
       }
 
       const namedExercises = entry.exercises.filter((ex) => ex.name.trim());
       if (!namedExercises.length) {
-        throw new Error(`Faltan ejercicios en el Día ${index + 1}`);
+        throw new Error(t('Faltan ejercicios en el Día {n}', { n: index + 1 }));
       }
 
       const icon = effectiveDayIcon(entry);
       if (!icon) {
-        throw new Error(`Elige un icono para el Día ${index + 1}`);
+        throw new Error(t('Elige un icono para el Día {n}', { n: index + 1 }));
       }
 
       const exercises: WorkoutExercise[] = namedExercises.map(
@@ -600,7 +610,7 @@ export function NewRoutineScreen({
       return {
         id: generateId(),
         dayNumber: index + 1,
-        name: `Día ${index + 1} - ${dayTitle}`,
+        name: `${t('Día')} ${index + 1} - ${dayTitle}`,
         // `emoji` guarda ahora el nombre del icono (ver GymIcon/DayAccentIcon).
         emoji: icon,
         exercises,
@@ -614,24 +624,33 @@ export function NewRoutineScreen({
 
       onCreateRoutine({
         id: generateId(),
-        name: `Rutina ${existingRoutineCount + 1}`,
-        description: `Rutina personalizada (${builtDays.length} días)`,
+        name:
+          routineName.trim() || `${t('Rutina')} ${existingRoutineCount + 1}`,
+        description:
+          routineDescription.trim() ||
+          t('Rutina personalizada ({n} días)', { n: builtDays.length }),
         isActive: true,
         createdAt: Date.now(),
         days: builtDays,
       });
 
-      setToast({ message: 'Nueva rutina creada', type: 'success' });
+      setToast({ message: t('Nueva rutina creada'), type: 'success' });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'No se pudo crear la rutina';
+        error instanceof Error
+          ? error.message
+          : t('No se pudo crear la rutina');
       setToast({ message, type: 'error' });
     }
   };
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -644,6 +663,33 @@ export function NewRoutineScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View style={[styles.dayCard, { borderLeftColor: theme.colors.white }]}>
+          <GradientFill accent={theme.colors.white} />
+          <Text style={styles.dayTitleDisplay}>{t('Rutina')}</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder={t('Nombre (ej: Rutina {n})', {
+                n: existingRoutineCount + 1,
+              })}
+              placeholderTextColor={theme.colors.textSecondary}
+              value={routineName}
+              onChangeText={setRoutineName}
+              maxLength={40}
+            />
+          </View>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.input}
+              placeholder={t('Descripción (opcional)')}
+              placeholderTextColor={theme.colors.textSecondary}
+              value={routineDescription}
+              onChangeText={setRoutineDescription}
+              maxLength={80}
+            />
+          </View>
+        </View>
+
         {days.map((day, index) => {
           const accent = theme.colors.white;
           const dayIcon = effectiveDayIcon(day);
@@ -656,7 +702,9 @@ export function NewRoutineScreen({
               <GradientFill accent={accent} />
 
               <View style={styles.dayHeaderRow}>
-                <Text style={styles.dayTitleDisplay}>Día {index + 1}</Text>
+                <Text style={styles.dayTitleDisplay}>
+                  {t('Día')} {index + 1}
+                </Text>
                 <Pressable
                   style={({ pressed }) => [
                     styles.dayIconPick,
@@ -673,7 +721,7 @@ export function NewRoutineScreen({
                         color={theme.colors.white}
                       />
                       <Text style={styles.dayIconPickText}>
-                        {GYM_ICON_LABELS[dayIcon]}
+                        {t(GYM_ICON_LABELS[dayIcon])}
                       </Text>
                     </>
                   ) : (
@@ -699,14 +747,14 @@ export function NewRoutineScreen({
               <View style={styles.inputRow}>
                 <TextInput
                   style={styles.input}
-                  placeholder="Ej: Push pesado"
+                  placeholder={t('Ej: Push pesado')}
                   placeholderTextColor={theme.colors.textSecondary}
                   value={day.title}
                   onChangeText={(value) => handleUpdateTitle(day.id, value)}
                 />
               </View>
 
-              <Text style={styles.label}>Ejercicios</Text>
+              <Text style={styles.label}>{t('Ejercicios')}</Text>
 
               {day.exercises.map((exercise) => {
                 const expanded =
@@ -748,7 +796,9 @@ export function NewRoutineScreen({
                   size={18}
                   color={theme.colors.primary}
                 />
-                <Text style={styles.addExerciseText}>Añadir ejercicio</Text>
+                <Text style={styles.addExerciseText}>
+                  {t('Añadir ejercicio')}
+                </Text>
               </Pressable>
             </View>
           );
@@ -817,7 +867,7 @@ export function NewRoutineScreen({
               size={18}
               color={theme.colors.primary}
             />
-            <Text style={styles.qrButtonText}>Crear a partir de QR</Text>
+            <Text style={styles.qrButtonText}>{t('Crear a partir de QR')}</Text>
           </Pressable>
         )}
 
@@ -833,14 +883,16 @@ export function NewRoutineScreen({
             size={18}
             color={theme.colors.primary}
           />
-          <Text style={styles.qrButtonText}>Crear a partir de texto plano</Text>
+          <Text style={styles.qrButtonText}>
+            {t('Crear a partir de texto plano')}
+          </Text>
         </Pressable>
       </StretchScrollView>
 
       <GlassTopBar
-        title="Nueva rutina"
+        title={t('Nueva rutina')}
         icon="playlist-plus"
-        subtitle="Define los ejercicios que realizarás cada día"
+        subtitle={t('Define los ejercicios que realizarás cada día')}
         topInset={insets.top}
       />
 
@@ -854,11 +906,13 @@ export function NewRoutineScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Crear a partir de texto plano</Text>
+            <Text style={styles.modalTitle}>
+              {t('Crear a partir de texto plano')}
+            </Text>
             <Text style={styles.modalHint}>
-              Un día por bloque (sepáralos con una línea en blanco). La primera
-              línea es el nombre del día; debajo, un ejercicio por línea. Añade
-              una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).
+              {t(
+                'Un día por bloque (sepáralos con una línea en blanco). La primera línea es el nombre del día; debajo, un ejercicio por línea. Añade una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).'
+              )}
             </Text>
             <TextInput
               style={styles.modalTextarea}
@@ -880,7 +934,7 @@ export function NewRoutineScreen({
                 ]}
                 onPress={() => setShowImport(false)}
               >
-                <Text style={styles.modalCancelText}>Cancelar</Text>
+                <Text style={styles.modalCancelText}>{t('Cancelar')}</Text>
               </Pressable>
               <Pressable
                 style={({ pressed }) => [
@@ -890,7 +944,7 @@ export function NewRoutineScreen({
                 ]}
                 onPress={handleImportText}
               >
-                <Text style={styles.modalConfirmText}>Importar</Text>
+                <Text style={styles.modalConfirmText}>{t('Importar')}</Text>
               </Pressable>
             </View>
           </View>
@@ -906,7 +960,7 @@ export function NewRoutineScreen({
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <Text style={[styles.modalTitle, styles.iconPickerTitle]}>
-              Selecciona un icono para este día
+              {t('Selecciona un icono para este día')}
             </Text>
             <View style={styles.iconGrid}>
               {GYM_ICON_NAMES.map((iconName) => {
@@ -937,7 +991,7 @@ export function NewRoutineScreen({
                       ]}
                       numberOfLines={1}
                     >
-                      {GYM_ICON_LABELS[iconName]}
+                      {t(GYM_ICON_LABELS[iconName])}
                     </Text>
                   </Pressable>
                 );
@@ -952,7 +1006,7 @@ export function NewRoutineScreen({
               ]}
               onPress={() => setIconPickerDayId(null)}
             >
-              <Text style={styles.modalCancelText}>Cerrar</Text>
+              <Text style={styles.modalCancelText}>{t('Cerrar')}</Text>
             </Pressable>
           </View>
         </View>
@@ -1018,7 +1072,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
   },
   dayIconPickEmpty: {
     borderColor: theme.colors.primary,
@@ -1041,7 +1095,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1067,7 +1121,7 @@ const styles = StyleSheet.create({
   exerciseNameInput: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1157,7 +1211,7 @@ const styles = StyleSheet.create({
   stepper: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1183,7 +1237,7 @@ const styles = StyleSheet.create({
   repsInput: {
     flex: 1,
     minWidth: 0,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1196,7 +1250,7 @@ const styles = StyleSheet.create({
   },
   unitToggle: {
     flexDirection: 'row',
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1298,7 +1352,7 @@ const styles = StyleSheet.create({
     height: '55%',
   },
   createText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontFamily: theme.fonts.display,
     fontSize: 22,
     letterSpacing: 0.5,
@@ -1356,7 +1410,7 @@ const styles = StyleSheet.create({
   modalTextarea: {
     minHeight: 180,
     maxHeight: 320,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1390,7 +1444,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     alignItems: 'center',
     gap: 6,
   },
@@ -1426,7 +1480,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
   },
   modalConfirmText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontWeight: '800',
     fontSize: 14,
   },

@@ -18,6 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { parseSeriesString } from '@lib/parsers';
 import { getImprovementDisplay } from '@lib/utils';
 import { GradientFill } from './GradientFill';
@@ -338,7 +339,7 @@ export function ExerciseInputField({
                   size={13}
                   color={theme.colors.textSecondary}
                 />
-                <Text style={styles.contextLabel}>Objetivo</Text>
+                <Text style={styles.contextLabel}>{t('Objetivo')}</Text>
                 <Text style={styles.contextValue}>
                   {target.sets}×{target.reps}
                 </Text>
@@ -351,7 +352,7 @@ export function ExerciseInputField({
                   size={13}
                   color={theme.colors.textSecondary}
                 />
-                <Text style={styles.contextLabel}>Anterior</Text>
+                <Text style={styles.contextLabel}>{t('Anterior')}</Text>
                 <Text style={styles.contextValue} numberOfLines={1}>
                   {getPreviousSetsSummary()}
                 </Text>
@@ -429,7 +430,7 @@ export function ExerciseInputField({
             {/* Inputs peso / reps: dos campos grandes y espaciados */}
             <View style={styles.inputRow}>
               <View style={styles.inputField}>
-                <Text style={styles.inputLabel}>Peso · kg</Text>
+                <Text style={styles.inputLabel}>{t('Peso · kg')}</Text>
                 <TextInput
                   style={styles.bigInput}
                   placeholder={getWeightPlaceholder()}
@@ -445,7 +446,7 @@ export function ExerciseInputField({
 
               <View style={styles.inputField}>
                 <Text style={styles.inputLabel}>
-                  {isTimeBased ? 'Segundos' : 'Repeticiones'}
+                  {isTimeBased ? t('Segundos') : t('Repeticiones')}
                 </Text>
                 <TextInput
                   style={styles.bigInput}
@@ -471,9 +472,9 @@ export function ExerciseInputField({
               <MaterialCommunityIcons
                 name="plus-circle"
                 size={22}
-                color={theme.colors.darkGray}
+                color={theme.colors.onGold}
               />
-              <Text style={styles.addButtonText}>Añadir serie</Text>
+              <Text style={styles.addButtonText}>{t('Añadir serie')}</Text>
             </Pressable>
 
             {/* Acciones secundarias */}
@@ -568,10 +569,10 @@ export function ExerciseInputField({
                     <MaterialCommunityIcons
                       name={timerRunning ? 'stop' : 'play'}
                       size={16}
-                      color={theme.colors.darkGray}
+                      color={theme.colors.onGold}
                     />
                     <Text style={styles.stopwatchButtonText}>
-                      {timerRunning ? 'Parar' : 'Iniciar'}
+                      {timerRunning ? t('Parar') : t('Iniciar')}
                     </Text>
                   </Pressable>
                   {timerSeconds > 0 && !timerRunning && (
@@ -586,10 +587,10 @@ export function ExerciseInputField({
                       <MaterialCommunityIcons
                         name="check"
                         size={16}
-                        color={theme.colors.darkGray}
+                        color={theme.colors.onGold}
                       />
                       <Text style={styles.stopwatchButtonText}>
-                        Usar {timerSeconds}s
+                        {t('Usar {n}s', { n: timerSeconds })}
                       </Text>
                     </Pressable>
                   )}
@@ -696,7 +697,10 @@ const styles = StyleSheet.create({
   orderBadgeText: {
     fontSize: 19,
     fontFamily: theme.fonts.display,
-    color: theme.colors.darkGray,
+    // El fondo del badge es el acento (blanco en noche, tinta oscura en día);
+    // el número usa el color de fondo del tema para contrastar en ambos: oscuro
+    // sobre el badge claro de noche, claro sobre el badge oscuro de día.
+    color: theme.colors.background,
     includeFontPadding: false,
     textAlignVertical: 'center',
   },
@@ -770,7 +774,7 @@ const styles = StyleSheet.create({
 
   // Bloque de contexto (objetivo + anterior)
   contextBlock: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     paddingHorizontal: 12,
     paddingVertical: 8,
@@ -877,7 +881,7 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.99 }],
   },
   addButtonText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontWeight: '800',
     fontSize: 17,
     letterSpacing: 0.3,
@@ -908,7 +912,7 @@ const styles = StyleSheet.create({
   },
   notesButton: {
     borderColor: theme.colors.border,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
   },
   secondaryButtonText: {
     fontWeight: '700',
@@ -940,7 +944,7 @@ const styles = StyleSheet.create({
 
   // Cronómetro
   stopwatchContainer: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderRadius: theme.borderRadius.sm,
     padding: 12,
     alignItems: 'center',
@@ -972,7 +976,7 @@ const styles = StyleSheet.create({
   stopwatchBtnStop: { backgroundColor: theme.colors.error },
   stopwatchBtnUse: { backgroundColor: theme.colors.primary },
   stopwatchButtonText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontWeight: '800',
     fontSize: 14,
   },

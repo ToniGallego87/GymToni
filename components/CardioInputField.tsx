@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 interface CardioInputFieldProps {
   value: string;
@@ -32,18 +33,18 @@ type CardioType =
 const TREADMILL_TYPES: CardioType[] = ['treadmill', 'treadmill-walk'];
 
 const CARDIO_OPTIONS = [
-  { id: 'treadmill', label: 'Correr en cinta', icon: 'run-fast' },
-  { id: 'treadmill-walk', label: 'Andar en cinta', icon: 'walk' },
-  { id: 'outdoor-run', label: 'Correr en exterior', icon: 'run' },
-  { id: 'stationary-bike', label: 'Bici estática', icon: 'bicycle' },
-  { id: 'elliptical', label: 'Elíptica', icon: 'human-handsup' },
-  { id: 'other', label: 'Otro', icon: 'dots-horizontal-circle-outline' },
+  { id: 'treadmill', label: t('Correr en cinta'), icon: 'run-fast' },
+  { id: 'treadmill-walk', label: t('Andar en cinta'), icon: 'walk' },
+  { id: 'outdoor-run', label: t('Correr en exterior'), icon: 'run' },
+  { id: 'stationary-bike', label: t('Bici estática'), icon: 'bicycle' },
+  { id: 'elliptical', label: t('Elíptica'), icon: 'human-handsup' },
+  { id: 'other', label: t('Otro'), icon: 'dots-horizontal-circle-outline' },
 ];
 
 export function CardioInputField({
   value,
   onChangeText,
-  placeholder = 'Ej: Cinta: 22.5mins, 11.5kmh',
+  placeholder = t('Ej: Cinta: 22.5mins, 11.5kmh'),
   accent = theme.colors.primary,
 }: CardioInputFieldProps) {
   const [cardioEntries, setCardioEntries] = useState<string[]>(() => {
@@ -136,9 +137,9 @@ export function CardioInputField({
             <MaterialCommunityIcons
               name="run-fast"
               size={18}
-              color={theme.colors.darkGray}
+              color={theme.colors.onGold}
             />
-            <Text style={styles.addCardioText}>Añadir cardio</Text>
+            <Text style={styles.addCardioText}>{t('Añadir cardio')}</Text>
           </View>
         </Pressable>
       ) : (
@@ -151,7 +152,7 @@ export function CardioInputField({
                 color={theme.colors.text}
                 style={styles.icon}
               />
-              <Text style={styles.title}>Cardio</Text>
+              <Text style={styles.title}>{t('Cardio')}</Text>
             </View>
           </View>
 
@@ -187,9 +188,9 @@ export function CardioInputField({
               <MaterialCommunityIcons
                 name="plus"
                 size={16}
-                color={theme.colors.darkGray}
+                color={theme.colors.onGold}
               />
-              <Text style={styles.addCardioText}>Añadir</Text>
+              <Text style={styles.addCardioText}>{t('Añadir')}</Text>
             </View>
           </Pressable>
         </View>
@@ -211,7 +212,7 @@ export function CardioInputField({
             {step === 'type' && !selectedCardioType && (
               <>
                 <Text style={styles.modalTitle}>
-                  Selecciona el tipo de cardio
+                  {t('Selecciona el tipo de cardio')}
                 </Text>
                 <ScrollView
                   style={styles.optionsScroll}
@@ -247,7 +248,7 @@ export function CardioInputField({
                     setStep('type');
                   }}
                 >
-                  <Text style={styles.closeButtonText}>Cancelar</Text>
+                  <Text style={styles.closeButtonText}>{t('Cancelar')}</Text>
                 </Pressable>
               </>
             )}
@@ -255,11 +256,11 @@ export function CardioInputField({
             {step === 'type' && selectedCardioType === 'other' && (
               <>
                 <Text style={styles.modalTitle}>
-                  Especifica el tipo de ejercicio
+                  {t('Especifica el tipo de ejercicio')}
                 </Text>
                 <TextInput
                   style={styles.customTypeInput}
-                  placeholder="Ej: Escalador, Remo, etc."
+                  placeholder={t('Ej: Escalador, Remo, etc.')}
                   placeholderTextColor={theme.colors.textSecondary}
                   value={customCardioType}
                   onChangeText={setCustomCardioType}
@@ -273,7 +274,7 @@ export function CardioInputField({
                   onPress={handleCardioTypeConfirm}
                   disabled={!customCardioType}
                 >
-                  <Text style={styles.confirmButtonText}>Continuar</Text>
+                  <Text style={styles.confirmButtonText}>{t('Continuar')}</Text>
                 </Pressable>
                 <Pressable
                   style={({ pressed }) => [
@@ -285,18 +286,20 @@ export function CardioInputField({
                     setCustomCardioType('');
                   }}
                 >
-                  <Text style={styles.closeButtonText}>Atrás</Text>
+                  <Text style={styles.closeButtonText}>{t('Atrás')}</Text>
                 </Pressable>
               </>
             )}
 
             {step === 'details' && (
               <>
-                <Text style={styles.modalTitle}>Detalles del cardio</Text>
+                <Text style={styles.modalTitle}>
+                  {t('Detalles del cardio')}
+                </Text>
                 <View style={styles.detailsContainer}>
                   <View style={styles.inputRowCardio}>
                     <View style={styles.inputGroupCardio}>
-                      <Text style={styles.labelCardio}>Minutos</Text>
+                      <Text style={styles.labelCardio}>{t('Minutos')}</Text>
                       <TextInput
                         style={styles.inputCardio}
                         placeholder="0"
@@ -321,7 +324,9 @@ export function CardioInputField({
                     </View>
                     {TREADMILL_TYPES.includes(selectedCardioType) && (
                       <View style={styles.inputGroupCardio}>
-                        <Text style={styles.labelCardio}>Pendiente %</Text>
+                        <Text style={styles.labelCardio}>
+                          {t('Pendiente %')}
+                        </Text>
                         <TextInput
                           style={styles.inputCardio}
                           placeholder="0"
@@ -344,7 +349,7 @@ export function CardioInputField({
                   onPress={handleSaveCardio}
                   disabled={!cardioMinutes}
                 >
-                  <Text style={styles.saveButtonText}>Guardar</Text>
+                  <Text style={styles.saveButtonText}>{t('Guardar')}</Text>
                 </Pressable>
                 <Pressable
                   style={({ pressed }) => [
@@ -360,7 +365,7 @@ export function CardioInputField({
                     setStep('type');
                   }}
                 >
-                  <Text style={styles.closeButtonText}>Atrás</Text>
+                  <Text style={styles.closeButtonText}>{t('Atrás')}</Text>
                 </Pressable>
               </>
             )}
@@ -405,7 +410,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
@@ -441,7 +446,7 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   addCardioText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontWeight: '800',
     fontSize: 15,
   },
@@ -501,7 +506,7 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
   },
   customTypeInput: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
@@ -530,7 +535,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   inputCardio: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.sm,
@@ -551,7 +556,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   confirmButton: {
     backgroundColor: theme.colors.primary,
@@ -564,7 +569,7 @@ const styles = StyleSheet.create({
   confirmButtonText: {
     fontSize: 15,
     fontWeight: '700',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   closeButton: {
     backgroundColor: theme.colors.surfaceAlt,

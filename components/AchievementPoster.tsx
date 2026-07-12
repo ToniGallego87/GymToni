@@ -11,8 +11,9 @@ import Svg, {
   TSpan,
   Image as SvgImage,
 } from 'react-native-svg';
-import { WeekAchievements } from '@lib/achievements';
+import { WeekAchievements, SlotColor } from '@lib/achievements';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 // Lienzo vertical 9:16, ideal para historias/stories de redes.
 export const POSTER_WIDTH = 1080;
@@ -23,7 +24,6 @@ export const POSTER_HEIGHT = 1920;
 const GOLD = theme.colors.primary;
 const GOLD_SOFT = theme.colors.primaryLight;
 const GREEN = theme.colors.success;
-const RED = theme.colors.error;
 const PANEL_BORDER = '#2A2F3A';
 const TRACK = '#262B36';
 const TEXT = theme.colors.text;
@@ -54,6 +54,33 @@ function wrapText(text: string, maxChars = 15): string {
   return rest ? `${first}\n${rest}` : first;
 }
 
+// Ancho útil bajo cada donut (media columna del póster menos margen). Los
+// sublabels largos reducen fuente en vez de invadir la otra columna.
+const SUB_LABEL_MAX_WIDTH = 460;
+const SUB_LABEL_CHAR_RATIO = 0.55; // Ancho medio de carácter ≈ 0.55 × fontSize (bold).
+
+// Envuelve en 2 líneas, trunca lo imposible y encoge la fuente para que ninguna
+// línea desborde su columna (nombres de ejercicio largos incluidos).
+function fitSubLabel(text: string): { text: string; font: number } {
+  const lines = wrapText(text, 17)
+    .split('\n')
+    .map((line) =>
+      line.length > 24 ? `${line.slice(0, 23).trimEnd()}…` : line
+    );
+  const longest = Math.max(...lines.map((line) => line.length));
+  const font =
+    longest <= 13
+      ? 50
+      : Math.max(
+          38,
+          Math.min(
+            50,
+            Math.floor(SUB_LABEL_MAX_WIDTH / (SUB_LABEL_CHAR_RATIO * longest))
+          )
+        );
+  return { text: lines.join('\n'), font };
+}
+
 // Primera letra en mayúscula (ignora signos iniciales como «¡»), para que todas
 // las frases blancas sigan el mismo formato que los nombres de ejercicio.
 function capitalizeFirst(text: string): string {
@@ -65,15 +92,12 @@ function capitalizeFirst(text: string): string {
   return text;
 }
 
-function formatWeight(weight: number): string {
-  return Number.isInteger(weight)
-    ? String(weight)
-    : String(Math.round(weight * 10) / 10);
-}
-
-function signedPercent(value: number): string {
-  return `${value >= 0 ? '+' : ''}${Math.round(value)}%`;
-}
+// Colores semánticos de los slots → paleta del tema.
+const SLOT_COLORS: Record<SlotColor, string> = {
+  success: GREEN,
+  gold: GOLD,
+  goldSoft: GOLD_SOFT,
+};
 
 interface DonutProps {
   cx: number;
@@ -218,14 +242,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
     },
     ref
   ) => {
-    const {
-      daysTrained,
-      streakDays,
-      streakIsPerfect,
-      weekImprovementPercent,
-      topImprovement,
-      maxLift,
-    } = achievements;
+    const { daysTrained, slots } = achievements;
 
     // Aparición escalonada: cada elemento tiene su ventana dentro de [0, 1].
     const seg = (start: number, end: number) =>
@@ -260,15 +277,20 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
     const titleX = (POSTER_WIDTH - titleW) / 2;
     const titleY = headerCenterY - titleH / 2;
 
-    // --- Donuts (rejilla 2×2): mejora de fuerza, mayor logro, racha, récord ---
+    // --- Donuts (rejilla 2×2): los 4 mejores logros de la semana ---
     const donutRadius = 148;
     const colLeftX = 288;
     const colRightX = POSTER_WIDTH - 288;
     const rowTopY = 858;
     const rowBottomY = 1430;
 
-    const topName = topImprovement ? topImprovement.exerciseName : '—';
-    const liftName = maxLift ? maxLift.exerciseName : '—';
+    // Posición y animación de cada hueco de la rejilla, en orden de lectura.
+    const slotLayout = [
+      { cx: colLeftX, cy: rowTopY, anim: d1 },
+      { cx: colRightX, cy: rowTopY, anim: d2 },
+      { cx: colLeftX, cy: rowBottomY, anim: d3 },
+      { cx: colRightX, cy: rowBottomY, anim: d4 },
+    ];
 
     return (
       <Svg
@@ -322,7 +344,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
           textAnchor="middle"
           opacity={semanaOp}
         >
-          SEMANA
+          {t('SEMANA')}
         </SvgText>
         <SvgText
           x={POSTER_WIDTH / 2}
@@ -334,7 +356,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
           textAnchor="middle"
           opacity={completadaOp}
         >
-          ¡COMPLETADA!
+          {t('¡COMPLETADA!')}
         </SvgText>
 
         {/* Subtítulo */}
@@ -347,84 +369,37 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
           textAnchor="middle"
           opacity={subtitleOp}
         >
-          {`${routineName ? `${routineName} · ` : ''}${daysTrained} día${
-            daysTrained === 1 ? '' : 's'
-          } entrenados`}
+          {`${routineName ? `${routineName} · ` : ''}${t(
+            daysTrained === 1 ? '{n} día entrenado' : '{n} días entrenados',
+            { n: daysTrained }
+          )}`}
         </SvgText>
 
-        {/* Donuts (2×2): mejora de fuerza, mayor logro, racha, récord de peso */}
-        <Donut
-          cx={colLeftX}
-          cy={rowTopY}
-          radius={donutRadius}
-          fraction={
-            (weekImprovementPercent === null
-              ? 0
-              : Math.abs(weekImprovementPercent) / 20) * d1.fill
-          }
-          color={
-            weekImprovementPercent === null
-              ? MUTED
-              : weekImprovementPercent >= 0
-              ? GREEN
-              : RED
-          }
-          centerMain={
-            weekImprovementPercent === null
-              ? '—'
-              : signedPercent(weekImprovementPercent)
-          }
-          centerMainFont={88}
-          label="MEJORA DE FUERZA"
-          subLabel={wrapText(capitalizeFirst('respecto a la semana anterior'))}
-          opacity={d1.opacity}
-        />
-        <Donut
-          cx={colRightX}
-          cy={rowTopY}
-          radius={donutRadius}
-          fraction={
-            (topImprovement ? topImprovement.percent / 40 : 0) * d2.fill
-          }
-          color={topImprovement ? GREEN : MUTED}
-          centerMain={
-            topImprovement ? signedPercent(topImprovement.percent) : '—'
-          }
-          centerMainFont={88}
-          label="MAYOR LOGRO"
-          subLabel={wrapText(capitalizeFirst(topName))}
-          opacity={d2.opacity}
-        />
-        <Donut
-          cx={colLeftX}
-          cy={rowBottomY}
-          radius={donutRadius}
-          fraction={(streakDays / 30) * d3.fill}
-          color={GOLD}
-          centerMain={String(streakDays)}
-          centerMainFont={108}
-          centerSub="días"
-          label="RACHA"
-          subLabel={wrapText(
-            capitalizeFirst(
-              streakIsPerfect ? '¡sin faltar ni un día!' : 'sin fallar'
-            )
-          )}
-          opacity={d3.opacity}
-        />
-        <Donut
-          cx={colRightX}
-          cy={rowBottomY}
-          radius={donutRadius}
-          fraction={(maxLift ? 1 : 0) * d4.fill}
-          color={maxLift ? GOLD_SOFT : MUTED}
-          centerMain={maxLift ? formatWeight(maxLift.weight) : '—'}
-          centerMainFont={96}
-          centerSub={maxLift ? 'kg' : undefined}
-          label="PESO MÁXIMO"
-          subLabel={maxLift ? wrapText(capitalizeFirst(liftName)) : undefined}
-          opacity={d4.opacity}
-        />
+        {/* Donuts (2×2): logros elegidos por el selector, mejores primero */}
+        {slotLayout.map((position, index) => {
+          const slot = slots[index];
+          if (!slot) return null;
+          const sub = slot.subLabel
+            ? fitSubLabel(capitalizeFirst(slot.subLabel))
+            : undefined;
+          return (
+            <Donut
+              key={slot.id}
+              cx={position.cx}
+              cy={position.cy}
+              radius={donutRadius}
+              fraction={slot.fraction * position.anim.fill}
+              color={SLOT_COLORS[slot.color]}
+              centerMain={slot.centerMain}
+              centerMainFont={slot.centerMainFont}
+              centerSub={slot.centerSub}
+              label={slot.label}
+              subLabel={sub?.text}
+              subLabelFont={sub?.font}
+              opacity={position.anim.opacity}
+            />
+          );
+        })}
 
         {/* Pie */}
         <G opacity={footerOp}>

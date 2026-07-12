@@ -6,7 +6,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Pressable,
   useWindowDimensions,
   Modal,
@@ -15,10 +14,6 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
-import Animated, {
-  FadeInDown,
-  LinearTransition,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { DayCard } from '@components/DayCard';
@@ -29,6 +24,7 @@ import {
   ExerciseLog,
 } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
+import { t, dateLocale } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   getWorkoutStrengthScore,
@@ -40,6 +36,7 @@ import { animateLayout } from '@lib/layoutAnimation';
 import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
+  Collapsible,
   ConfirmModal,
   DayAccentIcon,
   FloatingBackButton,
@@ -63,7 +60,7 @@ interface HomeScreenProps {
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
-  onNavigateData?: () => void;
+  onNavigateProfile?: () => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
   onOpenRoutineDetails?: (routine: WorkoutRoutine) => void;
@@ -378,16 +375,6 @@ function ProgressBarChart({
 // tapaban los días); por eso solo animamos opacidad/transform, que es fiable.
 // El contenedor se mantiene montado siempre (solo se alternan los hijos) para
 // que la animación de salida `exiting` se reproduzca con un padre estable.
-function CollapsibleWeekLogs({
-  isExpanded,
-  children,
-}: {
-  isExpanded: boolean;
-  children: React.ReactNode;
-}) {
-  return <View>{isExpanded ? children : null}</View>;
-}
-
 type TrendKind = 'up' | 'down' | 'neutral';
 
 // Icono de tendencia coherente (sustituye las flechas Unicode ↑↓=).
@@ -416,7 +403,7 @@ export function HomeScreen({
   onNavigateHome,
   onNavigateCardio,
   onNavigateCalendar,
-  onNavigateData,
+  onNavigateProfile,
   onOpenDaySelector,
   onOpenRoutineSelector,
   onOpenRoutineDetails,
@@ -441,8 +428,12 @@ export function HomeScreen({
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<
     Record<number, boolean>
   >({});
+  // undefined = mostrar la rutina activa (por defecto). Solo pasa a un id
+  // concreto cuando el usuario elige ver otra rutina en el selector. Así, tras
+  // la hidratación nunca se muestra por un frame una rutina semilla obsoleta:
+  // se cae siempre a la activa hasta que el usuario elija explícitamente.
   const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(
-    state.activeRoutineId
+    undefined
   );
   const [routineToDeleteId, setRoutineToDeleteId] = useState<
     string | undefined
@@ -458,17 +449,26 @@ export function HomeScreen({
   >(undefined);
   const { width: windowWidth } = useWindowDimensions();
 
-  // Sincronizar con la rutina activa cuando cambia (ej: tras hidratación del storage)
+  // Al cambiar la rutina activa (hidratación, crear/activar otra), volver a
+  // "mostrar la activa" (undefined). No se fija al id activo para evitar el
+  // frame de desincronía que mostraba una rutina antigua al abrir la app.
   useEffect(() => {
-    setViewedRoutineId(state.activeRoutineId);
+    setViewedRoutineId(undefined);
   }, [state.activeRoutineId]);
 
   const activeRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
   );
 
-  // Determine qué rutina se está visualizando (puede ser diferente a la activa)
-  const displayedRoutineId = viewedRoutineId || state.activeRoutineId;
+  // Determine qué rutina se está visualizando (puede ser diferente a la activa).
+  // Tras la hidratación, `viewedRoutineId` puede apuntar un instante a una rutina
+  // semilla que ya no existe (el efecto de sync corre un render después); en ese
+  // caso se cae a la activa para no mostrar por un frame una rutina equivocada.
+  const displayedRoutineId =
+    viewedRoutineId &&
+    state.routines.some((routine) => routine.id === viewedRoutineId)
+      ? viewedRoutineId
+      : state.activeRoutineId;
   const displayedRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === displayedRoutineId
   );
@@ -513,8 +513,13 @@ export function HomeScreen({
     bottom: floatingNavBottom,
     scrollBottomPadding: floatingNavScrollBottomPadding,
   } = getFloatingPrimaryNavMetrics(insets.bottom);
-  const selectorNavBottom = floatingNavBottom;
-  const selectorScrollBottomPadding = floatingNavScrollBottomPadding;
+  // El selector de rutinas no es una pestaña de navegación: lleva botón Volver
+  // abajo en lugar de la barra, así que su padding se calcula con la altura del
+  // botón (no con la de la barra flotante).
+  const selectorBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const selectorScrollBottomPadding =
+    selectorBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
   const homeScrollBottomPadding = floatingNavScrollBottomPadding;
   const appVersion = Constants.expoConfig?.version ?? '';
 
@@ -555,11 +560,17 @@ export function HomeScreen({
 
     if (!todayDay || todayDay.exercises.length === 0) return 'completed';
 
+    // Un ejercicio está completo cuando alcanza su número de series objetivo
+    // (mismo criterio que `isTargetCompleted` en WorkoutLogScreen), no con que
+    // tenga solo una serie metida: si falta una serie del objetivo, el
+    // entrenamiento sigue en progreso.
     const allFilled = todayDay.exercises.every((ex) => {
       const exLog = todayLog.exercises.find(
         (e: ExerciseLog) => e.exerciseId === ex.id
       );
-      return exLog && exLog.parsedSets && exLog.parsedSets.length > 0;
+      const setsCount = exLog?.parsedSets?.length ?? 0;
+      const targetSets = ex.targetSets && ex.targetSets > 0 ? ex.targetSets : 1;
+      return setsCount >= targetSets;
     });
     return allFilled ? 'completed' : 'in-progress';
   }, [displayedRoutineLogs, state.routines]);
@@ -790,6 +801,26 @@ export function HomeScreen({
     );
   }, [groupedByBlock, activeDays]);
 
+  // Logs de todas las semanas anteriores a un bloque (histórico para récords) y
+  // entrenos totales (días distintos entrenados) hasta un bloque inclusive.
+  const logsBeforeBlock = (block: number): WorkoutLog[] =>
+    Object.keys(groupedByBlock)
+      .map(Number)
+      .filter((b) => b < block)
+      .flatMap((b) => groupedByBlock[b] || []);
+  const workoutsUpToBlock = (block: number): number =>
+    Object.keys(groupedByBlock)
+      .map(Number)
+      .filter((b) => b <= block)
+      .reduce(
+        (sum, b) =>
+          sum +
+          new Set(
+            (groupedByBlock[b] || []).map((log) => log.dayId).filter(Boolean)
+          ).size,
+        0
+      );
+
   const weekAchievements = useMemo<WeekAchievements | null>(() => {
     if (!isCurrentWeekCompleted) return null;
     return computeWeekAchievements({
@@ -798,6 +829,8 @@ export function HomeScreen({
       weekNumber: currentWeekBlock,
       streakDays,
       streakIsPerfect,
+      historyLogs: logsBeforeBlock(currentWeekBlock),
+      totalWorkouts: workoutsUpToBlock(currentWeekBlock),
       progressSeries: weeklyProgress.map((point) => ({
         week: point.week,
         improvement: point.improvement,
@@ -853,6 +886,8 @@ export function HomeScreen({
       weekNumber: block,
       streakDays: streakDaysForBlock,
       streakIsPerfect: streakIsPerfectForBlock,
+      historyLogs: logsBeforeBlock(block),
+      totalWorkouts: workoutsUpToBlock(block),
       progressSeries: weeklyProgress
         .filter((point) => point.week <= block)
         .map((point) => ({ week: point.week, improvement: point.improvement })),
@@ -888,41 +923,45 @@ export function HomeScreen({
     subtitle?: string;
   } => {
     if (hasNoRoutines) {
-      return { variant: 'add', icon: 'plus-thick', title: 'Añade una rutina' };
+      return {
+        variant: 'add',
+        icon: 'plus-thick',
+        title: t('Añade una rutina'),
+      };
     }
     if (isRoutineOld && !isDisplayedRoutineActive) {
       return {
         variant: 'closed',
         icon: 'lock-outline',
-        title: 'Rutina Cerrada',
+        title: t('Rutina Cerrada'),
       };
     }
     if (isCurrentWeekCompletedToday) {
       return {
         variant: 'week-completed',
         icon: 'trophy-variant',
-        title: '¡Semana completada!',
-        subtitle: 'Pulsa para compartir resultados',
+        title: t('¡Semana completada!'),
+        subtitle: t('Pulsa para compartir resultados'),
       };
     }
     if (todayWorkoutStatus === 'in-progress') {
       return {
         variant: 'start',
         icon: 'weight-lifter',
-        title: 'Continuar entrenamiento',
+        title: t('Continúa tu entrenamiento'),
       };
     }
     if (todayWorkoutStatus === 'completed') {
       return {
         variant: 'completed',
         icon: 'check-bold',
-        title: 'Entrenamiento completado',
+        title: t('Entrenamiento completado'),
       };
     }
     return {
       variant: 'start',
       icon: 'gesture-tap',
-      title: 'Empezar entrenamiento',
+      title: t('Empezar entrenamiento'),
       titleIcon: 'weight-lifter',
     };
   };
@@ -970,18 +1009,32 @@ export function HomeScreen({
 
   const getExecutionDateLabel = (log: WorkoutLog): string => {
     if (log.date) {
-      return new Date(`${log.date}T00:00:00`).toLocaleDateString('es-ES');
+      return new Date(`${log.date}T00:00:00`).toLocaleDateString(dateLocale);
     }
 
-    return new Date(log.createdAt).toLocaleDateString('es-ES');
+    return new Date(log.createdAt).toLocaleDateString(dateLocale);
   };
 
   const isLogFromToday = (log: WorkoutLog): boolean => {
     const todayKey = new Date().toISOString().split('T')[0];
     return log.date
       ? log.date === todayKey
-      : getExecutionDateLabel(log) === new Date().toLocaleDateString('es-ES');
+      : getExecutionDateLabel(log) ===
+          new Date().toLocaleDateString(dateLocale);
   };
+
+  // El modal de opciones ("¿Qué deseas hacer?") se abre tanto al pulsar el
+  // registro de hoy como al mantener pulsado cualquier otro día pasado. Solo
+  // en el primer caso, y si aún quedan ejercicios sin rellenar, el botón
+  // "Editar" pasa a "Continuar" (misma acción: abre el registro para seguir
+  // metiendo series).
+  const optionsLog = displayedRoutineLogs.find(
+    (l) => l.id === logWithOptionsId
+  );
+  const isTodayLogInProgress =
+    !!optionsLog &&
+    isLogFromToday(optionsLog) &&
+    todayWorkoutStatus === 'in-progress';
 
   const handleDeleteLog = () => {
     if (!logToDeleteId) return;
@@ -1005,7 +1058,11 @@ export function HomeScreen({
 
     return (
       <View style={styles.container}>
-        <StatusBar style="light" translucent backgroundColor="transparent" />
+        <StatusBar
+          style={theme.statusBarStyle}
+          translucent
+          backgroundColor="transparent"
+        />
 
         <StretchScrollView
           style={styles.scroll}
@@ -1047,7 +1104,9 @@ export function HomeScreen({
                 onCreateRoutine();
               }}
             >
-              <Text style={styles.newRoutineCardText}>+ Nueva rutina</Text>
+              <Text style={styles.newRoutineCardText}>
+                {t('+ Nueva rutina')}
+              </Text>
             </TouchableOpacity>
           )}
 
@@ -1057,43 +1116,38 @@ export function HomeScreen({
               onPress={() => onOpenRoutineDetails(selectedRoutineInSelector)}
             >
               <Text style={styles.selectorDetailsButtonText}>
-                Consultar detalles de esta rutina
+                {t('Consultar detalles de esta rutina')}
               </Text>
             </TouchableOpacity>
           )}
         </StretchScrollView>
 
         <GlassTopBar
-          title="Rutinas"
+          title={t('Rutinas')}
           icon="book-open-variant"
-          subtitle="Consulta la que desees o crea una nueva"
+          subtitle={t('Consulta la que desees o crea una nueva')}
           topInset={insets.top}
         />
 
-        <FloatingPrimaryNav
-          bottom={selectorNavBottom}
-          activeTab="routines"
-          showCardio={showCardioTab}
-          onPressHome={onNavigateHome || handleCloseRoutineSelector}
-          onPressCardio={onNavigateCardio}
-          onPressCalendar={onNavigateCalendar}
-          onPressData={onNavigateData}
+        <FloatingBackButton
+          onPress={handleCloseRoutineSelector}
+          bottom={selectorBackBottom}
         />
 
         <ConfirmModal
           visible={!!routineToDeleteId}
-          title="¿Eliminar rutina?"
-          message="Esta acción no se puede deshacer. ¿Estás seguro?"
-          confirmLabel="Eliminar"
+          title={t('¿Eliminar rutina?')}
+          message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
+          confirmLabel={t('Eliminar')}
           onConfirm={handleDeleteRoutine}
           onCancel={() => setRoutineToDeleteId(undefined)}
         />
 
         <ConfirmModal
           visible={!!logToDeleteId}
-          title="¿Eliminar entrenamiento?"
-          message="Esta acción no se puede deshacer. ¿Estás seguro?"
-          confirmLabel="Eliminar"
+          title={t('¿Eliminar entrenamiento?')}
+          message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
+          confirmLabel={t('Eliminar')}
           onConfirm={handleDeleteLog}
           onCancel={() => setLogToDeleteId(undefined)}
         />
@@ -1103,7 +1157,11 @@ export function HomeScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -1130,7 +1188,7 @@ export function HomeScreen({
           <View style={styles.streakChip}>
             <Text style={styles.streakEmoji}>🔥</Text>
             <Text style={styles.streakText}>
-              {completedStreak} semanas seguidas
+              {t('{n} semanas seguidas', { n: completedStreak })}
             </Text>
           </View>
         )}
@@ -1232,12 +1290,13 @@ export function HomeScreen({
                     const dayOptions = [
                       {
                         id: undefined as string | undefined,
-                        label: 'Semana completa',
+                        label: t('Semana completa'),
                       },
                       ...activeDays.map((day: WorkoutDay, index: number) => ({
                         id: day.id,
                         label:
-                          getDisplayDayName(day.name) || `Día ${index + 1}`,
+                          getDisplayDayName(day.name) ||
+                          `${t('Día')} ${index + 1}`,
                       })),
                     ];
                     const currentIndex = Math.max(
@@ -1282,8 +1341,11 @@ export function HomeScreen({
           })()}
 
         {displayedRoutineLogs.length > 0 && (
-          <View style={[styles.weeksSection, { flex: 1 }]}>
-            <ScrollView nestedScrollEnabled style={{ flex: 1 }}>
+          // Sin ScrollView anidado: recortaba las sombras de las tarjetas de
+          // semana (bordes duros) e interfería con el colapsable. Las semanas
+          // scrollean con la vista principal, como en Cardio.
+          <View style={styles.weeksSection}>
+            <View>
               {blocks.map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
                 const weekLogsFull = groupedByBlock[block];
@@ -1308,10 +1370,11 @@ export function HomeScreen({
                   : theme.colors.white;
 
                 return (
-                  <Animated.View
-                    key={block}
-                    layout={LinearTransition.duration(250)}
-                  >
+                  // Sin `Animated.View layout`: un padre con animación de layout
+                  // (transform) rompía la sombra de elevación de las tarjetas
+                  // hijas en Android (aparecía cortada/sin redondear). El colapso
+                  // lo anima <Collapsible/> por su propia altura.
+                  <View key={block}>
                     <Pressable
                       style={[
                         styles.weekHeaderButton,
@@ -1339,7 +1402,7 @@ export function HomeScreen({
 
                       <View style={styles.weekTitleRow}>
                         <Text style={[styles.weekTitle, { color: weekAccent }]}>
-                          Semana {block}
+                          {t('Semana')} {block}
                         </Text>
                         {!!weekImprovement && (
                           <View style={styles.deltaRow}>
@@ -1379,7 +1442,7 @@ export function HomeScreen({
                       </View>
                     </Pressable>
 
-                    <CollapsibleWeekLogs isExpanded={isExpanded}>
+                    <Collapsible open={isExpanded}>
                       {weekLogs.map((log: WorkoutLog, logIndex: number) => {
                         const day = getDay(log.dayId);
                         const improvement = getLogImprovement(log);
@@ -1390,12 +1453,7 @@ export function HomeScreen({
                         if (!day) return null;
 
                         return (
-                          <Animated.View
-                            key={log.id}
-                            entering={FadeInDown.duration(220).delay(
-                              logIndex * 45
-                            )}
-                          >
+                          <View key={log.id}>
                             <Pressable
                               style={({ pressed }: { pressed: boolean }) => [
                                 styles.historyLogCard,
@@ -1465,14 +1523,14 @@ export function HomeScreen({
                                 </Text>
                               </View>
                             </Pressable>
-                          </Animated.View>
+                          </View>
                         );
                       })}
-                    </CollapsibleWeekLogs>
-                  </Animated.View>
+                    </Collapsible>
+                  </View>
                 );
               })}
-            </ScrollView>
+            </View>
           </View>
         )}
       </StretchScrollView>
@@ -1488,9 +1546,11 @@ export function HomeScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>¿Qué deseas hacer?</Text>
+            <Text style={styles.modalTitle}>{t('¿Qué deseas hacer?')}</Text>
             <Text style={styles.modalMessage}>
-              Puedes editar o eliminar el registro
+              {isTodayLogInProgress
+                ? t('Puedes continuar o eliminar el registro')
+                : t('Puedes editar o eliminar el registro')}
             </Text>
             <View style={styles.modalButtonsContainer}>
               <View style={styles.modalButtons}>
@@ -1509,11 +1569,15 @@ export function HomeScreen({
                 >
                   <View style={styles.modalActionRow}>
                     <MaterialCommunityIcons
-                      name="pencil-outline"
+                      name={
+                        isTodayLogInProgress ? 'play-outline' : 'pencil-outline'
+                      }
                       size={16}
-                      color={theme.colors.darkGray}
+                      color={theme.colors.onGold}
                     />
-                    <Text style={styles.modalButtonEditText}>Editar</Text>
+                    <Text style={styles.modalButtonEditText}>
+                      {isTodayLogInProgress ? t('Continuar') : t('Editar')}
+                    </Text>
                   </View>
                 </TouchableOpacity>
                 <TouchableOpacity
@@ -1528,9 +1592,11 @@ export function HomeScreen({
                     <MaterialCommunityIcons
                       name="delete-outline"
                       size={16}
-                      color={theme.colors.darkGray}
+                      color={theme.colors.onGold}
                     />
-                    <Text style={styles.modalButtonDeleteText}>Eliminar</Text>
+                    <Text style={styles.modalButtonDeleteText}>
+                      {t('Eliminar')}
+                    </Text>
                   </View>
                 </TouchableOpacity>
               </View>
@@ -1550,7 +1616,9 @@ export function HomeScreen({
                     size={16}
                     color={theme.colors.primary}
                   />
-                  <Text style={styles.modalButtonCancelText}>Volver</Text>
+                  <Text style={styles.modalButtonCancelText}>
+                    {t('Volver')}
+                  </Text>
                 </View>
               </TouchableOpacity>
             </View>
@@ -1560,9 +1628,9 @@ export function HomeScreen({
 
       <ConfirmModal
         visible={!!logToDeleteId}
-        title="¿Eliminar entrenamiento?"
-        message="Esta acción no se puede deshacer. ¿Estás seguro?"
-        confirmLabel="Eliminar"
+        title={t('¿Eliminar entrenamiento?')}
+        message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
+        confirmLabel={t('Eliminar')}
         onConfirm={handleDeleteLog}
         onCancel={() => setLogToDeleteId(undefined)}
       />
@@ -1574,28 +1642,25 @@ export function HomeScreen({
           showCardio={showCardioTab}
           onPressHome={onNavigateHome}
           onPressCardio={onNavigateCardio}
-          onPressRoutines={() => {
-            if (onOpenRoutineSelector) {
-              onOpenRoutineSelector();
-            } else {
-              setShowRoutineSelector(true);
-            }
-          }}
           onPressCalendar={onNavigateCalendar}
-          onPressData={onNavigateData}
+          onPressProfile={onNavigateProfile}
         />
       )}
 
       <GlassTopBar
-        title="Inicio"
+        title={t('Inicio')}
         titleElement={
           <Image
-            source={require('../../assets/title.png')}
+            source={
+              theme.mode === 'light'
+                ? require('../../assets/title-day.png')
+                : require('../../assets/title.png')
+            }
             style={styles.titleImage}
             resizeMode="contain"
           />
         }
-        subtitle={`Versión ${appVersion}`}
+        subtitle={`${t('Versión')} ${appVersion}`}
         topInset={insets.top}
       />
     </View>
@@ -1629,7 +1694,7 @@ function RoutineCard({
         <Text style={styles.routineCardName}>{routine.name}</Text>
         <Text style={styles.routineCardDesc}>{routine.description}</Text>
         <Text style={styles.routineCardDays}>
-          {routine.days.length} días de entrenamiento
+          {t('{n} días de entrenamiento', { n: routine.days.length })}
         </Text>
       </View>
       {isActive && (
@@ -1639,7 +1704,7 @@ function RoutineCard({
             size={13}
             color={theme.colors.primaryLight}
           />
-          <Text style={styles.routineCardActiveText}>Activa</Text>
+          <Text style={styles.routineCardActiveText}>{t('Activa')}</Text>
         </View>
       )}
     </TouchableOpacity>
@@ -1666,7 +1731,7 @@ const styles = StyleSheet.create({
     marginHorizontal: theme.spacing.md,
     marginTop: theme.spacing.xs,
     marginBottom: 0,
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
     borderWidth: 2,
     borderColor: theme.colors.primary,
@@ -1674,6 +1739,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 0,
     overflow: 'hidden',
     alignItems: 'center',
+    ...theme.shadow.card,
   },
   streakChip: {
     flexDirection: 'row',
@@ -1857,13 +1923,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 52,
     borderRadius: theme.borderRadius.sm,
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.surface,
     borderLeftWidth: 5,
     borderColor: theme.colors.primary,
     overflow: 'hidden',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    ...theme.shadow.soft,
   },
   weekTitleRow: {
     flexDirection: 'row',
@@ -2136,7 +2203,7 @@ const styles = StyleSheet.create({
   modalButtonDeleteText: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
   },
   modalButtonEdit: {
     flex: 1,
@@ -2149,7 +2216,7 @@ const styles = StyleSheet.create({
   modalButtonEditText: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
   },
   modalActionRow: {
     flexDirection: 'row',

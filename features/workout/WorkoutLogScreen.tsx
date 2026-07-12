@@ -47,6 +47,7 @@ import {
   WorkoutRoutine,
 } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
+import { t } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   getTotalSetsStrengthScore,
@@ -97,9 +98,9 @@ function SaveWorkoutButton({ onPress }: { onPress: () => void }) {
         <MaterialCommunityIcons
           name="content-save-check"
           size={22}
-          color={theme.colors.darkGray}
+          color={theme.colors.onGold}
         />
-        <Text style={styles.saveText}>Guardar</Text>
+        <Text style={styles.saveText}>{t('Guardar')}</Text>
       </LinearGradient>
     </AnimatedPressable>
   );
@@ -256,8 +257,8 @@ export function WorkoutLogScreen({
 
       const notificationId = await Notifications.scheduleNotificationAsync({
         content: {
-          title: 'Descanso finalizado',
-          body: 'Es hora de tu siguiente serie',
+          title: t('Descanso finalizado'),
+          body: t('Es hora de tu siguiente serie'),
           icon: 'notification_icon',
           color: theme.colors.primary,
           sound: 'default',
@@ -624,7 +625,7 @@ export function WorkoutLogScreen({
       }, 1500);
     } catch (error) {
       setToast({
-        message: 'Error al guardar.',
+        message: t('Error al guardar.'),
         type: 'error',
       });
     }
@@ -675,7 +676,11 @@ export function WorkoutLogScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scrollView}
@@ -712,7 +717,7 @@ export function WorkoutLogScreen({
                 onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
                 onInvalidAdd={() =>
                   setToast({
-                    message: 'Rellena primero los datos',
+                    message: t('Rellena primero los datos'),
                     type: 'error',
                     duration: 2000,
                   })
@@ -746,10 +751,10 @@ export function WorkoutLogScreen({
                       <MaterialCommunityIcons
                         name="timer-sand"
                         size={16}
-                        color={theme.colors.darkGray}
+                        color={theme.colors.onGold}
                       />
                       <Text style={styles.timerLabel}>
-                        Tiempo hasta la siguiente serie
+                        {t('Tiempo hasta la siguiente serie')}
                       </Text>
                     </View>
                     <Text style={styles.timerText}>
@@ -775,7 +780,9 @@ export function WorkoutLogScreen({
           {isWorkoutSaved ? (
             <View style={[styles.saveMessageContainer]}>
               <MaterialCommunityIcons name="check-circle" size={24} />
-              <Text style={styles.saveMessageText}>Entrenamiento guardado</Text>
+              <Text style={styles.saveMessageText}>
+                {t('Entrenamiento guardado')}
+              </Text>
             </View>
           ) : (
             <SaveWorkoutButton onPress={handleSaveWorkout} />
@@ -795,7 +802,7 @@ export function WorkoutLogScreen({
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
         }
-        subtitle={`Rellena los ejercicios - ${getSubtitleDate()}`}
+        subtitle={`${t('Rellena los ejercicios')} - ${getSubtitleDate()}`}
         topInset={insets.top}
       />
 
@@ -819,10 +826,12 @@ export function WorkoutLogScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Notas del ejercicio</Text>
+            <Text style={styles.modalTitle}>{t('Notas del ejercicio')}</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="Añade una nota (ej: muy cansado, fallo en última serie)"
+              placeholder={t(
+                'Añade una nota (ej: muy cansado, fallo en última serie)'
+              )}
               value={notesText}
               onChangeText={setNotesText}
               multiline
@@ -830,24 +839,27 @@ export function WorkoutLogScreen({
             />
             <View style={styles.modalButtons}>
               <Button
-                title="Guardar"
+                title={t('Guardar')}
                 onPress={handleSaveNotes}
                 variant="primary"
                 size="medium"
+                style={styles.modalButton}
               />
               {showNotesModal && exerciseNotes[showNotesModal] ? (
                 <Button
-                  title="Borrar"
+                  title={t('Borrar')}
                   onPress={handleDeleteNotes}
                   variant="danger"
                   size="medium"
+                  style={styles.modalButton}
                 />
               ) : null}
               <Button
-                title="Cancelar"
+                title={t('Cancelar')}
                 onPress={() => setShowNotesModal(null)}
                 variant="secondary"
                 size="medium"
+                style={styles.modalButton}
               />
             </View>
           </View>
@@ -894,11 +906,15 @@ const styles = StyleSheet.create({
     height: '55%',
   },
   saveText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontFamily: theme.fonts.display,
     fontSize: 22,
     letterSpacing: 0.5,
-    lineHeight: 26,
+    // Anton pega los glifos al borde superior de su caja de línea; sin padding
+    // el texto queda descentrado respecto al icono (mismo arreglo que createText
+    // de Nueva rutina).
+    lineHeight: 30,
+    includeFontPadding: true,
   },
   saveMessageContainer: {
     flexDirection: 'row',
@@ -913,7 +929,7 @@ const styles = StyleSheet.create({
   saveMessageText: {
     fontSize: 16,
     fontWeight: '700',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   modalOverlay: {
     flex: 1,
@@ -942,13 +958,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     minHeight: 88,
     color: theme.colors.text,
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     marginBottom: 16,
     lineHeight: 22,
   },
   modalButtons: {
     flexDirection: 'row',
     gap: 8,
+  },
+  // Botones del modal: reparto equitativo y sin la sombra fuerte del Button
+  // (en un bottom-sheet la sombra grande dejaba una mancha oscura debajo).
+  modalButton: {
+    flex: 1,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   timerContainer: {
     marginVertical: 16,
@@ -971,7 +994,7 @@ const styles = StyleSheet.create({
   timerText: {
     fontSize: 48,
     fontWeight: '800',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
   },
   timerLabelRow: {
     flexDirection: 'row',
@@ -981,12 +1004,12 @@ const styles = StyleSheet.create({
   timerLabel: {
     fontSize: 18,
     fontWeight: '600',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
   },
   timerHint: {
     fontSize: 13,
     fontStyle: 'italic',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     marginTop: 12,
     opacity: 0.8,
   },

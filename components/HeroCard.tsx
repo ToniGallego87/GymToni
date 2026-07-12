@@ -92,7 +92,7 @@ export function HeroCard({
             <MaterialCommunityIcons
               name={titleIcon as any}
               size={26}
-              color={theme.colors.darkGray}
+              color={theme.colors.onGold}
             />
           )}
         </View>
@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   },
   icon: {
     fontSize: 44,
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     textAlign: 'center',
     textAlignVertical: 'center',
   },
@@ -153,7 +153,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   title: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontFamily: theme.fonts.display,
     fontSize: 26,
     lineHeight: 36,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     marginTop: 8,
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontFamily: theme.fonts.display,
     fontSize: 17,
     lineHeight: 24,

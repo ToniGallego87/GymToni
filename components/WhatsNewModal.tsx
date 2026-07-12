@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import type { ChangelogEntry } from '@data/changelog';
 
 interface WhatsNewModalProps {
@@ -30,7 +31,7 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
             />
           </View>
           <Text style={styles.title}>
-            Novedades de la versión {entry.version}
+            {t('Novedades de la versión')} {entry.version}
           </Text>
           <View style={styles.list}>
             {entry.items.map((item, index) => (
@@ -47,7 +48,7 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
             ]}
             onPress={onClose}
           >
-            <Text style={styles.closeButtonText}>Entendido</Text>
+            <Text style={styles.closeButtonText}>{t('Entendido')}</Text>
           </Pressable>
         </View>
       </View>
@@ -121,7 +122,7 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   closeButtonText: {
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     fontSize: 15,
     fontWeight: '800',
   },

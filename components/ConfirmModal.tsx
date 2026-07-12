@@ -2,6 +2,7 @@ import React from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { Button } from './Button';
 
 interface ConfirmModalProps {
@@ -32,7 +33,7 @@ export function ConfirmModal({
   icon = 'alert-outline',
   confirmLabel,
   confirmVariant = 'danger',
-  cancelLabel = 'Cancelar',
+  cancelLabel = t('Cancelar'),
   onConfirm,
   onCancel,
   busy = false,

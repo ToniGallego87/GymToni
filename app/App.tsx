@@ -22,8 +22,10 @@ import {
   DetailScreen,
   HomeScreen,
   NewRoutineScreen,
+  ProfileScreen,
   QRScannerScreen,
   RoutineDetailScreen,
+  SettingsScreen,
   WeekAchievementScreen,
   WorkoutProvider,
   WorkoutLogScreen,
@@ -47,6 +49,7 @@ import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import {
   WorkoutAppData,
@@ -68,6 +71,8 @@ type Screen =
       origin: 'home' | 'calendar' | 'cardio';
     }
   | { type: 'calendar' }
+  | { type: 'profile' }
+  | { type: 'settings' }
   | { type: 'data' }
   | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
   | { type: 'routine-details'; routine: WorkoutRoutine }
@@ -360,7 +365,7 @@ function AppContent() {
     };
 
     if (!Array.isArray(payload?.routines) || !Array.isArray(payload?.logs)) {
-      throw new Error('El fichero no tiene el formato esperado');
+      throw new Error(t('El fichero no tiene el formato esperado'));
     }
 
     const routinesValid = payload.routines.every(
@@ -372,7 +377,7 @@ function AppContent() {
     );
 
     if (!routinesValid || !logsValid) {
-      throw new Error('El fichero contiene datos con un formato no válido');
+      throw new Error(t('El fichero contiene datos con un formato no válido'));
     }
 
     const activeRoutineId =
@@ -421,7 +426,7 @@ function AppContent() {
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateData={() => setScreen({ type: 'data' })}
+          onNavigateProfile={() => setScreen({ type: 'profile' })}
           onOpenDaySelector={() => {
             if (activeRoutine?.days.length) {
               setScreen({ type: 'day-selector' });
@@ -437,7 +442,7 @@ function AppContent() {
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
           initialShowRoutineSelector={true}
-          onCloseRoutineSelector={() => setScreen({ type: 'home' })}
+          onCloseRoutineSelector={() => setScreen({ type: 'profile' })}
         />
       )}
 
@@ -451,7 +456,7 @@ function AppContent() {
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateData={() => setScreen({ type: 'data' })}
+          onNavigateProfile={() => setScreen({ type: 'profile' })}
           onOpenDaySelector={() => {
             if (activeRoutine?.days.length) {
               setScreen({ type: 'day-selector' });
@@ -480,9 +485,8 @@ function AppContent() {
           }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateData={() => setScreen({ type: 'data' })}
+          onNavigateProfile={() => setScreen({ type: 'profile' })}
         />
       )}
 
@@ -544,10 +548,25 @@ function AppContent() {
           }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateData={() => setScreen({ type: 'data' })}
+          onNavigateProfile={() => setScreen({ type: 'profile' })}
         />
+      )}
+
+      {screen.type === 'profile' && (
+        <ProfileScreen
+          onOpenRoutines={() => setScreen({ type: 'routine-selector' })}
+          onOpenData={() => setScreen({ type: 'data' })}
+          onOpenSettings={() => setScreen({ type: 'settings' })}
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateProfile={() => setScreen({ type: 'profile' })}
+        />
+      )}
+
+      {screen.type === 'settings' && (
+        <SettingsScreen onBack={() => setScreen({ type: 'profile' })} />
       )}
 
       {screen.type === 'data' && (
@@ -555,11 +574,7 @@ function AppContent() {
           onImportData={handleImportData}
           onExportData={handleExportData}
           onClearData={handleClearData}
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateRoutines={() => setScreen({ type: 'routine-selector' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateData={() => setScreen({ type: 'data' })}
+          onBack={() => setScreen({ type: 'profile' })}
         />
       )}
 
@@ -625,7 +640,9 @@ export default function App() {
     <GestureHandlerRootView style={styles.container}>
       <WorkoutProvider>
         <StatusBar
-          barStyle="light-content"
+          barStyle={
+            theme.statusBarStyle === 'light' ? 'light-content' : 'dark-content'
+          }
           backgroundColor="transparent"
           translucent
         />

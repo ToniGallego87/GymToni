@@ -18,10 +18,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
+import { t, dateLocale } from '@lib/i18n';
 import {
   buildCardioWeeks,
   buildCardioMonths,
   formatMergedResults,
+  fmtNum,
   CardioMonth,
   WeightSegment,
 } from '@lib/cardio';
@@ -39,9 +41,8 @@ import { WorkoutDay, WorkoutLog } from '../../types';
 interface CardioScreenProps {
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
-  onNavigateRoutines?: () => void;
   onNavigateCalendar?: () => void;
-  onNavigateData?: () => void;
+  onNavigateProfile?: () => void;
   // Abre la vista de resultados (DetailScreen) del día de cardio pulsado.
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
 }
@@ -52,7 +53,7 @@ const WEEKS_PAGE = 5;
 // "29 jun" a partir de YYYY-MM-DD.
 const dayMonth = (dateStr: string) =>
   new Date(`${dateStr}T00:00:00`)
-    .toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+    .toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })
     .replace('.', '');
 
 // Icono de la disciplina; distinto si hay pendiente (cuesta arriba).
@@ -62,9 +63,14 @@ function disciplineIcon(
 ): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
   const t = type.toLowerCase();
   if (hasIncline) return 'slope-uphill';
-  if (t.includes('andar')) return 'walk';
-  if (t.includes('bici')) return 'bike';
-  if (t.includes('elíptica') || t.includes('eliptica')) return 'human-handsup';
+  if (t.includes('andar') || t.includes('walk')) return 'walk';
+  if (t.includes('bici') || t.includes('bike')) return 'bike';
+  if (
+    t.includes('elíptica') ||
+    t.includes('eliptica') ||
+    t.includes('elliptical')
+  )
+    return 'human-handsup';
   if (t.includes('correr') || t.includes('cinta') || t.includes('run'))
     return 'run-fast';
   return 'run';
@@ -73,7 +79,7 @@ function disciplineIcon(
 // "jul" a partir de un mes.
 const monthLabel = (m: CardioMonth) =>
   new Date(m.year, m.month, 1)
-    .toLocaleDateString('es-ES', { month: 'short' })
+    .toLocaleDateString(dateLocale, { month: 'short' })
     .replace('.', '');
 
 type ChartMetric = {
@@ -96,7 +102,7 @@ const CHART_METRICS: ChartMetric[] = [
   },
   {
     id: 'min',
-    label: 'Minutos',
+    label: t('Minutos'),
     unit: 'min',
     icon: 'clock-outline',
     get: (m) => m.totalMinutes,
@@ -104,7 +110,7 @@ const CHART_METRICS: ChartMetric[] = [
   },
   {
     id: 'km',
-    label: 'Distancia',
+    label: t('Distancia'),
     unit: 'km',
     icon: 'map-marker-distance',
     get: (m) => m.totalKm,
@@ -112,7 +118,7 @@ const CHART_METRICS: ChartMetric[] = [
   },
   {
     id: 'speed',
-    label: 'Velocidad',
+    label: t('Velocidad'),
     unit: 'km/h',
     icon: 'speedometer',
     get: (m) => m.avgSpeed,
@@ -248,9 +254,8 @@ function CardioMetricChart({
 export function CardioScreen({
   onNavigateHome,
   onNavigateCardio,
-  onNavigateRoutines,
   onNavigateCalendar,
-  onNavigateData,
+  onNavigateProfile,
   onSelectLog,
 }: CardioScreenProps) {
   const insets = useSafeAreaInsets();
@@ -350,7 +355,19 @@ export function CardioScreen({
 
   const todayKey = new Date().toISOString().split('T')[0];
 
-  // Última semana YA TERMINADA (no la en curso) vs la media de las semanas con cardio.
+  // Datos del hero: la semana EN CURSO como protagonista, con tres referencias
+  // fijas para leerla de un vistazo (semana pasada, media y mejor semana).
+  const currentWeek = useMemo(
+    () => weeks.find((w) => w.isCurrent) ?? null,
+    [weeks]
+  );
+  const currentWeekKm = useMemo(
+    () =>
+      currentWeek
+        ? currentWeek.sessions.reduce((s, session) => s + session.totalKm, 0)
+        : 0,
+    [currentWeek]
+  );
   const completedWeeks = useMemo(
     () => weeks.filter((w) => !w.isCurrent),
     [weeks]
@@ -358,7 +375,6 @@ export function CardioScreen({
   const lastWeek = completedWeeks.length
     ? completedWeeks[completedWeeks.length - 1]
     : null;
-  const lastWeekKcal = lastWeek?.totalKcal ?? 0;
   const avgWeekKcal = useMemo(
     () =>
       completedWeeks.length
@@ -367,20 +383,10 @@ export function CardioScreen({
         : null,
     [completedWeeks]
   );
-  const weekVsAvgPct =
-    completedWeeks.length >= 2 && avgWeekKcal && avgWeekKcal > 0 && lastWeek
-      ? ((lastWeekKcal - avgWeekKcal) / avgWeekKcal) * 100
-      : null;
-
-  // Totales acumulados (all-time) para el hero: no redundan con el día/semana.
-  const totalSessionsAll = useMemo(
-    () => weeks.reduce((s, w) => s + w.sessionCount, 0),
+  const bestWeekKcal = useMemo(
+    () => (weeks.length ? Math.max(...weeks.map((w) => w.totalKcal)) : null),
     [weeks]
   );
-  const totalHoursAll = useMemo(() => {
-    const h = weeks.reduce((s, w) => s + w.totalMinutes, 0) / 60;
-    return Math.round(h * 10) / 10;
-  }, [weeks]);
 
   // La gráfica es mensual; la métrica se elige con el selector.
   const kcalMonths = months.filter((m) => m.totalKcal > 0);
@@ -407,7 +413,11 @@ export function CardioScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -438,62 +448,57 @@ export function CardioScreen({
           />
           {!hasCardio ? (
             <Text style={styles.heroEmptyText}>
-              Aún no hay cardio. Añádelo dentro de un día de fuerza.
-            </Text>
-          ) : lastWeek == null ? (
-            <Text style={styles.heroEmptyText}>
-              Aún no hay una semana completa. Sigue registrando cardio.
+              {t('Aún no hay cardio. Añádelo dentro de un día de fuerza.')}
             </Text>
           ) : (
             <View>
-              <Text style={styles.heroKicker}>
-                {weekVsAvgPct == null
-                  ? 'Última semana'
-                  : 'Última semana vs tu media'}
-              </Text>
-              <View style={styles.heroCompareRow}>
-                {weekVsAvgPct != null ? (
-                  <>
-                    <MaterialCommunityIcons
-                      name={
-                        weekVsAvgPct >= 0 ? 'arrow-up-bold' : 'arrow-down-bold'
-                      }
-                      size={22}
-                      color={theme.colors.darkGray}
-                    />
-                    <Text style={styles.heroComparePct}>
-                      {weekVsAvgPct >= 0 ? '+' : ''}
-                      {Math.round(weekVsAvgPct)}%
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={styles.heroComparePct}>
-                    {Math.round(lastWeekKcal)} kcal
-                  </Text>
-                )}
+              <Text style={styles.heroKicker}>{t('Esta semana')}</Text>
+              <View style={styles.heroMainRow}>
+                <MaterialCommunityIcons
+                  name="fire"
+                  size={30}
+                  color={theme.colors.onGold}
+                />
+                <Text style={styles.heroMainValue}>
+                  {Math.round(currentWeek?.totalKcal ?? 0)}
+                </Text>
+                <Text style={styles.heroMainUnit}>kcal</Text>
               </View>
+              <Text style={styles.heroSubline}>
+                {currentWeek
+                  ? `${currentWeek.sessionCount} ${
+                      currentWeek.sessionCount === 1
+                        ? t('sesión')
+                        : t('sesiones')
+                    } · ${Math.round(currentWeek.totalMinutes)} min · ${fmtNum(
+                      currentWeekKm
+                    )} km`
+                  : t('Aún sin cardio esta semana')}
+              </Text>
             </View>
           )}
 
           {hasCardio && (
             <View style={styles.heroStatsRow}>
               <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>{totalSessionsAll}</Text>
-                <Text style={styles.heroStatLabel}>sesiones</Text>
+                <Text style={styles.heroStatValue}>
+                  {lastWeek ? Math.round(lastWeek.totalKcal) : '—'}
+                </Text>
+                <Text style={styles.heroStatLabel}>{t('semana pasada')}</Text>
               </View>
               <View style={styles.heroStatDivider} />
               <View style={styles.heroStat}>
                 <Text style={styles.heroStatValue}>
-                  {avgWeekKcal != null
-                    ? `${Math.round(avgWeekKcal)} kcal`
-                    : '—'}
+                  {avgWeekKcal != null ? Math.round(avgWeekKcal) : '—'}
                 </Text>
-                <Text style={styles.heroStatLabel}>media/sem</Text>
+                <Text style={styles.heroStatLabel}>{t('media semanal')}</Text>
               </View>
               <View style={styles.heroStatDivider} />
               <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>{totalHoursAll} h</Text>
-                <Text style={styles.heroStatLabel}>tiempo total</Text>
+                <Text style={styles.heroStatValue}>
+                  {bestWeekKcal != null ? Math.round(bestWeekKcal) : '—'}
+                </Text>
+                <Text style={styles.heroStatLabel}>{t('mejor semana')}</Text>
               </View>
             </View>
           )}
@@ -510,12 +515,12 @@ export function CardioScreen({
             <MaterialCommunityIcons
               name="scale-bathroom"
               size={16}
-              color={theme.colors.darkGray}
+              color={theme.colors.onGold}
             />
             <Text style={styles.heroWeightText}>
               {currentWeight != null
-                ? `Peso: ${currentWeight} kg`
-                : 'Pulsa para indicar tu peso'}
+                ? t('Peso: {w} kg', { w: currentWeight })
+                : t('Pulsa para indicar tu peso')}
             </Text>
           </Pressable>
         </LinearGradient>
@@ -538,7 +543,9 @@ export function CardioScreen({
                     size={18}
                     color={theme.colors.text}
                   />
-                  <Text style={styles.progressTitle}>{metric.label} / mes</Text>
+                  <Text style={styles.progressTitle}>
+                    {metric.label} / {t('mes')}
+                  </Text>
                   <MaterialCommunityIcons
                     name={showChart ? 'chevron-up' : 'chevron-down'}
                     size={20}
@@ -653,7 +660,7 @@ export function CardioScreen({
                 <View style={styles.weekMetaRow}>
                   <Text style={styles.weekMeta}>
                     {week.sessionCount}{' '}
-                    {week.sessionCount === 1 ? 'sesión' : 'sesiones'}
+                    {week.sessionCount === 1 ? t('sesión') : t('sesiones')}
                   </Text>
                   <MaterialCommunityIcons
                     name={isExpanded ? 'chevron-up' : 'chevron-down'}
@@ -669,12 +676,12 @@ export function CardioScreen({
                   .reverse()
                   .map((session, sIdx) => {
                     const d = new Date(`${session.date}T00:00:00`);
-                    const weekday = d.toLocaleDateString('es-ES', {
+                    const weekday = d.toLocaleDateString(dateLocale, {
                       weekday: 'long',
                     });
                     const weekdayCap =
                       weekday.charAt(0).toUpperCase() + weekday.slice(1);
-                    const dateStr = d.toLocaleDateString('es-ES');
+                    const dateStr = d.toLocaleDateString(dateLocale);
                     const isToday = session.date === todayKey;
                     return session.disciplines.map((entry, eIdx) => {
                       const hasIncline =
@@ -776,7 +783,7 @@ export function CardioScreen({
               size={16}
               color={theme.colors.text}
             />
-            <Text style={styles.showMoreText}>Cargar más</Text>
+            <Text style={styles.showMoreText}>{t('Cargar más')}</Text>
           </TouchableOpacity>
         )}
       </StretchScrollView>
@@ -786,15 +793,14 @@ export function CardioScreen({
         activeTab="cardio"
         onPressHome={onNavigateHome}
         onPressCardio={onNavigateCardio}
-        onPressRoutines={onNavigateRoutines}
         onPressCalendar={onNavigateCalendar}
-        onPressData={onNavigateData}
+        onPressProfile={onNavigateProfile}
       />
 
       <GlassTopBar
-        title="Cardio"
+        title={t('Cardio')}
         icon="run-fast"
-        subtitle="Consulta tus resultados"
+        subtitle={t('Consulta tus resultados')}
         topInset={insets.top}
       />
 
@@ -806,10 +812,11 @@ export function CardioScreen({
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>Tu peso</Text>
+            <Text style={styles.modalTitle}>{t('Tu peso')}</Text>
             <Text style={styles.modalHint}>
-              Se usa para estimar las kcalorías del cardio. Al cambiarlo, todas
-              se recalculan.
+              {t(
+                'Se usa para estimar las kcalorías del cardio. Al cambiarlo, todas se recalculan.'
+              )}
             </Text>
             <View style={styles.weightInputRow}>
               <TextInput
@@ -828,13 +835,13 @@ export function CardioScreen({
               style={styles.weightSaveButton}
               onPress={handleSaveWeight}
             >
-              <Text style={styles.weightSaveText}>Guardar</Text>
+              <Text style={styles.weightSaveText}>{t('Guardar')}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.weightCancelButton}
               onPress={() => setShowWeightModal(false)}
             >
-              <Text style={styles.weightCancelText}>Cancelar</Text>
+              <Text style={styles.weightCancelText}>{t('Cancelar')}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -879,31 +886,47 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     textAlign: 'center',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     opacity: 0.75,
     marginBottom: 6,
   },
-  heroCompareRow: {
+  heroMainRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
-  heroComparePct: {
+  heroMainValue: {
     fontFamily: theme.fonts.display,
-    fontSize: 30,
-    lineHeight: 36,
+    fontSize: 34,
+    lineHeight: 40,
     // Anton pega el glifo al borde superior de su caja; sin esto el número
-    // queda más alto que la flecha de al lado. includeFontPadding:false +
+    // queda más alto que la llama de al lado. includeFontPadding:false +
     // translateY lo baja para centrarlo con el icono (mismo patrón que weekTitle).
     includeFontPadding: false,
     transform: [{ translateY: 4 }],
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
+  },
+  heroMainUnit: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.onGold,
+    opacity: 0.8,
+    alignSelf: 'flex-end',
+    marginBottom: 4,
+  },
+  heroSubline: {
+    marginTop: 4,
+    fontSize: 13,
+    fontWeight: '700',
+    textAlign: 'center',
+    color: theme.colors.onGold,
+    opacity: 0.85,
   },
   heroEmptyText: {
     fontSize: 14,
     fontWeight: '600',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     opacity: 0.8,
     lineHeight: 20,
   },
@@ -927,12 +950,12 @@ const styles = StyleSheet.create({
   heroStatValue: {
     fontSize: 16,
     fontWeight: '800',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
   },
   heroStatLabel: {
     fontSize: 12,
     fontWeight: '600',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
     opacity: 0.8,
     marginTop: 2,
   },
@@ -949,7 +972,7 @@ const styles = StyleSheet.create({
   heroWeightText: {
     fontSize: 13,
     fontWeight: '800',
-    color: theme.colors.darkGray,
+    color: theme.colors.onGold,
   },
   progressCard: {
     borderRadius: theme.borderRadius.md,
@@ -959,7 +982,8 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.lg,
     overflow: 'hidden',
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.surface,
+    ...theme.shadow.card,
   },
   progressToggle: {
     width: '100%',
@@ -1072,10 +1096,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     minHeight: 52,
     overflow: 'hidden',
-    backgroundColor: 'transparent',
+    backgroundColor: theme.colors.surface,
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    ...theme.shadow.soft,
   },
   weekTitleRow: {
     flexDirection: 'row',
@@ -1240,7 +1265,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   weightInput: {
-    backgroundColor: theme.colors.darkGray,
+    backgroundColor: theme.colors.inputBg,
     borderWidth: 1,
     borderColor: theme.colors.border,
     borderRadius: theme.borderRadius.md,
@@ -1267,7 +1292,7 @@ const styles = StyleSheet.create({
   weightSaveText: {
     fontSize: 15,
     fontWeight: '800',
-    color: theme.colors.background,
+    color: theme.colors.onGold,
   },
   weightCancelButton: {
     backgroundColor: theme.colors.surfaceAlt,

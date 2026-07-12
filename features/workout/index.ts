@@ -6,6 +6,8 @@ export { WorkoutLogScreen } from './WorkoutLogScreen';
 export { DetailScreen } from './DetailScreen';
 export { CalendarScreen } from './CalendarScreen';
 export { DataScreen } from './DataScreen';
+export { ProfileScreen } from './ProfileScreen';
+export { SettingsScreen } from './SettingsScreen';
 export { DaySelectorScreen } from './DaySelectorScreen';
 export { NewRoutineScreen } from './NewRoutineScreen';
 export { RoutineDetailScreen } from './RoutineDetailScreen';

@@ -11,6 +11,7 @@ import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import {
+  GLASS_TINT,
   GLASS_TOP_BAR_BLUR_INTENSITY,
   GLASS_TOP_BAR_BG,
   GLASS_TOP_BAR_OVERLAY,
@@ -68,7 +69,7 @@ export function GlassTopBar({
       ]}
     >
       <FrostedBlur
-        tint="dark"
+        tint={GLASS_TINT}
         intensity={topBarBlurIntensity}
         experimentalBlurMethod="dimezisBlurView"
         style={styles.topBarBlur}
@@ -174,7 +175,7 @@ const styles = StyleSheet.create({
   subtitle: {
     marginTop: 4,
     fontSize: 14,
-    color: 'rgba(235, 239, 245, 0.86)',
+    color: theme.colors.textSecondary,
     fontStyle: 'italic',
     lineHeight: 19,
   },

@@ -2,6 +2,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
+import { t } from './i18n';
 
 export async function readJsonFromFile(): Promise<string> {
   if (Platform.OS === 'web' && typeof document !== 'undefined') {
@@ -14,13 +15,14 @@ export async function readJsonFromFile(): Promise<string> {
       input.onchange = () => {
         const file = input.files?.[0];
         if (!file) {
-          reject(new Error('No se seleccionó ningún archivo'));
+          reject(new Error(t('No se seleccionó ningún archivo')));
           return;
         }
 
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ''));
-        reader.onerror = () => reject(new Error('No se pudo leer el archivo'));
+        reader.onerror = () =>
+          reject(new Error(t('No se pudo leer el archivo')));
         reader.readAsText(file);
       };
 
@@ -42,12 +44,12 @@ export async function readJsonFromFile(): Promise<string> {
   });
 
   if (result.canceled) {
-    throw new Error('No se seleccionó ningún archivo');
+    throw new Error(t('No se seleccionó ningún archivo'));
   }
 
   const asset = result.assets?.[0];
   if (!asset?.uri) {
-    throw new Error('No se pudo acceder al archivo seleccionado');
+    throw new Error(t('No se pudo acceder al archivo seleccionado'));
   }
 
   return FileSystem.readAsStringAsync(asset.uri, {
@@ -75,7 +77,7 @@ export async function downloadJsonFile(
   const baseDirectory =
     FileSystem.cacheDirectory || FileSystem.documentDirectory;
   if (!baseDirectory) {
-    throw new Error('No se encontró una carpeta disponible para exportar');
+    throw new Error(t('No se encontró una carpeta disponible para exportar'));
   }
 
   const fileUri = `${baseDirectory}${fileName}`;
@@ -93,5 +95,8 @@ export async function downloadJsonFile(
     return;
   }
 
-  Alert.alert('Exportación completada', `Backup guardado en:\n${fileUri}`);
+  Alert.alert(
+    t('Exportación completada'),
+    `${t('Backup guardado en:')}\n${fileUri}`
+  );
 }

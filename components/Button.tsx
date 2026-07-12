@@ -44,7 +44,9 @@ export function Button({
 
   const getTextColor = () => {
     if (variant === 'secondary' && !disabled) return theme.colors.text;
-    return theme.colors.darkGray;
+    // Texto sobre relleno dorado (primary) o rojo (danger): tinta blanca en día,
+    // oscura en noche (onGold). En rojo el blanco de día también contrasta mejor.
+    return theme.colors.onGold;
   };
 
   const getPadding = () => {

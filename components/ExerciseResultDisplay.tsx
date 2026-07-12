@@ -4,6 +4,7 @@ import { ParsedSet } from '../types';
 import { parseSeriesString, formatParsedSet } from '@lib/parsers';
 import { getSetPerformanceScore } from '@lib/progress';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { GradientFill } from './GradientFill';
 
 interface ExerciseResultDisplayProps {
@@ -124,11 +125,15 @@ export function ExerciseResultDisplay({
 
       {/* Etiquetas de columna; el objetivo (4×10) ocupa el hueco central. */}
       <View style={styles.columnHeader}>
-        <Text style={[styles.columnLabel, styles.columnLeft]}>Actual</Text>
+        <Text style={[styles.columnLabel, styles.columnLeft]}>
+          {t('Actual')}
+        </Text>
         <Text style={styles.targetLabel}>
           {hasTarget ? `${targetSets || '-'}×${targetReps || '-'}` : ''}
         </Text>
-        <Text style={[styles.columnLabel, styles.columnRight]}>Anterior</Text>
+        <Text style={[styles.columnLabel, styles.columnRight]}>
+          {t('Anterior')}
+        </Text>
       </View>
 
       {rows.map((row, index) => (
@@ -136,7 +141,9 @@ export function ExerciseResultDisplay({
           <Text style={[styles.setValue, styles.currentValue]}>
             {row.currentText}
           </Text>
-          <Text style={[styles.statusGlyph, { color: STATUS_COLOR[row.status] }]}>
+          <Text
+            style={[styles.statusGlyph, { color: STATUS_COLOR[row.status] }]}
+          >
             {STATUS_GLYPH[row.status]}
           </Text>
           <Text style={[styles.setValue, styles.previousValue]}>

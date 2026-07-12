@@ -17,5 +17,7 @@ export function DayAccentIcon({
   size = 18,
   color = theme.colors.white,
 }: DayAccentIconProps) {
-  return <GymIcon name={resolveDayIcon(emoji, name)} size={size} color={color} />;
+  return (
+    <GymIcon name={resolveDayIcon(emoji, name)} size={size} color={color} />
+  );
 }

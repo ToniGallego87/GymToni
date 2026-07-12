@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Alert, Platform } from 'react-native';
+import { t } from './i18n';
 
 /**
  * Guarda un PNG (base64 sin prefijo data:) en caché y abre la hoja de compartir
@@ -23,7 +24,7 @@ export async function shareBase64Png(
   const baseDirectory =
     FileSystem.cacheDirectory || FileSystem.documentDirectory;
   if (!baseDirectory) {
-    throw new Error('No se encontró una carpeta disponible para la imagen');
+    throw new Error(t('No se encontró una carpeta disponible para la imagen'));
   }
 
   const fileUri = `${baseDirectory}${fileName}`;
@@ -35,11 +36,11 @@ export async function shareBase64Png(
   if (canShare) {
     await Sharing.shareAsync(fileUri, {
       mimeType: 'image/png',
-      dialogTitle: 'Compartir logros de la semana',
+      dialogTitle: t('Compartir logros de la semana'),
       UTI: 'public.png',
     });
     return;
   }
 
-  Alert.alert('Imagen guardada', `Disponible en:\n${fileUri}`);
+  Alert.alert(t('Imagen guardada'), `${t('Disponible en:')}\n${fileUri}`);
 }

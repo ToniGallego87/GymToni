@@ -1,15 +1,13 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 import { FloatingGlassBar } from './FloatingGlassBar';
+import { GLASS_ACTIVE_ITEM_BG, GLASS_ACTIVE_ITEM_BORDER } from './glassTokens';
 
-type FloatingPrimaryNavKey =
-  | 'home'
-  | 'cardio'
-  | 'routines'
-  | 'calendar'
-  | 'data';
+type FloatingPrimaryNavKey = 'home' | 'cardio' | 'calendar' | 'profile';
 
 interface FloatingPrimaryNavProps {
   bottom: number;
@@ -18,9 +16,8 @@ interface FloatingPrimaryNavProps {
   showCardio?: boolean;
   onPressHome?: () => void;
   onPressCardio?: () => void;
-  onPressRoutines?: () => void;
   onPressCalendar?: () => void;
-  onPressData?: () => void;
+  onPressProfile?: () => void;
 }
 
 type NavItem = {
@@ -36,40 +33,33 @@ export function FloatingPrimaryNav({
   showCardio = true,
   onPressHome,
   onPressCardio,
-  onPressRoutines,
   onPressCalendar,
-  onPressData,
+  onPressProfile,
 }: FloatingPrimaryNavProps) {
   const items: NavItem[] = [
     {
       key: 'home',
-      label: 'Fuerza',
+      label: t('Fuerza'),
       icon: 'dumbbell',
       onPress: onPressHome,
     },
     {
       key: 'cardio',
-      label: 'Cardio',
+      label: t('Cardio'),
       icon: 'run-fast',
       onPress: onPressCardio,
     },
     {
-      key: 'routines',
-      label: 'Rutinas',
-      icon: 'book-open-variant',
-      onPress: onPressRoutines,
-    },
-    {
       key: 'calendar',
-      label: 'Calendario',
+      label: t('Calendario'),
       icon: 'calendar-month-outline',
       onPress: onPressCalendar,
     },
     {
-      key: 'data',
-      label: 'Datos',
-      icon: 'folder-cog-outline',
-      onPress: onPressData,
+      key: 'profile',
+      label: t('Perfil'),
+      icon: 'account-circle-outline',
+      onPress: onPressProfile,
     },
   ];
 
@@ -85,11 +75,26 @@ export function FloatingPrimaryNav({
         return (
           <TouchableOpacity
             key={item.key}
-            style={[styles.item, isActive && styles.itemActive]}
+            // Tamaño/posición del contenido constante: el fondo activo es una
+            // capa absoluta (no un borde en el propio item), así el icono y el
+            // texto no se reajustan al cambiar de pestaña.
+            style={styles.item}
             onPress={item.onPress}
-            disabled={!item.onPress || isActive}
+            // La pestaña activa sigue siendo pulsable: las subpantallas de
+            // Perfil (Rutinas/Datos) la marcan activa y pulsar vuelve a Perfil.
+            disabled={!item.onPress}
             activeOpacity={0.88}
           >
+            {isActive && (
+              <Animated.View
+                // Aparece creciendo desde muy pequeño hasta su tamaño. Como cada
+                // pantalla monta su propia barra, al pulsar una opción se navega
+                // y la nueva barra reproduce esta entrada.
+                entering={ZoomIn.springify().damping(14).stiffness(180)}
+                style={styles.itemActiveBg}
+                pointerEvents="none"
+              />
+            )}
             <MaterialCommunityIcons
               name={item.icon}
               size={22}
@@ -117,12 +122,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     paddingHorizontal: 4,
     paddingVertical: 6,
-    backgroundColor: 'transparent',
   },
-  itemActive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  itemActiveBg: {
+    position: 'absolute',
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderRadius: 14,
+    backgroundColor: GLASS_ACTIVE_ITEM_BG,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderColor: GLASS_ACTIVE_ITEM_BORDER,
   },
   icon: {
     color: theme.colors.textSecondary,

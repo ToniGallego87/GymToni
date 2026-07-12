@@ -13,6 +13,7 @@ import {
 } from '@components';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 interface DaySelectorScreenProps {
   routine?: WorkoutRoutine;
@@ -35,7 +36,11 @@ export function DaySelectorScreen({
 
   return (
     <View style={styles.container}>
-      <StatusBar style="light" translucent backgroundColor="transparent" />
+      <StatusBar
+        style={theme.statusBarStyle}
+        translucent
+        backgroundColor="transparent"
+      />
 
       <StretchScrollView
         style={styles.scroll}
@@ -63,18 +68,20 @@ export function DaySelectorScreen({
             <View style={styles.dayContent}>
               <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
               <Text style={styles.dayMeta}>
-                {day.exercises.length} ejercicios
+                {t('{n} ejercicios', { n: day.exercises.length })}
               </Text>
             </View>
-            <Text style={styles.dayBadge}>Día {day.dayNumber}</Text>
+            <Text style={styles.dayBadge}>
+              {t('Día')} {day.dayNumber}
+            </Text>
           </Pressable>
         ))}
       </StretchScrollView>
 
       <GlassTopBar
-        title="Elige la sesión"
+        title={t('Elige la sesión')}
         icon="calendar-month-outline"
-        subtitle="Selecciona el día que vas a registrar"
+        subtitle={t('Selecciona el día que vas a registrar')}
         topInset={insets.top}
         rightElement={
           !!routine ? (

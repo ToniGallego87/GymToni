@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { t } from './i18n';
 
 // Módulo nativo local (modules/video-encoder). Solo existe en nativo; en web no
 // se carga para no romper el bundle.
@@ -34,7 +35,7 @@ export async function encodeFramesToMp4(
 ): Promise<string> {
   if (!nativeModule) {
     throw new Error(
-      'El codificador de vídeo no está disponible en esta versión.'
+      t('El codificador de vídeo no está disponible en esta versión.')
     );
   }
   return nativeModule.encode(framePaths, outputPath, fps);

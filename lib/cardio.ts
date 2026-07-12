@@ -115,8 +115,16 @@ export const rangeStr = (min: number, max: number): string =>
 /** Factor kcal/kg/km aproximado por disciplina. */
 function disciplineKcalFactor(type: string): number {
   const t = type.toLowerCase();
-  if (t.includes('andar')) return 0.5; // andar en cinta
-  if (t.includes('bici') || t.includes('elíptica') || t.includes('eliptica'))
+  // Palabras clave en español e inglés (las etiquetas de disciplina se guardan
+  // en el idioma activo de la app).
+  if (t.includes('andar') || t.includes('walk')) return 0.5; // andar en cinta
+  if (
+    t.includes('bici') ||
+    t.includes('bike') ||
+    t.includes('elíptica') ||
+    t.includes('eliptica') ||
+    t.includes('elliptical')
+  )
     return 0.28;
   if (t.includes('correr') || t.includes('cinta') || t.includes('run'))
     return 1.0;
@@ -140,7 +148,7 @@ export function estimateEntryKcal(
   const grade = (e.pendiente ?? 0) / 100; // fracción de pendiente
   const speedMPerMin = (e.speed * 1000) / 60;
 
-  if (t.includes('andar')) {
+  if (t.includes('andar') || t.includes('walk')) {
     // ACSM andar: incluye la pendiente con peso 1.8 (mucho más que correr).
     const vo2 = 3.5 + 0.1 * speedMPerMin + 1.8 * speedMPerMin * grade;
     return (vo2 * weightKg * e.minutes) / 200;
