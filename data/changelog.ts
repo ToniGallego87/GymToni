@@ -9,6 +9,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.1',
+    items: [
+      'Ahora puedes registrar solo tu cardio, sin tener que abrir un día de entrenamiento de fuerza.',
+      'Al crear una rutina nueva ya no cambias de golpe la que estás entrenando: la nueva queda "Preparada" y empieza a contar cuando registras en ella tu primer día.',
+      'La pantalla de Inicio estrena tarjetas que puedes deslizar con las flechas: tu situación de hoy, un acceso a tus rutinas y las estadísticas de la semana (kilos levantados).',
+      'En Cardio también puedes deslizar entre tus estadísticas de la semana y un botón directo para añadir cardio.',
+      'Al elegir la sesión del día puedes decidir empezar una semana nueva con ese día.',
+      'La app abre directa en tu rutina, sin parpadeos.',
+      'El aviso de novedades ahora se puede desplazar cuando hay muchas cosas que contar.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.0',
     items: [
       'Nueva pestaña Perfil: ahora la app tiene 4 secciones (Fuerza, Cardio, Calendario, Perfil) y desde Perfil accedes a tus rutinas, tus datos y los ajustes.',

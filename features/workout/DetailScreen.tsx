@@ -213,14 +213,18 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
 
         {log.cardio && (
           <>
-            <Text
-              style={[
-                styles.sectionTitle,
-                { marginTop: theme.spacing.xl, color: theme.colors.white },
-              ]}
-            >
-              {t('Cardio')}
-            </Text>
+            {/* En un día de solo cardio (sin ejercicios) el título "Cardio"
+                sobra: toda la vista es cardio. */}
+            {day.exercises.length > 0 && (
+              <Text
+                style={[
+                  styles.sectionTitle,
+                  { marginTop: theme.spacing.xl, color: theme.colors.white },
+                ]}
+              >
+                {t('Cardio')}
+              </Text>
+            )}
             {cardioSession ? (
               // Todas las disciplinas registradas en el día (el rawInput puede
               // traer varias entradas unidas por " | "), una caja por disciplina.

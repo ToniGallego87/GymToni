@@ -63,10 +63,17 @@ export function normalizeAppData(
     routines,
     payload?.activeRoutineId
   );
+  // La seleccionada se conserva solo si existe; si no, cae a la activa.
+  const selectedRoutineId = routines.some(
+    (routine) => routine.id === payload?.selectedRoutineId
+  )
+    ? payload?.selectedRoutineId
+    : activeRoutineId;
 
   return {
     routines: syncActiveRoutine(routines, activeRoutineId),
     activeRoutineId,
+    selectedRoutineId,
     logs: ensureParsedSets(rawLogs),
   };
 }

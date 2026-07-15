@@ -27,7 +27,12 @@ export function groupLogsIntoWeekBlocks(
   sortedByDateAsc.forEach((log) => {
     const dayNumber = getDayNumber(log);
 
-    if (dayNumber && seenDays[dayNumber] && currentBlockLogs.length > 0) {
+    // Se cierra el bloque y empieza otro cuando: (a) el usuario forzó una nueva
+    // semana con este entreno (startsNewWeek), o (b) reaparece un día ya
+    // entrenado dentro del bloque.
+    const forcesNewWeek = !!log.startsNewWeek;
+    const repeatsDay = !!dayNumber && !!seenDays[dayNumber];
+    if ((forcesNewWeek || repeatsDay) && currentBlockLogs.length > 0) {
       groupedByBlock[block] = currentBlockLogs;
       block += 1;
       currentBlockLogs = [];

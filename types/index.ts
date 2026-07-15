@@ -60,11 +60,20 @@ export interface WorkoutLog {
   cardio?: CardioLog;
   createdAt: number;
   updatedAt: number;
+  // Fuerza el inicio de una nueva semana con este entrenamiento aunque el
+  // agrupado automático por día repetido no lo haría (ver lib/weeks.ts).
+  startsNewWeek?: boolean;
+  // Sesión "solo cardio": no cuenta como entrenamiento de fuerza (no aparece
+  // en Inicio ni en las semanas), pero sí en la vista de Cardio.
+  cardioOnly?: boolean;
 }
 
 export interface WorkoutAppData {
   routines: WorkoutRoutine[];
   activeRoutineId?: string;
+  // Rutina marcada como seleccionada en la vista de Rutinas. Es independiente
+  // de la activa: seleccionar una rutina no la activa (ver WorkoutContext).
+  selectedRoutineId?: string;
   logs: WorkoutLog[];
 }
 
@@ -79,6 +88,7 @@ export type WorkoutAction =
   | { type: 'DELETE_ROUTINE'; payload: string }
   | { type: 'UPDATE_ROUTINE'; payload: WorkoutRoutine }
   | { type: 'SET_ACTIVE_ROUTINE'; payload: string }
+  | { type: 'SET_SELECTED_ROUTINE'; payload: string | undefined }
   | { type: 'ADD_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'DELETE_WORKOUT_LOG'; payload: string }

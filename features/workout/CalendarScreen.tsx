@@ -13,7 +13,13 @@ import {
   StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
-import { hasAnyCardio, cardioSessionFromLog, CardioSession } from '@lib/cardio';
+import {
+  hasAnyCardio,
+  cardioSessionFromLog,
+  CardioSession,
+  CARDIO_ONLY_DAY,
+  isCardioOnlyLog,
+} from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
@@ -150,7 +156,10 @@ export function CalendarScreen({
     state.logs.forEach((log: WorkoutLog) => {
       const session = cardioSessionFromLog(log);
       if (!session) return;
-      const day = getDayById(log.dayId);
+      // Solo cardio: el día no existe en ninguna rutina; se usa el sintético.
+      const day =
+        getDayById(log.dayId) ??
+        (isCardioOnlyLog(log) ? CARDIO_ONLY_DAY : undefined);
       if (day) map[log.date] = { log, day, session };
     });
     return map;
@@ -360,11 +369,15 @@ export function CalendarScreen({
             }
 
             const dayLogs = logsByDate[dateKey] || [];
-            const primaryLog = dayLogs[0];
+            // Modo fuerza: solo cuentan los logs de fuerza reales (su día existe
+            // en una rutina). Los días de solo cardio NO se muestran aquí; solo
+            // aparecen en el modo cardio.
+            const primaryLog = dayLogs.find((l) => !!getDayById(l.dayId));
             const primaryDay = primaryLog
               ? getDayById(primaryLog.dayId)
               : undefined;
             const hasLogs = !!primaryLog && !!primaryDay;
+
             // Color de la celda = color del día de entrenamiento (emoji de la rutina).
             const dayColor = primaryDay
               ? getTrainingAccent(primaryDay)

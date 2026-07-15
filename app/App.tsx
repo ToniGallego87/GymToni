@@ -33,12 +33,14 @@ import {
 } from '@features/workout';
 import { WhatsNewModal } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
+import { CARDIO_ONLY_DAY } from '@lib/cardio';
 import type { WeightSegment } from '@lib/cardio';
 import {
   clearAppData,
   getCardioWeightHistory,
   getLastSeenVersion,
   getSeedAppData,
+  getSeedCardioWeightHistory,
   isValidWeightSegments,
   loadAppData,
   saveAppData,
@@ -61,9 +63,15 @@ import {
 type Screen =
   | { type: 'home' }
   | { type: 'cardio' }
-  | { type: 'routine-selector' }
+  | { type: 'routine-selector'; origin?: 'home' | 'profile' }
   | { type: 'day-selector' }
-  | { type: 'workout-log'; day: WorkoutDay; log?: WorkoutLog }
+  | {
+      type: 'workout-log';
+      day: WorkoutDay;
+      log?: WorkoutLog;
+      startsNewWeek?: boolean;
+      cardioOnly?: boolean;
+    }
   | {
       type: 'detail';
       log: WorkoutLog;
@@ -75,7 +83,11 @@ type Screen =
   | { type: 'settings' }
   | { type: 'data' }
   | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
-  | { type: 'routine-details'; routine: WorkoutRoutine }
+  | {
+      type: 'routine-details';
+      routine: WorkoutRoutine;
+      origin?: 'home' | 'profile';
+    }
   | { type: 'qr-scanner' }
   | {
       type: 'week-achievement';
@@ -117,6 +129,12 @@ function AppContent() {
           const seed = getSeedAppData();
           await saveAppData(seed);
           dispatch({ type: 'SET_APP_DATA', payload: seed });
+          // Peso corporal del backup de dev (web): sin él las kcal del cardio
+          // se calcularían con el peso por defecto.
+          const seedWeights = getSeedCardioWeightHistory();
+          if (seedWeights.length) {
+            await setCardioWeightHistory(seedWeights);
+          }
           setIsFirstInstall(true);
         }
       } catch (error) {
@@ -211,6 +229,17 @@ function AppContent() {
       state.routines.find((routine) => routine.id === state.activeRoutineId),
     [state.activeRoutineId, state.routines]
   );
+
+  // Rutina que se está mostrando/entrenando: la seleccionada (si existe) o, en
+  // su defecto, la activa. "Empezar entrenamiento" opera sobre esta, de modo
+  // que se puede entrenar una rutina "preparada" seleccionada aunque no sea la
+  // activa (al registrar su primer día pasará a ser la activa).
+  const displayedRoutine = useMemo(() => {
+    const selected = state.routines.find(
+      (routine) => routine.id === state.selectedRoutineId
+    );
+    return selected ?? activeRoutine;
+  }, [state.routines, state.selectedRoutineId, activeRoutine]);
 
   const activeRoutineLogs = useMemo(
     () => state.logs.filter((log) => log.routineId === state.activeRoutineId),
@@ -428,21 +457,28 @@ function AppContent() {
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateProfile={() => setScreen({ type: 'profile' })}
           onOpenDaySelector={() => {
-            if (activeRoutine?.days.length) {
+            if (displayedRoutine?.days.length) {
               setScreen({ type: 'day-selector' });
             } else {
               setScreen({ type: 'new-routine' });
             }
           }}
           onOpenRoutineDetails={(routine) =>
-            setScreen({ type: 'routine-details', routine })
+            setScreen({
+              type: 'routine-details',
+              routine,
+              origin: screen.origin,
+            })
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
           onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           canDeleteCurrentRoutine={canDeleteCurrentRoutine}
           initialShowRoutineSelector={true}
-          onCloseRoutineSelector={() => setScreen({ type: 'profile' })}
+          // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
+          onCloseRoutineSelector={() =>
+            setScreen({ type: screen.origin === 'home' ? 'home' : 'profile' })
+          }
         />
       )}
 
@@ -458,15 +494,17 @@ function AppContent() {
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
           onNavigateProfile={() => setScreen({ type: 'profile' })}
           onOpenDaySelector={() => {
-            if (activeRoutine?.days.length) {
+            if (displayedRoutine?.days.length) {
               setScreen({ type: 'day-selector' });
             } else {
               setScreen({ type: 'new-routine' });
             }
           }}
-          onOpenRoutineSelector={() => setScreen({ type: 'routine-selector' })}
+          onOpenRoutineSelector={() =>
+            setScreen({ type: 'routine-selector', origin: 'home' })
+          }
           onOpenRoutineDetails={(routine) =>
-            setScreen({ type: 'routine-details', routine })
+            setScreen({ type: 'routine-details', routine, origin: 'home' })
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
@@ -483,6 +521,13 @@ function AppContent() {
           onSelectLog={(log, day) =>
             setScreen({ type: 'detail', log, day, origin: 'cardio' })
           }
+          onInsertCardioOnly={() =>
+            setScreen({
+              type: 'workout-log',
+              day: CARDIO_ONLY_DAY,
+              cardioOnly: true,
+            })
+          }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
@@ -492,14 +537,14 @@ function AppContent() {
 
       {screen.type === 'day-selector' && (
         <DaySelectorScreen
-          routine={activeRoutine}
-          onSelectDay={(day) => {
-            // Si la rutina activa ya tiene un log de hoy para este día, volver a home
+          routine={displayedRoutine}
+          onSelectDay={(day, startsNewWeek) => {
+            // Si la rutina mostrada ya tiene un log de hoy para este día, volver a home
             const today = new Date().toISOString().split('T')[0];
             const hasLogToday = state.logs.some(
               (log) =>
                 log.dayId === day.id &&
-                log.routineId === state.activeRoutineId &&
+                log.routineId === displayedRoutine?.id &&
                 (log.date === today ||
                   new Date(log.createdAt).toISOString().split('T')[0] === today)
             );
@@ -507,9 +552,16 @@ function AppContent() {
             if (hasLogToday) {
               setScreen({ type: 'home' });
             } else {
-              setScreen({ type: 'workout-log', day });
+              setScreen({ type: 'workout-log', day, startsNewWeek });
             }
           }}
+          onSelectCardioOnly={() =>
+            setScreen({
+              type: 'workout-log',
+              day: CARDIO_ONLY_DAY,
+              cardioOnly: true,
+            })
+          }
           onBack={() => setScreen({ type: 'home' })}
         />
       )}
@@ -518,6 +570,8 @@ function AppContent() {
         <WorkoutLogScreen
           day={screen.day}
           log={screen.log}
+          startsNewWeek={screen.startsNewWeek}
+          cardioOnly={screen.cardioOnly}
           onSave={() => setScreen({ type: 'home' })}
           onBack={() => setScreen({ type: 'home' })}
         />
@@ -555,7 +609,9 @@ function AppContent() {
 
       {screen.type === 'profile' && (
         <ProfileScreen
-          onOpenRoutines={() => setScreen({ type: 'routine-selector' })}
+          onOpenRoutines={() =>
+            setScreen({ type: 'routine-selector', origin: 'profile' })
+          }
           onOpenData={() => setScreen({ type: 'data' })}
           onOpenSettings={() => setScreen({ type: 'settings' })}
           onNavigateHome={() => setScreen({ type: 'home' })}
@@ -598,7 +654,9 @@ function AppContent() {
       {screen.type === 'routine-details' && (
         <RoutineDetailScreen
           routine={screen.routine}
-          onBack={() => setScreen({ type: 'routine-selector' })}
+          onBack={() =>
+            setScreen({ type: 'routine-selector', origin: screen.origin })
+          }
         />
       )}
 

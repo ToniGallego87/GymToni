@@ -5,6 +5,7 @@ import {
   dbDeleteRoutine,
   dbDeleteWorkoutLog,
   dbSetActiveRoutine,
+  dbSetSelectedRoutine,
   dbUpdateDay,
   dbUpsertRoutine,
   dbUpsertWorkoutLog,
@@ -19,6 +20,7 @@ function toAppData(state: WorkoutState): WorkoutAppData {
   return {
     routines: state.routines,
     activeRoutineId: state.activeRoutineId,
+    selectedRoutineId: state.selectedRoutineId,
     logs: state.logs,
   };
 }
@@ -84,7 +86,10 @@ export function persistAction(action: WorkoutAction, next: WorkoutState): void {
     case 'ADD_ROUTINE':
       enqueue(async () => {
         await dbUpsertRoutine(action.payload);
+        // Una rutina nueva no cambia la activa pero sí pasa a ser la
+        // seleccionada (queda "preparada").
         await dbSetActiveRoutine(next.activeRoutineId);
+        await dbSetSelectedRoutine(next.selectedRoutineId);
       });
       break;
     case 'UPDATE_ROUTINE':
@@ -94,12 +99,23 @@ export function persistAction(action: WorkoutAction, next: WorkoutState): void {
       enqueue(async () => {
         await dbDeleteRoutine(action.payload);
         await dbSetActiveRoutine(next.activeRoutineId);
+        await dbSetSelectedRoutine(next.selectedRoutineId);
       });
       break;
     case 'SET_ACTIVE_ROUTINE':
       enqueue(() => dbSetActiveRoutine(next.activeRoutineId));
       break;
+    case 'SET_SELECTED_ROUTINE':
+      enqueue(() => dbSetSelectedRoutine(next.selectedRoutineId));
+      break;
     case 'ADD_WORKOUT_LOG':
+      enqueue(async () => {
+        await dbUpsertWorkoutLog(action.payload);
+        // Registrar el primer día de una rutina preparada la activa: hay que
+        // persistir también el cambio de rutina activa.
+        await dbSetActiveRoutine(next.activeRoutineId);
+      });
+      break;
     case 'UPDATE_WORKOUT_LOG':
       enqueue(() => dbUpsertWorkoutLog(action.payload));
       break;

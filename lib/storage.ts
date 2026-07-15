@@ -6,6 +6,7 @@ import { WorkoutAppData } from '../types';
 import { WeightSegment } from './cardio';
 import { clearAppDataInDb, loadAppDataFromDb, saveAppDataToDb } from './db';
 import { normalizeAppData } from './normalize';
+import devWebSeed from '@data/devWebSeed.json';
 
 export { generateId, formatDate, getToday } from './utils';
 
@@ -35,7 +36,27 @@ export function getSeedAppData(): WorkoutAppData {
   if (!__DEV__) {
     return { routines: [], logs: [] };
   }
+  // En web+dev se siembra desde el backup real (data/devWebSeed.json) para
+  // poder probar las vistas con datos de verdad. En nativo dev se mantiene el
+  // seed de fábrica (WORKOUT_ROUTINES / INITIAL_LOGS).
+  if (isWeb) {
+    return normalizeAppData(devWebSeed as Partial<WorkoutAppData>, {
+      routines: [],
+      logs: [],
+    });
+  }
   return getDefaultAppData();
+}
+
+// Historial de tramos de peso incluido en el backup de dev (solo web+dev),
+// para que las kcal del cardio se calculen con el peso real y no con el
+// valor por defecto. Vacío si el backup no lo trae o fuera de web+dev.
+export function getSeedCardioWeightHistory(): WeightSegment[] {
+  if (!__DEV__ || !isWeb) return [];
+  const seed = devWebSeed as { cardioWeightHistory?: unknown };
+  return isValidWeightSegments(seed.cardioWeightHistory)
+    ? seed.cardioWeightHistory
+    : [];
 }
 
 async function setStorageItem(key: string, value: string): Promise<void> {

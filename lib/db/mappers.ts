@@ -13,6 +13,7 @@ import { generateId } from '../utils';
 // Sin ella, borrar todas las rutinas resucitaría las de fábrica al reiniciar.
 export const SETTING_INITIALIZED = 'initialized';
 export const SETTING_ACTIVE_ROUTINE_ID = 'active_routine_id';
+export const SETTING_SELECTED_ROUTINE_ID = 'selected_routine_id';
 
 export interface SettingRow {
   key: string;
@@ -52,6 +53,8 @@ export interface WorkoutLogRow {
   date: string;
   created_at: number;
   updated_at: number;
+  starts_new_week: number;
+  cardio_only: number;
 }
 
 export interface ExerciseLogRow {
@@ -215,6 +218,8 @@ export function logToRows(
       date: log.date,
       created_at: log.createdAt,
       updated_at: log.updatedAt,
+      starts_new_week: log.startsNewWeek ? 1 : 0,
+      cardio_only: log.cardioOnly ? 1 : 0,
     },
     exerciseLogs,
     logSets,
@@ -241,6 +246,13 @@ export function appDataToRows(
     rows.settings.push({
       key: SETTING_ACTIVE_ROUTINE_ID,
       value: data.activeRoutineId,
+    });
+  }
+
+  if (data.selectedRoutineId) {
+    rows.settings.push({
+      key: SETTING_SELECTED_ROUTINE_ID,
+      value: data.selectedRoutineId,
     });
   }
 
@@ -297,6 +309,9 @@ function byNumber<T>(select: (item: T) => number): (a: T, b: T) => number {
 export function rowsToAppData(rows: DbRows): WorkoutAppData {
   const activeRoutineId = rows.settings.find(
     (setting) => setting.key === SETTING_ACTIVE_ROUTINE_ID
+  )?.value;
+  const selectedRoutineId = rows.settings.find(
+    (setting) => setting.key === SETTING_SELECTED_ROUTINE_ID
   )?.value;
 
   const exercisesByDay = new Map<string, WorkoutExercise[]>();
@@ -395,7 +410,9 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       cardio: cardioByLog.get(row.id),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      startsNewWeek: row.starts_new_week ? true : undefined,
+      cardioOnly: row.cardio_only ? true : undefined,
     }));
 
-  return { routines, activeRoutineId, logs };
+  return { routines, activeRoutineId, selectedRoutineId, logs };
 }

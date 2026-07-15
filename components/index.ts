@@ -1,6 +1,9 @@
 export { DayCard } from './DayCard';
 export { HeroCard } from './HeroCard';
 export type { HeroVariant } from './HeroCard';
+export { HeroCarousel } from './HeroCarousel';
+export { HeroStatsCard } from './HeroStatsCard';
+export type { HeroStat } from './HeroStatsCard';
 export {
   AchievementPoster,
   POSTER_WIDTH,

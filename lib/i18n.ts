@@ -76,7 +76,15 @@ register({
 
   // Inicio / hero
   'Añade una rutina': 'Add a routine',
-  'Rutina Cerrada': 'Closed Routine',
+  'Rutina cerrada': 'Closed routine',
+  'Pulsa para cambiar la rutina': 'Tap to change the routine',
+  Preparada: 'Prepared',
+  'Solo cardio': 'Cardio only',
+  'Registra solo tu cardio': 'Log just your cardio',
+  'Registra tu cardio': 'Log your cardio',
+  'Añade tu cardio antes de guardar': 'Add your cardio before saving',
+  'Empezar una nueva semana con este día': 'Start a new week with this day',
+  'Empezar sesión': 'Start session',
   '¡Semana completada!': 'Week completed!',
   'Pulsa para compartir resultados': 'Tap to share your results',
   'Continúa tu entrenamiento': 'Continue your workout',
@@ -159,6 +167,8 @@ register({
   'semana pasada': 'last week',
   'media semanal': 'weekly average',
   'mejor semana': 'best week',
+  cambio: 'change',
+  ejercicios: 'exercises',
   'Peso: {w} kg': 'Weight: {w} kg',
   'Pulsa para indicar tu peso': 'Tap to set your weight',
   'Tu peso': 'Your weight',
@@ -356,6 +366,13 @@ register({
   días: 'days',
   entrenos: 'workouts',
   series: 'sets',
+  entreno: 'workout',
+  serie: 'set',
+
+  // Hero cards (carrusel de estados)
+  'Ver rutinas': 'View routines',
+  'Aún no hay entrenamientos registrados.': 'No workouts logged yet.',
+  'Insertar cardio': 'Add cardio',
 
   // Iconos de día (GYM_ICON_LABELS)
   Pecho: 'Chest',

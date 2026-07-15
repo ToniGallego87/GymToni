@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
+  withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -23,14 +24,19 @@ interface HeroCardProps {
   titleIcon?: string;
   subtitle?: string;
   onPress: () => void;
+  // Dirección de entrada del contenido cuando la tarjeta forma parte de un
+  // carrusel: el frame no se mueve, solo el contenido entra desde este lado.
+  enterFrom?: 'left' | 'right';
 }
 
 // Paletas de gradiente por estado. El orden es claro→base→oscuro (diagonal).
+// La hero card de Fuerza se mantiene siempre en amarillo/dorado, también
+// completado el entrenamiento o cerrada la rutina (consistente con la de Cardio).
 const GRADIENTS: Record<HeroVariant, [string, string, string]> = {
   start: theme.gradients.primary,
-  completed: theme.gradients.success,
+  completed: theme.gradients.primary,
   'week-completed': theme.gradients.amber,
-  closed: theme.gradients.danger,
+  closed: theme.gradients.primary,
   add: theme.gradients.warning,
 };
 
@@ -43,12 +49,28 @@ export function HeroCard({
   titleIcon,
   subtitle,
   onPress,
+  enterFrom,
 }: HeroCardProps) {
   const colors = GRADIENTS[variant];
   const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+  }));
+
+  // Animación de solo el CONTENIDO (icono + textos): el frame (gradiente) queda
+  // fijo. En un carrusel el contenido entra deslizándose desde `enterFrom` con
+  // un fundido; suelta (sin enterFrom) hace un fundido sutil de entrada.
+  const enterDir = enterFrom === 'left' ? -1 : enterFrom === 'right' ? 1 : 0;
+  const contentTx = useSharedValue(22 * enterDir);
+  const contentOpacity = useSharedValue(0);
+  useEffect(() => {
+    contentTx.value = withTiming(0, { duration: 260 });
+    contentOpacity.value = withTiming(1, { duration: 260 });
+  }, []);
+  const contentStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: contentTx.value }],
+    opacity: contentOpacity.value,
   }));
 
   return (
@@ -77,30 +99,32 @@ export function HeroCard({
           pointerEvents="none"
         />
 
-        <View style={styles.iconWrap}>
-          <MaterialCommunityIcons
-            name={icon as any}
-            size={44}
-            style={styles.icon}
-          />
-        </View>
-        <View style={styles.titleRow}>
-          <Text style={styles.title} numberOfLines={2}>
-            {title}
-          </Text>
-          {!!titleIcon && (
+        <Animated.View style={[styles.content, contentStyle]}>
+          <View style={styles.iconWrap}>
             <MaterialCommunityIcons
-              name={titleIcon as any}
-              size={26}
-              color={theme.colors.onGold}
+              name={icon as any}
+              size={44}
+              style={styles.icon}
             />
+          </View>
+          <View style={styles.titleRow}>
+            <Text style={styles.title} numberOfLines={2}>
+              {title}
+            </Text>
+            {!!titleIcon && (
+              <MaterialCommunityIcons
+                name={titleIcon as any}
+                size={26}
+                color={theme.colors.onGold}
+              />
+            )}
+          </View>
+          {!!subtitle && (
+            <Text style={styles.subtitle} numberOfLines={1}>
+              {subtitle}
+            </Text>
           )}
-        </View>
-        {!!subtitle && (
-          <Text style={styles.subtitle} numberOfLines={1}>
-            {subtitle}
-          </Text>
-        )}
+        </Animated.View>
       </LinearGradient>
     </AnimatedPressable>
   );
@@ -128,6 +152,10 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     height: '55%',
+  },
+  content: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   iconWrap: {
     width: 68,

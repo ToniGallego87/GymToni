@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
@@ -42,7 +42,9 @@ CREATE TABLE IF NOT EXISTS workout_logs (
   workout_days_id TEXT REFERENCES workout_days(id) ON DELETE SET NULL,
   date            TEXT NOT NULL,
   created_at      INTEGER NOT NULL,
-  updated_at      INTEGER NOT NULL
+  updated_at      INTEGER NOT NULL,
+  starts_new_week INTEGER NOT NULL DEFAULT 0,
+  cardio_only     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS exercise_logs (

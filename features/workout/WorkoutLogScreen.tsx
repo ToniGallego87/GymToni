@@ -56,6 +56,12 @@ import {
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
   log?: WorkoutLog;
+  // El usuario forzó, en "Elige la sesión", que este entreno inicie una nueva
+  // semana (ver DaySelectorScreen / lib/weeks.ts).
+  startsNewWeek?: boolean;
+  // Sesión de solo cardio: se oculta todo lo de fuerza y el log se marca para
+  // no aparecer en Inicio (solo en Cardio).
+  cardioOnly?: boolean;
   onSave: () => void;
   onBack: () => void;
 }
@@ -109,6 +115,8 @@ function SaveWorkoutButton({ onPress }: { onPress: () => void }) {
 export function WorkoutLogScreen({
   day,
   log,
+  startsNewWeek,
+  cardioOnly,
   onSave,
   onBack,
 }: WorkoutLogScreenProps) {
@@ -583,6 +591,10 @@ export function WorkoutLogScreen({
       cardio: cardioLog,
       createdAt: log?.createdAt || Date.now(),
       updatedAt: Date.now(),
+      // Al editar se conserva el valor previo del log; al crear se toma la
+      // elección hecha en "Elige la sesión".
+      startsNewWeek: log?.startsNewWeek ?? startsNewWeek ?? undefined,
+      cardioOnly: log?.cardioOnly ?? (cardioOnly || undefined),
     };
   };
 
@@ -615,6 +627,16 @@ export function WorkoutLogScreen({
   };
 
   const handleSaveWorkout = () => {
+    // En modo solo cardio no hay ejercicios: exige al menos el cardio.
+    if (cardioOnly && !cardioInput.trim()) {
+      setToast({
+        message: t('Añade tu cardio antes de guardar'),
+        type: 'error',
+        duration: 2000,
+      });
+      return;
+    }
+
     try {
       persistWorkoutLog(buildWorkoutLog(exerciseSets));
 
@@ -802,7 +824,9 @@ export function WorkoutLogScreen({
             <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
           </View>
         }
-        subtitle={`${t('Rellena los ejercicios')} - ${getSubtitleDate()}`}
+        subtitle={`${
+          cardioOnly ? t('Registra tu cardio') : t('Rellena los ejercicios')
+        } - ${getSubtitleDate()}`}
         topInset={insets.top}
       />
 

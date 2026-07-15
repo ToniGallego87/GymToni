@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,28 +12,82 @@ import {
   GLASS_TOP_BAR_BASE_HEIGHT,
   StretchScrollView,
 } from '@components';
+import { useWorkout } from '@hooks/useWorkout';
+import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 
 interface DaySelectorScreenProps {
   routine?: WorkoutRoutine;
-  onSelectDay: (day: WorkoutDay) => void;
+  onSelectDay: (day: WorkoutDay, startsNewWeek?: boolean) => void;
+  // Registrar una sesión de solo cardio (sin ejercicios de fuerza).
+  onSelectCardioOnly?: () => void;
   onBack: () => void;
 }
 
 export function DaySelectorScreen({
   routine,
   onSelectDay,
+  onSelectCardioOnly,
   onBack,
 }: DaySelectorScreenProps) {
   const insets = useSafeAreaInsets();
+  const { state } = useWorkout();
   const days = routine?.days || [];
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
     Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
   const scrollBottomPadding =
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+
+  // Día seleccionado a la espera de confirmar (solo cuando implicaría empezar
+  // una nueva semana). El resto de días arrancan la sesión directamente.
+  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [forceNewWeek, setForceNewWeek] = useState(false);
+
+  // Días ya entrenados en la semana EN CURSO (último bloque). Si la semana ya
+  // tiene sesiones y se elige un día distinto, ese día no es "el primero de la
+  // semana": puede forzarse a iniciar una nueva.
+  const daysInCurrentWeek = useMemo(() => {
+    if (!routine) return new Set<string>();
+    const dayNumberById = new Map(
+      routine.days.map((day) => [day.id, day.dayNumber])
+    );
+    const routineLogs = state.logs.filter(
+      (log) => log.routineId === routine.id
+    );
+    const blocks = groupLogsIntoWeekBlocks(routineLogs, (log) =>
+      dayNumberById.get(log.dayId)
+    );
+    const blockNumbers = Object.keys(blocks)
+      .map(Number)
+      .sort((a, b) => a - b);
+    const lastBlock = blockNumbers.length
+      ? blocks[blockNumbers[blockNumbers.length - 1]]
+      : [];
+    return new Set(lastBlock.map((log) => log.dayId));
+  }, [routine, state.logs]);
+
+  // Un día "no es el primero de la semana" si la semana en curso ya tiene
+  // sesiones y este día aún no se ha entrenado en ella (entrenarlo continuaría
+  // la semana; el check permite forzar el inicio de una nueva).
+  const dayImpliesNewWeekChoice = (day: WorkoutDay) =>
+    daysInCurrentWeek.size > 0 && !daysInCurrentWeek.has(day.id);
+
+  const handleDayPress = (day: WorkoutDay) => {
+    if (!dayImpliesNewWeekChoice(day)) {
+      onSelectDay(day, false);
+      return;
+    }
+    // Alternar la selección para mostrar/ocultar el check bajo el día.
+    if (selectedDayId === day.id) {
+      setSelectedDayId(null);
+    } else {
+      setSelectedDayId(day.id);
+      setForceNewWeek(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -53,29 +108,104 @@ export function DaySelectorScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {days.map((day) => (
+        {days.map((day) => {
+          const isSelected = selectedDayId === day.id;
+          return (
+            <View key={day.id}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.dayCard,
+                  isSelected && styles.dayCardSelected,
+                  pressed && styles.dayCardPressed,
+                ]}
+                onPress={() => handleDayPress(day)}
+              >
+                <View style={styles.dayLeading}>
+                  <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />
+                </View>
+                <View style={styles.dayContent}>
+                  <Text style={styles.dayName}>
+                    {getDisplayDayName(day.name)}
+                  </Text>
+                  <Text style={styles.dayMeta}>
+                    {t('{n} ejercicios', { n: day.exercises.length })}
+                  </Text>
+                </View>
+                <Text style={styles.dayBadge}>
+                  {t('Día')} {day.dayNumber}
+                </Text>
+              </Pressable>
+
+              {isSelected && (
+                <View style={styles.newWeekPanel}>
+                  <Pressable
+                    style={styles.newWeekCheckRow}
+                    onPress={() => setForceNewWeek((prev) => !prev)}
+                  >
+                    <View
+                      style={[
+                        styles.checkbox,
+                        forceNewWeek && styles.checkboxChecked,
+                      ]}
+                    >
+                      {forceNewWeek && (
+                        <MaterialCommunityIcons
+                          name="check-bold"
+                          size={14}
+                          color={theme.colors.onGold}
+                        />
+                      )}
+                    </View>
+                    <Text style={styles.newWeekText}>
+                      {t('Empezar una nueva semana con este día')}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.newWeekStartButton}
+                    onPress={() => onSelectDay(day, forceNewWeek)}
+                  >
+                    <MaterialCommunityIcons
+                      name="arrow-right-bold"
+                      size={18}
+                      color={theme.colors.onGold}
+                    />
+                    <Text style={styles.newWeekStartText}>
+                      {t('Empezar sesión')}
+                    </Text>
+                  </Pressable>
+                </View>
+              )}
+            </View>
+          );
+        })}
+
+        {!!onSelectCardioOnly && (
           <Pressable
-            key={day.id}
             style={({ pressed }) => [
               styles.dayCard,
+              styles.cardioOnlyCard,
               pressed && styles.dayCardPressed,
             ]}
-            onPress={() => onSelectDay(day)}
+            onPress={onSelectCardioOnly}
           >
             <View style={styles.dayLeading}>
-              <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />
+              <View style={styles.cardioOnlyIcon}>
+                <MaterialCommunityIcons
+                  name="run-fast"
+                  size={26}
+                  color={theme.colors.emoji_blue}
+                />
+              </View>
             </View>
             <View style={styles.dayContent}>
-              <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
-              <Text style={styles.dayMeta}>
-                {t('{n} ejercicios', { n: day.exercises.length })}
-              </Text>
+              <Text style={styles.dayName}>{t('Solo cardio')}</Text>
+              <Text style={styles.dayMeta}>{t('Registra solo tu cardio')}</Text>
             </View>
-            <Text style={styles.dayBadge}>
-              {t('Día')} {day.dayNumber}
+            <Text style={[styles.dayBadge, styles.cardioOnlyBadge]}>
+              {t('Cardio')}
             </Text>
           </Pressable>
-        ))}
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -132,8 +262,82 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     ...theme.shadow.soft,
   },
+  dayCardSelected: {
+    borderColor: theme.colors.primary,
+    borderWidth: 2,
+    marginBottom: 0,
+  },
+  cardioOnlyCard: {
+    borderColor: theme.colors.emoji_blue,
+    borderStyle: 'dashed',
+  },
+  cardioOnlyIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+  },
+  cardioOnlyBadge: {
+    color: theme.colors.emoji_blue,
+    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+  },
   dayCardPressed: {
     opacity: 0.85,
+  },
+  newWeekPanel: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderTopWidth: 0,
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 0,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: 12,
+    paddingBottom: 12,
+    marginBottom: 10,
+    gap: 12,
+  },
+  newWeekCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+  },
+  checkboxChecked: {
+    backgroundColor: theme.colors.primary,
+  },
+  newWeekText: {
+    flex: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+    lineHeight: 19,
+  },
+  newWeekStartButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.md,
+    backgroundColor: theme.colors.primary,
+  },
+  newWeekStartText: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: theme.colors.onGold,
   },
   dayLeading: {
     marginRight: 12,

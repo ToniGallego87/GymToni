@@ -9,10 +9,10 @@ import {
   TouchableOpacity,
   Pressable,
   useWindowDimensions,
+  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -25,6 +25,8 @@ import {
   formatMergedResults,
   fmtNum,
   CardioMonth,
+  CARDIO_ONLY_DAY,
+  isCardioOnlyLog,
   WeightSegment,
 } from '@lib/cardio';
 import { getCardioWeightHistory, setCardioWeightHistory } from '@lib/storage';
@@ -34,6 +36,9 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  HeroCard,
+  HeroCarousel,
+  HeroStatsCard,
   StretchScrollView,
 } from '../../components';
 import { WorkoutDay, WorkoutLog } from '../../types';
@@ -45,6 +50,8 @@ interface CardioScreenProps {
   onNavigateProfile?: () => void;
   // Abre la vista de resultados (DetailScreen) del día de cardio pulsado.
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
+  // Abre la vista de registro de una sesión de solo cardio (sin fuerza).
+  onInsertCardioOnly?: () => void;
 }
 
 // Cuántas semanas se muestran de inicio y cuántas añade "Cargar más".
@@ -257,6 +264,7 @@ export function CardioScreen({
   onNavigateCalendar,
   onNavigateProfile,
   onSelectLog,
+  onInsertCardioOnly,
 }: CardioScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -336,6 +344,12 @@ export function CardioScreen({
   const handleSessionPress = (logId: string) => {
     const log = state.logs.find((l) => l.id === logId);
     if (!log) return;
+    // Solo cardio: el día no existe en ninguna rutina, se usa el día sintético
+    // para abrir su consulta (el detalle mostrará solo el cardio).
+    if (isCardioOnlyLog(log)) {
+      onSelectLog?.(log, CARDIO_ONLY_DAY);
+      return;
+    }
     let day: WorkoutDay | undefined;
     for (const routine of state.routines) {
       const found = routine.days.find((d) => d.id === log.dayId);
@@ -430,42 +444,28 @@ export function CardioScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero informativo con el mismo aspecto que la HeroCard de Fuerza:
-            gradiente opaco, sin borde y tipografía display. El cardio se registra
-            dentro del día de fuerza, así que aquí solo resumimos. */}
-        <LinearGradient
-          colors={theme.gradients.primary}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.hero}
-        >
-          <LinearGradient
-            colors={theme.gradients.sheen}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 0, y: 1 }}
-            style={styles.heroSheen}
-            pointerEvents="none"
-          />
-          {!hasCardio ? (
-            <Text style={styles.heroEmptyText}>
-              {t('Aún no hay cardio. Añádelo dentro de un día de fuerza.')}
-            </Text>
-          ) : (
-            <View>
-              <Text style={styles.heroKicker}>{t('Esta semana')}</Text>
-              <View style={styles.heroMainRow}>
-                <MaterialCommunityIcons
-                  name="fire"
-                  size={30}
-                  color={theme.colors.onGold}
-                />
-                <Text style={styles.heroMainValue}>
-                  {Math.round(currentWeek?.totalKcal ?? 0)}
-                </Text>
-                <Text style={styles.heroMainUnit}>kcal</Text>
-              </View>
-              <Text style={styles.heroSubline}>
-                {currentWeek
+        {/* Hero con dos estados (carrusel con flechas): estadísticas de la
+            semana e "Insertar nuevo cardio" (día de solo cardio, sin fuerza).
+            Mismo aspecto que la HeroCard de Fuerza. El contenedor con margen
+            negativo cancela el padding horizontal del scroll para que la tarjeta
+            tenga el mismo ancho que la hero de Fuerza (que ya lleva su propio
+            margen). */}
+        <View style={styles.heroBleed}>
+        <HeroCarousel
+          slides={[
+            <HeroStatsCard
+              key="stats"
+              dense
+              isEmpty={!hasCardio}
+              emptyText={t(
+                'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
+              )}
+              kicker={t('Esta semana')}
+              mainIcon="fire"
+              mainValue={String(Math.round(currentWeek?.totalKcal ?? 0))}
+              mainUnit="kcal"
+              subline={
+                currentWeek
                   ? `${currentWeek.sessionCount} ${
                       currentWeek.sessionCount === 1
                         ? t('sesión')
@@ -473,57 +473,59 @@ export function CardioScreen({
                     } · ${Math.round(currentWeek.totalMinutes)} min · ${fmtNum(
                       currentWeekKm
                     )} km`
-                  : t('Aún sin cardio esta semana')}
-              </Text>
-            </View>
-          )}
-
-          {hasCardio && (
-            <View style={styles.heroStatsRow}>
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>
-                  {lastWeek ? Math.round(lastWeek.totalKcal) : '—'}
-                </Text>
-                <Text style={styles.heroStatLabel}>{t('semana pasada')}</Text>
-              </View>
-              <View style={styles.heroStatDivider} />
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>
-                  {avgWeekKcal != null ? Math.round(avgWeekKcal) : '—'}
-                </Text>
-                <Text style={styles.heroStatLabel}>{t('media semanal')}</Text>
-              </View>
-              <View style={styles.heroStatDivider} />
-              <View style={styles.heroStat}>
-                <Text style={styles.heroStatValue}>
-                  {bestWeekKcal != null ? Math.round(bestWeekKcal) : '—'}
-                </Text>
-                <Text style={styles.heroStatLabel}>{t('mejor semana')}</Text>
-              </View>
-            </View>
-          )}
-
-          <Pressable
-            style={styles.heroWeightRow}
-            onPress={() => {
-              setWeightInput(
-                currentWeight != null ? String(currentWeight) : ''
-              );
-              setShowWeightModal(true);
-            }}
-          >
-            <MaterialCommunityIcons
-              name="scale-bathroom"
-              size={16}
-              color={theme.colors.onGold}
-            />
-            <Text style={styles.heroWeightText}>
-              {currentWeight != null
-                ? t('Peso: {w} kg', { w: currentWeight })
-                : t('Pulsa para indicar tu peso')}
-            </Text>
-          </Pressable>
-        </LinearGradient>
+                  : t('Aún sin cardio esta semana')
+              }
+              stats={[
+                {
+                  value: lastWeek ? String(Math.round(lastWeek.totalKcal)) : '—',
+                  label: t('semana pasada'),
+                },
+                {
+                  value:
+                    avgWeekKcal != null ? String(Math.round(avgWeekKcal)) : '—',
+                  label: t('media semanal'),
+                },
+                {
+                  value:
+                    bestWeekKcal != null
+                      ? String(Math.round(bestWeekKcal))
+                      : '—',
+                  label: t('mejor semana'),
+                },
+              ]}
+              footer={
+                <Pressable
+                  style={styles.heroWeightRow}
+                  onPress={() => {
+                    setWeightInput(
+                      currentWeight != null ? String(currentWeight) : ''
+                    );
+                    setShowWeightModal(true);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name="scale-bathroom"
+                    size={16}
+                    color={theme.colors.onGold}
+                  />
+                  <Text style={styles.heroWeightText}>
+                    {currentWeight != null
+                      ? t('Peso: {w} kg', { w: currentWeight })
+                      : t('Pulsa para indicar tu peso')}
+                  </Text>
+                </Pressable>
+              }
+            />,
+            <HeroCard
+              key="insert"
+              variant="start"
+              icon="run-fast"
+              title={t('Insertar cardio')}
+              onPress={() => onInsertCardioOnly?.()}
+            />,
+          ]}
+        />
+        </View>
 
         {kcalMonths.length >= 2 && (
           <View style={[styles.progressCard, { borderColor: progressAccent }]}>
@@ -622,7 +624,7 @@ export function CardioScreen({
                 <GradientFill accent={accent} />
                 <View style={styles.weekTitleRow}>
                   <Text
-                    style={[styles.weekTitle, { color: accent }]}
+                    style={[styles.weekTitle, { color: theme.colors.white }]}
                     numberOfLines={1}
                   >
                     {dayMonth(week.weekStart)} – {dayMonth(week.weekEnd)}
@@ -861,111 +863,18 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: theme.spacing.md,
   },
-  hero: {
-    borderRadius: theme.borderRadius.lg,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    // Misma altura mínima que la HeroCard de Fuerza, centrando el contenido
-    // para que empty-state y estado con stats ocupen la tarjeta por igual.
-    minHeight: 172,
-    justifyContent: 'center',
-    marginBottom: theme.spacing.md,
-    overflow: 'hidden',
-    ...theme.shadow.card,
-  },
-  heroSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  heroKicker: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.75,
-    marginBottom: 6,
-  },
-  heroMainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  heroMainValue: {
-    fontFamily: theme.fonts.display,
-    fontSize: 34,
-    lineHeight: 40,
-    // Anton pega el glifo al borde superior de su caja; sin esto el número
-    // queda más alto que la llama de al lado. includeFontPadding:false +
-    // translateY lo baja para centrarlo con el icono (mismo patrón que weekTitle).
-    includeFontPadding: false,
-    transform: [{ translateY: 4 }],
-    color: theme.colors.onGold,
-  },
-  heroMainUnit: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    alignSelf: 'flex-end',
-    marginBottom: 4,
-  },
-  heroSubline: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.85,
-  },
-  heroEmptyText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    lineHeight: 20,
-  },
-  heroStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 19, 24, 0.16)',
-  },
-  heroStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  heroStatDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: 'rgba(16, 19, 24, 0.16)',
-  },
-  heroStatValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-  },
-  heroStatLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    marginTop: 2,
+  // Cancela el padding horizontal del scroll: la hero queda al mismo ancho que
+  // la de Fuerza (que solo lleva el margen propio de la tarjeta).
+  heroBleed: {
+    marginHorizontal: -theme.spacing.md,
   },
   heroWeightRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: 6,
-    paddingTop: 6,
+    marginTop: 4,
+    paddingTop: 4,
     borderTopWidth: 1,
     borderTopColor: 'rgba(16, 19, 24, 0.16)',
   },
@@ -1006,7 +915,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    transform: [{ translateY: 3 }],
+    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
   },
   deltaRow: {
     flexDirection: 'row',
@@ -1114,7 +1023,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     lineHeight: 26,
     includeFontPadding: false,
-    transform: [{ translateY: 3 }],
+    textAlignVertical: 'center',
+    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
   },
   weekDelta: {
     fontSize: 14,
@@ -1208,7 +1118,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   dailyTextToday: {
-    color: theme.colors.primary,
+    color: theme.colors.white,
   },
   showMoreButton: {
     flexDirection: 'row',

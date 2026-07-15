@@ -11,6 +11,7 @@ import {
   Modal,
   Alert,
   Image,
+  Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
@@ -47,6 +48,9 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   HeroCard,
+  HeroCarousel,
+  HeroStatsCard,
+  HeroStat,
   HeroVariant,
   GradientFill,
   AnimatedCounter,
@@ -92,8 +96,11 @@ function buildWeekProgress(
 ): WeekProgressPoint[] {
   if (!activeRoutineId) return [];
 
-  // El progreso solo se calcula con la rutina actualmente seleccionada en Inicio.
-  const routineLogs = logs.filter((log) => log.routineId === activeRoutineId);
+  // El progreso solo se calcula con la rutina actualmente seleccionada en
+  // Inicio. Las sesiones de solo cardio no cuentan como entrenamiento de fuerza.
+  const routineLogs = logs.filter(
+    (log) => log.routineId === activeRoutineId && !log.cardioOnly
+  );
   if (routineLogs.length === 0) return [];
 
   // Agrupación por dayId directamente — sin depender del mapping dayId→dayNumber,
@@ -107,7 +114,10 @@ function buildWeekProgress(
   let seenDayIds = new Set<string>();
 
   for (const log of sortedLogs) {
-    if (log.dayId && seenDayIds.has(log.dayId) && blockLogs.length > 0) {
+    // Igual que lib/weeks.ts: se abre bloque nuevo si el usuario forzó nueva
+    // semana o si reaparece un día ya entrenado en el bloque.
+    const repeatsDay = !!log.dayId && seenDayIds.has(log.dayId);
+    if ((log.startsNewWeek || repeatsDay) && blockLogs.length > 0) {
       groupedByBlock[blockNum++] = blockLogs;
       blockLogs = [];
       seenDayIds = new Set();
@@ -428,13 +438,6 @@ export function HomeScreen({
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<
     Record<number, boolean>
   >({});
-  // undefined = mostrar la rutina activa (por defecto). Solo pasa a un id
-  // concreto cuando el usuario elige ver otra rutina en el selector. Así, tras
-  // la hidratación nunca se muestra por un frame una rutina semilla obsoleta:
-  // se cae siempre a la activa hasta que el usuario elija explícitamente.
-  const [viewedRoutineId, setViewedRoutineId] = useState<string | undefined>(
-    undefined
-  );
   const [routineToDeleteId, setRoutineToDeleteId] = useState<
     string | undefined
   >(undefined);
@@ -449,26 +452,18 @@ export function HomeScreen({
   >(undefined);
   const { width: windowWidth } = useWindowDimensions();
 
-  // Al cambiar la rutina activa (hidratación, crear/activar otra), volver a
-  // "mostrar la activa" (undefined). No se fija al id activo para evitar el
-  // frame de desincronía que mostraba una rutina antigua al abrir la app.
-  useEffect(() => {
-    setViewedRoutineId(undefined);
-  }, [state.activeRoutineId]);
-
   const activeRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
   );
 
-  // Determine qué rutina se está visualizando (puede ser diferente a la activa).
-  // Tras la hidratación, `viewedRoutineId` puede apuntar un instante a una rutina
-  // semilla que ya no existe (el efecto de sync corre un render después); en ese
-  // caso se cae a la activa para no mostrar por un frame una rutina equivocada.
-  const displayedRoutineId =
-    viewedRoutineId &&
-    state.routines.some((routine) => routine.id === viewedRoutineId)
-      ? viewedRoutineId
-      : state.activeRoutineId;
+  // La rutina que se muestra en Inicio es la SELECCIONADA (persistida en el
+  // estado; se marca en la vista de Rutinas). Si la seleccionada ya no existe,
+  // se cae a la activa. Seleccionar una rutina no la activa (ver item Rutinas).
+  const displayedRoutineId = state.routines.some(
+    (routine) => routine.id === state.selectedRoutineId
+  )
+    ? state.selectedRoutineId
+    : state.activeRoutineId;
   const displayedRoutine = state.routines.find(
     (routine: WorkoutRoutine) => routine.id === displayedRoutineId
   );
@@ -494,7 +489,9 @@ export function HomeScreen({
       state.logs
         .filter(
           (log: WorkoutLog) =>
-            !displayedRoutineId || log.routineId === displayedRoutineId
+            (!displayedRoutineId || log.routineId === displayedRoutineId) &&
+            // Solo cardio no aparece en Inicio (Fuerza), solo en Cardio.
+            !log.cardioOnly
         )
         .sort((a: WorkoutLog, b: WorkoutLog) => b.createdAt - a.createdAt),
     [displayedRoutineId, state.logs]
@@ -592,8 +589,10 @@ export function HomeScreen({
       return;
     }
 
-    // No permitir iniciar entrenamiento con rutina vieja que NO sea la activa
+    // Rutina cerrada (vieja y no activa): pulsar la hero lleva a Rutinas para
+    // cambiar de rutina, en vez de iniciar un entrenamiento.
     if (isRoutineOld && !isDisplayedRoutineActive) {
+      onOpenRoutineSelector?.();
       return;
     }
 
@@ -933,7 +932,8 @@ export function HomeScreen({
       return {
         variant: 'closed',
         icon: 'lock-outline',
-        title: t('Rutina Cerrada'),
+        title: t('Rutina cerrada'),
+        subtitle: t('Pulsa para cambiar la rutina'),
       };
     }
     if (isCurrentWeekCompletedToday) {
@@ -960,34 +960,133 @@ export function HomeScreen({
     }
     return {
       variant: 'start',
-      icon: 'gesture-tap',
+      icon: 'weight-lifter',
       title: t('Empezar entrenamiento'),
-      titleIcon: 'weight-lifter',
     };
   };
   const hero = getHeroState();
 
-  const handleSelectRoutine = (routineId: string) => {
-    // Verificar si la rutina tiene logs (es vieja)
-    const routineHasLogs = state.logs.some(
-      (log) => log.routineId === routineId
+  // Estadísticas de fuerza para el estado "estadísticas" de la hero card
+  // (carrusel). Espejo de la hero de Cardio pero con volumen (kg levantados)
+  // por semana de la rutina mostrada. El volumen ignora el peso corporal
+  // (series sin carga) por definición de "kg levantados".
+  const strengthStats = useMemo(() => {
+    const workoutVolume = (log: WorkoutLog): number =>
+      log.exercises.reduce(
+        (sum, ex) =>
+          sum +
+          (ex.parsedSets || []).reduce(
+            (a, set) =>
+              a + (set.weight > 0 && set.reps > 0 ? set.weight * set.reps : 0),
+            0
+          ),
+        0
+      );
+
+    const blockNums = Object.keys(groupedByBlock)
+      .map(Number)
+      .sort((a, b) => a - b);
+    if (blockNums.length === 0) {
+      return { hasData: false as const };
+    }
+
+    const weekVolume = (block: number) =>
+      (groupedByBlock[block] || []).reduce((s, l) => s + workoutVolume(l), 0);
+
+    const latest = blockNums[blockNums.length - 1];
+    const prev = blockNums.length > 1 ? blockNums[blockNums.length - 2] : null;
+    const currentVol = weekVolume(latest);
+    const lastVol = prev != null ? weekVolume(prev) : null;
+    const completed = blockNums.filter((b) => b !== latest);
+    const avgVol = completed.length
+      ? completed.reduce((s, b) => s + weekVolume(b), 0) / completed.length
+      : null;
+    const bestVol = Math.max(...blockNums.map(weekVolume));
+
+    const currentLogs = groupedByBlock[latest] || [];
+    const entrenos = new Set(
+      currentLogs.map((l) => l.dayId).filter(Boolean)
+    ).size;
+    const series = currentLogs.reduce(
+      (s, l) =>
+        s + l.exercises.reduce((a, ex) => a + (ex.parsedSets?.length || 0), 0),
+      0
     );
+    // Repeticiones y ejercicios distintos de la semana en curso: datos que
+    // siempre tienen sentido (también en la primera semana, cuando media/mejor
+    // no aportan nada).
+    const reps = currentLogs.reduce(
+      (s, l) =>
+        s +
+        l.exercises.reduce(
+          (a, ex) =>
+            a +
+            (ex.parsedSets || []).reduce(
+              (r, set) => r + (set.reps > 0 ? set.reps : 0),
+              0
+            ),
+          0
+        ),
+      0
+    );
+    const ejercicios = new Set(
+      currentLogs.flatMap((l) => l.exercises.map((ex) => ex.exerciseId))
+    ).size;
+    // % de cambio de volumen vs la semana pasada (null si no hay con qué comparar).
+    const deltaPct =
+      lastVol != null && lastVol > 0
+        ? ((currentVol - lastVol) / lastVol) * 100
+        : null;
 
-    // Siempre establecer como rutina visualizada
-    setViewedRoutineId(routineId);
+    return {
+      hasData: true as const,
+      weeksCount: blockNums.length,
+      currentVol,
+      lastVol,
+      avgVol,
+      bestVol,
+      deltaPct,
+      entrenos,
+      series,
+      reps,
+      ejercicios,
+    };
+  }, [groupedByBlock]);
 
-    // Si la rutina no es vieja, activarla
-    if (!routineHasLogs) {
-      dispatch({ type: 'SET_ACTIVE_ROUTINE', payload: routineId });
-    }
+  const fmtKg = (v: number | null | undefined) =>
+    v == null ? '—' : Math.round(v).toLocaleString(dateLocale);
+  const fmtInt = (v: number) => Math.round(v).toLocaleString(dateLocale);
+  const fmtPct = (v: number | null) =>
+    v == null ? '—' : `${v >= 0 ? '+' : ''}${Math.round(v)}%`;
 
-    // Siempre cerrar el selector (permite ver rutinas viejas sin activarlas)
-    setShowRoutineSelector(false);
+  // Fila de 3 datos de la hero de Fuerza, adaptada a las semanas disponibles
+  // (comparativa progresiva): en la primera semana no hay con qué comparar, así
+  // que se muestra la composición del entreno; en la segunda, la semana pasada y
+  // el cambio; a partir de la tercera, las referencias históricas.
+  const strengthHeroStats: HeroStat[] = !strengthStats.hasData
+    ? []
+    : strengthStats.weeksCount >= 3
+      ? [
+          { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
+          { value: fmtKg(strengthStats.avgVol), label: t('media semanal') },
+          { value: fmtKg(strengthStats.bestVol), label: t('mejor semana') },
+        ]
+      : strengthStats.weeksCount === 2
+        ? [
+            { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
+            { value: fmtPct(strengthStats.deltaPct), label: t('cambio') },
+            { value: fmtInt(strengthStats.reps), label: t('reps') },
+          ]
+        : [
+            { value: fmtInt(strengthStats.series), label: t('series') },
+            { value: fmtInt(strengthStats.reps), label: t('reps') },
+            { value: fmtInt(strengthStats.ejercicios), label: t('ejercicios') },
+          ];
 
-    // Si la rutina seleccionada es la activa, volver a home
-    if (routineId === state.activeRoutineId && onCloseRoutineSelector) {
-      onCloseRoutineSelector();
-    }
+  const handleSelectRoutine = (routineId: string) => {
+    // Pulsar una rutina solo la marca como seleccionada: NO la activa ni
+    // navega a Inicio. Queda seleccionada (persistente) hasta elegir otra.
+    dispatch({ type: 'SET_SELECTED_ROUTINE', payload: routineId });
   };
 
   const handleDeleteRoutine = () => {
@@ -996,15 +1095,10 @@ export function HomeScreen({
     const routine = state.routines.find((r) => r.id === routineToDeleteId);
     if (!routine) return;
 
+    // El reducer reajusta la selección si se borra la seleccionada.
     dispatch({ type: 'DELETE_ROUTINE', payload: routineToDeleteId });
 
-    // Si se borra la rutina visualizada, limpiar viewedRoutineId
-    if (viewedRoutineId === routineToDeleteId) {
-      setViewedRoutineId(undefined);
-    }
-
     setRoutineToDeleteId(undefined);
-    setShowRoutineSelector(false);
   };
 
   const getExecutionDateLabel = (log: WorkoutLog): string => {
@@ -1053,7 +1147,7 @@ export function HomeScreen({
 
   if (showRoutineSelector) {
     const selectedRoutineInSelector = state.routines.find(
-      (r) => r.id === viewedRoutineId
+      (r) => r.id === displayedRoutineId
     );
 
     return (
@@ -1080,14 +1174,19 @@ export function HomeScreen({
             const routineHasLogs = state.logs.some(
               (log) => log.routineId === routine.id
             );
+            const isActive = routine.id === state.activeRoutineId;
+            // "Preparada": creada pero aún no entrenada (no es la activa y sin
+            // historial). Se activará al registrar su primer día.
+            const isPrepared = !isActive && !routineHasLogs;
             const canDelete = !routineHasLogs;
 
             return (
               <RoutineCard
                 key={routine.id}
                 routine={routine}
-                isViewed={routine.id === viewedRoutineId}
-                isActive={routine.id === state.activeRoutineId}
+                isViewed={routine.id === displayedRoutineId}
+                isActive={isActive}
+                isPrepared={isPrepared}
                 onPress={() => handleSelectRoutine(routine.id)}
                 onLongPress={
                   canDelete ? () => setRoutineToDeleteId(routine.id) : undefined
@@ -1175,14 +1274,63 @@ export function HomeScreen({
         nestedScrollEnabled
         showsVerticalScrollIndicator={false}
       >
-        <HeroCard
-          variant={hero.variant}
-          icon={hero.icon}
-          title={hero.title}
-          titleIcon={hero.titleIcon}
-          subtitle={hero.subtitle}
-          onPress={handleStartPress}
-        />
+        {hasNoRoutines ? (
+          // Sin rutinas: un único estado (añadir rutina), sin carrusel.
+          <HeroCard
+            variant={hero.variant}
+            icon={hero.icon}
+            title={hero.title}
+            titleIcon={hero.titleIcon}
+            subtitle={hero.subtitle}
+            onPress={handleStartPress}
+          />
+        ) : (
+          // Tres estados con flechas: situación actual, ir a las rutinas y
+          // estadísticas de fuerza (volumen semanal).
+          <HeroCarousel
+            slides={[
+              <HeroCard
+                key="status"
+                variant={hero.variant}
+                icon={hero.icon}
+                title={hero.title}
+                titleIcon={hero.titleIcon}
+                subtitle={hero.subtitle}
+                onPress={handleStartPress}
+              />,
+              <HeroCard
+                key="routines"
+                variant="start"
+                icon="book-open-variant"
+                title={t('Ver rutinas')}
+                onPress={() => onOpenRoutineSelector?.()}
+              />,
+              <HeroStatsCard
+                key="stats"
+                isEmpty={!strengthStats.hasData}
+                emptyText={t('Aún no hay entrenamientos registrados.')}
+                kicker={t('Esta semana')}
+                mainIcon="weight-lifter"
+                mainValue={fmtKg(
+                  strengthStats.hasData ? strengthStats.currentVol : null
+                )}
+                mainUnit="kg"
+                subline={
+                  strengthStats.hasData
+                    ? `${strengthStats.entrenos} ${
+                        strengthStats.entrenos === 1
+                          ? t('entreno')
+                          : t('entrenos')
+                      } · ${strengthStats.series} ${
+                        strengthStats.series === 1 ? t('serie') : t('series')
+                      }`
+                    : ''
+                }
+                stats={strengthHeroStats}
+              />,
+            ]}
+          />
+        )}
 
         {isDisplayedRoutineActive && completedStreak >= 2 && (
           <View style={styles.streakChip}>
@@ -1374,7 +1522,7 @@ export function HomeScreen({
                   // (transform) rompía la sombra de elevación de las tarjetas
                   // hijas en Android (aparecía cortada/sin redondear). El colapso
                   // lo anima <Collapsible/> por su propia altura.
-                  <View key={block}>
+                  <View key={block} style={styles.weekBlock}>
                     <Pressable
                       style={[
                         styles.weekHeaderButton,
@@ -1401,7 +1549,9 @@ export function HomeScreen({
                       <GradientFill accent={weekAccent} />
 
                       <View style={styles.weekTitleRow}>
-                        <Text style={[styles.weekTitle, { color: weekAccent }]}>
+                        <Text
+                          style={[styles.weekTitle, { color: theme.colors.white }]}
+                        >
                           {t('Semana')} {block}
                         </Text>
                         {!!weekImprovement && (
@@ -1489,9 +1639,12 @@ export function HomeScreen({
                                       size={36}
                                     />
                                   </View>
-                                  <View>
+                                  <View style={styles.historyLogInfo}>
                                     <View style={styles.historyLogNameRow}>
-                                      <Text style={styles.historyLogDayName}>
+                                      <Text
+                                        style={styles.historyLogDayName}
+                                        numberOfLines={1}
+                                      >
                                         {getDisplayDayName(day.name)}
                                       </Text>
                                     </View>
@@ -1669,8 +1822,9 @@ export function HomeScreen({
 
 interface RoutineCardProps {
   routine: WorkoutRoutine;
-  isViewed: boolean; // Para el borde grueso
+  isViewed: boolean; // Para el borde grueso (seleccionada)
   isActive: boolean; // Para el check "Activa"
+  isPrepared: boolean; // Para la etiqueta "Preparada"
   onPress: () => void;
   onLongPress?: () => void;
 }
@@ -1679,6 +1833,7 @@ function RoutineCard({
   routine,
   isViewed,
   isActive,
+  isPrepared,
   onPress,
   onLongPress,
 }: RoutineCardProps) {
@@ -1697,7 +1852,7 @@ function RoutineCard({
           {t('{n} días de entrenamiento', { n: routine.days.length })}
         </Text>
       </View>
-      {isActive && (
+      {isActive ? (
         <View style={styles.routineCardActiveIndicator}>
           <MaterialCommunityIcons
             name="check-bold"
@@ -1706,7 +1861,16 @@ function RoutineCard({
           />
           <Text style={styles.routineCardActiveText}>{t('Activa')}</Text>
         </View>
-      )}
+      ) : isPrepared ? (
+        <View style={styles.routineCardPreparedIndicator}>
+          <MaterialCommunityIcons
+            name="progress-clock"
+            size={13}
+            color={theme.colors.emoji_blue}
+          />
+          <Text style={styles.routineCardPreparedText}>{t('Preparada')}</Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -1801,7 +1965,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    transform: [{ translateY: 3 }],
+    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
   },
   progressLatest: {
     fontSize: 17,
@@ -1913,12 +2077,17 @@ const styles = StyleSheet.create({
   },
   weeksSection: {
     marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.sm,
+    // Misma separación que hay entre la HeroCard y la tarjeta de la gráfica
+    // (HeroCard marginBottom md=16 + progressCard marginTop xs=6 = 22 = lg).
+    marginTop: theme.spacing.lg,
     marginBottom: theme.spacing.md,
   },
-  weekHeaderButton: {
-    marginTop: 12,
+  weekBlock: {
+    // Mismo ritmo vertical que Cardio: separación entre semanas = 10, y las
+    // tarjetas de día se separan 12 con su propio marginTop (ver historyLogCard).
     marginBottom: 10,
+  },
+  weekHeaderButton: {
     paddingVertical: 14,
     paddingHorizontal: 14,
     minHeight: 52,
@@ -1945,7 +2114,10 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    transform: [{ translateY: 3 }],
+    // Anton se dibuja pegado al borde superior de su caja; en Android
+    // (includeFontPadding:false) queda más alto que en web, así que necesita un
+    // empuje mayor para centrarse verticalmente frente al texto de al lado.
+    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
   },
   weekImprovementText: {
     fontSize: 15,
@@ -1968,7 +2140,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
-    marginBottom: 12,
+    marginTop: 12,
     borderWidth: 1,
     borderColor: theme.colors.border,
     minHeight: 72,
@@ -2000,10 +2172,13 @@ const styles = StyleSheet.create({
     marginLeft: -4,
     marginRight: 12,
   },
+  historyLogInfo: {
+    flex: 1,
+    minWidth: 0,
+  },
   historyLogNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flexWrap: 'wrap',
     gap: 10,
   },
   historyLogDayName: {
@@ -2099,6 +2274,21 @@ const styles = StyleSheet.create({
   routineCardActiveText: {
     fontSize: 13,
     color: theme.colors.primaryLight,
+    fontWeight: '800',
+  },
+  routineCardPreparedIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: theme.borderRadius.pill,
+    overflow: 'hidden',
+  },
+  routineCardPreparedText: {
+    fontSize: 13,
+    color: theme.colors.emoji_blue,
     fontWeight: '800',
   },
   newRoutineCard: {

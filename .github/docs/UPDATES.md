@@ -1,5 +1,33 @@
 # UPDATES
 
+## Version 0.6.1 - 2026-07-15
+
+### Nuevas funcionalidades
+
+- **Sesiones de solo cardio**: nuevo día sintético `CARDIO_ONLY_DAY` (`lib/cardio.ts`, id `__cardio_only__`, sin ejercicios) para registrar cardio suelto sin un día de fuerza. Se accede desde el estado "Insertar cardio" de la hero de Cardio y desde la opción "Solo cardio" del selector de sesión (`DaySelectorScreen`). El log se marca `cardioOnly`: no cuenta como entrenamiento de fuerza (se filtra en `HomeScreen`/`buildWeekProgress` y en el modo Fuerza del calendario) pero sí aparece en Cardio y en el modo Cardio del calendario, que resuelven el día con el sintético (`isCardioOnlyLog`).
+- **Hero cards en carrusel** (`components/HeroCarousel.tsx` + `components/HeroStatsCard.tsx`): el frame dorado queda fijo y solo el contenido entra deslizándose (`enterFrom`) con flechas y puntos. Inicio pasa a 3 estados (situación actual, "Ver rutinas" y estadísticas de fuerza con volumen semanal en kg y comparativa progresiva de 1/2/3+ semanas); Cardio pasa a 2 (estadísticas semanales + "Insertar cardio").
+- **Rutina seleccionada independiente de la activa** ("Preparada"): crear o pulsar una rutina en Rutinas ya no la activa; queda `selectedRoutineId` (persistido, `SET_SELECTED_ROUTINE`) y se muestra en Inicio. Una rutina creada/preparada se marca "Preparada" en su tarjeta y se convierte en activa al registrar en ella el primer día de fuerza (`ADD_WORKOUT_LOG` con promoción a activa; el solo-cardio no promociona). La hero de rutina cerrada pasa a llevar a Rutinas al pulsarla.
+- **Forzar inicio de nueva semana** en "Elige la sesión": nuevo flag `startsNewWeek` en el log; `DaySelectorScreen` ofrece un check "Empezar una nueva semana con este día" cuando el día elegido continuaría la semana en curso. Respetado por `lib/weeks.ts` y por `buildWeekProgress` de `HomeScreen`.
+
+### Arquitectura
+
+- **Esquema SQLite v2** (`lib/db/schema.ts`): nuevas columnas `starts_new_week` y `cardio_only` en `workout_logs` y setting `selected_routine_id`. Migración incremental idempotente por `ALTER TABLE ... ADD COLUMN` con try/catch para BD existentes; inserts/mappers (`db/index.ts`, `db/mappers.ts`) y `dbSetSelectedRoutine`/`persistence.ts` actualizados. `types/index.ts` añade `selectedRoutineId`, `startsNewWeek` y `cardioOnly`; `normalize.ts` conserva la seleccionada solo si existe (cae a la activa).
+- **Helpers de cardio** (`lib/cardio.ts`): `CARDIO_ONLY_DAY`/`CARDIO_ONLY_DAY_ID`, `isCardioOnlyLog`, `disciplineIconName` (iconos por disciplina, reconoce keywords es/en) y `mostPerformedDiscipline` (disciplina con más minutos, kcal de desempate).
+- **Seed de desarrollo web desde backup real** (`lib/storage.ts` + `data/devWebSeed.json`): en web+dev `getSeedAppData` siembra desde el backup real y `getSeedCardioWeightHistory` restaura el historial de peso para calcular kcal reales; el seed de fábrica se mantiene en nativo dev.
+
+### Cambios
+
+- Hero de Fuerza siempre en dorado: los estados `completed` y `closed` dejan de usar verde/rojo (consistente con Cardio); icono del estado inicial pasa a `weight-lifter`.
+- Títulos de semana (Inicio y Cardio) en blanco en vez del color de acento; texto del día "hoy" de Cardio también en blanco.
+- Ajuste de centrado vertical de la tipografía Anton en Android (`translateY` 9 vs 5 en web) en títulos de semana y del progreso.
+- `WhatsNewModal` con `ScrollView` y `maxHeight` para changelogs largos; el detalle de una sesión de solo cardio omite el título "Cardio" redundante.
+- `versionCode` 14 → 15 en `android/app/build.gradle`.
+
+### Correcciones
+
+- **Parpadeo de rutina al abrir, resuelto de raíz**: se elimina el estado local `viewedRoutineId` y su `useEffect` de `HomeScreen`; la rutina mostrada deriva ahora de `selectedRoutineId` persistido (cae a la activa si no existe), sin el frame de desincronía tras la hidratación.
+- Tests nuevos de `groupLogsIntoWeekBlocks` con `startsNewWeek` (`lib/__tests__/weeks.test.ts`).
+
 ## Version 0.6.0 - 2026-07-12
 
 ### Nuevas funcionalidades

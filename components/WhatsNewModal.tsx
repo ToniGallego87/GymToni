@@ -1,5 +1,13 @@
 import React from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Dimensions,
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -33,14 +41,17 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
           <Text style={styles.title}>
             {t('Novedades de la versión')} {entry.version}
           </Text>
-          <View style={styles.list}>
+          <ScrollView
+            style={styles.list}
+            showsVerticalScrollIndicator={false}
+          >
             {entry.items.map((item, index) => (
               <View key={index} style={styles.itemRow}>
                 <Text style={styles.bullet}>•</Text>
                 <Text style={styles.itemText}>{item}</Text>
               </View>
             ))}
-          </View>
+          </ScrollView>
           <Pressable
             style={({ pressed }) => [
               styles.closeButton,
@@ -70,6 +81,7 @@ const styles = StyleSheet.create({
     padding: 24,
     width: '100%',
     maxWidth: 360,
+    maxHeight: Dimensions.get('window').height * 0.75,
     borderWidth: 1,
     borderColor: theme.colors.border,
     alignItems: 'center',
@@ -92,6 +104,7 @@ const styles = StyleSheet.create({
   },
   list: {
     width: '100%',
+    maxHeight: Dimensions.get('window').height * 0.45,
     marginBottom: 22,
   },
   itemRow: {

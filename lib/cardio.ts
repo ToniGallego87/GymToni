@@ -1,4 +1,4 @@
-import { WorkoutLog } from '../types';
+import { WorkoutDay, WorkoutLog } from '../types';
 
 /**
  * Lógica pura del cardio "de primera clase".
@@ -196,6 +196,65 @@ export function parseCardioEntries(rawInput: string): CardioEntry[] {
 export function hasAnyCardio(logs: WorkoutLog[]): boolean {
   return logs.some(
     (l) => parseCardioEntries(l.cardio?.rawInput ?? '').length > 0
+  );
+}
+
+/** Id del día sintético "Solo cardio" (sin ejercicios de fuerza). */
+export const CARDIO_ONLY_DAY_ID = '__cardio_only__';
+
+/**
+ * Día sintético para las sesiones de "solo cardio": no pertenece a ninguna
+ * rutina y no tiene ejercicios de fuerza. El log resultante se marca cardioOnly.
+ * Compartido por App (inserción), Cardio y Calendario (para resolver el día al
+ * abrir el detalle, ya que no existe en ninguna rutina).
+ */
+export const CARDIO_ONLY_DAY: WorkoutDay = {
+  id: CARDIO_ONLY_DAY_ID,
+  dayNumber: 0,
+  name: 'Solo cardio',
+  emoji: 'run-fast',
+  exercises: [],
+};
+
+/** ¿Es un log de solo cardio (sin fuerza)? */
+export function isCardioOnlyLog(log: WorkoutLog): boolean {
+  return !!log.cardioOnly || log.dayId === CARDIO_ONLY_DAY_ID;
+}
+
+/**
+ * Nombre del icono (MaterialCommunityIcons) de una disciplina de cardio.
+ * `hasIncline` fuerza el icono de cuesta arriba. Se devuelve como string para
+ * mantener esta librería libre de dependencias de UI; se castea en el consumidor.
+ */
+export function disciplineIconName(type: string, hasIncline = false): string {
+  const tt = type.toLowerCase();
+  if (hasIncline) return 'slope-uphill';
+  if (tt.includes('andar') || tt.includes('walk')) return 'walk';
+  if (tt.includes('bici') || tt.includes('bike')) return 'bike';
+  if (
+    tt.includes('elíptica') ||
+    tt.includes('eliptica') ||
+    tt.includes('elliptical')
+  )
+    return 'human-handsup';
+  if (tt.includes('correr') || tt.includes('cinta') || tt.includes('run'))
+    return 'run-fast';
+  return 'run';
+}
+
+/**
+ * Disciplina "más realizada" de una sesión: la que más minutos acumula (kcal
+ * como desempate). Devuelve null si la sesión no tiene disciplinas.
+ */
+export function mostPerformedDiscipline(
+  session: CardioSession
+): MergedCardioEntry | null {
+  if (!session.disciplines.length) return null;
+  return session.disciplines.reduce((best, d) =>
+    d.totalMinutes > best.totalMinutes ||
+    (d.totalMinutes === best.totalMinutes && d.kcal > best.kcal)
+      ? d
+      : best
   );
 }
 

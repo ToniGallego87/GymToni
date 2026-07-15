@@ -23,8 +23,20 @@ const initialActiveRoutineId = resolveActiveRoutineId(
 const initialState: WorkoutState = {
   routines: syncActiveRoutine(WORKOUT_ROUTINES, initialActiveRoutineId),
   activeRoutineId: initialActiveRoutineId,
+  selectedRoutineId: initialActiveRoutineId,
   logs: ensureParsedSets(INITIAL_LOGS),
 };
+
+// Una rutina está "preparada" si no es la activa y aún no tiene ningún
+// entrenamiento registrado. Al registrar el primer día de una preparada,
+// pasa a ser la activa (ver ADD_WORKOUT_LOG).
+function isPreparedRoutine(
+  state: WorkoutState,
+  routineId: string | undefined
+): boolean {
+  if (!routineId || routineId === state.activeRoutineId) return false;
+  return !state.logs.some((log) => log.routineId === routineId);
+}
 
 function workoutReducer(
   state: WorkoutState,
@@ -36,11 +48,19 @@ function workoutReducer(
         action.payload.routines,
         action.payload.activeRoutineId
       );
+      // La seleccionada solo se conserva si sigue existiendo; si no, cae a la
+      // activa (misma rutina que se muestra en Inicio por defecto).
+      const selectedRoutineId = action.payload.routines.some(
+        (routine) => routine.id === action.payload.selectedRoutineId
+      )
+        ? action.payload.selectedRoutineId
+        : activeRoutineId;
 
       return {
         ...state,
         routines: syncActiveRoutine(action.payload.routines, activeRoutineId),
         activeRoutineId,
+        selectedRoutineId,
         logs: action.payload.logs,
       };
     }
@@ -50,13 +70,16 @@ function workoutReducer(
         routines: syncActiveRoutine(action.payload, state.activeRoutineId),
       };
     case 'ADD_ROUTINE':
+      // Una rutina nueva NO pasa a ser la activa: queda "preparada" y
+      // seleccionada (se muestra en Inicio). Se activará al registrar en ella
+      // el primer día de entrenamiento (ver ADD_WORKOUT_LOG).
       return {
         ...state,
         routines: syncActiveRoutine(
           [...state.routines, action.payload],
-          action.payload.id
+          state.activeRoutineId
         ),
-        activeRoutineId: action.payload.id,
+        selectedRoutineId: action.payload.id,
       };
     case 'DELETE_ROUTINE': {
       const nextRoutines = state.routines.filter(
@@ -66,11 +89,17 @@ function workoutReducer(
         state.activeRoutineId === action.payload
           ? nextRoutines[nextRoutines.length - 1]?.id
           : state.activeRoutineId;
+      // Si se borra la seleccionada, la selección cae a la activa resultante.
+      const nextSelectedRoutineId =
+        state.selectedRoutineId === action.payload
+          ? nextActiveRoutineId
+          : state.selectedRoutineId;
 
       return {
         ...state,
         routines: syncActiveRoutine(nextRoutines, nextActiveRoutineId),
         activeRoutineId: nextActiveRoutineId,
+        selectedRoutineId: nextSelectedRoutineId,
         logs: state.logs.filter((log) => log.routineId !== action.payload),
       };
     }
@@ -90,8 +119,26 @@ function workoutReducer(
         activeRoutineId: action.payload,
         routines: syncActiveRoutine(state.routines, action.payload),
       };
-    case 'ADD_WORKOUT_LOG':
-      return { ...state, logs: [...state.logs, action.payload] };
+    case 'SET_SELECTED_ROUTINE':
+      return { ...state, selectedRoutineId: action.payload };
+    case 'ADD_WORKOUT_LOG': {
+      // Registrar el primer día en una rutina "preparada" la convierte en la
+      // activa (el usuario ha empezado a entrenarla de verdad). Una sesión de
+      // solo cardio NO cuenta como entrenamiento de fuerza: no activa nada.
+      const promoteToActive =
+        !action.payload.cardioOnly &&
+        isPreparedRoutine(state, action.payload.routineId);
+      return {
+        ...state,
+        logs: [...state.logs, action.payload],
+        activeRoutineId: promoteToActive
+          ? action.payload.routineId
+          : state.activeRoutineId,
+        routines: promoteToActive
+          ? syncActiveRoutine(state.routines, action.payload.routineId)
+          : state.routines,
+      };
+    }
     case 'UPDATE_WORKOUT_LOG':
       return {
         ...state,
@@ -130,6 +177,7 @@ function workoutReducer(
         ...state,
         routines: [],
         activeRoutineId: undefined,
+        selectedRoutineId: undefined,
         logs: [],
         currentDay: undefined,
       };

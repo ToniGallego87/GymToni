@@ -12,6 +12,7 @@ import {
   LogSetRow,
   RoutineRow,
   SETTING_ACTIVE_ROUTINE_ID,
+  SETTING_SELECTED_ROUTINE_ID,
   SETTING_INITIALIZED,
   SettingRow,
   WorkoutDayRow,
@@ -82,6 +83,20 @@ function getDb(): Promise<SQLiteDatabase> {
       );
       if ((versionRow?.user_version ?? 0) < SCHEMA_VERSION) {
         await db.execAsync(SCHEMA_SQL);
+        // Migraciones incrementales para BD ya existentes: SCHEMA_SQL solo crea
+        // tablas que faltan (CREATE IF NOT EXISTS), no altera las existentes.
+        // ADD COLUMN falla si la columna ya existe (instalación nueva): se
+        // ignora ese error para que sea idempotente.
+        try {
+          await db.execAsync(
+            'ALTER TABLE workout_logs ADD COLUMN starts_new_week INTEGER NOT NULL DEFAULT 0'
+          );
+        } catch {}
+        try {
+          await db.execAsync(
+            'ALTER TABLE workout_logs ADD COLUMN cardio_only INTEGER NOT NULL DEFAULT 0'
+          );
+        } catch {}
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -114,7 +129,7 @@ function insertWorkoutLog(
   row: WorkoutLogRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.routines_id,
@@ -122,6 +137,8 @@ function insertWorkoutLog(
       row.date,
       row.created_at,
       row.updated_at,
+      row.starts_new_week,
+      row.cardio_only,
     ]
   );
 }
@@ -291,7 +308,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     );
     await bulkInsert(
       txn,
-      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       rows.workoutLogs,
       (row) => [
         row.id,
@@ -300,6 +317,8 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.date,
         row.created_at,
         row.updated_at,
+        row.starts_new_week,
+        row.cardio_only,
       ]
     );
     await bulkInsert(
@@ -547,6 +566,23 @@ export async function dbSetActiveRoutine(
   } else {
     await db.runAsync('DELETE FROM settings WHERE key = ?', [
       SETTING_ACTIVE_ROUTINE_ID,
+    ]);
+  }
+}
+
+export async function dbSetSelectedRoutine(
+  routineId: string | undefined
+): Promise<void> {
+  const db = await getDb();
+  if (routineId) {
+    await db.runAsync(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [SETTING_SELECTED_ROUTINE_ID, routineId]
+    );
+  } else {
+    await db.runAsync('DELETE FROM settings WHERE key = ?', [
+      SETTING_SELECTED_ROUTINE_ID,
     ]);
   }
 }
