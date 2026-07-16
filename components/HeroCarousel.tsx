@@ -5,8 +5,31 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
+import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+
+// Sombreado del "escalón": tinta oscura translúcida más intensa en el borde
+// exterior de la tarjeta y desvanecida a nada hacia el centro, para que el botón
+// parezca un peldaño hundido en el lateral del dorado en vez de una pastilla
+// flotante. Terminar en alpha 0 (y no en 0.04) es lo que borra el canto: el
+// tramo plano inicial mantiene el cuerpo oscuro y el resto difumina la
+// transición al dorado, en vez de cortarla en seco.
+const STEP_SHADE = [
+  'rgba(16, 19, 24, 0.26)',
+  'rgba(16, 19, 24, 0.22)',
+  'rgba(16, 19, 24, 0.10)',
+  'rgba(16, 19, 24, 0)',
+] as const;
+const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
+
+// Ancho del peldaño lateral.
+export const HERO_ARROW_WIDTH = 34;
+
+// Cuánto tiene que apartar de cada lado una tarjeta su contenido ancho (filas de
+// datos, gráficas) para que no quede bajo las flechas: lo que el peldaño invade
+// por dentro del padding horizontal de la tarjeta (20), más un poco de aire.
+export const HERO_ARROW_INSET = HERO_ARROW_WIDTH - 20 + 4;
 
 interface HeroCarouselProps {
   /** Cada estado de la hero card. Se muestra uno cada vez. */
@@ -71,7 +94,15 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
         hitSlop={10}
         onPress={() => go(-1)}
       >
-        <View style={styles.arrowBubble}>
+        <View style={[styles.arrowStep, styles.arrowStepLeft]}>
+          <LinearGradient
+            colors={[...STEP_SHADE]}
+            locations={STEP_SHADE_STOPS}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           <MaterialCommunityIcons name="chevron-left" size={30} color={color} />
         </View>
       </Pressable>
@@ -81,7 +112,15 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
         hitSlop={10}
         onPress={() => go(1)}
       >
-        <View style={styles.arrowBubble}>
+        <View style={[styles.arrowStep, styles.arrowStepRight]}>
+          <LinearGradient
+            colors={[...STEP_SHADE]}
+            locations={STEP_SHADE_STOPS}
+            start={{ x: 1, y: 0 }}
+            end={{ x: 0, y: 0 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
           <MaterialCommunityIcons
             name="chevron-right"
             size={30}
@@ -106,28 +145,41 @@ const styles = StyleSheet.create({
   arrow: {
     position: 'absolute',
     top: 0,
-    // Excluye el margen inferior de la hero card para centrar sobre la tarjeta.
+    // Excluye el margen inferior de la hero card para abarcar justo su altura.
     bottom: theme.spacing.md,
+    // Pegadas al borde exterior de la tarjeta (coincide con su margen horizontal).
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'stretch',
   },
-  // Flechas altas y anchas, pegadas al borde de la tarjeta e integradas: un panel
-  // translúcido oscuro que se funde con el dorado (poco borde, esquinas suaves).
   arrowLeft: {
     left: theme.spacing.md,
   },
   arrowRight: {
     right: theme.spacing.md,
   },
-  arrowBubble: {
-    width: 30,
-    height: 132,
-    borderRadius: 16,
+  // Peldaño lateral: ocupa TODA la altura de la hero card y va pegado a su borde.
+  // Las esquinas exteriores copian el radio de la tarjeta (parecen su propio
+  // borde); las interiores llevan un radio pequeño que apenas se ve, porque el
+  // degradado ya llega transparente a ese lado. El conjunto se lee como un
+  // escalón tallado en el lateral del dorado, no como un botón superpuesto.
+  arrowStep: {
+    width: HERO_ARROW_WIDTH,
+    flex: 1,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(16, 19, 24, 0.13)',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.26)',
+  },
+  arrowStepLeft: {
+    borderTopLeftRadius: theme.borderRadius.lg,
+    borderBottomLeftRadius: theme.borderRadius.lg,
+    borderTopRightRadius: theme.borderRadius.sm,
+    borderBottomRightRadius: theme.borderRadius.sm,
+  },
+  arrowStepRight: {
+    borderTopRightRadius: theme.borderRadius.lg,
+    borderBottomRightRadius: theme.borderRadius.lg,
+    borderTopLeftRadius: theme.borderRadius.sm,
+    borderBottomLeftRadius: theme.borderRadius.sm,
   },
   dots: {
     position: 'absolute',

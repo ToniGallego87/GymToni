@@ -39,6 +39,7 @@ import {
   HeroCard,
   HeroCarousel,
   HeroStatsCard,
+  HeroWeightCard,
   StretchScrollView,
 } from '../../components';
 import { WorkoutDay, WorkoutLog } from '../../types';
@@ -276,7 +277,7 @@ export function CardioScreen({
     {}
   );
   // Historial de tramos de peso. Cada peso nuevo recalcula el tramo anterior si
-  // se mete <1 semana después, o abre un tramo nuevo (sin recalcular) si es más.
+  // se mete <1 día después, o abre un tramo nuevo (sin recalcular) si es más.
   const [weightHistory, setWeightHistory] = useState<WeightSegment[]>([]);
   const [showWeightModal, setShowWeightModal] = useState(false);
   const [weightInput, setWeightInput] = useState('');
@@ -303,26 +304,31 @@ export function CardioScreen({
     ? weightHistory[weightHistory.length - 1].weight
     : null;
 
+  const openWeightModal = () => {
+    setWeightInput(currentWeight != null ? String(currentWeight) : '');
+    setShowWeightModal(true);
+  };
+
   const handleSaveWeight = async () => {
     const w = parseFloat(weightInput.replace(',', '.'));
     if (!Number.isFinite(w) || w <= 0) return;
 
     const now = Date.now();
-    const WEEK_MS = 7 * 24 * 3600 * 1000;
+    const DAY_MS = 24 * 3600 * 1000;
     let next: WeightSegment[];
     if (weightHistory.length === 0) {
       // Primer peso: cubre todo lo anterior (appliesFrom 0).
       next = [{ weight: w, appliesFrom: 0, setAt: now }];
     } else {
       const last = weightHistory[weightHistory.length - 1];
-      if (now - last.setAt < WEEK_MS) {
-        // <1 semana: recalcula el tramo anterior (mismo appliesFrom, nuevo peso).
+      if (now - last.setAt < DAY_MS) {
+        // <1 día: recalcula el tramo anterior (mismo appliesFrom, nuevo peso).
         next = [
           ...weightHistory.slice(0, -1),
           { ...last, weight: w, setAt: now },
         ];
       } else {
-        // ≥1 semana: tramo nuevo desde ahora, sin tocar lo anterior.
+        // ≥1 día: tramo nuevo desde ahora, sin tocar lo anterior.
         next = [...weightHistory, { weight: w, appliesFrom: now, setAt: now }];
       }
     }
@@ -444,87 +450,75 @@ export function CardioScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero con dos estados (carrusel con flechas): estadísticas de la
-            semana e "Insertar nuevo cardio" (día de solo cardio, sin fuerza).
+        {/* Hero con tres estados (carrusel con flechas): estadísticas de la
+            semana, peso corporal (editable, con su evolución) e "Insertar nuevo
+            cardio" (día de solo cardio, sin fuerza).
             Mismo aspecto que la HeroCard de Fuerza. El contenedor con margen
             negativo cancela el padding horizontal del scroll para que la tarjeta
             tenga el mismo ancho que la hero de Fuerza (que ya lleva su propio
             margen). */}
         <View style={styles.heroBleed}>
-        <HeroCarousel
-          slides={[
-            <HeroStatsCard
-              key="stats"
-              dense
-              isEmpty={!hasCardio}
-              emptyText={t(
-                'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
-              )}
-              kicker={t('Esta semana')}
-              mainIcon="fire"
-              mainValue={String(Math.round(currentWeek?.totalKcal ?? 0))}
-              mainUnit="kcal"
-              subline={
-                currentWeek
-                  ? `${currentWeek.sessionCount} ${
-                      currentWeek.sessionCount === 1
-                        ? t('sesión')
-                        : t('sesiones')
-                    } · ${Math.round(currentWeek.totalMinutes)} min · ${fmtNum(
-                      currentWeekKm
-                    )} km`
-                  : t('Aún sin cardio esta semana')
-              }
-              stats={[
-                {
-                  value: lastWeek ? String(Math.round(lastWeek.totalKcal)) : '—',
-                  label: t('semana pasada'),
-                },
-                {
-                  value:
-                    avgWeekKcal != null ? String(Math.round(avgWeekKcal)) : '—',
-                  label: t('media semanal'),
-                },
-                {
-                  value:
-                    bestWeekKcal != null
-                      ? String(Math.round(bestWeekKcal))
+          <HeroCarousel
+            slides={[
+              <HeroStatsCard
+                key="stats"
+                isEmpty={!hasCardio}
+                emptyText={t(
+                  'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
+                )}
+                kicker={t('Esta semana')}
+                mainIcon="fire"
+                mainValue={String(Math.round(currentWeek?.totalKcal ?? 0))}
+                mainUnit="kcal"
+                subline={
+                  currentWeek
+                    ? `${currentWeek.sessionCount} ${
+                        currentWeek.sessionCount === 1
+                          ? t('sesión')
+                          : t('sesiones')
+                      } · ${Math.round(
+                        currentWeek.totalMinutes
+                      )} min · ${fmtNum(currentWeekKm)} km`
+                    : t('Aún sin cardio esta semana')
+                }
+                stats={[
+                  {
+                    value: lastWeek
+                      ? String(Math.round(lastWeek.totalKcal))
                       : '—',
-                  label: t('mejor semana'),
-                },
-              ]}
-              footer={
-                <Pressable
-                  style={styles.heroWeightRow}
-                  onPress={() => {
-                    setWeightInput(
-                      currentWeight != null ? String(currentWeight) : ''
-                    );
-                    setShowWeightModal(true);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="scale-bathroom"
-                    size={16}
-                    color={theme.colors.onGold}
-                  />
-                  <Text style={styles.heroWeightText}>
-                    {currentWeight != null
-                      ? t('Peso: {w} kg', { w: currentWeight })
-                      : t('Pulsa para indicar tu peso')}
-                  </Text>
-                </Pressable>
-              }
-            />,
-            <HeroCard
-              key="insert"
-              variant="start"
-              icon="run-fast"
-              title={t('Insertar cardio')}
-              onPress={() => onInsertCardioOnly?.()}
-            />,
-          ]}
-        />
+                    label: t('semana pasada'),
+                  },
+                  {
+                    value:
+                      avgWeekKcal != null
+                        ? String(Math.round(avgWeekKcal))
+                        : '—',
+                    label: t('media semanal'),
+                  },
+                  {
+                    value:
+                      bestWeekKcal != null
+                        ? String(Math.round(bestWeekKcal))
+                        : '—',
+                    label: t('mejor semana'),
+                  },
+                ]}
+              />,
+              <HeroWeightCard
+                key="weight"
+                weight={currentWeight}
+                history={weightHistory.map((s) => s.weight)}
+                onPress={openWeightModal}
+              />,
+              <HeroCard
+                key="insert"
+                variant="start"
+                icon="run-fast"
+                title={t('Insertar cardio')}
+                onPress={() => onInsertCardioOnly?.()}
+              />,
+            ]}
+          />
         </View>
 
         {kcalMonths.length >= 2 && (
@@ -868,21 +862,6 @@ const styles = StyleSheet.create({
   heroBleed: {
     marginHorizontal: -theme.spacing.md,
   },
-  heroWeightRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 19, 24, 0.16)',
-  },
-  heroWeightText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-  },
   progressCard: {
     borderRadius: theme.borderRadius.md,
     borderWidth: 2,
@@ -915,7 +894,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
+    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
   },
   deltaRow: {
     flexDirection: 'row',
@@ -1024,7 +1003,7 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
+    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
   },
   weekDelta: {
     fontSize: 14,

@@ -1004,9 +1004,8 @@ export function HomeScreen({
     const bestVol = Math.max(...blockNums.map(weekVolume));
 
     const currentLogs = groupedByBlock[latest] || [];
-    const entrenos = new Set(
-      currentLogs.map((l) => l.dayId).filter(Boolean)
-    ).size;
+    const entrenos = new Set(currentLogs.map((l) => l.dayId).filter(Boolean))
+      .size;
     const series = currentLogs.reduce(
       (s, l) =>
         s + l.exercises.reduce((a, ex) => a + (ex.parsedSets?.length || 0), 0),
@@ -1032,10 +1031,21 @@ export function HomeScreen({
     const ejercicios = new Set(
       currentLogs.flatMap((l) => l.exercises.map((ex) => ex.exerciseId))
     ).size;
-    // % de cambio de volumen vs la semana pasada (null si no hay con qué comparar).
+    // % de cambio de volumen vs la semana pasada. La semana en curso está a
+    // medias, así que compararla con la anterior ENTERA daría un -X% que solo
+    // mide los días que faltan (el lunes, -100%). Se compara contra los mismos
+    // días que ya se han entrenado esta semana: pera con pera desde el primer
+    // día, y al completar la semana converge solo al % de semana entera.
+    const doneDayIds = new Set(currentLogs.map((l) => l.dayId).filter(Boolean));
+    const lastVolSameDays =
+      prev != null
+        ? (groupedByBlock[prev] || [])
+            .filter((l) => !!l.dayId && doneDayIds.has(l.dayId))
+            .reduce((s, l) => s + workoutVolume(l), 0)
+        : null;
     const deltaPct =
-      lastVol != null && lastVol > 0
-        ? ((currentVol - lastVol) / lastVol) * 100
+      lastVolSameDays != null && lastVolSameDays > 0
+        ? ((currentVol - lastVolSameDays) / lastVolSameDays) * 100
         : null;
 
     return {
@@ -1066,22 +1076,22 @@ export function HomeScreen({
   const strengthHeroStats: HeroStat[] = !strengthStats.hasData
     ? []
     : strengthStats.weeksCount >= 3
-      ? [
-          { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
-          { value: fmtKg(strengthStats.avgVol), label: t('media semanal') },
-          { value: fmtKg(strengthStats.bestVol), label: t('mejor semana') },
-        ]
-      : strengthStats.weeksCount === 2
-        ? [
-            { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
-            { value: fmtPct(strengthStats.deltaPct), label: t('cambio') },
-            { value: fmtInt(strengthStats.reps), label: t('reps') },
-          ]
-        : [
-            { value: fmtInt(strengthStats.series), label: t('series') },
-            { value: fmtInt(strengthStats.reps), label: t('reps') },
-            { value: fmtInt(strengthStats.ejercicios), label: t('ejercicios') },
-          ];
+    ? [
+        { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
+        { value: fmtKg(strengthStats.avgVol), label: t('media semanal') },
+        { value: fmtKg(strengthStats.bestVol), label: t('mejor semana') },
+      ]
+    : strengthStats.weeksCount === 2
+    ? [
+        { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
+        { value: fmtPct(strengthStats.deltaPct), label: t('vs mismos días') },
+        { value: fmtInt(strengthStats.reps), label: t('reps') },
+      ]
+    : [
+        { value: fmtInt(strengthStats.series), label: t('series') },
+        { value: fmtInt(strengthStats.reps), label: t('reps') },
+        { value: fmtInt(strengthStats.ejercicios), label: t('ejercicios') },
+      ];
 
   const handleSelectRoutine = (routineId: string) => {
     // Pulsar una rutina solo la marca como seleccionada: NO la activa ni
@@ -1550,7 +1560,10 @@ export function HomeScreen({
 
                       <View style={styles.weekTitleRow}>
                         <Text
-                          style={[styles.weekTitle, { color: theme.colors.white }]}
+                          style={[
+                            styles.weekTitle,
+                            { color: theme.colors.white },
+                          ]}
                         >
                           {t('Semana')} {block}
                         </Text>
@@ -1965,7 +1978,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
+    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
   },
   progressLatest: {
     fontSize: 17,
@@ -2114,10 +2127,9 @@ const styles = StyleSheet.create({
     lineHeight: 26,
     includeFontPadding: false,
     textAlignVertical: 'center',
-    // Anton se dibuja pegado al borde superior de su caja; en Android
-    // (includeFontPadding:false) queda más alto que en web, así que necesita un
-    // empuje mayor para centrarse verticalmente frente al texto de al lado.
-    transform: [{ translateY: Platform.OS === 'android' ? 9 : 5 }],
+    // Anton se dibuja pegado al borde superior de su caja, así que hace falta un
+    // pequeño empuje hacia abajo para centrarlo frente al texto/icono de al lado.
+    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
   },
   weekImprovementText: {
     fontSize: 15,

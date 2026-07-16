@@ -8,6 +8,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { HERO_ARROW_INSET } from './HeroCarousel';
 
 export interface HeroStat {
   value: string;
@@ -30,14 +31,6 @@ interface HeroStatsCardProps {
   /** Si es true, se muestra `emptyText` centrado en vez de los datos. */
   isEmpty?: boolean;
   emptyText?: string;
-  /** Contenido opcional al pie (ej: fila de peso corporal en Cardio). */
-  footer?: React.ReactNode;
-  /**
-   * Modo compacto: encoge el dato principal y las distancias verticales para que
-   * la tarjeta quepa en la misma altura aun llevando `footer` (lo usa Cardio,
-   * que añade la fila de peso, para igualar la altura de la hero de Fuerza).
-   */
-  dense?: boolean;
   /** Dirección de entrada del contenido en un carrusel (el frame no se mueve). */
   enterFrom?: 'left' | 'right';
 }
@@ -58,8 +51,6 @@ export function HeroStatsCard({
   stats,
   isEmpty,
   emptyText,
-  footer,
-  dense,
   enterFrom,
 }: HeroStatsCardProps) {
   // Animación de solo el contenido (el frame/gradiente queda fijo en el carrusel).
@@ -91,51 +82,39 @@ export function HeroStatsCard({
       />
 
       <Animated.View style={contentStyle}>
-      {isEmpty ? (
-        <Text style={styles.heroEmptyText}>{emptyText}</Text>
-      ) : (
-        <>
-          <View>
-            <Text style={[styles.heroKicker, dense && styles.heroKickerDense]}>
-              {kicker}
-            </Text>
-            <View style={styles.heroMainRow}>
-              <MaterialCommunityIcons
-                name={mainIcon as any}
-                size={dense ? 26 : 30}
-                color={theme.colors.onGold}
-              />
-              <Text
-                style={[styles.heroMainValue, dense && styles.heroMainValueDense]}
-              >
-                {mainValue}
-              </Text>
-              <Text style={styles.heroMainUnit}>{mainUnit}</Text>
+        {isEmpty ? (
+          <Text style={styles.heroEmptyText}>{emptyText}</Text>
+        ) : (
+          <>
+            <View>
+              <Text style={styles.heroKicker}>{kicker}</Text>
+              <View style={styles.heroMainRow}>
+                <MaterialCommunityIcons
+                  name={mainIcon as any}
+                  size={30}
+                  color={theme.colors.onGold}
+                />
+                <Text style={styles.heroMainValue}>{mainValue}</Text>
+                <Text style={styles.heroMainUnit}>{mainUnit}</Text>
+              </View>
+              <Text style={styles.heroSubline}>{subline}</Text>
             </View>
-            <Text style={[styles.heroSubline, dense && styles.heroSublineDense]}>
-              {subline}
-            </Text>
-          </View>
 
-          {stats.length > 0 && (
-            <View
-              style={[styles.heroStatsRow, dense && styles.heroStatsRowDense]}
-            >
-              {stats.map((stat, index) => (
-                <React.Fragment key={stat.label}>
-                  {index > 0 && <View style={styles.heroStatDivider} />}
-                  <View style={styles.heroStat}>
-                    <Text style={styles.heroStatValue}>{stat.value}</Text>
-                    <Text style={styles.heroStatLabel}>{stat.label}</Text>
-                  </View>
-                </React.Fragment>
-              ))}
-            </View>
-          )}
-        </>
-      )}
-
-      {footer}
+            {stats.length > 0 && (
+              <View style={styles.heroStatsRow}>
+                {stats.map((stat, index) => (
+                  <React.Fragment key={stat.label}>
+                    {index > 0 && <View style={styles.heroStatDivider} />}
+                    <View style={styles.heroStat}>
+                      <Text style={styles.heroStatValue}>{stat.value}</Text>
+                      <Text style={styles.heroStatLabel}>{stat.label}</Text>
+                    </View>
+                  </React.Fragment>
+                ))}
+              </View>
+            )}
+          </>
+        )}
       </Animated.View>
     </LinearGradient>
   );
@@ -147,7 +126,11 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.md,
     borderRadius: theme.borderRadius.lg,
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingTop: 14,
+    // Más padding abajo que arriba: el contenido va centrado, así que este hueco
+    // extra lo sube en bloque y deja respirar la fila de datos frente a los
+    // puntitos del carrusel (que van a 10px del borde inferior de la tarjeta).
+    paddingBottom: 24,
     minHeight: 172,
     justifyContent: 'center',
     overflow: 'hidden',
@@ -168,9 +151,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: theme.colors.onGold,
     opacity: 0.75,
-    marginBottom: 6,
-  },
-  heroKickerDense: {
     marginBottom: 2,
   },
   heroMainRow: {
@@ -182,15 +162,12 @@ const styles = StyleSheet.create({
   heroMainValue: {
     fontFamily: theme.fonts.display,
     fontSize: 34,
-    lineHeight: 44,
+    // Ratio 1.18, en línea con el resto de textos en Anton de la app (weekTitle
+    // 21/26, dailyName 19/22). 44 dejaba aire muerto sobre y bajo el número.
+    lineHeight: 40,
     includeFontPadding: false,
     transform: [{ translateY: 4 }],
     color: theme.colors.onGold,
-  },
-  heroMainValueDense: {
-    fontSize: 28,
-    lineHeight: 36,
-    transform: [{ translateY: 3 }],
   },
   heroMainUnit: {
     fontSize: 16,
@@ -201,15 +178,12 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   heroSubline: {
-    marginTop: 4,
+    marginTop: 2,
     fontSize: 13,
     fontWeight: '700',
     textAlign: 'center',
     color: theme.colors.onGold,
     opacity: 0.85,
-  },
-  heroSublineDense: {
-    marginTop: 2,
   },
   heroEmptyText: {
     fontSize: 14,
@@ -222,14 +196,13 @@ const styles = StyleSheet.create({
   heroStatsRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 6,
-    paddingTop: 6,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 19, 24, 0.16)',
-  },
-  heroStatsRowDense: {
     marginTop: 4,
     paddingTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 19, 24, 0.16)',
+    // Encogida a los lados: es el contenido más ancho de la tarjeta y sus
+    // columnas exteriores llegaban a meterse bajo las flechas del carrusel.
+    marginHorizontal: HERO_ARROW_INSET,
   },
   heroStat: {
     flex: 1,
