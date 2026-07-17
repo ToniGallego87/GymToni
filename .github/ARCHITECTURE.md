@@ -47,7 +47,7 @@ Tanto `storage.ts` como `WorkoutContext.tsx` usan estas funciones compartidas.
 
 ```typescript
 WorkoutRoutine        // Contiene días y metadata de rutina
-  └─ WorkoutDay[]     // 5 días por rutina
+  └─ WorkoutDay[]     // 1–7 días por rutina
        └─ WorkoutExercise[]  // Ejercicios del día
 
 WorkoutLog            // Registro de una sesión completada
@@ -55,30 +55,28 @@ WorkoutLog            // Registro de una sesión completada
   │    └─ ParsedSet[] // { weight, reps }
   └─ CardioLog?       // Cardio opcional
 
-WorkoutState          // Estado global del reducer
+WorkoutState          // Estado global del reducer (= WorkoutAppData)
   ├─ routines[]
   ├─ activeRoutineId
-  ├─ logs[]
-  └─ currentDay?
+  ├─ selectedRoutineId  // rutina mostrada en Inicio; independiente de la activa
+  └─ logs[]
 ```
 
 ## Acciones del reducer
 
-| Acción               | Efecto                          |
-| -------------------- | ------------------------------- |
-| `SET_APP_DATA`       | Carga inicial desde storage     |
-| `SET_ROUTINES`       | Reemplaza todas las rutinas     |
-| `ADD_ROUTINE`        | Añade rutina nueva              |
-| `DELETE_ROUTINE`     | Elimina rutina por id           |
-| `UPDATE_ROUTINE`     | Actualiza rutina existente      |
-| `SET_ACTIVE_ROUTINE` | Cambia rutina activa            |
-| `ADD_WORKOUT_LOG`    | Guarda nuevo registro           |
-| `UPDATE_WORKOUT_LOG` | Edita registro existente        |
-| `DELETE_WORKOUT_LOG` | Elimina registro                |
-| `SET_LOGS`           | Reemplaza todos los logs        |
-| `UPDATE_DAY`         | Modifica un día de una rutina   |
-| `CLEAR_DATA`         | Borra todo                      |
-| `SET_CURRENT_DAY`    | Establece día de trabajo actual |
+| Acción                 | Efecto                                       |
+| ---------------------- | -------------------------------------------- |
+| `SET_APP_DATA`         | Carga inicial desde storage                  |
+| `ADD_ROUTINE`          | Añade rutina nueva (queda "preparada")       |
+| `DELETE_ROUTINE`       | Elimina rutina por id                        |
+| `UPDATE_ROUTINE`       | Actualiza rutina existente                   |
+| `SET_ACTIVE_ROUTINE`   | Cambia rutina activa                         |
+| `SET_SELECTED_ROUTINE` | Cambia la rutina seleccionada (vista Inicio) |
+| `ADD_WORKOUT_LOG`      | Guarda nuevo registro                        |
+| `UPDATE_WORKOUT_LOG`   | Edita registro existente                     |
+| `DELETE_WORKOUT_LOG`   | Elimina registro                             |
+| `UPDATE_DAY`           | Modifica un día de una rutina                |
+| `CLEAR_DATA`           | Borra todo                                   |
 
 ## Estructura de carpetas
 
@@ -95,7 +93,13 @@ lib/                    → Lógica compartida
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
   ├── parsers.ts        → Parsers de series y cardio
   ├── progress.ts       → Cálculos de progreso y 1RM estimado (Epley)
-  ├── weeks.ts          → Agrupación de logs en bloques/semanas y puntuación semanal
+  ├── weeks.ts          → Semanas de entrenamiento: agrupación en bloques, puntuación,
+  │                       rachas (computeStreak) y serie de progreso (buildWeekProgress)
+  ├── exerciseForm.ts   → Modelo de edición de ejercicios (fila ↔ WorkoutExercise,
+  │                       parseo de texto importado). Conserva ids: el historial los referencia
+  ├── exerciseProgress.ts → Historial y récords de UN ejercicio (agrupa por NOMBRE:
+  │                       el mismo ejercicio tiene otro id en cada rutina)
+  ├── routines.ts       → Duplicar una rutina (ids nuevos en rutina/días/ejercicios)
   ├── cardio.ts         → Cardio como experiencia propia: sesiones, semanas ISO, kcal
   ├── achievements.ts   → Logros semanales (récords, rachas)
   ├── routineShare.ts   → Compartir rutina (QR / texto plano)
@@ -116,9 +120,10 @@ data/                   → Seed data (rutinas iniciales + logs demo) y changelo
 HomeScreen
   ├─→ DaySelectorScreen (elegir día)
   │     └─→ WorkoutLogScreen (registrar)
-  ├─→ RoutineDetailScreen (ver/editar rutina, compartir QR)
+  ├─→ RoutineSelectorScreen (elegir/borrar rutina; se abre desde Inicio o Perfil)
+  │     └─→ RoutineDetailScreen (ver/editar rutina, compartir QR)
   ├─→ NewRoutineScreen (crear rutina)
-  ├─→ QRScannerScreen (importar rutina por QR/texto)
+  │     └─→ QRScannerScreen (importar rutina por QR/texto)
   ├─→ WeekAchievementScreen (imagen/vídeo de logros semanales)
   └─→ DetailScreen (ver log guardado)
 
@@ -126,7 +131,10 @@ FloatingPrimaryNav (barra inferior, desde cualquier pantalla principal)
   ├─→ HomeScreen
   ├─→ CardioScreen (semanas de cardio, kcal, peso corporal)
   ├─→ CalendarScreen (vista calendario)
-  └─→ DataScreen (exportar/importar/limpiar)
+  └─→ ProfileScreen (resumen y menú)
+        ├─→ RoutineSelectorScreen
+        ├─→ DataScreen (exportar/importar/limpiar)
+        └─→ SettingsScreen (tema, idioma, novedades)
 
 DetailScreen recuerda su origen (home / calendar / cardio) para volver a él.
 ```
@@ -141,8 +149,13 @@ DetailScreen recuerda su origen (home / calendar / cardio) para volver a él.
 - Tokens compartidos en `glassTokens.ts` (blur, opacidad, bordes)
 - Colores y degradados centralizados en `lib/theme.ts` (`theme.colors`,
   `theme.gradients`); ningún hex suelto en pantallas
-- Diálogo de confirmación único: `ConfirmModal` (overlay `theme.colors.overlay`,
-  tarjeta surface, botones `Button`)
+- Modal único: `AppModal` (overlay, tarjeta, título con icono, mensaje y pie).
+  El cuerpo y los botones los pone quien lo usa, siempre con `Button`.
+  `ConfirmModal` es su especialización para confirmar/cancelar
+- Gráfica de barras única: `BarChart` (progreso semanal de Inicio y métricas
+  mensuales de Cardio); cada pantalla aporta sus barras ya coloreadas y su dominio
+- Filtro segmentado único: `SegmentedFilter` (filtro por día de Inicio y métrica
+  de Cardio)
 - Popup de novedades tras actualizar: `WhatsNewModal` (lee `data/changelog.ts`,
   se controla desde `App.tsx` comparando con la última versión vista)
 - Diseño edge-to-edge en todas las pantallas

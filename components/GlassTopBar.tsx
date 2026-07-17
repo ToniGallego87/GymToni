@@ -14,6 +14,7 @@ import {
   GLASS_TINT,
   GLASS_TOP_BAR_BLUR_INTENSITY,
   GLASS_TOP_BAR_BG,
+  GLASS_TOP_BAR_HAIRLINE,
   GLASS_TOP_BAR_OVERLAY,
 } from './glassTokens';
 
@@ -127,8 +128,10 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 25,
     justifyContent: 'flex-start',
-    borderBottomWidth: 0,
-    borderBottomColor: 'rgba(255, 255, 255, 0.12)',
+    // En día un filo sutil separa la barra del contenido que pasa por debajo;
+    // en noche el propio blur oscuro ya define el límite.
+    borderBottomWidth: theme.mode === 'light' ? StyleSheet.hairlineWidth : 0,
+    borderBottomColor: GLASS_TOP_BAR_HAIRLINE,
     backgroundColor: GLASS_TOP_BAR_BG,
     overflow: 'hidden',
   },

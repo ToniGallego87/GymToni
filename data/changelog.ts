@@ -9,6 +9,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.2',
+    items: [
+      'Nuevo Progreso por ejercicio (en Perfil): elige un ejercicio y ve cómo ha ido sesión a sesión, con tus récords de peso, repeticiones y mejor sesión, cada uno con su fecha. Aunque cambies de rutina, el histórico del ejercicio sigue entero.',
+      'Ya no hay que mantener pulsado para nada: todo lo que se puede hacer tiene ahora su botón a la vista (ver los logros de una semana, editar o borrar un entrenamiento, borrar una rutina y editar los ejercicios de un día).',
+      'Ahora puedes duplicar una rutina: se copia entera, sin historial, para que la ajustes y la estrenes sin tocar la que estás entrenando.',
+      'La pantalla ya no se apaga mientras registras un entrenamiento, así no tienes que desbloquear el móvil entre serie y serie.',
+      'Al borrar un día de entrenamiento puedes quedarte con el cardio de ese día: te lo pregunta y, por defecto, lo conserva.',
+      'Un día tiene un solo cardio, lo metas por donde lo metas: se acabaron los días partidos en dos sesiones que se veían distintas en cada pantalla. Los días que ya estaban partidos se arreglan solos al abrir la app.',
+      'Los filtros de las gráficas ahora se ven todos de golpe: antes había que ir pulsando a ciegas para pasar de uno a otro. El filtro por día muestra el dibujo de cada grupo muscular.',
+      'El modo claro estrena un dorado vivo y luminoso, en vez del bronce apagado de antes, y los acentos ya no se ven marrones.',
+      'Cardio se organiza por días: una tarjeta por día con sus calorías totales y, dentro, cada disciplina. El dato grande ahora es tu cardio de HOY, comparado con el mismo día de la semana pasada, tu media diaria y tu mejor día.',
+      'Andar en cuesta ya cuenta como algo distinto de andar en llano, y el calendario pinta la disciplina en la que más quemaste ese día.',
+      'Los decimales se escriben y se ven con coma, como en español ("12,6 km/h").',
+      'Guardar un entrenamiento ya no te hace esperar: vuelve al instante.',
+      'La tarjeta de progreso de Inicio ya dice el nombre de tu rutina, en vez de "Rutina 2".',
+      'Corregido: al reordenar o añadir ejercicios en un día, el historial se mezclaba entre ejercicios y las comparaciones mostraban datos de otro. Ya no.',
+      'Al volver del registro de cardio aterrizas en Cardio, no en Inicio.',
+      'Los números grandes de las tarjetas vuelven a estar bien alineados y sin recortes.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.1',
     items: [
       'Ahora puedes registrar solo tu cardio, sin tener que abrir un día de entrenamiento de fuerza.',

@@ -33,7 +33,7 @@ export function GradientFill({ accent }: GradientFillProps) {
         />
       )}
       <LinearGradient
-        colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']}
+        colors={theme.gradients.cardSheen}
         start={{ x: 0, y: 0 }}
         end={{ x: 0, y: 1 }}
         style={styles.sheen}

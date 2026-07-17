@@ -5,7 +5,6 @@ import {
   Text,
   StyleSheet,
   TextInput,
-  Modal,
   TouchableOpacity,
   Pressable,
   useWindowDimensions,
@@ -18,12 +17,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
-import { t, dateLocale } from '@lib/i18n';
+import { t, dateLocale, localizeDecimals, parseTypedNumber } from '@lib/i18n';
 import {
+  buildCardioDays,
   buildCardioWeeks,
   buildCardioMonths,
   formatMergedResults,
   fmtNum,
+  hasIncline,
+  CardioDay,
   CardioMonth,
   CARDIO_ONLY_DAY,
   isCardioOnlyLog,
@@ -31,6 +33,10 @@ import {
 } from '@lib/cardio';
 import { getCardioWeightHistory, setCardioWeightHistory } from '@lib/storage';
 import {
+  AppModal,
+  BarChart,
+  BarChartPoint,
+  Button,
   FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -40,6 +46,8 @@ import {
   HeroCarousel,
   HeroStatsCard,
   HeroWeightCard,
+  SegmentedFilter,
+  SegmentedOption,
   StretchScrollView,
 } from '../../components';
 import { WorkoutDay, WorkoutLog } from '../../types';
@@ -51,7 +59,8 @@ interface CardioScreenProps {
   onNavigateProfile?: () => void;
   // Abre la vista de resultados (DetailScreen) del día de cardio pulsado.
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
-  // Abre la vista de registro de una sesión de solo cardio (sin fuerza).
+  // Abre la vista de registro del cardio (la usan el hero y el día de hoy, que
+  // sigue vivo). Precarga sola todo el cardio que ya tenga ese día.
   onInsertCardioOnly?: () => void;
 }
 
@@ -122,7 +131,8 @@ const CHART_METRICS: ChartMetric[] = [
     unit: 'km',
     icon: 'map-marker-distance',
     get: (m) => m.totalKm,
-    fmt: (v) => String(Math.round(v * 10) / 10),
+    // fmtNum redondea a 1 decimal y lo pinta en el separador del idioma.
+    fmt: fmtNum,
   },
   {
     id: 'speed',
@@ -130,34 +140,34 @@ const CHART_METRICS: ChartMetric[] = [
     unit: 'km/h',
     icon: 'speedometer',
     get: (m) => m.avgSpeed,
-    fmt: (v) => String(Math.round(v * 10) / 10),
+    fmt: fmtNum,
   },
 ];
 
-// Gráfico compacto por MES de la métrica seleccionada. Color por tendencia (mes
-// vs mes anterior) de esa métrica; el mes en curso, en amarillo.
-function CardioMetricChart({
-  months,
-  width,
-  metric,
-}: {
-  months: CardioMonth[];
-  width: number;
-  metric: ChartMetric;
-}) {
+// Opciones del filtro de la gráfica, en el mismo orden que CHART_METRICS.
+const METRIC_OPTIONS: SegmentedOption<string>[] = CHART_METRICS.map(
+  (chartMetric) => ({
+    id: chartMetric.id,
+    label: chartMetric.label,
+    icon: chartMetric.icon,
+  })
+);
+
+// Traduce los meses a barras de la métrica seleccionada: color por tendencia
+// (mes vs mes anterior) y el mes en curso en amarillo. El dibujo lo hace
+// <BarChart/> (compartido con la gráfica de progreso de Inicio).
+function buildMetricChart(
+  months: CardioMonth[],
+  metric: ChartMetric
+): { bars: BarChartPoint[]; domain: { min: number; max: number } } | null {
   const points = months
-    .map((m) => ({ m, value: metric.get(m) }))
-    .filter((p): p is { m: CardioMonth; value: number } => {
-      return p.value != null && p.value > 0;
+    .map((month) => ({ month, value: metric.get(month) }))
+    .filter((point): point is { month: CardioMonth; value: number } => {
+      return point.value != null && point.value > 0;
     });
   if (points.length < 2) return null;
 
-  const padding = { top: 18, right: 12, bottom: 26, left: 42 };
-  const height = 170;
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-
-  const values = points.map((p) => p.value);
+  const values = points.map((point) => point.value);
   const maxVal = Math.max(...values);
   const minVal = Math.min(...values);
   // La velocidad no arranca en 0 (rangos pequeños); el resto sí.
@@ -166,97 +176,33 @@ function CardioMetricChart({
       ? Math.max(0, minVal - (maxVal - minVal) * 0.4 - 0.5)
       : 0;
   const span = maxVal - domainMin || maxVal || 1;
-  const domainMax = maxVal + span * 0.15;
 
-  const slotWidth = plotWidth / points.length;
-  const barWidth = Math.max(18, Math.min(slotWidth * 0.55, 34));
-  const getX = (i: number) =>
-    padding.left + i * slotWidth + (slotWidth - barWidth) / 2;
-  const getY = (value: number) => {
-    if (domainMax === domainMin) return padding.top + plotHeight / 2;
-    return (
-      padding.top + ((domainMax - value) / (domainMax - domainMin)) * plotHeight
-    );
-  };
-  const baseY = padding.top + plotHeight;
-  const yTicks = [domainMax, (domainMax + domainMin) / 2, domainMin];
+  const bars = points.map((point, index) => {
+    const isCurrent = point.month.isCurrent;
+    const prev = index > 0 ? points[index - 1].value : null;
+    const improved = prev == null ? null : point.value >= prev;
+    const color = isCurrent
+      ? theme.colors.primaryLine
+      : improved == null
+      ? theme.colors.emoji_blue
+      : improved
+      ? theme.colors.success
+      : theme.colors.error;
 
-  return (
-    <View style={styles.chartWrapper}>
-      <View style={[styles.chart, { width }]}>
-        {yTicks.map((tick, idx) => (
-          <View
-            key={`grid-${idx}`}
-            style={[
-              styles.chartGridLine,
-              { top: getY(tick), left: padding.left, width: plotWidth },
-            ]}
-          />
-        ))}
+    return {
+      key: point.month.monthKey,
+      value: point.value,
+      label: monthLabel(point.month),
+      valueLabel: metric.fmt(point.value),
+      color,
+      // La etiqueta es texto sobre la tarjeta: el mes en curso necesita la
+      // tinta, no el oro de línea de su barra (ver theme.ts).
+      valueColor: isCurrent ? theme.colors.primary : color,
+      highlighted: isCurrent,
+    };
+  });
 
-        {points.map((point, index) => {
-          const x = getX(index);
-          const y = getY(point.value);
-          const barHeight = Math.max(baseY - y, 4);
-          const isCurrent = point.m.isCurrent;
-          const prev = index > 0 ? points[index - 1].value : null;
-          const improved = prev == null ? null : point.value >= prev;
-          const barColor = isCurrent
-            ? theme.colors.primary
-            : improved == null
-            ? theme.colors.emoji_blue
-            : improved
-            ? theme.colors.success
-            : theme.colors.error;
-
-          return (
-            <React.Fragment key={point.m.monthKey}>
-              <View
-                style={[
-                  styles.chartBar,
-                  {
-                    left: x,
-                    top: y,
-                    height: barHeight,
-                    width: barWidth,
-                    backgroundColor: barColor,
-                  },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.chartValueLabel,
-                  { color: barColor, left: x + barWidth / 2 - 22, top: y - 16 },
-                ]}
-                numberOfLines={1}
-              >
-                {metric.fmt(point.value)}
-              </Text>
-              <Text
-                style={[
-                  styles.chartXLabel,
-                  isCurrent && styles.chartXLabelCurrent,
-                  { left: x + barWidth / 2 - 20, top: height - 18, width: 40 },
-                ]}
-                numberOfLines={1}
-              >
-                {monthLabel(point.m)}
-              </Text>
-            </React.Fragment>
-          );
-        })}
-
-        {yTicks.map((tick, idx) => (
-          <Text
-            key={`y-${idx}`}
-            style={[styles.chartYLabel, { top: getY(tick) - 8 }]}
-          >
-            {metric.fmt(tick)}
-          </Text>
-        ))}
-      </View>
-    </View>
-  );
+  return { bars, domain: { min: domainMin, max: maxVal + span * 0.15 } };
 }
 
 export function CardioScreen({
@@ -305,12 +251,15 @@ export function CardioScreen({
     : null;
 
   const openWeightModal = () => {
-    setWeightInput(currentWeight != null ? String(currentWeight) : '');
+    // Se edita en el separador del idioma; parseTypedNumber lo lee igual.
+    setWeightInput(
+      currentWeight != null ? localizeDecimals(String(currentWeight)) : ''
+    );
     setShowWeightModal(true);
   };
 
   const handleSaveWeight = async () => {
-    const w = parseFloat(weightInput.replace(',', '.'));
+    const w = parseTypedNumber(weightInput);
     if (!Number.isFinite(w) || w <= 0) return;
 
     const now = Date.now();
@@ -345,8 +294,8 @@ export function CardioScreen({
     [state.logs, weightHistory]
   );
 
-  // Pulsar un día de cardio abre su vista de resultados (DetailScreen). Se
-  // resuelve el log completo por id y su día dentro de las rutinas.
+  // Abre la vista de resultados (DetailScreen) de un log de cardio ya cerrado.
+  // Se resuelve el log completo por id y su día dentro de las rutinas.
   const handleSessionPress = (logId: string) => {
     const log = state.logs.find((l) => l.id === logId);
     if (!log) return;
@@ -366,6 +315,22 @@ export function CardioScreen({
     }
     if (day) onSelectLog?.(log, day);
   };
+
+  // Pulsar la tarjeta de un día. HOY la sesión sigue viva: se abre la inserción
+  // de cardio (que ya precarga todo lo del día) para seguir sumando, en vez de
+  // la consulta. Los días pasados abren su log; si ese día tiene fuerza y cardio
+  // suelto (datos antiguos), manda el de fuerza: es el que lo contiene todo.
+  const handleDayPress = (cardioDay: CardioDay) => {
+    if (cardioDay.date === todayKey) {
+      onInsertCardioOnly?.();
+      return;
+    }
+    const logs = cardioDay.sessions
+      .map((s) => state.logs.find((l) => l.id === s.logId))
+      .filter((l): l is WorkoutLog => l != null);
+    const primary = logs.find((l) => !isCardioOnlyLog(l)) ?? logs[0];
+    if (primary) handleSessionPress(primary.id);
+  };
   const months = useMemo(
     () => buildCardioMonths(state.logs, weightHistory),
     [state.logs, weightHistory]
@@ -375,37 +340,35 @@ export function CardioScreen({
 
   const todayKey = new Date().toISOString().split('T')[0];
 
-  // Datos del hero: la semana EN CURSO como protagonista, con tres referencias
-  // fijas para leerla de un vistazo (semana pasada, media y mejor semana).
-  const currentWeek = useMemo(
-    () => weeks.find((w) => w.isCurrent) ?? null,
-    [weeks]
+  // Datos del hero: HOY como protagonista, con tres referencias diarias para
+  // leerlo de un vistazo (mismo día de la semana pasada, media y mejor día).
+  const days = useMemo(
+    () => buildCardioDays(state.logs, weightHistory),
+    [state.logs, weightHistory]
   );
-  const currentWeekKm = useMemo(
+  const today = useMemo(() => days.find((d) => d.isToday) ?? null, [days]);
+  // Compara lunes con lunes: el mismo día de la semana anterior (hoy - 7).
+  const sameDayLastWeek = useMemo(() => {
+    const d = new Date(`${todayKey}T00:00:00`);
+    d.setDate(d.getDate() - 7);
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+      2,
+      '0'
+    )}-${String(d.getDate()).padStart(2, '0')}`;
+    return days.find((x) => x.date === key) ?? null;
+  }, [days, todayKey]);
+  // La media es de días CON cardio y ya cerrados: hoy aún está sumando.
+  const pastDays = useMemo(() => days.filter((d) => !d.isToday), [days]);
+  const avgDayKcal = useMemo(
     () =>
-      currentWeek
-        ? currentWeek.sessions.reduce((s, session) => s + session.totalKm, 0)
-        : 0,
-    [currentWeek]
-  );
-  const completedWeeks = useMemo(
-    () => weeks.filter((w) => !w.isCurrent),
-    [weeks]
-  );
-  const lastWeek = completedWeeks.length
-    ? completedWeeks[completedWeeks.length - 1]
-    : null;
-  const avgWeekKcal = useMemo(
-    () =>
-      completedWeeks.length
-        ? completedWeeks.reduce((s, w) => s + w.totalKcal, 0) /
-          completedWeeks.length
+      pastDays.length
+        ? pastDays.reduce((s, d) => s + d.totalKcal, 0) / pastDays.length
         : null,
-    [completedWeeks]
+    [pastDays]
   );
-  const bestWeekKcal = useMemo(
-    () => (weeks.length ? Math.max(...weeks.map((w) => w.totalKcal)) : null),
-    [weeks]
+  const bestDayKcal = useMemo(
+    () => (days.length ? Math.max(...days.map((d) => d.totalKcal)) : null),
+    [days]
   );
 
   // La gráfica es mensual; la métrica se elige con el selector.
@@ -413,6 +376,10 @@ export function CardioScreen({
   const latestMonth = months[months.length - 1];
   const metric = CHART_METRICS[metricIdx];
   const latestMonthValue = latestMonth ? metric.get(latestMonth) : null;
+  const metricChart = useMemo(
+    () => buildMetricChart(months, metric),
+    [months, metric]
+  );
 
   // Lista: 5 semanas más recientes (incluida la actual); "Cargar más" añade 5.
   const visibleWeeks = orderedWeeks.slice(0, visibleCount);
@@ -428,8 +395,8 @@ export function CardioScreen({
 
   const hasCardio = weeks.length > 0;
 
-  // La tarjeta de la gráfica es siempre blanca.
-  const progressAccent = theme.colors.white;
+  // La tarjeta de la gráfica lleva siempre el acento estructural.
+  const progressAccent = theme.colors.accentLine;
 
   return (
     <View style={styles.container}>
@@ -466,41 +433,39 @@ export function CardioScreen({
                 emptyText={t(
                   'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
                 )}
-                kicker={t('Esta semana')}
+                kicker={t('Hoy')}
                 mainIcon="fire"
-                mainValue={String(Math.round(currentWeek?.totalKcal ?? 0))}
+                mainValue={String(Math.round(today?.totalKcal ?? 0))}
                 mainUnit="kcal"
                 subline={
-                  currentWeek
-                    ? `${currentWeek.sessionCount} ${
-                        currentWeek.sessionCount === 1
-                          ? t('sesión')
-                          : t('sesiones')
-                      } · ${Math.round(
-                        currentWeek.totalMinutes
-                      )} min · ${fmtNum(currentWeekKm)} km`
-                    : t('Aún sin cardio esta semana')
+                  today
+                    ? `${today.disciplines.length} ${
+                        today.disciplines.length === 1
+                          ? t('disciplina')
+                          : t('disciplinas')
+                      } · ${Math.round(today.totalMinutes)} min · ${fmtNum(
+                        today.totalKm
+                      )} km`
+                    : t('Aún sin cardio hoy')
                 }
                 stats={[
                   {
-                    value: lastWeek
-                      ? String(Math.round(lastWeek.totalKcal))
+                    value: sameDayLastWeek
+                      ? String(Math.round(sameDayLastWeek.totalKcal))
                       : '—',
-                    label: t('semana pasada'),
+                    label: t('hace 7 días'),
                   },
                   {
                     value:
-                      avgWeekKcal != null
-                        ? String(Math.round(avgWeekKcal))
-                        : '—',
-                    label: t('media semanal'),
+                      avgDayKcal != null ? String(Math.round(avgDayKcal)) : '—',
+                    label: t('media diaria'),
                   },
                   {
                     value:
-                      bestWeekKcal != null
-                        ? String(Math.round(bestWeekKcal))
+                      bestDayKcal != null
+                        ? String(Math.round(bestDayKcal))
                         : '—',
-                    label: t('mejor semana'),
+                    label: t('mejor día'),
                   },
                 ]}
               />,
@@ -563,33 +528,27 @@ export function CardioScreen({
 
             {showChart && (
               <>
-                <CardioMetricChart
-                  months={months}
-                  width={chartWidth}
-                  metric={metric}
-                />
-                <TouchableOpacity
-                  style={styles.chartFilterButton}
-                  activeOpacity={0.8}
-                  onPress={() => {
-                    animateLayout();
-                    const next = (metricIdx + 1) % CHART_METRICS.length;
-                    setMetricIdx(next);
-                    AsyncStorage.setItem(
-                      'cardioChartMetric',
-                      CHART_METRICS[next].id
-                    ).catch(() => {});
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name="autorenew"
-                    size={16}
-                    color={theme.colors.text}
+                {!!metricChart && (
+                  <BarChart
+                    points={metricChart.bars}
+                    domain={metricChart.domain}
+                    width={chartWidth}
+                    formatYTick={metric.fmt}
                   />
-                  <Text style={styles.chartFilterButtonText} numberOfLines={1}>
-                    {metric.label}
-                  </Text>
-                </TouchableOpacity>
+                )}
+                <SegmentedFilter
+                  options={METRIC_OPTIONS}
+                  value={metric.id}
+                  onChange={(id) => {
+                    const next = CHART_METRICS.findIndex((m) => m.id === id);
+                    if (next < 0) return;
+                    animateLayout();
+                    setMetricIdx(next);
+                    AsyncStorage.setItem('cardioChartMetric', id).catch(
+                      () => {}
+                    );
+                  }}
+                />
               </>
             )}
           </View>
@@ -597,11 +556,11 @@ export function CardioScreen({
 
         {visibleWeeks.map((week) => {
           const isExpanded = expandedWeeks[week.weekKey] ?? week.isCurrent;
-          // Tarjeta: siempre blanca salvo la semana en curso (amarilla). El
+          // Tarjeta: acento estructural salvo la semana en curso (amarilla). El
           // verde/rojo solo se usa en el dato de subida/bajada (kcalDelta).
           const accent = week.isCurrent
-            ? theme.colors.primary
-            : theme.colors.white;
+            ? theme.colors.primaryLine
+            : theme.colors.accentLine;
 
           return (
             <View key={week.weekKey} style={styles.weekBlock}>
@@ -666,101 +625,97 @@ export function CardioScreen({
                 </View>
               </Pressable>
 
-              {isExpanded &&
-                week.sessions
-                  .slice()
-                  .reverse()
-                  .map((session, sIdx) => {
-                    const d = new Date(`${session.date}T00:00:00`);
-                    const weekday = d.toLocaleDateString(dateLocale, {
-                      weekday: 'long',
-                    });
-                    const weekdayCap =
-                      weekday.charAt(0).toUpperCase() + weekday.slice(1);
-                    const dateStr = d.toLocaleDateString(dateLocale);
-                    const isToday = session.date === todayKey;
-                    return session.disciplines.map((entry, eIdx) => {
-                      const hasIncline =
-                        entry.maxPendiente != null && entry.maxPendiente > 0;
+              {/* Una tarjeta por DÍA: fecha y kcal del día arriba, y dentro el
+                  listado de disciplinas que se hicieron ese día. */}
+              {isExpanded && (
+                <View style={styles.weekDays}>
+                  {week.days
+                    .slice()
+                    .reverse()
+                    .map((day, dIdx) => {
+                      const d = new Date(`${day.date}T00:00:00`);
+                      const weekday = d.toLocaleDateString(dateLocale, {
+                        weekday: 'long',
+                      });
+                      const weekdayCap =
+                        weekday.charAt(0).toUpperCase() + weekday.slice(1);
+                      const dateStr = d.toLocaleDateString(dateLocale);
+                      const isToday = day.date === todayKey;
                       return (
                         <Animated.View
-                          key={`${session.logId}-${eIdx}`}
-                          entering={FadeInDown.duration(200).delay(sIdx * 40)}
+                          key={day.date}
+                          entering={FadeInDown.duration(200).delay(dIdx * 40)}
                         >
+                          {/* "Hoy" se marca con el aro dorado y el GradientFill,
+                              como en Inicio; el texto va en sus colores de
+                              siempre (fecha y resultados en gris). */}
                           <Pressable
-                            onPress={() => handleSessionPress(session.logId)}
+                            onPress={() => handleDayPress(day)}
                             style={({ pressed }) => [
                               styles.dailyCard,
                               isToday && styles.dailyCardToday,
                               pressed && { opacity: 0.7 },
                             ]}
                           >
+                            {isToday && (
+                              <GradientFill accent={theme.colors.primaryLine} />
+                            )}
                             <View style={styles.dailyHeader}>
-                              <View style={styles.dailyLeft}>
+                              <Text style={styles.dailyDate} numberOfLines={1}>
+                                <Text style={styles.dailyWeekday}>
+                                  {weekdayCap}{' '}
+                                </Text>
+                                <Text style={styles.dailyDateBold}>
+                                  {dateStr}
+                                </Text>
+                              </Text>
+                              <Text style={styles.dailyBadge}>
+                                {Math.round(day.totalKcal)} kcal
+                              </Text>
+                            </View>
+
+                            {day.disciplines.map((entry, eIdx) => (
+                              <View
+                                key={`${day.date}-${eIdx}`}
+                                style={styles.disciplineRow}
+                              >
                                 <MaterialCommunityIcons
-                                  name={disciplineIcon(entry.type, hasIncline)}
-                                  size={30}
+                                  name={disciplineIcon(
+                                    entry.type,
+                                    hasIncline(entry.maxPendiente)
+                                  )}
+                                  size={28}
                                   color={theme.colors.white}
-                                  style={styles.dailyAccent}
                                 />
                                 <View style={styles.dailyInfo}>
                                   <Text
-                                    style={[
-                                      styles.dailyName,
-                                      isToday && styles.dailyTextToday,
-                                    ]}
+                                    style={styles.dailyName}
                                     numberOfLines={1}
                                   >
                                     {entry.type}
                                   </Text>
                                   <Text
-                                    style={[
-                                      styles.dailyResults,
-                                      isToday && styles.dailyTextToday,
-                                    ]}
+                                    style={styles.dailyResults}
                                     numberOfLines={1}
                                   >
                                     {formatMergedResults(entry)}
                                   </Text>
                                 </View>
-                              </View>
-                              <View style={styles.dailyRight}>
-                                <Text
-                                  style={styles.dailyDate}
-                                  numberOfLines={1}
-                                >
-                                  <Text
-                                    style={[
-                                      styles.dailyWeekday,
-                                      isToday && styles.dailyTextToday,
-                                    ]}
-                                  >
-                                    {weekdayCap}{' '}
+                                {/* Las kcal por disciplina solo aportan si hay
+                                    más de una: si no, repiten las del día. */}
+                                {day.disciplines.length > 1 && (
+                                  <Text style={styles.disciplineKcal}>
+                                    {Math.round(entry.kcal)} kcal
                                   </Text>
-                                  <Text
-                                    style={[
-                                      styles.dailyDateBold,
-                                      isToday && styles.dailyTextToday,
-                                    ]}
-                                  >
-                                    {dateStr}
-                                  </Text>
-                                </Text>
-                                <Text
-                                  style={[
-                                    styles.dailyBadge,
-                                    isToday && styles.dailyTextToday,
-                                  ]}
-                                >
-                                  {Math.round(entry.kcal)} kcal
-                                </Text>
+                                )}
                               </View>
-                            </View>
+                            ))}
                           </Pressable>
                         </Animated.View>
                       );
-                    });
-                  })}
+                    })}
+                </View>
+              )}
             </View>
           );
         })}
@@ -800,48 +755,47 @@ export function CardioScreen({
         topInset={insets.top}
       />
 
-      <Modal
+      <AppModal
         visible={showWeightModal}
-        transparent
-        animationType="fade"
         onRequestClose={() => setShowWeightModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>{t('Tu peso')}</Text>
-            <Text style={styles.modalHint}>
-              {t(
-                'Se usa para estimar las kcalorías del cardio. Al cambiarlo, todas se recalculan.'
-              )}
-            </Text>
-            <View style={styles.weightInputRow}>
-              <TextInput
-                style={styles.weightInput}
-                value={weightInput}
-                onChangeText={setWeightInput}
-                keyboardType="decimal-pad"
-                placeholder="70"
-                placeholderTextColor={theme.colors.textSecondary}
-                maxLength={5}
-                autoFocus
-              />
-              <Text style={styles.weightUnit}>kg</Text>
-            </View>
-            <TouchableOpacity
-              style={styles.weightSaveButton}
-              onPress={handleSaveWeight}
-            >
-              <Text style={styles.weightSaveText}>{t('Guardar')}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.weightCancelButton}
+        title={t('Tu peso')}
+        icon="scale-bathroom"
+        message={t(
+          'Se usa para estimar las kcalorías del cardio. Se aplica a los próximos; los cardios ya registrados mantienen el peso que tenías entonces.'
+        )}
+        footer={
+          <View style={styles.modalButtonRow}>
+            <Button
+              title={t('Cancelar')}
               onPress={() => setShowWeightModal(false)}
-            >
-              <Text style={styles.weightCancelText}>{t('Cancelar')}</Text>
-            </TouchableOpacity>
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
+            />
+            <Button
+              title={t('Guardar')}
+              onPress={handleSaveWeight}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
           </View>
+        }
+      >
+        <View style={styles.weightInputRow}>
+          <TextInput
+            style={styles.weightInput}
+            value={weightInput}
+            onChangeText={setWeightInput}
+            keyboardType="decimal-pad"
+            placeholder="70"
+            placeholderTextColor={theme.colors.textSecondary}
+            maxLength={5}
+            autoFocus
+          />
+          <Text style={styles.weightUnit}>kg</Text>
         </View>
-      </Modal>
+      </AppModal>
     </View>
   );
 }
@@ -912,70 +866,14 @@ const styles = StyleSheet.create({
   progressLatestDown: {
     color: theme.colors.error,
   },
-  chartWrapper: {
-    marginTop: 18,
-    alignItems: 'center',
-  },
-  chartFilterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    alignSelf: 'center',
-    marginTop: 18,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  chartFilterButtonText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  chart: {
-    height: 170,
-    position: 'relative',
-  },
-  chartGridLine: {
-    position: 'absolute',
-    height: 1,
-    backgroundColor: theme.colors.border,
-  },
-  chartBar: {
-    position: 'absolute',
-    borderRadius: 6,
-  },
-  chartValueLabel: {
-    position: 'absolute',
-    width: 44,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  chartXLabel: {
-    position: 'absolute',
-    textAlign: 'center',
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-  },
-  chartXLabelCurrent: {
-    color: theme.colors.primary,
-    fontWeight: '800',
-  },
-  chartYLabel: {
-    position: 'absolute',
-    left: 0,
-    width: 38,
-    textAlign: 'right',
-    fontSize: 10,
-    color: theme.colors.textSecondary,
-  },
   weekBlock: {
     marginBottom: 10,
+  },
+  // Hueco bajo la última tarjeta del día, para separarla de la semana siguiente.
+  // Es el mismo ritmo que Inicio, donde lo pone el SHADOW_BLEED_BOTTOM del
+  // Collapsible que envuelve los días (aquí no hay acordeón, va en el estilo).
+  weekDays: {
+    paddingBottom: 10,
   },
   weekHeader: {
     borderRadius: theme.borderRadius.sm,
@@ -1032,23 +930,32 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...theme.shadow.soft,
   },
+  // Mismo "hoy" que la tarjeta de Inicio: aro dorado + GradientFill. NO pisar
+  // aquí el backgroundColor con un tinte translúcido: la tarjeta lleva
+  // elevation (shadow.soft) y Android, sin fondo opaco, pinta el relleno como
+  // un rectángulo con esquinas vivas dentro del redondeo.
   dailyCardToday: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primaryMuted,
+    borderColor: theme.colors.primaryLine,
+    borderWidth: 2.5,
   },
+  // Cabecera de la tarjeta del día: fecha a la izquierda, kcal del día a la
+  // derecha. Debajo va una fila por disciplina.
   dailyHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     gap: 10,
   },
-  dailyLeft: {
+  disciplineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
+    gap: 10,
+    marginTop: 10,
   },
-  dailyAccent: {
-    marginRight: 12,
+  disciplineKcal: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: theme.colors.textSecondary,
   },
   dailyInfo: {
     flex: 1,
@@ -1067,14 +974,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
     lineHeight: 16,
   },
-  dailyRight: {
-    alignItems: 'flex-end',
-    gap: 2,
-  },
   dailyDate: {
     fontSize: 14,
     lineHeight: 16,
-    textAlign: 'right',
   },
   dailyWeekday: {
     fontWeight: '500',
@@ -1096,9 +998,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceAlt,
     overflow: 'hidden',
   },
-  dailyTextToday: {
-    color: theme.colors.white,
-  },
   showMoreButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1116,42 +1015,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.text,
   },
-  modalOverlay: {
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalButton: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  modalCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: 20,
-    width: '100%',
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  modalHint: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-    marginBottom: 16,
   },
   weightInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginBottom: 16,
+    marginTop: 16,
   },
   weightInput: {
     backgroundColor: theme.colors.inputBg,
@@ -1170,30 +1046,5 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: theme.colors.textSecondary,
-  },
-  weightSaveButton: {
-    backgroundColor: theme.colors.success,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  weightSaveText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-  },
-  weightCancelButton: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  weightCancelText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.text,
   },
 });

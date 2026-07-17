@@ -1,8 +1,9 @@
 import React from 'react';
-import { Modal, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
+import { AppModal } from './AppModal';
 import { Button } from './Button';
 
 interface ConfirmModalProps {
@@ -10,7 +11,7 @@ interface ConfirmModalProps {
   title: string;
   message: string;
   /** Icono MaterialCommunityIcons junto al título (default: alert-outline). */
-  icon?: string;
+  icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   confirmLabel: string;
   /** Variante del botón de confirmar (default: danger, el caso habitual). */
   confirmVariant?: 'primary' | 'danger';
@@ -19,12 +20,18 @@ interface ConfirmModalProps {
   onCancel: () => void;
   /** Deshabilita el botón de confirmar (acción en curso). */
   busy?: boolean;
+  /**
+   * Check opcional entre el mensaje y los botones, para matizar la acción
+   * (ej: "Borrar también el cardio"). Sin `checkLabel` no se pinta nada.
+   */
+  checkLabel?: string;
+  checked?: boolean;
+  onToggleCheck?: () => void;
 }
 
 /**
  * Diálogo de confirmación único de la app (eliminar rutina/entrenamiento,
- * importar/limpiar datos…). Centraliza overlay, tarjeta y botones para que
- * todas las confirmaciones se vean y se comporten igual.
+ * importar/limpiar datos…): `AppModal` con el par cancelar/confirmar ya puesto.
  */
 export function ConfirmModal({
   visible,
@@ -37,89 +44,85 @@ export function ConfirmModal({
   onConfirm,
   onCancel,
   busy = false,
+  checkLabel,
+  checked = false,
+  onToggleCheck,
 }: ConfirmModalProps) {
   return (
-    <Modal
+    <AppModal
       visible={visible}
-      transparent
-      animationType="fade"
       onRequestClose={onCancel}
-    >
-      <View style={styles.overlay}>
-        <View style={styles.card}>
-          <View style={styles.titleRow}>
-            <MaterialCommunityIcons
-              name={icon as any}
-              size={18}
-              color={theme.colors.text}
-            />
-            <Text style={styles.title}>{title}</Text>
-          </View>
-          <Text style={styles.message}>{message}</Text>
-          <View style={styles.buttons}>
-            <Button
-              title={cancelLabel}
-              onPress={onCancel}
-              variant="secondary"
-              size="medium"
-              style={styles.button}
-            />
-            <Button
-              title={confirmLabel}
-              onPress={onConfirm}
-              variant={confirmVariant}
-              disabled={busy}
-              size="medium"
-              style={styles.button}
-            />
-          </View>
+      title={title}
+      icon={icon}
+      message={message}
+      footer={
+        <View style={styles.buttonRow}>
+          <Button
+            title={cancelLabel}
+            onPress={onCancel}
+            variant="secondary"
+            size="medium"
+            style={styles.button}
+          />
+          <Button
+            title={confirmLabel}
+            onPress={onConfirm}
+            variant={confirmVariant}
+            disabled={busy}
+            size="medium"
+            style={styles.button}
+          />
         </View>
-      </View>
-    </Modal>
+      }
+    >
+      {!!checkLabel && (
+        <Pressable style={styles.checkRow} onPress={onToggleCheck}>
+          <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
+            {checked && (
+              <MaterialCommunityIcons
+                name="check-bold"
+                size={14}
+                color={theme.colors.onGold}
+              />
+            )}
+          </View>
+          <Text style={styles.checkLabel}>{checkLabel}</Text>
+        </Pressable>
+      )}
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: theme.colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-  },
-  card: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
-    width: '100%',
-    maxWidth: 340,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.card,
-  },
-  titleRow: {
+  checkRow: {
     flexDirection: 'row',
-    justifyContent: 'center',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
+    gap: 10,
+    marginTop: 16,
   },
-  title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: theme.colors.primaryLine,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
   },
-  message: {
+  checkboxChecked: {
+    backgroundColor: theme.colors.primaryFill,
+  },
+  checkLabel: {
+    flex: 1,
     fontSize: 14,
-    color: theme.colors.textSecondary,
+    fontWeight: '700',
+    color: theme.colors.text,
     lineHeight: 19,
-    textAlign: 'center',
   },
-  buttons: {
+  buttonRow: {
     flexDirection: 'row',
     gap: 10,
-    marginTop: 18,
   },
   button: {
     flex: 1,

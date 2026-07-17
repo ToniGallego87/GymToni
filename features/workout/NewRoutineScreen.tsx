@@ -1,13 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  Modal,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -17,6 +10,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  AppModal,
+  Button,
+  ExerciseFormRow,
+  ExerciseSummaryRow,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -31,11 +28,18 @@ import {
   StretchScrollView,
 } from '../../components';
 import type { GymIconName } from '../../components';
-import { generateId } from '@lib/storage';
+import { generateId } from '@lib/utils';
+import {
+  buildExercisesFromText,
+  buildWorkoutExercises,
+  createEmptyExercise,
+  ExerciseForm,
+  parseImportedExercise,
+} from '@lib/exerciseForm';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { stripIconTag } from '@lib/routineShare';
-import { WorkoutDay, WorkoutExercise, WorkoutRoutine } from '../../types';
+import { WorkoutDay, WorkoutRoutine } from '../../types';
 
 interface NewRoutineScreenProps {
   existingRoutineCount: number;
@@ -47,17 +51,6 @@ interface NewRoutineScreenProps {
   initialDays?: { title: string; exercisesText: string; icon?: GymIconName }[];
 }
 
-type RepUnit = 'reps' | 'seg';
-
-interface ExerciseForm {
-  id: string;
-  name: string;
-  sets: number;
-  // Reps/segundos como texto corto: admite rangos ("6-8") y matices ("10-12/lado").
-  reps: string;
-  unit: RepUnit;
-}
-
 interface NewRoutineDayForm {
   id: string;
   title: string;
@@ -67,74 +60,10 @@ interface NewRoutineDayForm {
   icon?: GymIconName;
 }
 
-const MIN_SETS = 1;
-const MAX_SETS = 12;
-
 // Icono efectivo de un día en el formulario: el elegido a mano o, si no, el
 // autodetectado por el título. null si aún no se puede determinar.
 function effectiveDayIcon(day: NewRoutineDayForm): GymIconName | null {
   return day.icon ?? detectGymIcon(day.title);
-}
-
-// Formato con corchetes ("Press banca [4x6-8]").
-const EXERCISE_LINE_REGEX = /^(.*?)\s*\[(\d+)\s*x\s*([^\]]+)\]\s*$/i;
-// Formato plano: nombre + separador (raya o espacios) + [series x] reps. La reps
-// admite rango ("6-8") y una "s" final opcional para segundos ("30s", "20-30s").
-const EXERCISE_PLAIN_REGEX =
-  /^(.+?)\s*(?:[—–]\s*|\s+)(?:(\d+)\s*[x×]\s*)?(\d+(?:-\d+)?\s*(?:s|seg|sec)?)\s*$/i;
-
-function createEmptyExercise(): ExerciseForm {
-  return { id: generateId(), name: '', sets: 3, reps: '10-12', unit: 'reps' };
-}
-
-// Construye una fila a partir de nombre + series + reps (string), detectando segundos.
-function makeExercise(
-  name: string,
-  setsRaw: string,
-  repsRaw: string
-): ExerciseForm {
-  const sets = Math.min(
-    MAX_SETS,
-    Math.max(MIN_SETS, parseInt(setsRaw, 10) || 3)
-  );
-  let reps = repsRaw.trim();
-  let unit: RepUnit = 'reps';
-
-  if (/(s|seg|sec)\b/i.test(reps)) {
-    unit = 'seg';
-    reps = reps.replace(/\s*(s|seg|sec)\b/i, '').trim();
-  }
-
-  return {
-    id: generateId(),
-    name: name.trim(),
-    sets,
-    reps: reps || '10',
-    unit,
-  };
-}
-
-// Convierte una línea importada en una fila estructurada. Acepta "Nombre [4x6-8]",
-// "Nombre 4x6-8" o solo "Nombre".
-function parseImportedExercise(line: string): ExerciseForm {
-  const trimmed = line.trim();
-
-  const bracket = trimmed.match(EXERCISE_LINE_REGEX);
-  if (bracket) return makeExercise(bracket[1], bracket[2], bracket[3]);
-
-  const plain = trimmed.match(EXERCISE_PLAIN_REGEX);
-  if (plain && plain[3]) {
-    const name = plain[1].replace(/[—–]\s*$/, '').trim();
-    return makeExercise(name, plain[2] ?? '3', plain[3]);
-  }
-
-  return {
-    id: generateId(),
-    name: trimmed,
-    sets: 3,
-    reps: '10-12',
-    unit: 'reps',
-  };
 }
 
 // Parsea una rutina completa en texto: cada día es un bloque separado por línea en
@@ -161,23 +90,6 @@ function buildDaysFromRoutineText(text: string): NewRoutineDayForm[] {
         exercises: exercises.length ? exercises : [createEmptyExercise()],
       };
     });
-}
-
-function buildExercisesFromText(exercisesText: string): ExerciseForm[] {
-  const exercises = exercisesText
-    .replace(/\r/g, '')
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map(parseImportedExercise);
-
-  return exercises.length ? exercises : [createEmptyExercise()];
-}
-
-// targetReps que entiende el resto de la app: añade la unidad de segundos.
-function buildTargetReps(exercise: ExerciseForm): string {
-  const reps = exercise.reps.trim() || (exercise.unit === 'seg' ? '30' : '10');
-  return exercise.unit === 'seg' ? `${reps}s` : reps;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -221,220 +133,6 @@ function CreateRoutineButton({ onPress }: { onPress: () => void }) {
         <Text style={styles.createText}>{t('Crear rutina')}</Text>
       </LinearGradient>
     </AnimatedPressable>
-  );
-}
-
-// Editor estructurado de un ejercicio: nombre + stepper de series + reps/segundos.
-function ExerciseRow({
-  exercise,
-  accent,
-  canRemove,
-  onChange,
-  onRemove,
-  onCollapse,
-}: {
-  exercise: ExerciseForm;
-  accent: string;
-  canRemove: boolean;
-  onChange: (changes: Partial<ExerciseForm>) => void;
-  onRemove: () => void;
-  onCollapse: () => void;
-}) {
-  const adjustSets = (delta: number) => {
-    const next = Math.min(MAX_SETS, Math.max(MIN_SETS, exercise.sets + delta));
-    onChange({ sets: next });
-  };
-
-  const hasName = !!exercise.name.trim();
-
-  return (
-    <View style={styles.exerciseRow}>
-      <View style={styles.exerciseNameRow}>
-        <TextInput
-          style={styles.exerciseNameInput}
-          placeholder={t('Ej: Press banca')}
-          placeholderTextColor={theme.colors.textSecondary}
-          value={exercise.name}
-          onChangeText={(value) => onChange({ name: value })}
-        />
-        {hasName && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.collapseButton,
-              { borderColor: accent },
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={onCollapse}
-            hitSlop={8}
-          >
-            <MaterialCommunityIcons name="check" size={18} color={accent} />
-          </Pressable>
-        )}
-        <Pressable
-          style={({ pressed }) => [
-            styles.removeExerciseButton,
-            !canRemove && styles.controlDisabled,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={onRemove}
-          disabled={!canRemove}
-          hitSlop={8}
-        >
-          <MaterialCommunityIcons
-            name="close"
-            size={18}
-            color={canRemove ? theme.colors.error : theme.colors.textSecondary}
-          />
-        </Pressable>
-      </View>
-
-      <View style={styles.exerciseControlsRow}>
-        <View style={styles.controlBlock}>
-          <Text style={styles.controlLabel}>{t('Series')}</Text>
-          <View style={styles.stepper}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.stepperButton,
-                exercise.sets <= MIN_SETS && styles.controlDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => adjustSets(-1)}
-              disabled={exercise.sets <= MIN_SETS}
-              hitSlop={6}
-            >
-              <MaterialCommunityIcons
-                name="minus"
-                size={18}
-                color={theme.colors.text}
-              />
-            </Pressable>
-            <Text style={styles.stepperValue}>{exercise.sets}</Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.stepperButton,
-                exercise.sets >= MAX_SETS && styles.controlDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => adjustSets(1)}
-              disabled={exercise.sets >= MAX_SETS}
-              hitSlop={6}
-            >
-              <MaterialCommunityIcons
-                name="plus"
-                size={18}
-                color={theme.colors.text}
-              />
-            </Pressable>
-          </View>
-        </View>
-
-        <View style={[styles.controlBlock, styles.controlBlockGrow]}>
-          <Text style={styles.controlLabel}>
-            {exercise.unit === 'seg' ? t('Segundos') : t('Repeticiones')}
-          </Text>
-          <View style={styles.repsRow}>
-            <TextInput
-              style={styles.repsInput}
-              placeholder={
-                exercise.unit === 'seg' ? t('Ej: 30-45') : t('Ej: 10-12')
-              }
-              placeholderTextColor={theme.colors.textSecondary}
-              value={exercise.reps}
-              onChangeText={(value) => onChange({ reps: value })}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-            />
-            <View style={styles.unitToggle}>
-              {(['reps', 'seg'] as RepUnit[]).map((unit) => {
-                const active = exercise.unit === unit;
-                return (
-                  <Pressable
-                    key={unit}
-                    style={[
-                      styles.unitOption,
-                      active && [
-                        styles.unitOptionActive,
-                        { borderColor: accent },
-                      ],
-                    ]}
-                    onPress={() => onChange({ unit })}
-                  >
-                    <Text
-                      style={[
-                        styles.unitOptionText,
-                        active && [
-                          styles.unitOptionTextActive,
-                          { color: accent },
-                        ],
-                      ]}
-                    >
-                      {unit === 'reps' ? t('reps') : t('seg')}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        </View>
-      </View>
-    </View>
-  );
-}
-
-// Fila colapsada: muestra el ejercicio ya definido como una sola línea de texto.
-function ExerciseSummaryRow({
-  exercise,
-  accent,
-  canRemove,
-  onEdit,
-  onRemove,
-}: {
-  exercise: ExerciseForm;
-  accent: string;
-  canRemove: boolean;
-  onEdit: () => void;
-  onRemove: () => void;
-}) {
-  return (
-    <View style={styles.summaryRow}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.summaryMain,
-          pressed && styles.buttonPressed,
-        ]}
-        onPress={onEdit}
-        hitSlop={6}
-      >
-        <Text style={styles.summaryText} numberOfLines={1}>
-          {exercise.name.trim()}
-        </Text>
-        <View style={styles.summaryDivider} />
-        <Text style={styles.summarySets}>
-          {exercise.sets}x{buildTargetReps(exercise)}
-        </Text>
-        <MaterialCommunityIcons
-          name="pencil"
-          size={16}
-          color={theme.colors.textSecondary}
-        />
-      </Pressable>
-      <Pressable
-        style={({ pressed }) => [
-          styles.removeExerciseButton,
-          !canRemove && styles.controlDisabled,
-          pressed && styles.buttonPressed,
-        ]}
-        onPress={onRemove}
-        disabled={!canRemove}
-        hitSlop={8}
-      >
-        <MaterialCommunityIcons
-          name="close"
-          size={18}
-          color={canRemove ? theme.colors.error : theme.colors.textSecondary}
-        />
-      </Pressable>
-    </View>
   );
 }
 
@@ -587,8 +285,8 @@ export function NewRoutineScreen({
         throw new Error(t('Falta el título del Día {n}', { n: index + 1 }));
       }
 
-      const namedExercises = entry.exercises.filter((ex) => ex.name.trim());
-      if (!namedExercises.length) {
+      const exercises = buildWorkoutExercises(entry.exercises);
+      if (!exercises.length) {
         throw new Error(t('Faltan ejercicios en el Día {n}', { n: index + 1 }));
       }
 
@@ -596,16 +294,6 @@ export function NewRoutineScreen({
       if (!icon) {
         throw new Error(t('Elige un icono para el Día {n}', { n: index + 1 }));
       }
-
-      const exercises: WorkoutExercise[] = namedExercises.map(
-        (ex, exerciseIndex) => ({
-          id: generateId(),
-          name: ex.name.trim(),
-          order: exerciseIndex + 1,
-          targetSets: ex.sets,
-          targetReps: buildTargetReps(ex),
-        })
-      );
 
       return {
         id: generateId(),
@@ -629,7 +317,10 @@ export function NewRoutineScreen({
         description:
           routineDescription.trim() ||
           t('Rutina personalizada ({n} días)', { n: builtDays.length }),
-        isActive: true,
+        // La rutina nueva queda "preparada", no activa: el reducer (ADD_ROUTINE
+        // + syncActiveRoutine) mantiene la activa actual hasta que se registre
+        // el primer entrenamiento en esta.
+        isActive: false,
         createdAt: Date.now(),
         days: builtDays,
       });
@@ -663,8 +354,10 @@ export function NewRoutineScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        <View style={[styles.dayCard, { borderLeftColor: theme.colors.white }]}>
-          <GradientFill accent={theme.colors.white} />
+        <View
+          style={[styles.dayCard, { borderLeftColor: theme.colors.accentLine }]}
+        >
+          <GradientFill accent={theme.colors.accentLine} />
           <Text style={styles.dayTitleDisplay}>{t('Rutina')}</Text>
           <View style={styles.inputRow}>
             <TextInput
@@ -691,7 +384,7 @@ export function NewRoutineScreen({
         </View>
 
         {days.map((day, index) => {
-          const accent = theme.colors.white;
+          const accent = theme.colors.accentLine;
           const dayIcon = effectiveDayIcon(day);
 
           return (
@@ -737,7 +430,7 @@ export function NewRoutineScreen({
                           { color: theme.colors.primary },
                         ]}
                       >
-                        Elegir icono
+                        {t('Elegir icono')}
                       </Text>
                     </>
                   )}
@@ -761,7 +454,7 @@ export function NewRoutineScreen({
                   editingExerciseId === exercise.id || !exercise.name.trim();
 
                 return expanded ? (
-                  <ExerciseRow
+                  <ExerciseFormRow
                     key={exercise.id}
                     exercise={exercise}
                     accent={accent}
@@ -776,7 +469,6 @@ export function NewRoutineScreen({
                   <ExerciseSummaryRow
                     key={exercise.id}
                     exercise={exercise}
-                    accent={accent}
                     canRemove={day.exercises.length > 1}
                     onEdit={() => setEditingExerciseId(exercise.id)}
                     onRemove={() => handleRemoveExercise(day.id, exercise.id)}
@@ -825,7 +517,7 @@ export function NewRoutineScreen({
                 !canAddMoreDays && styles.dayChipTextDisabled,
               ]}
             >
-              Añadir día
+              {t('Añadir día')}
             </Text>
           </Pressable>
 
@@ -847,7 +539,7 @@ export function NewRoutineScreen({
                 !canRemoveDay && styles.dayChipTextDisabled,
               ]}
             >
-              Quitar día
+              {t('Quitar día')}
             </Text>
           </Pressable>
         </View>
@@ -898,119 +590,96 @@ export function NewRoutineScreen({
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
-      <Modal
+      <AppModal
         visible={showImport}
-        transparent
-        animationType="fade"
         onRequestClose={() => setShowImport(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>
-              {t('Crear a partir de texto plano')}
-            </Text>
-            <Text style={styles.modalHint}>
-              {t(
-                'Un día por bloque (sepáralos con una línea en blanco). La primera línea es el nombre del día; debajo, un ejercicio por línea. Añade una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).'
-              )}
-            </Text>
-            <TextInput
-              style={styles.modalTextarea}
-              multiline
-              textAlignVertical="top"
-              placeholder={
-                'Push\nPress banca 4x6-8\nPress militar 3x8-10\n\nPull\nDominadas 4x8\nRemo 4x10-12'
-              }
-              placeholderTextColor={theme.colors.textSecondary}
-              value={importText}
-              onChangeText={setImportText}
+        title={t('Crear a partir de texto plano')}
+        icon="text-box-plus-outline"
+        align="left"
+        message={t(
+          'Un día por bloque (sepáralos con una línea en blanco). La primera línea es el nombre del día; debajo, un ejercicio por línea. Añade una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).'
+        )}
+        footer={
+          <View style={styles.modalButtons}>
+            <Button
+              title={t('Cancelar')}
+              onPress={() => setShowImport(false)}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
             />
-            <View style={styles.modalButtons}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  styles.modalCancel,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => setShowImport(false)}
-              >
-                <Text style={styles.modalCancelText}>{t('Cancelar')}</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.modalButton,
-                  styles.modalConfirm,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={handleImportText}
-              >
-                <Text style={styles.modalConfirmText}>{t('Importar')}</Text>
-              </Pressable>
-            </View>
+            <Button
+              title={t('Importar')}
+              onPress={handleImportText}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
           </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={iconPickerDayId !== null}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setIconPickerDayId(null)}
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <Text style={[styles.modalTitle, styles.iconPickerTitle]}>
-              {t('Selecciona un icono para este día')}
-            </Text>
-            <View style={styles.iconGrid}>
-              {GYM_ICON_NAMES.map((iconName) => {
-                const day = days.find((d) => d.id === iconPickerDayId);
-                const active = day ? effectiveDayIcon(day) === iconName : false;
-                return (
-                  <Pressable
-                    key={iconName}
-                    style={({ pressed }) => [
-                      styles.iconButton,
-                      active && styles.iconButtonActive,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() =>
-                      iconPickerDayId &&
-                      handleSelectIcon(iconPickerDayId, iconName)
-                    }
-                  >
-                    <GymIcon
-                      name={iconName}
-                      size={30}
-                      color={active ? theme.colors.primary : theme.colors.white}
-                    />
-                    <Text
-                      style={[
-                        styles.iconButtonLabel,
-                        active && { color: theme.colors.primary },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {t(GYM_ICON_LABELS[iconName])}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.modalButton,
-                styles.modalCancel,
-                styles.iconModalClose,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => setIconPickerDayId(null)}
-            >
-              <Text style={styles.modalCancelText}>{t('Cerrar')}</Text>
-            </Pressable>
-          </View>
+        <TextInput
+          style={styles.modalTextarea}
+          multiline
+          textAlignVertical="top"
+          placeholder={
+            'Push\nPress banca 4x6-8\nPress militar 3x8-10\n\nPull\nDominadas 4x8\nRemo 4x10-12'
+          }
+          placeholderTextColor={theme.colors.textSecondary}
+          value={importText}
+          onChangeText={setImportText}
+        />
+      </AppModal>
+
+      <AppModal
+        visible={iconPickerDayId !== null}
+        onRequestClose={() => setIconPickerDayId(null)}
+        title={t('Selecciona un icono para este día')}
+        icon="shape-outline"
+        footer={
+          <Button
+            title={t('Cerrar')}
+            onPress={() => setIconPickerDayId(null)}
+            variant="secondary"
+            size="medium"
+          />
+        }
+      >
+        <View style={styles.iconGrid}>
+          {GYM_ICON_NAMES.map((iconName) => {
+            const day = days.find((d) => d.id === iconPickerDayId);
+            const active = day ? effectiveDayIcon(day) === iconName : false;
+            return (
+              <Pressable
+                key={iconName}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  active && styles.iconButtonActive,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() =>
+                  iconPickerDayId && handleSelectIcon(iconPickerDayId, iconName)
+                }
+              >
+                <GymIcon
+                  name={iconName}
+                  size={30}
+                  color={active ? theme.colors.primary : theme.colors.white}
+                />
+                <Text
+                  style={[
+                    styles.iconButtonLabel,
+                    active && { color: theme.colors.primary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t(GYM_ICON_LABELS[iconName])}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </Modal>
+      </AppModal>
 
       {toast && (
         <Toast
@@ -1044,7 +713,7 @@ const styles = StyleSheet.create({
     borderRightColor: theme.colors.border,
     borderBottomColor: theme.colors.border,
     borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primary,
+    borderLeftColor: theme.colors.primaryLine,
     padding: theme.spacing.md,
     gap: 10,
     overflow: 'hidden',
@@ -1075,7 +744,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.inputBg,
   },
   dayIconPickEmpty: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.primary + '1A',
   },
   dayIconPickText: {
@@ -1105,176 +774,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
-  exerciseRow: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 12,
-    gap: 12,
-  },
-  exerciseNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  exerciseNameInput: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  removeExerciseButton: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  collapseButton: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    height: 44,
-  },
-  summaryText: {
-    flex: 1,
-    minWidth: 0,
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  summaryDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    marginVertical: 6,
-    backgroundColor: theme.colors.border,
-  },
-  summarySets: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  exerciseControlsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  controlBlock: {
-    gap: 6,
-  },
-  controlBlockGrow: {
-    flex: 1,
-    minWidth: 0,
-  },
-  controlLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  stepperButton: {
-    width: 32,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperValue: {
-    minWidth: 24,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  repsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  repsInput: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    height: 44,
-    color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  unitToggle: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-  },
-  unitOption: {
-    paddingHorizontal: 12,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderColor: 'transparent',
-  },
-  unitOptionActive: {
-    backgroundColor: theme.colors.surface,
-  },
-  unitOptionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  unitOptionTextActive: {
-    color: theme.colors.primary,
-  },
   addExerciseButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1284,7 +783,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.surfaceAlt,
   },
   addExerciseText: {
@@ -1295,9 +794,6 @@ const styles = StyleSheet.create({
   },
   buttonPressed: {
     opacity: 0.85,
-  },
-  controlDisabled: {
-    opacity: 0.4,
   },
   rowButtons: {
     flexDirection: 'row',
@@ -1313,7 +809,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: theme.borderRadius.pill,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.surface,
   },
   dayChipDisabled: {
@@ -1371,7 +867,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.surfaceAlt,
   },
   qrButtonPressed: {
@@ -1383,31 +879,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 20,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 18,
-    gap: 12,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  modalHint: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    lineHeight: 18,
-  },
   modalTextarea: {
+    marginTop: 12,
     minHeight: 180,
     maxHeight: 320,
     backgroundColor: theme.colors.inputBg,
@@ -1426,13 +899,9 @@ const styles = StyleSheet.create({
   modalButton: {
     flex: 1,
     minWidth: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
   },
   iconGrid: {
+    marginTop: 12,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: theme.spacing.sm,
@@ -1449,39 +918,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   iconButtonActive: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.primary + '1A',
   },
   iconButtonLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: theme.colors.textSecondary,
-  },
-  iconPickerTitle: {
-    marginBottom: 6,
-  },
-  iconModalClose: {
-    flex: 0,
-    marginTop: 4,
-    alignSelf: 'center',
-    paddingHorizontal: 28,
-  },
-  modalCancel: {
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  modalCancelText: {
-    color: theme.colors.textSecondary,
-    fontWeight: '700',
-    fontSize: 14,
-  },
-  modalConfirm: {
-    borderColor: theme.colors.primary,
-    backgroundColor: theme.colors.primary,
-  },
-  modalConfirmText: {
-    color: theme.colors.onGold,
-    fontWeight: '800',
-    fontSize: 14,
   },
 });

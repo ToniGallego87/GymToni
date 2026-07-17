@@ -12,6 +12,16 @@ const darkColors = {
   primaryDark: '#E5B82C',
   primaryLight: '#F9D85A',
   primaryMuted: 'rgba(247, 204, 61, 0.14)',
+  // Oro de SUPERFICIE (heros, botones y badges dorados), con `onGold` de tinta
+  // encima. En noche coincide con `primary`: el oro brillante ya sirve igual de
+  // relleno que de tinta sobre el fondo oscuro. Ver lightColors.
+  primaryFill: '#F7CC3D',
+  primaryFillLight: '#F9D85A',
+  primaryFillDark: '#E5B82C',
+  // Oro de LÍNEA: aros/bordes del día en curso, borde izquierdo de la semana,
+  // contorno de checkboxes. Como no es texto le basta 3:1, así que en día puede
+  // ser bastante más amarillo que la tinta. En noche es el oro de siempre.
+  primaryLine: '#F7CC3D',
   darkGray: '#101318',
   gray: '#1E232D',
   mediumGray: '#232734',
@@ -26,12 +36,22 @@ const darkColors = {
   text: '#F5F7FA',
   textSecondary: '#98A0AE',
   textMuted: '#697180',
+  // Acento estructural: bordes de tarjeta, barras de semana y tinte de
+  // GradientFill. Se separa de `white` (que es la TINTA de texto/iconos) porque
+  // los dos roles no se invierten igual: en noche el aro blanco sobre superficie
+  // oscura lee como un halo suave, pero su inverso literal en día (#171B23) da
+  // un aro casi negro con aspecto de pegatina. Ver lightColors.
+  accentLine: '#ffffff',
   // Fondo de inputs/controles hundidos. En oscuro coincide con darkGray (que
   // se mantiene como tinta oscura sobre amarillo en AMBOS temas).
   inputBg: '#101318',
-  // Tinta para texto/iconos sobre fondos dorados (hero, botones oro). En noche
-  // el oro es brillante → tinta oscura; en día el oro es profundo → texto blanco.
+  // Tinta sobre el oro de superficie (`primaryFill` / `gradients.primary`). El
+  // oro es vivo en AMBOS temas, así que la tinta es oscura en ambos.
   onGold: '#101318',
+  // Tinta sobre los rellenos sólidos de estado (rojo `error`, verde `success`).
+  // Iba con `onGold`, pero al separar el oro de día los dos roles dejaron de
+  // coincidir: sobre el rojo profundo de día la tinta tiene que ser blanca.
+  onDanger: '#101318',
   success: '#52C878',
   successLight: '#7CD99A',
   error: '#F06A6A',
@@ -52,43 +72,69 @@ const darkColors = {
 // como "tinta de acento" (blanca en noche, oscura en día); `darkGray` sigue
 // siendo tinta oscura porque siempre se pinta sobre el degradado amarillo.
 const lightColors: typeof darkColors = {
-  // Oro de día algo más profundo que antes: los rellenos dorados sólidos
-  // (botones, badges) llevan ahora texto blanco (onGold) y necesitan que el oro
-  // sea oscuro para que el blanco contraste.
-  primary: '#B0790F',
-  primaryDark: '#946409',
-  primaryLight: '#8F6B00',
-  primaryMuted: 'rgba(176, 121, 15, 0.16)',
+  // El oro de día se parte en dos roles porque un solo tono no puede servir a
+  // los dos sobre un lienzo claro:
+  //
+  // - `primary` es TINTA (texto, iconos, bordes, tintes sobre el fondo claro):
+  //   tiene que ser un ámbar oscuro para contrastar con `background` (>4.5:1).
+  // - `primaryFill` es SUPERFICIE (heros, botones y badges dorados): tiene que
+  //   ser un oro VIVO, con tinta oscura (`onGold`) encima.
+  //
+  // Antes ambos eran el mismo bronce oscuro con texto blanco: legible, pero el
+  // relleno quedaba apagado y sucio sobre el fondo claro. En noche los dos roles
+  // siguen coincidiendo en el mismo oro brillante.
+  primary: '#966100',
+  primaryDark: '#7A4F00',
+  // Ojo: en día "light" significa MÁS contraste sobre el lienzo claro (se usa
+  // como tinta), así que es más oscuro que `primary`, no más claro.
+  primaryLight: '#7A5200',
+  primaryMuted: 'rgba(150, 97, 0, 0.14)',
+  primaryFill: '#F2B307',
+  primaryFillLight: '#FFCE3F',
+  primaryFillDark: '#D99405',
+  // Ámbar: 3.2:1 sobre el fondo y 3.6:1 sobre las tarjetas. La tinta (`primary`)
+  // aquí se leía marrón; el oro de relleno, en cambio, se perdería (1.6:1).
+  primaryLine: '#B87A00',
   darkGray: '#101318',
-  gray: '#E4E7EE',
-  mediumGray: '#D9DDE6',
-  lightGray: '#8A90A2',
+  gray: '#E2E6EE',
+  mediumGray: '#D2D8E3',
+  lightGray: '#7C8496',
   veryLightGray: '#3C4352',
   white: '#171B23',
-  background: '#F3F4F8',
+  // Fondo frío y algo más profundo que antes para que las superficies blancas
+  // de las tarjetas se separen del lienzo sin depender solo de la sombra.
+  background: '#EDF0F6',
   backgroundElevated: '#FFFFFF',
   surface: '#FFFFFF',
-  surfaceAlt: '#EAEDF3',
-  border: '#D7DBE4',
-  text: '#171A21',
-  textSecondary: '#59606F',
-  textMuted: '#8A90A2',
-  inputBg: '#E7EAF1',
-  onGold: '#FFFFFF',
-  success: '#2E9E58',
-  successLight: '#237D45',
-  error: '#D84B4B',
-  errorLight: '#B23A3A',
-  warning: '#C77F1A',
-  current: '#4A6CC4',
-  previous: '#C77F1A',
-  accent: '#B0790F',
-  overlay: 'rgba(15, 18, 24, 0.45)',
-  emoji_blue: '#4A6CC4',
-  emoji_purple: '#8B5FBF',
-  emoji_green: '#3E8E63',
-  emoji_orange: '#D97E00',
-  emoji_brown: '#A0633A',
+  surfaceAlt: '#E8EBF3',
+  border: '#C7CDDB',
+  text: '#151922',
+  textSecondary: '#4E5565',
+  textMuted: '#7C8496',
+  // Pizarra medio, NO el inverso de `white`: el aro/barra queda definido pero
+  // sin el canto negro de pegatina. Además deja el oro de la semana en curso
+  // como el único acento fuerte, que es la jerarquía correcta.
+  accentLine: '#6B7385',
+  inputBg: '#E3E7F0',
+  // Tinta oscura cálida sobre el oro vivo (≈7:1). El blanco de antes solo se
+  // sostenía porque el oro era un bronce oscuro.
+  onGold: '#3A2B04',
+  // Sobre los rojos/verdes profundos de día el blanco es la tinta que contrasta.
+  onDanger: '#FFFFFF',
+  success: '#1F8A49',
+  successLight: '#1A723D',
+  error: '#C93B3B',
+  errorLight: '#A82F2F',
+  warning: '#B26E0E',
+  current: '#3E60B8',
+  previous: '#B26E0E',
+  accent: '#966100',
+  overlay: 'rgba(13, 16, 23, 0.5)',
+  emoji_blue: '#3E60B8',
+  emoji_purple: '#7E51B3',
+  emoji_green: '#357F57',
+  emoji_orange: '#C26F00',
+  emoji_brown: '#96582F',
 };
 
 export const theme = {
@@ -106,25 +152,48 @@ export const theme = {
 
   // Degradados de marca (claro → base → oscuro, diagonal). Única fuente para
   // todos los LinearGradient de acción/estado: no duplicar estos tríos en
-  // pantallas ni componentes. En modo día los oros (`primary`/`amber`) se
-  // vuelven más profundos: el oro claro de noche se perdía sobre el fondo
-  // claro; con la tinta oscura del texto encima el contraste sube y las
-  // tarjetas destacan. El resto (verde/rojo/naranja) ya contrasta en ambos.
+  // pantallas ni componentes. Los oros (`primary`/`amber`) son SUPERFICIE: van
+  // con tinta oscura (`onGold`) encima en ambos temas, así que en día también
+  // son un oro vivo (el bronce oscuro de antes se veía apagado sobre el lienzo
+  // claro). El resto (verde/rojo/naranja) ya contrasta en ambos.
   gradients: {
     primary: (themeMode === 'light'
-      ? ['#D3960F', '#B67D0C', '#946409']
+      ? ['#FFCF43', '#F2B307', '#D19205']
       : ['#F9D85A', '#F7CC3D', '#E0B226']) as [string, string, string],
     success: ['#7CD99A', '#52C878', '#3DA866'] as [string, string, string],
     danger: ['#F59898', '#F06A6A', '#D85151'] as [string, string, string],
     warning: ['#FFC97A', '#FFB347', '#F2982C'] as [string, string, string],
     amber: (themeMode === 'light'
-      ? ['#D9A424', '#BE8817', '#9C6D10']
+      ? ['#FFC94F', '#F0A81C', '#C98505']
       : ['#F9D85A', '#F2B33D', '#E08A26']) as [string, string, string],
+    // Sombreado del "peldaño" de las flechas del carrusel de heros: tinta oscura
+    // translúcida, intensa en el borde exterior y desvanecida a nada hacia el
+    // centro (ver HeroCarousel). En día pesa menos: sobre el oro vivo la misma
+    // tinta que en noche ennegrecía el escalón.
+    heroStep: (themeMode === 'light'
+      ? [
+          'rgba(16, 19, 24, 0.15)',
+          'rgba(16, 19, 24, 0.12)',
+          'rgba(16, 19, 24, 0.06)',
+          'rgba(16, 19, 24, 0)',
+        ]
+      : [
+          'rgba(16, 19, 24, 0.26)',
+          'rgba(16, 19, 24, 0.22)',
+          'rgba(16, 19, 24, 0.10)',
+          'rgba(16, 19, 24, 0)',
+        ]) as [string, string, string, string],
     // Brillo superior (sheen) que da volumen a los botones/tarjetas con gradiente.
     sheen: ['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)'] as [
       string,
       string,
     ],
+    // Sheen de las tarjetas neutras (GradientFill). En noche es un velo mínimo;
+    // en día tiene que ser mucho más blanco para dar volumen sobre superficies
+    // ya claras (un 0.06 blanco sobre blanco es invisible).
+    cardSheen: (themeMode === 'light'
+      ? ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']
+      : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']) as [string, string],
   },
 
   typography: {
@@ -182,22 +251,43 @@ export const theme = {
     pill: 999,
   },
 
-  shadow: {
-    card: {
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: 0.22,
-      shadowRadius: 18,
-      elevation: 10,
-    },
-    soft: {
-      shadowColor: '#000000',
-      shadowOffset: { width: 0, height: 8 },
-      shadowOpacity: 0.16,
-      shadowRadius: 14,
-      elevation: 8,
-    },
-  },
+  // En día las sombras negras densas se ven como manchas grises: se sustituyen
+  // por sombras azuladas más suaves y con menos elevation (la sombra de
+  // elevation en Android es negra sí o sí, así que se baja su intensidad).
+  shadow:
+    themeMode === 'light'
+      ? {
+          card: {
+            shadowColor: '#26314A',
+            shadowOffset: { width: 0, height: 10 },
+            shadowOpacity: 0.14,
+            shadowRadius: 18,
+            elevation: 6,
+          },
+          soft: {
+            shadowColor: '#26314A',
+            shadowOffset: { width: 0, height: 6 },
+            shadowOpacity: 0.1,
+            shadowRadius: 12,
+            elevation: 4,
+          },
+        }
+      : {
+          card: {
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 12 },
+            shadowOpacity: 0.22,
+            shadowRadius: 18,
+            elevation: 10,
+          },
+          soft: {
+            shadowColor: '#000000',
+            shadowOffset: { width: 0, height: 8 },
+            shadowOpacity: 0.16,
+            shadowRadius: 14,
+            elevation: 8,
+          },
+        },
 };
 
 type DayAccentTarget =
@@ -215,9 +305,9 @@ export function getDisplayDayName(name?: string | null) {
 }
 
 // Los días ya no se distinguen por color sino por icono (ver GymIcon). El
-// acento visual (bordes, degradados, calendario, puntos) es la tinta de acento
-// del tema (blanca en noche, oscura en día).
+// acento visual (bordes, degradados, calendario, puntos) es el acento
+// estructural del tema (blanco en noche, pizarra en día).
 // Se mantiene la firma para no tocar los ~40 consumidores del acento.
 export function getTrainingAccent(_target?: DayAccentTarget) {
-  return theme.colors.white;
+  return theme.colors.accentLine;
 }

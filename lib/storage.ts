@@ -8,8 +8,6 @@ import { clearAppDataInDb, loadAppDataFromDb, saveAppDataToDb } from './db';
 import { normalizeAppData } from './normalize';
 import devWebSeed from '@data/devWebSeed.json';
 
-export { generateId, formatDate, getToday } from './utils';
-
 // Claves del almacenamiento JSON. En nativo son legacy: solo se leen una vez
 // para migrar a SQLite. En web siguen siendo el almacenamiento principal
 // (expo-sqlite no está soportado en web en SDK 51).

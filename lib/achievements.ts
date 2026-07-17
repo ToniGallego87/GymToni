@@ -5,7 +5,7 @@ import {
 } from './progress';
 import { getWeekStrengthScore } from './weeks';
 import { getLogTimestamp } from './utils';
-import { t } from './i18n';
+import { localizeDecimals, t } from './i18n';
 
 /** Ejercicio con mayor mejora respecto a la misma semana anterior. */
 export interface TopImprovement {
@@ -261,7 +261,7 @@ function formatInt(value: number): string {
 function formatWeightText(weight: number): string {
   return Number.isInteger(weight)
     ? String(weight)
-    : String(Math.round(weight * 10) / 10);
+    : localizeDecimals(String(Math.round(weight * 10) / 10));
 }
 
 // Tamaño del número central según su longitud, para que no desborde el anillo.

@@ -79,11 +79,13 @@ const styles = StyleSheet.create({
     borderColor: GLASS_FLOATING_BORDER,
     overflow: 'hidden',
     justifyContent: 'center',
-    shadowColor: '#000000',
+    // En día la sombra negra intensa se veía como una mancha gris bajo la
+    // barra; se suaviza y azula igual que theme.shadow.
+    shadowColor: theme.mode === 'light' ? '#26314A' : '#000000',
     shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.16,
+    shadowOpacity: theme.mode === 'light' ? 0.12 : 0.16,
     shadowRadius: 28,
-    elevation: 14,
+    elevation: theme.mode === 'light' ? 8 : 14,
   },
   blur: {
     ...StyleSheet.absoluteFillObject,

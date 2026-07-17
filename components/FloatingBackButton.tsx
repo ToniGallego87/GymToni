@@ -7,7 +7,6 @@ import {
   GLASS_BLUR_INTENSITY,
   GLASS_FLOATING_BG,
   GLASS_FLOATING_BORDER,
-  GLASS_FLOATING_OVERLAY,
 } from './glassTokens';
 
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;

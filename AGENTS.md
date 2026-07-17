@@ -10,6 +10,7 @@ Para detalles técnicos consulta:
 - [.github/docs/frontend-design.md](.github/docs/frontend-design.md) — principios de diseño UI
 - [.github/docs/SETUP.md](.github/docs/SETUP.md) — instalación y estructura de archivos
 - [.github/docs/UPDATES.md](.github/docs/UPDATES.md) — historial de versiones
+- [.github/docs/ROADMAP.md](.github/docs/ROADMAP.md) — seguimiento de futuros desarrollos (mejoras visuales, simplificaciones y nuevas funcionalidades pendientes)
 
 ---
 
@@ -75,6 +76,9 @@ Después de modificar cualquiera de estos, verificar que el resto sigue coherent
 - `theme.ts` / `glassTokens.ts` ↔ componentes visuales
 - `storage.ts` ↔ App.tsx (load/save)
 - `workoutDays.ts` / `seedData.ts` ↔ tipos
+- `exerciseForm.ts` ↔ `ExerciseFormRow` ↔ `NewRoutineScreen` / `RoutineDetailScreen`
+  (crear una rutina y editar los ejercicios de un día usan el MISMO modelo)
+- `weeks.ts` ↔ `HomeScreen` (semanas, rachas y progreso; la pantalla no recalcula)
 
 ---
 
@@ -123,7 +127,12 @@ Antes de finalizar, verificar:
 - Evitar modales innecesarios y formularios largos
 - Sistema glass: usar tokens de `glassTokens.ts`
 - Colores y degradados SIEMPRE desde `theme.ts` (`theme.colors`, `theme.gradients`); no hex sueltos en pantallas
-- Confirmaciones (eliminar/importar/limpiar): componente compartido `ConfirmModal`
+- Modales: SIEMPRE `AppModal` (overlay/tarjeta/título/pie), con `Button` en las
+  acciones. Nunca montar un `Modal` + overlay a mano
+- Confirmaciones (eliminar/importar/limpiar): `ConfirmModal` (es `AppModal` + cancelar/confirmar)
+- Gráficas de barras: `BarChart`. Filtros de gráfica: `SegmentedFilter`
+- Nada de acciones escondidas tras long-press: si algo se puede hacer, tiene que
+  verse (botón propio con su icono)
 - Título de pantalla: prop `icon` de `GlassTopBar` (no recrear el row icono+texto a mano)
 - Detalle completo del sistema en [.github/docs/frontend-design.md](.github/docs/frontend-design.md)
 

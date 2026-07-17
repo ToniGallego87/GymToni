@@ -1,4 +1,5 @@
 import { WorkoutDay, WorkoutLog } from '../types';
+import { localizeDecimals } from './i18n';
 
 /**
  * Lógica pura del cardio "de primera clase".
@@ -42,12 +43,27 @@ export interface CardioSession {
   totalKcal: number;
 }
 
+/**
+ * Todo el cardio de una FECHA, venga de donde venga (día de fuerza y/o sesiones
+ * de solo cardio): un día es una unidad, con sus disciplinas fusionadas.
+ */
+export interface CardioDay {
+  date: string; // YYYY-MM-DD
+  sessions: CardioSession[]; // logs que aportan cardio ese día
+  disciplines: MergedCardioEntry[]; // fusionadas entre todos ellos
+  totalMinutes: number;
+  totalKm: number;
+  totalKcal: number;
+  isToday: boolean;
+}
+
 export interface CardioWeek {
   weekNumber: number; // 1..N secuencial sobre semanas CON cardio
   weekKey: string; // clave de semana ISO (ej: "2026-W27")
   weekStart: string; // lunes de la semana (YYYY-MM-DD)
   weekEnd: string; // domingo de la semana (YYYY-MM-DD)
   sessions: CardioSession[];
+  days: CardioDay[]; // el cardio de la semana agrupado por fecha (asc.)
   totalMinutes: number;
   avgSpeed: number | null; // media de km/h (referencia)
   totalKcal: number; // kcal quemadas en la semana
@@ -102,10 +118,14 @@ export function weightForTimestamp(
   return weight;
 }
 
-/** Redondea a 1 decimal y quita el ".0" innecesario. */
+/**
+ * Redondea a 1 decimal, quita el ".0" innecesario y pinta el decimal con el
+ * separador del idioma (coma en español). Es formato de PINTADO: los datos se
+ * guardan siempre con punto (ver i18n.ts).
+ */
 export const fmtNum = (n: number): string => {
   const r = Math.round(n * 10) / 10;
-  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+  return localizeDecimals(Number.isInteger(r) ? String(r) : r.toFixed(1));
 };
 
 /** "12" o "12-12.6" según coincidan mín y máx. */
@@ -192,6 +212,18 @@ export function parseCardioEntries(rawInput: string): CardioEntry[] {
     .map(parseCardioEntry);
 }
 
+/** ¿La entrada se hizo en cuesta? (pendiente 0 o sin pendiente es llano). */
+export const hasIncline = (pendiente: number | null): boolean =>
+  pendiente != null && pendiente > 0;
+
+/**
+ * Clave con la que se fusionan las entradas de cardio. La pendiente forma parte
+ * de la disciplina: andar en cinta en cuesta es otro esfuerzo (otras kcal y otro
+ * icono) que andar en llano, así que van en filas distintas y no se promedian.
+ */
+const disciplineKey = (type: string, incline: boolean): string =>
+  `${type.trim().toLowerCase()}|${incline ? 'cuesta' : 'llano'}`;
+
 /** ¿Hay al menos un log con cardio registrado? */
 export function hasAnyCardio(logs: WorkoutLog[]): boolean {
   return logs.some(
@@ -243,16 +275,18 @@ export function disciplineIconName(type: string, hasIncline = false): string {
 }
 
 /**
- * Disciplina "más realizada" de una sesión: la que más minutos acumula (kcal
- * como desempate). Devuelve null si la sesión no tiene disciplinas.
+ * Disciplina protagonista de una sesión o de un día: la que más kcal quema
+ * (minutos como desempate). Es la que representa el día (icono del calendario).
+ * Devuelve null si no hay disciplinas. Las kcal escalan linealmente con el peso
+ * en todas las disciplinas, así que el orden no depende del peso usado.
  */
-export function mostPerformedDiscipline(
-  session: CardioSession
+export function topKcalDiscipline(
+  session: CardioSession | CardioDay
 ): MergedCardioEntry | null {
   if (!session.disciplines.length) return null;
   return session.disciplines.reduce((best, d) =>
-    d.totalMinutes > best.totalMinutes ||
-    (d.totalMinutes === best.totalMinutes && d.kcal > best.kcal)
+    d.kcal > best.kcal ||
+    (d.kcal === best.kcal && d.totalMinutes > best.totalMinutes)
       ? d
       : best
   );
@@ -310,6 +344,89 @@ export function cardioSessionFromLog(
     avgSpeed,
     totalKcal,
   };
+}
+
+/**
+ * Fusiona listas de disciplinas ya calculadas (de varias sesiones del mismo
+ * día): suma minutos y kcal y extiende los rangos de velocidad y pendiente.
+ * Las kcal ya vienen con el peso vigente de cada log, así que aquí solo se suman.
+ */
+export function mergeDisciplines(
+  lists: MergedCardioEntry[][]
+): MergedCardioEntry[] {
+  const map = new Map<string, MergedCardioEntry>();
+  const order: string[] = [];
+  const extend = (
+    a: number | null,
+    b: number | null,
+    pick: (x: number, y: number) => number
+  ) => (a == null ? b : b == null ? a : pick(a, b));
+
+  for (const list of lists) {
+    for (const d of list) {
+      // Misma clave que mergeSessionEntries: cada entrada fusionada ya es de un
+      // solo tipo (llano o cuesta), así que basta con su pendiente máxima.
+      const key = disciplineKey(d.type, hasIncline(d.maxPendiente));
+      const merged = map.get(key);
+      if (!merged) {
+        map.set(key, { ...d });
+        order.push(key);
+        continue;
+      }
+      merged.totalMinutes += d.totalMinutes;
+      merged.kcal += d.kcal;
+      merged.minSpeed = extend(merged.minSpeed, d.minSpeed, Math.min);
+      merged.maxSpeed = extend(merged.maxSpeed, d.maxSpeed, Math.max);
+      merged.minPendiente = extend(
+        merged.minPendiente,
+        d.minPendiente,
+        Math.min
+      );
+      merged.maxPendiente = extend(
+        merged.maxPendiente,
+        d.maxPendiente,
+        Math.max
+      );
+    }
+  }
+  return order.map((k) => map.get(k)!);
+}
+
+/** Agrupa sesiones de cardio por fecha (ascendente). Un día = una unidad. */
+export function groupSessionsByDay(sessions: CardioSession[]): CardioDay[] {
+  const byDate = new Map<string, CardioSession[]>();
+  for (const session of sessions) {
+    const bucket = byDate.get(session.date);
+    if (bucket) bucket.push(session);
+    else byDate.set(session.date, [session]);
+  }
+
+  const today = new Date().toISOString().split('T')[0];
+  return Array.from(byDate.keys())
+    .sort()
+    .map((date) => {
+      const daySessions = byDate.get(date)!;
+      return {
+        date,
+        sessions: daySessions,
+        disciplines: mergeDisciplines(daySessions.map((s) => s.disciplines)),
+        totalMinutes: daySessions.reduce((s, x) => s + x.totalMinutes, 0),
+        totalKm: daySessions.reduce((s, x) => s + x.totalKm, 0),
+        totalKcal: daySessions.reduce((s, x) => s + x.totalKcal, 0),
+        isToday: date === today,
+      };
+    });
+}
+
+/** Todo el cardio registrado agrupado por fecha (ascendente). */
+export function buildCardioDays(
+  logs: WorkoutLog[],
+  weight: number | WeightSegment[] = ASSUMED_WEIGHT_KG
+): CardioDay[] {
+  const sessions = logs
+    .map((l) => cardioSessionFromLog(l, weight))
+    .filter((s): s is CardioSession => s != null);
+  return groupSessionsByDay(sessions);
 }
 
 /** Clave de semana ISO 8601 (lunes-domingo) para una fecha YYYY-MM-DD. */
@@ -398,6 +515,9 @@ export function buildCardioWeeks(
     if (totalKcal > 0) prevKcal = totalKcal;
 
     const { start, end } = isoWeekRange(weekSessions[0].date);
+    // Una sesión = un día de cardio: si un día tiene fuerza y solo cardio, o
+    // varias disciplinas, sigue contando como una.
+    const days = groupSessionsByDay(weekSessions);
 
     return {
       weekNumber: index + 1,
@@ -405,11 +525,12 @@ export function buildCardioWeeks(
       weekStart: start,
       weekEnd: end,
       sessions: weekSessions,
+      days,
       totalMinutes,
       avgSpeed,
       totalKcal,
       kcalDelta,
-      sessionCount: weekSessions.length,
+      sessionCount: days.length,
       improvement,
       isCurrent: key === todayKey,
     };
@@ -417,8 +538,9 @@ export function buildCardioWeeks(
 }
 
 /**
- * Fusiona las entradas de una sesión por disciplina: suma los tiempos y guarda
- * el rango (mín-máx) de velocidad y de pendiente de cada disciplina.
+ * Fusiona las entradas de una sesión por disciplina (la pendiente cuenta como
+ * disciplina propia, ver disciplineKey): suma los tiempos y guarda el rango
+ * (mín-máx) de velocidad y de pendiente de cada una.
  */
 export function mergeSessionEntries(
   entries: CardioEntry[],
@@ -427,7 +549,7 @@ export function mergeSessionEntries(
   const map = new Map<string, MergedCardioEntry>();
   const order: string[] = [];
   for (const e of entries) {
-    const key = e.type.trim().toLowerCase();
+    const key = disciplineKey(e.type, hasIncline(e.pendiente));
     let merged = map.get(key);
     if (!merged) {
       merged = {

@@ -6,14 +6,18 @@ import {
   Text,
   StyleSheet,
   Pressable,
-  Modal,
+  ScrollView,
   TextInput,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  AppModal,
+  Button,
   DayAccentIcon,
+  ExerciseFormRow,
+  ExerciseSummaryRow,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -30,7 +34,12 @@ import {
 import { WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { generateId } from '@lib/storage';
+import {
+  buildWorkoutExercises,
+  createEmptyExercise,
+  ExerciseForm,
+  exerciseFormFromExercise,
+} from '@lib/exerciseForm';
 import {
   buildRoutineShareLink,
   buildRoutineShareText,
@@ -51,7 +60,12 @@ export function RoutineDetailScreen({
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
   const [showEmojiModal, setShowEmojiModal] = useState(false);
   const [showEditExercisesModal, setShowEditExercisesModal] = useState(false);
-  const [exercisesEditText, setExercisesEditText] = useState('');
+  // Borrador del editor de ejercicios: filas estructuradas (mismo modelo que
+  // "Nueva rutina"), no un textarea que hubiera que volver a parsear.
+  const [exercisesDraft, setExercisesDraft] = useState<ExerciseForm[]>([]);
+  const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
+    null
+  );
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
   const [showQrModal, setShowQrModal] = useState(false);
@@ -160,19 +174,46 @@ export function RoutineDetailScreen({
     setShowEmojiModal(true);
   };
 
-  const handleLongPressDay = (dayId: string) => {
+  const handleEditExercises = (dayId: string) => {
     const day = currentRoutine.days.find((d) => d.id === dayId);
-    if (day) {
-      // Crear un texto con los ejercicios para poder editarlos
-      const exercisesText = day.exercises
-        .map(
-          (ex) => `${ex.name} — ${ex.targetSets || '—'}x${ex.targetReps || '—'}`
-        )
-        .join('\n');
-      setExercisesEditText(exercisesText);
-      setSelectedDayId(dayId);
-      setShowEditExercisesModal(true);
-    }
+    if (!day) return;
+
+    setExercisesDraft(day.exercises.map(exerciseFormFromExercise));
+    setEditingExerciseId(null);
+    setSelectedDayId(dayId);
+    setShowEditExercisesModal(true);
+  };
+
+  const closeExercisesModal = () => {
+    setShowEditExercisesModal(false);
+    setSelectedDayId(null);
+    setExercisesDraft([]);
+    setEditingExerciseId(null);
+  };
+
+  const updateDraftExercise = (
+    exerciseId: string,
+    changes: Partial<ExerciseForm>
+  ) => {
+    setExercisesDraft((previous) =>
+      previous.map((exercise) =>
+        exercise.id === exerciseId ? { ...exercise, ...changes } : exercise
+      )
+    );
+  };
+
+  const addDraftExercise = () => {
+    const exercise = createEmptyExercise();
+    setExercisesDraft((previous) => [...previous, exercise]);
+    setEditingExerciseId(exercise.id);
+  };
+
+  const removeDraftExercise = (exerciseId: string) => {
+    setExercisesDraft((previous) =>
+      previous.length <= 1
+        ? previous
+        : previous.filter((exercise) => exercise.id !== exerciseId)
+    );
   };
 
   const handleSaveExercises = () => {
@@ -181,51 +222,25 @@ export function RoutineDetailScreen({
     const day = currentRoutine.days.find((d) => d.id === selectedDayId);
     if (!day) return;
 
-    // Parsear el texto para actualizar ejercicios
-    const lines = exercisesEditText.trim().split('\n');
-    const updatedExercises = lines
-      .filter((line) => line.trim().length > 0)
-      .map((line, index) => {
-        // Parsear formato: "Nombre — Nx#"
-        const match = line.match(
-          /^(.+?)\s*—\s*(\d+|\d+\.?\d*|—|x)?\s*[xX×]?\s*(\d+(?:-\d+)?\s*[a-zA-Z]*|—)?/
-        );
+    // Los ids de las filas son los de los ejercicios originales (ver
+    // lib/exerciseForm): el historial sigue apuntando a su ejercicio aunque
+    // se reordenen o se inserte uno en medio.
+    const exercises = buildWorkoutExercises(exercisesDraft);
+    if (!exercises.length) {
+      setToast({ message: t('Añade al menos un ejercicio'), type: 'error' });
+      return;
+    }
 
-        const name = match ? match[1].trim() : line.trim();
-        const targetSets =
-          match && match[2] && match[2] !== '—'
-            ? parseInt(match[2])
-            : undefined;
-        const targetReps =
-          match && match[3] && match[3].trim() !== '—'
-            ? match[3].trim()
-            : undefined;
-
-        // Mantener el ID del ejercicio original si es posible
-        const originalExercise = day.exercises[index];
-
-        return {
-          id: originalExercise?.id || generateId(),
-          name,
-          order: index + 1,
-          targetSets,
-          targetReps: targetReps as string | undefined,
-        };
-      });
-
-    const updatedDay = { ...day, exercises: updatedExercises };
     dispatch({
       type: 'UPDATE_DAY',
       payload: {
         routineId: currentRoutine.id,
         dayId: selectedDayId,
-        day: updatedDay,
+        day: { ...day, exercises },
       },
     });
 
-    setShowEditExercisesModal(false);
-    setSelectedDayId(null);
-    setExercisesEditText('');
+    closeExercisesModal();
   };
 
   const handleSelectEmoji = (emoji: string) => {
@@ -304,23 +319,42 @@ export function RoutineDetailScreen({
           const accent = getTrainingAccent(day);
 
           return (
+            // Pulsar la tarjeta edita sus ejercicios (la acción principal, y la
+            // misma regla que el bloque de información de arriba: se pulsa y se
+            // abre su editor). Cambiar el icono es su propio botón: se toca el
+            // icono. Antes ambas cosas eran gestos a ciegas (pulsar abría el
+            // selector de icono; mantener 1s, el editor).
             <Pressable
               key={day.id}
               style={[styles.dayBlock, { borderColor: accent }]}
-              onPress={() => handleSelectDay(day.id)}
-              onLongPress={() => handleLongPressDay(day.id)}
-              delayLongPress={1000}
+              onPress={() => handleEditExercises(day.id)}
             >
               <GradientFill accent={accent} />
               <View style={styles.dayHeader}>
                 <View style={styles.dayHeaderLeft}>
-                  <View style={styles.dayAccentWrap}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayIconButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => handleSelectDay(day.id)}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Selecciona un icono')}
+                  >
                     <DayAccentIcon
                       emoji={day.emoji}
                       name={day.name}
                       size={32}
                     />
-                  </View>
+                    <View style={styles.dayIconEditBadge}>
+                      <MaterialCommunityIcons
+                        name="pencil"
+                        size={9}
+                        color={theme.colors.onGold}
+                      />
+                    </View>
+                  </Pressable>
                   <Text style={styles.dayName}>
                     {getDisplayDayName(day.name)}
                   </Text>
@@ -328,6 +362,13 @@ export function RoutineDetailScreen({
                 <Text style={styles.dayBadge}>
                   {t('Día')} {day.dayNumber}
                 </Text>
+                <View style={styles.infoEditChip}>
+                  <MaterialCommunityIcons
+                    name="pencil"
+                    size={16}
+                    color={theme.colors.primary}
+                  />
+                </View>
               </View>
 
               <View style={styles.exerciseList}>
@@ -428,262 +469,250 @@ export function RoutineDetailScreen({
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
-      <Modal
+      <AppModal
         visible={showEmojiModal}
-        transparent
-        animationType="fade"
         onRequestClose={() => setShowEmojiModal(false)}
+        title={t('Selecciona un icono')}
+        icon="shape-outline"
+        footer={
+          <Button
+            title={t('Cancelar')}
+            onPress={() => setShowEmojiModal(false)}
+            variant="secondary"
+            size="medium"
+          />
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('Selecciona un icono')}</Text>
-            <View style={styles.iconGrid}>
-              {GYM_ICON_NAMES.map((iconName) => {
-                const selectedDay = currentRoutine.days.find(
-                  (d) => d.id === selectedDayId
-                );
-                const current = selectedDay
-                  ? resolveDayIcon(selectedDay.emoji, selectedDay.name)
-                  : null;
-                const active = current === iconName;
-                return (
-                  <Pressable
-                    key={iconName}
-                    style={({ pressed }) => [
-                      styles.iconButton,
-                      active && styles.iconButtonActive,
-                      pressed && styles.emojiButtonPressed,
-                    ]}
-                    onPress={() => handleSelectEmoji(iconName)}
-                  >
-                    <GymIcon
-                      name={iconName}
-                      size={30}
-                      color={active ? theme.colors.primary : theme.colors.white}
-                    />
-                    <Text
-                      style={[
-                        styles.iconButtonLabel,
-                        active && { color: theme.colors.primary },
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {t(GYM_ICON_LABELS[iconName])}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.cancelButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => setShowEmojiModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>{t('Cancelar')}</Text>
-            </Pressable>
-          </View>
+        <View style={styles.iconGrid}>
+          {GYM_ICON_NAMES.map((iconName) => {
+            const selectedDay = currentRoutine.days.find(
+              (d) => d.id === selectedDayId
+            );
+            const current = selectedDay
+              ? resolveDayIcon(selectedDay.emoji, selectedDay.name)
+              : null;
+            const active = current === iconName;
+            return (
+              <Pressable
+                key={iconName}
+                style={({ pressed }) => [
+                  styles.iconButton,
+                  active && styles.iconButtonActive,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => handleSelectEmoji(iconName)}
+              >
+                <GymIcon
+                  name={iconName}
+                  size={30}
+                  color={active ? theme.colors.primary : theme.colors.white}
+                />
+                <Text
+                  style={[
+                    styles.iconButtonLabel,
+                    active && { color: theme.colors.primary },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {t(GYM_ICON_LABELS[iconName])}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
-      </Modal>
+      </AppModal>
 
-      <Modal
+      <AppModal
         visible={showEditExercisesModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setShowEditExercisesModal(false);
-          setSelectedDayId(null);
-          setExercisesEditText('');
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('Editar Ejercicios')}</Text>
-            <Text style={styles.editExercisesLabel}>
-              {t('Formato: Nombre — SetsxReps')}
-            </Text>
-            <TextInput
-              style={styles.editExercisesInput}
-              placeholder={t('Ej: Sentadilla — 4x8\nPrensa — 3x10')}
-              placeholderTextColor={theme.colors.textSecondary}
-              value={exercisesEditText}
-              onChangeText={setExercisesEditText}
-              multiline
-              scrollEnabled={false}
+        onRequestClose={closeExercisesModal}
+        title={t('Editar Ejercicios')}
+        icon="pencil"
+        align="left"
+        footer={
+          <View style={styles.modalButtonRow}>
+            <Button
+              title={t('Volver')}
+              onPress={closeExercisesModal}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
             />
-            <View style={styles.editExercisesButtons}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.editButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={handleSaveExercises}
-              >
-                <Text style={styles.editButtonText}>{t('Editar')}</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.cancelButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => {
-                  setShowEditExercisesModal(false);
-                  setSelectedDayId(null);
-                  setExercisesEditText('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>{t('Volver')}</Text>
-              </Pressable>
-            </View>
+            <Button
+              title={t('Guardar')}
+              onPress={handleSaveExercises}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
           </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showInfoModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowInfoModal(false)}
+        }
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('Editar rutina')}</Text>
-            <Text style={styles.timerModalLabel}>{t('Nombre:')}</Text>
-            <TextInput
-              style={styles.timerModalInput}
-              placeholder={t('Nombre de la rutina')}
-              placeholderTextColor={theme.colors.textSecondary}
-              value={nameInput}
-              onChangeText={setNameInput}
-              maxLength={40}
-            />
-            <Text style={styles.timerModalLabel}>{t('Descripción:')}</Text>
-            <TextInput
-              style={styles.timerModalInput}
-              placeholder={t('Descripción (opcional)')}
-              placeholderTextColor={theme.colors.textSecondary}
-              value={descriptionInput}
-              onChangeText={setDescriptionInput}
-              maxLength={80}
-            />
-            <View style={styles.timerModalButtons}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.timerModalButton,
-                  !nameInput.trim() && styles.infoSaveDisabled,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={handleSaveInfo}
-                disabled={!nameInput.trim()}
-              >
-                <Text style={styles.timerModalButtonText}>{t('Guardar')}</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.timerModalButton,
-                  styles.timerModalButtonCancel,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => setShowInfoModal(false)}
-              >
-                <Text style={styles.timerModalButtonTextCancel}>
-                  {t('Cancelar')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        {/* La lista puede ser larga: scrollea dentro de la tarjeta en vez de
+            desbordarla. */}
+        <ScrollView
+          style={styles.exercisesEditorScroll}
+          contentContainerStyle={styles.exercisesEditor}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
+          {exercisesDraft.map((exercise) => {
+            const expanded =
+              editingExerciseId === exercise.id || !exercise.name.trim();
 
-      <Modal
-        visible={showTimerModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowTimerModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('Editar Temporizador')}</Text>
-            <Text style={styles.timerModalLabel}>
-              {t('Duración en segundos:')}
-            </Text>
-            <TextInput
-              style={styles.timerModalInput}
-              keyboardType="number-pad"
-              placeholder="150"
-              value={timerInput}
-              onChangeText={setTimerInput}
-            />
-            <Text style={styles.timerModalFormat}>
-              {t('Equivalente:')} {formatTime(parseInt(timerInput, 10) || 0)}
-            </Text>
-            <View style={styles.timerModalButtons}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.timerModalButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={handleSaveTimer}
-              >
-                <Text style={styles.timerModalButtonText}>{t('Guardar')}</Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.timerModalButton,
-                  styles.timerModalButtonCancel,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => setShowTimerModal(false)}
-              >
-                <Text style={styles.timerModalButtonTextCancel}>
-                  {t('Cancelar')}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showQrModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowQrModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('Compartir rutina')}</Text>
-            <Text style={styles.qrModalHint}>
-              {t(
-                'Escanea este código con la cámara de otro móvil para cargar «{name}».',
-                {
-                  name:
-                    getDisplayDayName(currentRoutine.name) ||
-                    currentRoutine.name,
+            return expanded ? (
+              <ExerciseFormRow
+                key={exercise.id}
+                exercise={exercise}
+                accent={theme.colors.primaryLine}
+                canRemove={exercisesDraft.length > 1}
+                onChange={(changes) =>
+                  updateDraftExercise(exercise.id, changes)
                 }
-              )}
-            </Text>
-            <View style={styles.qrCanvas}>
-              <QRCode
-                value={shareLink}
-                size={232}
-                backgroundColor="#FFFFFF"
-                color="#000000"
+                onRemove={() => removeDraftExercise(exercise.id)}
+                onCollapse={() => setEditingExerciseId(null)}
               />
-            </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.cancelButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => setShowQrModal(false)}
-            >
-              <Text style={styles.cancelButtonText}>{t('Cerrar')}</Text>
-            </Pressable>
+            ) : (
+              <ExerciseSummaryRow
+                key={exercise.id}
+                exercise={exercise}
+                canRemove={exercisesDraft.length > 1}
+                onEdit={() => setEditingExerciseId(exercise.id)}
+                onRemove={() => removeDraftExercise(exercise.id)}
+              />
+            );
+          })}
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.addExerciseButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={addDraftExercise}
+          >
+            <MaterialCommunityIcons
+              name="plus-circle-outline"
+              size={18}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.addExerciseText}>{t('Añadir ejercicio')}</Text>
+          </Pressable>
+        </ScrollView>
+      </AppModal>
+
+      <AppModal
+        visible={showInfoModal}
+        onRequestClose={() => setShowInfoModal(false)}
+        title={t('Editar rutina')}
+        icon="pencil"
+        align="left"
+        footer={
+          <View style={styles.modalButtonRow}>
+            <Button
+              title={t('Cancelar')}
+              onPress={() => setShowInfoModal(false)}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
+            />
+            <Button
+              title={t('Guardar')}
+              onPress={handleSaveInfo}
+              variant="primary"
+              disabled={!nameInput.trim()}
+              size="medium"
+              style={styles.modalButton}
+            />
           </View>
+        }
+      >
+        <Text style={styles.fieldLabel}>{t('Nombre:')}</Text>
+        <TextInput
+          style={styles.fieldInput}
+          placeholder={t('Nombre de la rutina')}
+          placeholderTextColor={theme.colors.textSecondary}
+          value={nameInput}
+          onChangeText={setNameInput}
+          maxLength={40}
+        />
+        <Text style={styles.fieldLabel}>{t('Descripción:')}</Text>
+        <TextInput
+          style={styles.fieldInput}
+          placeholder={t('Descripción (opcional)')}
+          placeholderTextColor={theme.colors.textSecondary}
+          value={descriptionInput}
+          onChangeText={setDescriptionInput}
+          maxLength={80}
+        />
+      </AppModal>
+
+      <AppModal
+        visible={showTimerModal}
+        onRequestClose={() => setShowTimerModal(false)}
+        title={t('Editar Temporizador')}
+        icon="timer-sand"
+        align="left"
+        footer={
+          <View style={styles.modalButtonRow}>
+            <Button
+              title={t('Cancelar')}
+              onPress={() => setShowTimerModal(false)}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
+            />
+            <Button
+              title={t('Guardar')}
+              onPress={handleSaveTimer}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
+          </View>
+        }
+      >
+        <Text style={styles.fieldLabel}>{t('Duración en segundos:')}</Text>
+        <TextInput
+          style={styles.fieldInput}
+          keyboardType="number-pad"
+          placeholder="150"
+          placeholderTextColor={theme.colors.textSecondary}
+          value={timerInput}
+          onChangeText={setTimerInput}
+        />
+        <Text style={styles.timerModalFormat}>
+          {t('Equivalente:')} {formatTime(parseInt(timerInput, 10) || 0)}
+        </Text>
+      </AppModal>
+
+      <AppModal
+        visible={showQrModal}
+        onRequestClose={() => setShowQrModal(false)}
+        title={t('Compartir rutina')}
+        icon="qrcode"
+        message={t(
+          'Escanea este código con la cámara de otro móvil para cargar «{name}».',
+          {
+            name: getDisplayDayName(currentRoutine.name) || currentRoutine.name,
+          }
+        )}
+        footer={
+          <Button
+            title={t('Cerrar')}
+            onPress={() => setShowQrModal(false)}
+            variant="secondary"
+            size="medium"
+          />
+        }
+      >
+        <View style={styles.qrCanvas}>
+          <QRCode
+            value={shareLink}
+            size={232}
+            backgroundColor="#FFFFFF"
+            color="#000000"
+          />
         </View>
-      </Modal>
+      </AppModal>
 
       {toast && (
         <Toast
@@ -769,9 +798,6 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     color: theme.colors.textSecondary,
   },
-  infoSaveDisabled: {
-    opacity: 0.5,
-  },
   dayBlock: {
     backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
@@ -794,9 +820,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  dayAccentWrap: {
+  // El icono del día es su propio botón (se toca el icono para cambiarlo), con
+  // un micro-badge de lápiz que lo delata como editable.
+  dayIconButton: {
     marginRight: 10,
     paddingTop: 2,
+  },
+  dayIconEditBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primaryFill,
   },
   dayName: {
     fontSize: 20,
@@ -837,29 +876,55 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     color: theme.colors.textSecondary,
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.md,
+  modalButtonRow: {
+    flexDirection: 'row',
+    gap: 10,
   },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
-    width: '100%',
-    maxWidth: 320,
+  modalButton: {
+    flex: 1,
+  },
+  fieldLabel: {
+    marginTop: 12,
+    fontSize: 14,
+    fontWeight: '700',
+    color: theme.colors.text,
+    marginBottom: 8,
+  },
+  fieldInput: {
     borderWidth: 1,
     borderColor: theme.colors.border,
-    ...theme.shadow.card,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: '800',
+    borderRadius: theme.borderRadius.sm,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
     color: theme.colors.text,
-    marginBottom: theme.spacing.md,
-    textAlign: 'center',
+    backgroundColor: theme.colors.inputBg,
+  },
+  // Editor de ejercicios: la lista scrollea dentro de la tarjeta del modal.
+  exercisesEditorScroll: {
+    marginTop: 12,
+    maxHeight: 380,
+  },
+  exercisesEditor: {
+    gap: 10,
+  },
+  addExerciseButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: theme.colors.primaryLine,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  addExerciseText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
   },
   iconGrid: {
     flexDirection: 'row',
@@ -879,7 +944,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   iconButtonActive: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.primary + '1A',
   },
   iconButtonLabel: {
@@ -887,65 +952,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: theme.colors.textSecondary,
   },
-  emojiButtonPressed: {
-    opacity: 0.85,
-  },
-  editExercisesLabel: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  editExercisesInput: {
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: theme.colors.text,
-    minHeight: 100,
-    marginBottom: 12,
-    textAlignVertical: 'top',
-  },
-  editExercisesButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  editButton: {
-    flex: 1,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  editButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.onGold,
-  },
-  cancelButton: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    marginTop: theme.spacing.xs,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
   buttonPressed: {
     opacity: 0.8,
   },
   timerBlock: {
-    backgroundColor: theme.colors.primaryDark,
+    // Relleno dorado (lleva tinta onGold): va con el oro de superficie.
+    backgroundColor: theme.colors.primaryFillDark,
     borderRadius: theme.borderRadius.md,
     padding: theme.spacing.md,
     marginTop: 4,
@@ -1000,68 +1012,17 @@ const styles = StyleSheet.create({
     color: theme.colors.textSecondary,
     lineHeight: 16,
   },
-  qrModalHint: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.md,
-    lineHeight: 19,
-  },
   qrCanvas: {
     alignSelf: 'center',
     backgroundColor: '#FFFFFF',
     padding: 16,
     borderRadius: theme.borderRadius.md,
-    marginBottom: theme.spacing.md,
-  },
-  timerModalLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  timerModalInput: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: theme.colors.text,
-    marginBottom: 8,
-    backgroundColor: theme.colors.surfaceAlt,
+    marginTop: theme.spacing.md,
   },
   timerModalFormat: {
+    marginTop: 8,
     fontSize: 13,
     color: theme.colors.textSecondary,
-    marginBottom: theme.spacing.md,
     textAlign: 'center',
-  },
-  timerModalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: theme.spacing.sm,
-  },
-  timerModalButton: {
-    flex: 1,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  timerModalButtonCancel: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  timerModalButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.onGold,
-  },
-  timerModalButtonTextCancel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.text,
   },
 });

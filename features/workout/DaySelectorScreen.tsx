@@ -263,7 +263,7 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   dayCardSelected: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     borderWidth: 2,
     marginBottom: 0,
   },
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceAlt,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     borderTopWidth: 0,
     borderTopLeftRadius: 0,
     borderTopRightRadius: 0,
@@ -310,13 +310,13 @@ const styles = StyleSheet.create({
     height: 22,
     borderRadius: 6,
     borderWidth: 2,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
   },
   checkboxChecked: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryFill,
   },
   newWeekText: {
     flex: 1,
@@ -332,7 +332,7 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingVertical: 12,
     borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryFill,
   },
   newWeekStartText: {
     fontSize: 15,

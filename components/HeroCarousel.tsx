@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Pressable } from 'react-native';
 import Animated, {
+  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -9,18 +10,12 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 
-// Sombreado del "escalón": tinta oscura translúcida más intensa en el borde
-// exterior de la tarjeta y desvanecida a nada hacia el centro, para que el botón
-// parezca un peldaño hundido en el lateral del dorado en vez de una pastilla
-// flotante. Terminar en alpha 0 (y no en 0.04) es lo que borra el canto: el
-// tramo plano inicial mantiene el cuerpo oscuro y el resto difumina la
-// transición al dorado, en vez de cortarla en seco.
-const STEP_SHADE = [
-  'rgba(16, 19, 24, 0.26)',
-  'rgba(16, 19, 24, 0.22)',
-  'rgba(16, 19, 24, 0.10)',
-  'rgba(16, 19, 24, 0)',
-] as const;
+// Sombreado del "escalón" (`theme.gradients.heroStep`): tinta oscura translúcida
+// más intensa en el borde exterior de la tarjeta y desvanecida a nada hacia el
+// centro, para que el botón parezca un peldaño hundido en el lateral del dorado
+// en vez de una pastilla flotante. Terminar en alpha 0 (y no en 0.04) es lo que
+// borra el canto: el tramo plano inicial mantiene el cuerpo oscuro y el resto
+// difumina la transición al dorado, en vez de cortarla en seco.
 const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
 
 // Ancho del peldaño lateral.
@@ -61,10 +56,19 @@ function Dot({ active, color }: { active: boolean; color: string }) {
  * de estado solo el contenido (icono + texto) entra deslizándose desde el lado
  * de avance con un fundido (lo anima cada tarjeta según la prop `enterFrom`).
  * Los puntos indicadores animan su cambio. La navegación es cíclica.
+ *
+ * La escala de pulsación la lleva este envoltorio, no la tarjeta: flechas y
+ * puntos son hermanos de la tarjeta y, si se escalara ella sola, se quedarían
+ * quietos mientras el dorado encoge. Las tarjetas pulsables reciben el
+ * `pressScale` y lo animan en vez de aplicarse su propia escala.
  */
 export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
   const [index, setIndex] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
+  const pressScale = useSharedValue(1);
+  const pressStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale.value }],
+  }));
   const count = slides.length;
 
   if (count === 0) return null;
@@ -83,10 +87,11 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
   // elemento distinto, React lo remonta y replica la animación de entrada.
   const activeSlide = React.cloneElement(slides[safeIndex], {
     enterFrom: dir === 1 ? 'right' : 'left',
-  } as { enterFrom: 'left' | 'right' });
+    pressScale,
+  } as { enterFrom: 'left' | 'right'; pressScale: SharedValue<number> });
 
   return (
-    <View style={styles.wrapper}>
+    <Animated.View style={[styles.wrapper, pressStyle]}>
       {activeSlide}
 
       <Pressable
@@ -96,7 +101,7 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
       >
         <View style={[styles.arrowStep, styles.arrowStepLeft]}>
           <LinearGradient
-            colors={[...STEP_SHADE]}
+            colors={theme.gradients.heroStep}
             locations={STEP_SHADE_STOPS}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
@@ -114,7 +119,7 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
       >
         <View style={[styles.arrowStep, styles.arrowStepRight]}>
           <LinearGradient
-            colors={[...STEP_SHADE]}
+            colors={theme.gradients.heroStep}
             locations={STEP_SHADE_STOPS}
             start={{ x: 1, y: 0 }}
             end={{ x: 0, y: 0 }}
@@ -134,7 +139,7 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
           <Dot key={i} active={i === safeIndex} color={color} />
         ))}
       </View>
-    </View>
+    </Animated.View>
   );
 }
 

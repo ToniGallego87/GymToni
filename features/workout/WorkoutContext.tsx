@@ -64,11 +64,6 @@ function workoutReducer(
         logs: action.payload.logs,
       };
     }
-    case 'SET_ROUTINES':
-      return {
-        ...state,
-        routines: syncActiveRoutine(action.payload, state.activeRoutineId),
-      };
     case 'ADD_ROUTINE':
       // Una rutina nueva NO pasa a ser la activa: queda "preparada" y
       // seleccionada (se muestra en Inicio). Se activará al registrar en ella
@@ -151,8 +146,6 @@ function workoutReducer(
         ...state,
         logs: state.logs.filter((log) => log.id !== action.payload),
       };
-    case 'SET_LOGS':
-      return { ...state, logs: action.payload };
     case 'UPDATE_DAY': {
       return {
         ...state,
@@ -179,10 +172,7 @@ function workoutReducer(
         activeRoutineId: undefined,
         selectedRoutineId: undefined,
         logs: [],
-        currentDay: undefined,
       };
-    case 'SET_CURRENT_DAY':
-      return { ...state, currentDay: action.payload };
     default:
       return state;
   }

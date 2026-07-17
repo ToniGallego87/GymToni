@@ -39,13 +39,14 @@ export function Button({
   const getFlatBackgroundColor = () => {
     if (disabled) return theme.colors.lightGray;
     if (variant === 'secondary') return theme.colors.surface;
-    return theme.colors.primary;
+    return theme.colors.primaryFill;
   };
 
   const getTextColor = () => {
     if (variant === 'secondary' && !disabled) return theme.colors.text;
-    // Texto sobre relleno dorado (primary) o rojo (danger): tinta blanca en día,
-    // oscura en noche (onGold). En rojo el blanco de día también contrasta mejor.
+    // Cada relleno tiene su tinta: oscura sobre el oro vivo (onGold) y blanca
+    // sobre el rojo profundo de día (onDanger). Ver theme.ts.
+    if (variant === 'danger' || disabled) return theme.colors.onDanger;
     return theme.colors.onGold;
   };
 

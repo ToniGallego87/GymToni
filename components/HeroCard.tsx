@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
+  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -27,6 +28,9 @@ interface HeroCardProps {
   // Dirección de entrada del contenido cuando la tarjeta forma parte de un
   // carrusel: el frame no se mueve, solo el contenido entra desde este lado.
   enterFrom?: 'left' | 'right';
+  // Escala de pulsación del carrusel: si viene, la tarjeta la anima y es el
+  // carrusel quien escala el conjunto (tarjeta + flechas + puntos).
+  pressScale?: SharedValue<number>;
 }
 
 // Paletas de gradiente por estado. El orden es claro→base→oscuro (diagonal).
@@ -50,12 +54,15 @@ export function HeroCard({
   subtitle,
   onPress,
   enterFrom,
+  pressScale,
 }: HeroCardProps) {
   const colors = GRADIENTS[variant];
-  const scale = useSharedValue(1);
+  const localScale = useSharedValue(1);
+  const scale = pressScale ?? localScale;
 
+  // Suelta, la tarjeta se escala a sí misma; en un carrusel escala el conjunto.
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: pressScale ? 1 : localScale.value }],
   }));
 
   // Animación de solo el CONTENIDO (icono + textos): el frame (gradiente) queda

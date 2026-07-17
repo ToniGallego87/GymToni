@@ -13,12 +13,20 @@ claras y móviles, con todas las vistas coherentes entre sí.
 
 ## Paleta (fuente única: `lib/theme.ts`)
 
-Tema oscuro fijo. **Ningún hex suelto en pantallas/componentes**: los únicos
-archivos con valores hex son `lib/theme.ts` y `components/glassTokens.ts`.
+Dos temas (noche por defecto y día) con las MISMAS claves; el modo se resuelve una
+sola vez al evaluar el módulo, así que cambiarlo exige relanzar el bundle.
+**Ningún hex suelto en pantallas/componentes**: los únicos archivos con valores hex
+son `lib/theme.ts` y `components/glassTokens.ts`.
+
+Los roles no siempre se invierten: varios tokens (`accentLine`, `shadow`,
+`gradients.cardSheen`) tienen valor propio en día porque su inverso literal queda
+mal (ver "Reglas de color"). La tabla lista los valores de noche.
 
 | Rol                | Token                             | Valor                 |
 | ------------------ | --------------------------------- | --------------------- |
-| Primario (marca)   | `colors.primary`                  | `#F7CC3D` (dorado)    |
+| Primario (tinta)   | `colors.primary`                  | `#F7CC3D` (dorado)    |
+| Primario (línea)   | `colors.primaryLine`              | `#F7CC3D` (dorado)    |
+| Primario (relleno) | `colors.primaryFill`              | `#F7CC3D` (dorado)    |
 | Fondo              | `colors.background`               | `#0F1115`             |
 | Superficie (cards) | `colors.surface` / `surfaceAlt`   | `#171A21` / `#1C2029` |
 | Borde              | `colors.border`                   | `#232734`             |
@@ -28,9 +36,36 @@ archivos con valores hex son `lib/theme.ts` y `components/glassTokens.ts`.
 
 Reglas de color:
 
-- **Texto/iconos sobre amarillo (`primary`) siempre `colors.darkGray`** — nunca blanco (contraste).
+- **El oro tiene TRES tokens según el rol**, porque sobre el lienzo claro un solo
+  tono no puede servir a los tres (en noche los tres son el mismo oro brillante):
+  - `colors.primary` es **tinta**: texto e iconos sobre el fondo/las tarjetas, y
+    tintes `+'1A'`. Necesita 4.5:1 → en día es un ámbar oscuro (`#966100`).
+  - `colors.primaryLine` es **línea/acento estructural**: bordes, aro del día en
+    curso, borde izquierdo de la semana, barras de gráfica, `accent` de
+    `GradientFill`. Como no es texto le basta 3:1 → en día es más amarillo
+    (`#B87A00`); con la tinta se veía marrón.
+  - `colors.primaryFill` (+ `primaryFillLight` / `primaryFillDark`) es **relleno**
+    (heros, botones, badges, checkboxes) y lleva `onGold` encima. En día es un oro
+    vivo (`#F2B307`); como línea sobre el lienzo claro se perdería (1.6:1).
+  - Regla rápida: ¿`backgroundColor` sólido con texto encima? → `primaryFill`.
+    ¿`borderColor` / acento gráfico? → `primaryLine`. ¿`color` de texto/icono? →
+    `primary`.
+  - `gradients.primary` / `gradients.amber` son relleno: siempre con `onGold`.
+  - Ojo con los colores compartidos entre una barra y su etiqueta (gráficas): la
+    barra es `primaryLine` y la etiqueta `primary`, no el mismo valor.
+- **Texto/iconos sobre dorado siempre `colors.onGold`** (tinta oscura en ambos
+  temas) — nunca un blanco/negro suelto.
+- **Texto/iconos sobre rellenos sólidos de estado (rojo/verde): `colors.onDanger`**
+  (blanca en día, oscura en noche). No reutilizar `onGold` ahí: sobre el rojo
+  profundo de día la tinta oscura no contrasta.
 - Verde/rojo solo para datos de mejora/empeoramiento; el acento estructural
-  (bordes de tarjetas, gradientes de fondo) es blanco uniforme (`getTrainingAccent`).
+  (bordes de tarjetas, barras de semana, tinte de `GradientFill`) es uniforme y
+  sale SIEMPRE de `colors.accentLine` / `getTrainingAccent()`.
+- **`colors.white` es la TINTA de texto/iconos, no un borde.** Los dos roles no se
+  invierten igual: en noche el aro blanco sobre superficie oscura lee como un halo
+  suave, pero en día su inverso (`#171B23`) da un aro casi negro con aspecto de
+  pegatina. Por eso el día usa un pizarra medio (`accentLine: #6B7385`) que además
+  deja el oro como único acento fuerte.
 - Amarillo reservado a: semana/día en curso, rutina activa, acciones primarias.
 
 ## Degradados (`theme.gradients`)
@@ -93,7 +128,15 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
 ## Checklist antes de cerrar un cambio visual
 
 1. ¿Algún hex nuevo fuera de `theme.ts`/`glassTokens.ts`? → moverlo a token.
-2. ¿Texto claro sobre amarillo? → cambiarlo a `darkGray`.
-3. ¿Modal de confirmación a mano? → `ConfirmModal`.
-4. ¿Row icono+título recreado en una top bar? → prop `icon` de `GlassTopBar`.
-5. ¿Gradiente duplicado? → `theme.gradients`.
+2. ¿Texto sobre dorado? → `colors.onGold`. ¿Sobre rojo/verde sólido? → `colors.onDanger`.
+3. ¿`colors.primary` en un `backgroundColor` sólido? → es relleno: `primaryFill`.
+   ¿En un `borderColor` o acento gráfico? → es línea: `primaryLine`.
+4. ¿`colors.white` usado como borde o tinte? → es tinta de texto: usar `accentLine`.
+5. ¿Modal de confirmación a mano? → `ConfirmModal`.
+6. ¿Row icono+título recreado en una top bar? → prop `icon` de `GlassTopBar`.
+7. ¿Gradiente duplicado? → `theme.gradients`.
+8. ¿Fondo translúcido (`primaryMuted`, `+'1A'`…) en una tarjeta con
+   `theme.shadow.*`? → en Android, `elevation` sin fondo opaco pinta el relleno
+   como un rectángulo con esquinas vivas dentro del redondeo. Marcar el estado
+   con `GradientFill` sobre el fondo opaco, como hacen las tarjetas de "hoy".
+9. ¿Revisado en los DOS temas? El día no es el negativo del noche.

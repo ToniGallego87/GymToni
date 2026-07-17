@@ -1,4 +1,5 @@
 import { WorkoutLog } from '../types';
+import { localizeDecimals } from './i18n';
 
 export function generateId(): string {
   const cryptoRef = (globalThis as { crypto?: { randomUUID?: () => string } })
@@ -62,8 +63,11 @@ export function getImprovementDisplay(imp: {
   isImproved: boolean;
   percent: number;
 }): ImprovementDisplay {
+  // El decimal se pinta con el separador del idioma ("9,1%" en español).
   const roundedPercent =
-    imp.percent % 1 === 0 ? Math.round(imp.percent) : imp.percent.toFixed(1);
+    imp.percent % 1 === 0
+      ? Math.round(imp.percent)
+      : localizeDecimals(imp.percent.toFixed(1));
 
   if (imp.percent === 0) {
     return { symbol: '=', display: roundedPercent, kind: 'neutral' };

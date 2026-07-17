@@ -3,11 +3,13 @@ import {
   cardioSessionFromLog,
   isoWeekKey,
   isoWeekRange,
+  buildCardioDays,
   buildCardioWeeks,
   buildCardioMonths,
   mergeSessionEntries,
   formatMergedResults,
   estimateEntryKcal,
+  topKcalDiscipline,
   weightForTimestamp,
 } from '../cardio';
 import { WorkoutLog } from '../../types';
@@ -108,6 +110,101 @@ describe('buildCardioWeeks', () => {
   });
 });
 
+describe('buildCardioDays', () => {
+  it('junta en un día el cardio de varios logs de la misma fecha', () => {
+    const days = buildCardioDays([
+      makeLog('fuerza', '2026-07-01', 'Cinta: 20min, 10kmh'),
+      makeLog('suelto', '2026-07-01', 'Bici: 30min, 20kmh'),
+    ]);
+    expect(days).toHaveLength(1);
+    expect(days[0].sessions).toHaveLength(2);
+    expect(days[0].totalMinutes).toBe(50);
+    expect(days[0].disciplines.map((d) => d.type)).toEqual(['Cinta', 'Bici']);
+  });
+
+  it('fusiona la misma disciplina repetida sumando y ampliando rangos', () => {
+    const [day] = buildCardioDays([
+      makeLog('a', '2026-07-01', 'Cinta: 20min, 10kmh, 2%'),
+      makeLog('b', '2026-07-01', 'Cinta: 10min, 12kmh, 5%'),
+    ]);
+    expect(day.disciplines).toHaveLength(1);
+    expect(day.disciplines[0]).toMatchObject({
+      totalMinutes: 30,
+      minSpeed: 10,
+      maxSpeed: 12,
+      minPendiente: 2,
+      maxPendiente: 5,
+    });
+  });
+
+  it('la cuesta es otra disciplina: no fusiona andar llano con andar en cuesta', () => {
+    const [day] = buildCardioDays([
+      makeLog(
+        'a',
+        '2026-07-16',
+        'Andar en cinta: 20min, 6kmh | Andar en cinta: 15min, 6kmh, 5%'
+      ),
+    ]);
+    expect(day.disciplines).toHaveLength(2);
+    expect(day.disciplines[0]).toMatchObject({
+      totalMinutes: 20,
+      maxPendiente: null,
+    });
+    expect(day.disciplines[1]).toMatchObject({
+      totalMinutes: 15,
+      maxPendiente: 5,
+    });
+    // La cuesta quema más aunque sean menos minutos: es otro esfuerzo.
+    expect(day.disciplines[1].kcal).toBeGreaterThan(day.disciplines[0].kcal);
+  });
+
+  it('pendiente 0 es llano: se fusiona con las entradas sin pendiente', () => {
+    const [day] = buildCardioDays([
+      makeLog(
+        'a',
+        '2026-07-16',
+        'Andar en cinta: 20min, 6kmh | Andar en cinta: 10min, 6kmh, 0%'
+      ),
+    ]);
+    expect(day.disciplines).toHaveLength(1);
+    expect(day.disciplines[0].totalMinutes).toBe(30);
+  });
+
+  it('separa fechas distintas y las ordena ascendente', () => {
+    const days = buildCardioDays([
+      makeLog('b', '2026-07-02', 'Cinta: 10min, 10kmh'),
+      makeLog('a', '2026-07-01', 'Cinta: 10min, 10kmh'),
+    ]);
+    expect(days.map((d) => d.date)).toEqual(['2026-07-01', '2026-07-02']);
+  });
+});
+
+describe('topKcalDiscipline', () => {
+  it('elige la disciplina con más kcal, no la de más minutos', () => {
+    // La bici son más minutos; correr en cinta quema bastante más.
+    const [day] = buildCardioDays([
+      makeLog('a', '2026-07-01', 'Bici: 40min, 20kmh | Correr: 20min, 12kmh'),
+    ]);
+    const top = topKcalDiscipline(day)!;
+    expect(top.type).toBe('Correr');
+    expect(top.kcal).toBeGreaterThan(day.disciplines[0].kcal);
+  });
+
+  it('null si no hay disciplinas', () => {
+    expect(
+      topKcalDiscipline({
+        date: '2026-07-01',
+        sessions: [],
+        disciplines: [],
+        totalMinutes: 0,
+        totalKm: 0,
+        totalKcal: 0,
+        isToday: false,
+      })
+    ).toBeNull();
+  });
+});
+
 describe('isoWeekRange', () => {
   it('devuelve lunes y domingo de la semana ISO', () => {
     expect(isoWeekRange('2026-07-01')).toEqual({
@@ -135,11 +232,13 @@ describe('mergeSessionEntries', () => {
 });
 
 describe('formatMergedResults', () => {
-  it('formatea con espacios y rango de velocidad', () => {
+  // El idioma por defecto (también en jest) es español: el decimal se pinta con
+  // coma aunque el dato se guarde y se parsee con punto (ver i18n.ts).
+  it('formatea con espacios y rango de velocidad, con coma decimal', () => {
     const [merged] = mergeSessionEntries(
       parseCardioEntries('Cinta: 20min, 12kmh | Cinta: 24min, 12.6kmh')
     );
-    expect(formatMergedResults(merged)).toBe('44 min, 12-12.6 km/h');
+    expect(formatMergedResults(merged)).toBe('44 min, 12-12,6 km/h');
   });
 
   it('velocidad única sin rango, y sin velocidad omite km/h', () => {

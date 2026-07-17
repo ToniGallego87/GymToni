@@ -16,9 +16,14 @@ import { useWorkout } from '@hooks/useWorkout';
 import {
   hasAnyCardio,
   cardioSessionFromLog,
+  CardioDay,
   CardioSession,
   CARDIO_ONLY_DAY,
+  disciplineIconName,
+  groupSessionsByDay,
+  hasIncline,
   isCardioOnlyLog,
+  topKcalDiscipline,
 } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
@@ -28,8 +33,23 @@ import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 type CalendarMode = 'fuerza' | 'cardio';
 
+// Icono de la celda de cardio: la disciplina que más kcal quemó ese día (cuesta
+// arriba si la hizo con pendiente).
+const cardioDayIcon = (
+  day: CardioDay
+): React.ComponentProps<typeof MaterialCommunityIcons>['name'] => {
+  const top = topKcalDiscipline(day);
+  if (!top) return 'run-fast';
+  return disciplineIconName(
+    top.type,
+    hasIncline(top.maxPendiente)
+  ) as React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+};
+
 interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
+  // Reabre la inserción de una sesión de solo cardio ya registrada (solo hoy).
+  onEditCardioOnly?: (log: WorkoutLog) => void;
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
@@ -63,6 +83,7 @@ const WEEK_DAYS = [
 
 export function CalendarScreen({
   onSelectLog,
+  onEditCardioOnly,
   onNavigateHome,
   onNavigateCardio,
   onNavigateCalendar,
@@ -146,12 +167,12 @@ export function CalendarScreen({
     );
   }, [state.logs]);
 
-  // Sesión de cardio por fecha (el cardio se registra dentro del log de fuerza).
-  // Se guarda también el día para poder abrir su detalle al pulsar la celda.
+  // Cardio por fecha: la celda representa TODO el cardio del día (aunque venga
+  // de varios logs), con el log/día a abrir al pulsarla.
   const cardioByDate = useMemo(() => {
     const map: Record<
       string,
-      { log: WorkoutLog; day: WorkoutDay; session: CardioSession }
+      { log: WorkoutLog; day: WorkoutDay; sessions: CardioSession[] }
     > = {};
     state.logs.forEach((log: WorkoutLog) => {
       const session = cardioSessionFromLog(log);
@@ -160,9 +181,24 @@ export function CalendarScreen({
       const day =
         getDayById(log.dayId) ??
         (isCardioOnlyLog(log) ? CARDIO_ONLY_DAY : undefined);
-      if (day) map[log.date] = { log, day, session };
+      if (!day) return;
+      const entry = map[log.date];
+      // El día de fuerza manda al abrir la celda; el solo cardio solo si no hay.
+      if (!entry) map[log.date] = { log, day, sessions: [session] };
+      else {
+        entry.sessions.push(session);
+        if (isCardioOnlyLog(entry.log) && !isCardioOnlyLog(log)) {
+          entry.log = log;
+          entry.day = day;
+        }
+      }
     });
-    return map;
+    return Object.fromEntries(
+      Object.entries(map).map(([date, entry]) => [
+        date,
+        { ...entry, cardioDay: groupSessionsByDay(entry.sessions)[0] },
+      ])
+    );
   }, [state.logs, state.routines]);
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
@@ -247,7 +283,7 @@ export function CalendarScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.monthCard}>
-          <GradientFill accent={theme.colors.primary} />
+          <GradientFill accent={theme.colors.primaryLine} />
           <Pressable
             style={[
               styles.monthNavButton,
@@ -315,18 +351,25 @@ export function CalendarScreen({
                   key={dateKey}
                   disabled={!hasCardio}
                   onPress={() => {
-                    if (cardio) onSelectLog(cardio.log, cardio.day);
+                    if (!cardio) return;
+                    // Solo cardio de hoy: la sesión sigue viva, se abre la
+                    // inserción en vez de la consulta.
+                    if (isCardioOnlyLog(cardio.log) && dateKey === todayKey) {
+                      onEditCardioOnly?.(cardio.log);
+                    } else {
+                      onSelectLog(cardio.log, cardio.day);
+                    }
                   }}
                   style={[
                     styles.dayCell,
                     hasCardio && styles.dayCellActive,
-                    hasCardio && { borderColor: theme.colors.white },
+                    hasCardio && { borderColor: theme.colors.accentLine },
                     dateKey === todayKey && styles.dayCellToday,
                   ]}
                 >
                   {hasCardio ? (
                     <>
-                      <GradientFill accent={theme.colors.white} />
+                      <GradientFill accent={theme.colors.accentLine} />
                       <View style={styles.dayHeaderRow}>
                         <Text
                           style={[
@@ -339,7 +382,7 @@ export function CalendarScreen({
                       </View>
                       <View style={styles.dayIconSlot}>
                         <MaterialCommunityIcons
-                          name="run-fast"
+                          name={cardioDayIcon(cardio.cardioDay)}
                           size={28}
                           color={theme.colors.white}
                         />
@@ -353,13 +396,13 @@ export function CalendarScreen({
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
                       >
-                        {Math.round(cardio.session.totalMinutes)}'
+                        {Math.round(cardio.cardioDay.totalMinutes)}'
                       </Text>
                     </>
                   ) : (
                     <>
                       {dateKey === todayKey && (
-                        <GradientFill accent={theme.colors.primary} />
+                        <GradientFill accent={theme.colors.primaryLine} />
                       )}
                       <Text style={styles.dayNumber}>{dayNumber}</Text>
                     </>
@@ -381,7 +424,7 @@ export function CalendarScreen({
             // Color de la celda = color del día de entrenamiento (emoji de la rutina).
             const dayColor = primaryDay
               ? getTrainingAccent(primaryDay)
-              : theme.colors.primary;
+              : theme.colors.primaryLine;
             const routineIndex = primaryLog
               ? state.routines.findIndex(
                   (r: WorkoutRoutine) => r.id === primaryLog.routineId
@@ -468,7 +511,7 @@ export function CalendarScreen({
                 ) : (
                   <>
                     {dateKey === todayKey && (
-                      <GradientFill accent={theme.colors.primary} />
+                      <GradientFill accent={theme.colors.primaryLine} />
                     )}
                     <Text style={styles.dayNumber}>{dayNumber}</Text>
                   </>
@@ -482,8 +525,11 @@ export function CalendarScreen({
           <View style={styles.modeToggle}>
             {(['fuerza', 'cardio'] as CalendarMode[]).map((m) => {
               const active = mode === m;
+              // Activo = relleno dorado, así que la tinta es la del oro. Iba con
+              // `background`, que en día es casi blanco y sobre el oro vivo no se
+              // leía (en noche coinciden, así que allí no cambia nada).
               const color = active
-                ? theme.colors.background
+                ? theme.colors.onGold
                 : theme.colors.textSecondary;
               return (
                 <Pressable
@@ -614,7 +660,7 @@ const styles = StyleSheet.create({
   },
   dayCellToday: {
     borderWidth: 2.5,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
   },
   // Cabecera del cell: número de día (izq) y chip de rutina (der) en una fila.
   dayHeaderRow: {
@@ -680,7 +726,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
   },
   modeButtonActive: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryFill,
   },
   modeButtonText: {
     fontSize: 14,

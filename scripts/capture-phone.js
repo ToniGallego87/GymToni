@@ -1,7 +1,13 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-const OUT_DIR = path.join(__dirname, '..', 'store-assets', 'screenshots', 'phone');
+const OUT_DIR = path.join(
+  __dirname,
+  '..',
+  'store-assets',
+  'screenshots',
+  'phone'
+);
 const URL = 'http://localhost:8081';
 const ACTION_TIMEOUT = 8000;
 
@@ -14,7 +20,10 @@ async function safeStep(label, fn) {
   try {
     await fn();
   } catch (e) {
-    console.log('AVISO: fallo en paso "' + label + '":', e.message.split('\n')[0]);
+    console.log(
+      'AVISO: fallo en paso "' + label + '":',
+      e.message.split('\n')[0]
+    );
   }
 }
 
@@ -28,7 +37,10 @@ async function safeStep(label, fn) {
   page.setDefaultTimeout(ACTION_TIMEOUT);
 
   await page.goto(URL, { waitUntil: 'load', timeout: 30000 });
-  await page.getByText('Empezar entrenamiento', { exact: false }).first().waitFor({ timeout: 30000 });
+  await page
+    .getByText('Empezar entrenamiento', { exact: false })
+    .first()
+    .waitFor({ timeout: 30000 });
   await page.waitForTimeout(1000);
 
   await shot(page, '01-home.png');
@@ -38,7 +50,10 @@ async function safeStep(label, fn) {
     await page.waitForTimeout(800);
     await shot(page, '02-registro.png');
     await page.goBack();
-    await page.getByText('Empezar entrenamiento', { exact: false }).first().waitFor();
+    await page
+      .getByText('Empezar entrenamiento', { exact: false })
+      .first()
+      .waitFor();
   });
 
   await safeStep('calendario', async () => {

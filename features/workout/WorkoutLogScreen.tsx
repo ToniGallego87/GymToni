@@ -4,7 +4,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Modal,
   TextInput,
   Pressable,
   Vibration,
@@ -12,6 +11,7 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import { useKeepAwake } from 'expo-keep-awake';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useAnimatedStyle,
@@ -24,6 +24,7 @@ import { useWorkout } from '@hooks/useWorkout';
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
 import {
+  AppModal,
   DayAccentIcon,
   ExerciseInputField,
   CardioInputField,
@@ -36,8 +37,9 @@ import {
   Toast,
   StretchScrollView,
 } from '../../components';
+import { isCardioOnlyLog } from '@lib/cardio';
 import { parseCardioString, parseSeriesString } from '@lib/parsers';
-import { generateId, getToday } from '@lib/storage';
+import { generateId, getToday } from '@lib/utils';
 import {
   WorkoutDay,
   WorkoutLog,
@@ -120,6 +122,11 @@ export function WorkoutLogScreen({
   onSave,
   onBack,
 }: WorkoutLogScreenProps) {
+  // La pantalla no se apaga mientras se registra: entre serie y serie pasan
+  // minutos y desbloquear el móvil con las manos ocupadas es la fricción del
+  // banco. Solo aquí; se libera al salir de la pantalla.
+  useKeepAwake();
+
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
 
@@ -130,7 +137,7 @@ export function WorkoutLogScreen({
     return activeRoutine?.days || [];
   };
 
-  const [selectedDay, setSelectedDay] = useState(() => {
+  const [selectedDay] = useState(() => {
     if (log) {
       const activeDays = getActiveDays();
       return activeDays.find((d) => d.id === log.dayId) || day;
@@ -194,7 +201,36 @@ export function WorkoutLogScreen({
     {} as Record<string, string>
   );
 
-  const initialCardioInput = existingLog?.cardio?.rawInput || '';
+  // Sesión de "solo cardio" ya registrada en la misma fecha: la absorbe este día
+  // de fuerza. Su cardio se precarga en el campo (queda igual que si se hubiera
+  // metido desde aquí) y el log suelto se elimina al guardar.
+  const [absorbedCardioLog] = useState(() => {
+    if (cardioOnly || selectedDay.exercises.length === 0) return null;
+    const date = existingLog?.date || getToday();
+    return (
+      state.logs.find((l) => isCardioOnlyLog(l) && l.date === date) || null
+    );
+  });
+
+  // Espejo del caso anterior: en "solo cardio", si ese día ya tiene entreno de
+  // fuerza, el cardio es del mismo día y va dentro de ese log. Se precarga su
+  // cardio y al guardar se escribe ahí (no se crea un log suelto aparte).
+  const [hostStrengthLog] = useState(() => {
+    if (!cardioOnly) return null;
+    const date = log?.date || getToday();
+    return (
+      state.logs.find((l) => !isCardioOnlyLog(l) && l.date === date) || null
+    );
+  });
+
+  const initialCardioInput = [
+    absorbedCardioLog?.cardio?.rawInput,
+    hostStrengthLog?.cardio?.rawInput,
+    existingLog?.cardio?.rawInput,
+  ]
+    .map((raw) => raw?.trim())
+    .filter(Boolean)
+    .join(' | ');
 
   // Estado para almacenar las series agregadas por cada ejercicio
   const [exerciseSets, setExerciseSets] =
@@ -205,7 +241,6 @@ export function WorkoutLogScreen({
   const [cardioInput, setCardioInput] = useState(initialCardioInput);
   const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
-  const [isWorkoutSaved, setIsWorkoutSaved] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -582,6 +617,12 @@ export function WorkoutLogScreen({
         }
       : undefined;
 
+    // Solo cardio sobre un día que ya tiene fuerza: se actualiza ese log (su
+    // fuerza no se toca aquí), no se crea una sesión suelta.
+    if (hostStrengthLog) {
+      return { ...hostStrengthLog, cardio: cardioLog, updatedAt: Date.now() };
+    }
+
     return {
       id: log?.id || generateId(),
       routineId: getRoutineIdForDay(),
@@ -601,6 +642,22 @@ export function WorkoutLogScreen({
   // Persiste el log: actualiza el existente o crea uno nuevo (eliminando antes
   // un posible log del mismo día de hoy para no duplicar).
   const persistWorkoutLog = (workoutLog: WorkoutLog) => {
+    // El "solo cardio" del día queda fusionado en este entrenamiento (su cardio
+    // ya viaja en workoutLog.cardio), así que el log suelto sobra.
+    if (absorbedCardioLog) {
+      dispatch({ type: 'DELETE_WORKOUT_LOG', payload: absorbedCardioLog.id });
+    }
+
+    // El cardio se fusiona en el entreno de fuerza del día: si además había un
+    // log de solo cardio suelto (datos antiguos), ya viaja dentro y sobra.
+    if (hostStrengthLog) {
+      if (existingLog && existingLog.id !== hostStrengthLog.id) {
+        dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLog.id });
+      }
+      dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
+      return;
+    }
+
     if (log) {
       dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: workoutLog });
       return;
@@ -639,12 +696,10 @@ export function WorkoutLogScreen({
 
     try {
       persistWorkoutLog(buildWorkoutLog(exerciseSets));
-
-      setIsWorkoutSaved(true);
-
-      setTimeout(() => {
-        onSave();
-      }, 1500);
+      // Vuelta inmediata: la confirmación es aterrizar en Inicio con la sesión
+      // de hoy ya en el historial (además el registro se autoguarda serie a
+      // serie, así que aquí no hay nada que esperar).
+      onSave();
     } catch (error) {
       setToast({
         message: t('Error al guardar.'),
@@ -680,10 +735,6 @@ export function WorkoutLogScreen({
     setShowNotesModal(null);
     setNotesText('');
   };
-
-  const hasExerciseInput = selectedDay.exercises.some(
-    (ex) => exerciseSets[ex.id]?.length > 0
-  );
 
   // Fecha mostrada en el subtítulo, en formato dd/mm/aaaa.
   const getSubtitleDate = (): string => {
@@ -784,7 +835,7 @@ export function WorkoutLogScreen({
                       {(timerSeconds % 60).toString().padStart(2, '0')}
                     </Text>
                     <Text style={styles.timerHint}>
-                      Tocar: +30s | Mantener: elimina temporizador
+                      {t('Tocar: +30s | Mantener: elimina temporizador')}
                     </Text>
                   </Pressable>
                 )}
@@ -799,34 +850,40 @@ export function WorkoutLogScreen({
         />
 
         <View style={styles.buttonContainer}>
-          {isWorkoutSaved ? (
-            <View style={[styles.saveMessageContainer]}>
-              <MaterialCommunityIcons name="check-circle" size={24} />
-              <Text style={styles.saveMessageText}>
-                {t('Entrenamiento guardado')}
-              </Text>
-            </View>
-          ) : (
-            <SaveWorkoutButton onPress={handleSaveWorkout} />
-          )}
+          <SaveWorkoutButton onPress={handleSaveWorkout} />
         </View>
       </StretchScrollView>
 
+      {/* En solo cardio la pantalla se titula como la tarjeta de disciplinas
+          (icono 'run' + "Cardio") y el subtítulo es solo la fecha: no hay
+          ejercicios que rellenar, así que no hay nada más que decir. */}
       <GlassTopBar
-        title={selectedDay.name}
+        title={cardioOnly ? t('Cardio') : selectedDay.name}
         titleElement={
           <View style={styles.topBarTitleRow}>
-            <DayAccentIcon
-              emoji={selectedDay.emoji}
-              name={selectedDay.name}
-              size={24}
-            />
-            <Text style={styles.topBarTitleText}>{selectedDay.name}</Text>
+            {cardioOnly ? (
+              <MaterialCommunityIcons
+                name="run"
+                size={24}
+                color={theme.colors.white}
+              />
+            ) : (
+              <DayAccentIcon
+                emoji={selectedDay.emoji}
+                name={selectedDay.name}
+                size={24}
+              />
+            )}
+            <Text style={styles.topBarTitleText}>
+              {cardioOnly ? t('Cardio') : selectedDay.name}
+            </Text>
           </View>
         }
-        subtitle={`${
-          cardioOnly ? t('Registra tu cardio') : t('Rellena los ejercicios')
-        } - ${getSubtitleDate()}`}
+        subtitle={
+          cardioOnly
+            ? getSubtitleDate()
+            : `${t('Rellena los ejercicios')} - ${getSubtitleDate()}`
+        }
         topInset={insets.top}
       />
 
@@ -841,54 +898,51 @@ export function WorkoutLogScreen({
         />
       )}
 
-      {/* Modal de notas */}
-      <Modal
+      <AppModal
         visible={showNotesModal !== null}
-        animationType="fade"
-        transparent
         onRequestClose={() => setShowNotesModal(null)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('Notas del ejercicio')}</Text>
-            <TextInput
-              style={styles.notesInput}
-              placeholder={t(
-                'Añade una nota (ej: muy cansado, fallo en última serie)'
-              )}
-              value={notesText}
-              onChangeText={setNotesText}
-              multiline
-              placeholderTextColor={theme.colors.textSecondary}
+        title={t('Notas del ejercicio')}
+        icon="note-text-outline"
+        align="left"
+        footer={
+          <View style={styles.modalButtons}>
+            <Button
+              title={t('Cancelar')}
+              onPress={() => setShowNotesModal(null)}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
             />
-            <View style={styles.modalButtons}>
+            {showNotesModal && exerciseNotes[showNotesModal] ? (
               <Button
-                title={t('Guardar')}
-                onPress={handleSaveNotes}
-                variant="primary"
+                title={t('Borrar')}
+                onPress={handleDeleteNotes}
+                variant="danger"
                 size="medium"
                 style={styles.modalButton}
               />
-              {showNotesModal && exerciseNotes[showNotesModal] ? (
-                <Button
-                  title={t('Borrar')}
-                  onPress={handleDeleteNotes}
-                  variant="danger"
-                  size="medium"
-                  style={styles.modalButton}
-                />
-              ) : null}
-              <Button
-                title={t('Cancelar')}
-                onPress={() => setShowNotesModal(null)}
-                variant="secondary"
-                size="medium"
-                style={styles.modalButton}
-              />
-            </View>
+            ) : null}
+            <Button
+              title={t('Guardar')}
+              onPress={handleSaveNotes}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
           </View>
-        </View>
-      </Modal>
+        }
+      >
+        <TextInput
+          style={styles.notesInput}
+          placeholder={t(
+            'Añade una nota (ej: muy cansado, fallo en última serie)'
+          )}
+          value={notesText}
+          onChangeText={setNotesText}
+          multiline
+          placeholderTextColor={theme.colors.textSecondary}
+        />
+      </AppModal>
     </View>
   );
 }
@@ -940,58 +994,25 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     includeFontPadding: true,
   },
-  saveMessageContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    backgroundColor: theme.colors.success,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: theme.borderRadius.md,
-  },
-  saveMessageText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.onGold,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
-    maxHeight: '80%',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: theme.colors.text,
-    marginBottom: 12,
-    lineHeight: 24,
-  },
   notesInput: {
+    marginTop: 4,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    borderRadius: 8,
+    borderRadius: theme.borderRadius.sm,
     padding: 14,
     fontSize: 16,
     minHeight: 88,
     color: theme.colors.text,
     backgroundColor: theme.colors.inputBg,
-    marginBottom: 16,
     lineHeight: 22,
+    textAlignVertical: 'top',
   },
   modalButtons: {
     flexDirection: 'row',
     gap: 8,
   },
-  // Botones del modal: reparto equitativo y sin la sombra fuerte del Button
-  // (en un bottom-sheet la sombra grande dejaba una mancha oscura debajo).
+  // Reparto equitativo y sin la sombra fuerte del Button: dentro de la tarjeta
+  // del modal la sombra grande dejaba una mancha oscura debajo.
   modalButton: {
     flex: 1,
     shadowOpacity: 0,
@@ -1000,7 +1021,7 @@ const styles = StyleSheet.create({
   timerContainer: {
     marginVertical: 16,
     marginHorizontal: 20,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryFill,
     borderRadius: theme.borderRadius.lg,
     padding: 15,
     alignItems: 'center',

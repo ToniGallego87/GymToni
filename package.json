@@ -1,6 +1,6 @@
 {
   "name": "gymbro",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "private": true,
   "description": "App para registrar entrenamientos de gimnasio de forma rápida",
   "main": "expo-router/entry",
@@ -28,6 +28,7 @@
     "expo-document-picker": "~12.0.2",
     "expo-file-system": "~17.0.1",
     "expo-font": "~12.0.10",
+    "expo-keep-awake": "~13.0.2",
     "expo-linear-gradient": "~13.0.2",
     "expo-linking": "~6.3.1",
     "expo-notifications": "~0.28.19",

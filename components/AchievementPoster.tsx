@@ -21,8 +21,10 @@ export const POSTER_HEIGHT = 1920;
 
 // Alias locales de la paleta del tema (el póster se renderiza en SVG con los
 // mismos colores de la app). PANEL_BORDER/TRACK son tonos propios del póster.
-const GOLD = theme.colors.primary;
-const GOLD_SOFT = theme.colors.primaryLight;
+// El póster se pinta siempre sobre lienzo oscuro (PANEL_BORDER/TRACK), así que
+// el oro es el de superficie: el bronce oscuro de la tinta de día se apagaba.
+const GOLD = theme.colors.primaryFill;
+const GOLD_SOFT = theme.colors.primaryFillLight;
 const GREEN = theme.colors.success;
 const PANEL_BORDER = '#2A2F3A';
 const TRACK = '#262B36';

@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   importBtn: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.primaryFill,
     borderRadius: theme.borderRadius.md,
     paddingVertical: 14,
     alignItems: 'center',

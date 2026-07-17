@@ -1,17 +1,10 @@
 import React from 'react';
-import {
-  Dimensions,
-  Modal,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import type { ChangelogEntry } from '@data/changelog';
+import { AppModal } from './AppModal';
+import { Button } from './Button';
 
 interface WhatsNewModalProps {
   visible: boolean;
@@ -23,89 +16,31 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
   if (!entry) return null;
 
   return (
-    <Modal
+    <AppModal
       visible={visible}
-      transparent
-      animationType="fade"
       onRequestClose={onClose}
+      title={`${t('Novedades de la versión')} ${entry.version}`}
+      icon="party-popper"
+      footer={<Button title={t('Entendido')} onPress={onClose} size="medium" />}
     >
-      <View style={styles.overlay}>
-        <View style={styles.content}>
-          <View style={styles.iconWrap}>
-            <MaterialCommunityIcons
-              name="party-popper"
-              size={28}
-              color={theme.colors.primary}
-            />
+      <ScrollView style={styles.list} showsVerticalScrollIndicator={false}>
+        {entry.items.map((item, index) => (
+          <View key={index} style={styles.itemRow}>
+            <Text style={styles.bullet}>•</Text>
+            <Text style={styles.itemText}>{item}</Text>
           </View>
-          <Text style={styles.title}>
-            {t('Novedades de la versión')} {entry.version}
-          </Text>
-          <ScrollView
-            style={styles.list}
-            showsVerticalScrollIndicator={false}
-          >
-            {entry.items.map((item, index) => (
-              <View key={index} style={styles.itemRow}>
-                <Text style={styles.bullet}>•</Text>
-                <Text style={styles.itemText}>{item}</Text>
-              </View>
-            ))}
-          </ScrollView>
-          <Pressable
-            style={({ pressed }) => [
-              styles.closeButton,
-              pressed && styles.closeButtonPressed,
-            ]}
-            onPress={onClose}
-          >
-            <Text style={styles.closeButtonText}>{t('Entendido')}</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
+        ))}
+      </ScrollView>
+    </AppModal>
   );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: theme.colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 16,
-  },
-  content: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: 24,
-    width: '100%',
-    maxWidth: 360,
-    maxHeight: Dimensions.get('window').height * 0.75,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-  },
-  iconWrap: {
-    width: 52,
-    height: 52,
-    borderRadius: theme.borderRadius.pill,
-    backgroundColor: theme.colors.primaryMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  title: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-    marginBottom: 18,
-  },
   list: {
-    width: '100%',
+    marginTop: 12,
+    // La lista de novedades crece con cada versión: scrollea dentro de la
+    // tarjeta en vez de desbordar la pantalla.
     maxHeight: Dimensions.get('window').height * 0.45,
-    marginBottom: 22,
   },
   itemRow: {
     flexDirection: 'row',
@@ -122,21 +57,5 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 15,
     lineHeight: 21,
-  },
-  closeButton: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 14,
-    paddingHorizontal: 28,
-    width: '100%',
-    alignItems: 'center',
-  },
-  closeButtonPressed: {
-    opacity: 0.85,
-  },
-  closeButtonText: {
-    color: theme.colors.onGold,
-    fontSize: 15,
-    fontWeight: '800',
   },
 });

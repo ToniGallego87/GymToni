@@ -77,13 +77,10 @@ export interface WorkoutAppData {
   logs: WorkoutLog[];
 }
 
-export interface WorkoutState extends WorkoutAppData {
-  currentDay?: WorkoutDay;
-}
+export type WorkoutState = WorkoutAppData;
 
 export type WorkoutAction =
   | { type: 'SET_APP_DATA'; payload: WorkoutAppData }
-  | { type: 'SET_ROUTINES'; payload: WorkoutRoutine[] }
   | { type: 'ADD_ROUTINE'; payload: WorkoutRoutine }
   | { type: 'DELETE_ROUTINE'; payload: string }
   | { type: 'UPDATE_ROUTINE'; payload: WorkoutRoutine }
@@ -92,10 +89,8 @@ export type WorkoutAction =
   | { type: 'ADD_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'UPDATE_WORKOUT_LOG'; payload: WorkoutLog }
   | { type: 'DELETE_WORKOUT_LOG'; payload: string }
-  | { type: 'SET_LOGS'; payload: WorkoutLog[] }
   | {
       type: 'UPDATE_DAY';
       payload: { routineId: string; dayId: string; day: WorkoutDay };
     }
-  | { type: 'CLEAR_DATA' }
-  | { type: 'SET_CURRENT_DAY'; payload: WorkoutDay | undefined };
+  | { type: 'CLEAR_DATA' };

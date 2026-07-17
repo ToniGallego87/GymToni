@@ -162,10 +162,15 @@ const styles = StyleSheet.create({
   heroMainValue: {
     fontFamily: theme.fonts.display,
     fontSize: 34,
-    // Ratio 1.18, en línea con el resto de textos en Anton de la app (weekTitle
-    // 21/26, dailyName 19/22). 44 dejaba aire muerto sobre y bajo el número.
-    lineHeight: 40,
+    // Anton a 34px pide 51px de línea (ascendente 40 + descendente 11), más de
+    // los que hay: la línea base queda a lineHeight - descendente = 32.8 y los
+    // dígitos (altura de mayúscula 29.2) ocupan de 3.6 a 32.8. Con 40 la base
+    // subía a 28.8 y Android recortaba el número por arriba; 44 le da hueco.
+    lineHeight: 44,
     includeFontPadding: false,
+    // Los dígitos quedan centrados en 18.2 y la caja en 22 (el hueco del
+    // descendente, que las cifras no usan, tira de ellas hacia arriba): sin esto
+    // el número se ve alto frente al icono y la unidad, que sí van centrados.
     transform: [{ translateY: 4 }],
     color: theme.colors.onGold,
   },

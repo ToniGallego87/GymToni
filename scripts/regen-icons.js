@@ -1,8 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const Jimp = require(require.resolve('jimp-compact', {
-  paths: [require.resolve('@expo/image-utils')],
-}));
+const Jimp = require(
+  require.resolve('jimp-compact', {
+    paths: [require.resolve('@expo/image-utils')],
+  })
+);
 
 const projectRoot = path.resolve(__dirname, '..');
 const src = path.join(projectRoot, 'assets', 'adaptive-icon.png');
@@ -89,9 +91,13 @@ const TRANSPARENT = 0x00000000;
       await legacy.getBufferAsync(Jimp.MIME_PNG)
     );
 
-    console.log(`mipmap-${d}: lienzo ${size}, contenido ${content.bitmap.width}x${content.bitmap.height}`);
+    console.log(
+      `mipmap-${d}: lienzo ${size}, contenido ${content.bitmap.width}x${content.bitmap.height}`
+    );
   }
-  console.log(`Iconos regenerados (SCALE=${SCALE}) desde assets/adaptive-icon.png`);
+  console.log(
+    `Iconos regenerados (SCALE=${SCALE}) desde assets/adaptive-icon.png`
+  );
 })().catch((e) => {
   console.error(e);
   process.exit(1);

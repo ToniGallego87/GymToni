@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (60 tests)
+npm test           # Jest sobre lib/ (10 suites, 119 tests)
 npm run format     # Prettier
 ```
 
@@ -43,9 +43,13 @@ GymToni/
 │   ├── GlassTopBar.tsx       ← Barra superior (título estándar via prop icon)
 │   ├── FloatingPrimaryNav.tsx / FloatingBackButton.tsx / FloatingGlassBar.tsx
 │   ├── Button.tsx            ← Botón estándar (primary/secondary/danger)
-│   ├── ConfirmModal.tsx      ← Diálogo de confirmación único de la app
+│   ├── AppModal.tsx          ← Carpintería única de los modales de la app
+│   ├── ConfirmModal.tsx      ← AppModal + par cancelar/confirmar
 │   ├── HeroCard.tsx          ← Tarjeta principal de Inicio
+│   ├── BarChart.tsx          ← Gráfica de barras (Inicio y Cardio)
+│   ├── SegmentedFilter.tsx   ← Filtro de chips de las gráficas
 │   ├── ExerciseInputField.tsx← Registro serie a serie (60x8 → ➕)
+│   ├── ExerciseFormRow.tsx   ← Edición de un ejercicio (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
 │   ├── GymIcon.tsx / DayAccentIcon.tsx ← Iconos de grupo muscular por día
 │   ├── AchievementPoster.tsx ← Póster SVG de logros semanales (imagen/vídeo)
@@ -53,7 +57,9 @@ GymToni/
 │   └── Toast.tsx, GradientFill.tsx, AnimatedCounter.tsx, StretchScrollView.tsx…
 ├── features/workout/         ← Pantallas + estado global
 │   ├── WorkoutContext.tsx    ← Provider + reducer + persistencia granular
-│   ├── HomeScreen.tsx        ← Inicio: héroe, progreso semanal, historial, selector de rutinas
+│   ├── HomeScreen.tsx        ← Inicio: héroe, progreso semanal e historial
+│   ├── RoutineSelectorScreen.tsx ← Rutinas: elegir la que se ve en Inicio, duplicar, borrar
+│   ├── ExerciseProgressScreen.tsx ← Progreso por ejercicio: gráfica y récords
 │   ├── DaySelectorScreen.tsx / WorkoutLogScreen.tsx  ← Elegir día y registrar
 │   ├── DetailScreen.tsx      ← Detalle de una sesión guardada
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
@@ -65,7 +71,8 @@ GymToni/
 ├── lib/                      ← Lógica compartida (ver ARCHITECTURE.md)
 │   ├── theme.ts              ← Colores, degradados, tipografía, spacing
 │   ├── storage.ts / persistence.ts / db/ ← Persistencia SQLite (nativo) / JSON (web)
-│   └── parsers.ts, progress.ts, weeks.ts, cardio.ts, achievements.ts…
+│   └── parsers.ts, progress.ts, weeks.ts, exerciseProgress.ts, routines.ts,
+│       cardio.ts, achievements.ts…
 ├── lib/__tests__/            ← Tests Jest de la lógica pura
 ├── types/index.ts            ← Tipos centralizados
 ├── data/

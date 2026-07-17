@@ -18,7 +18,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
-import { t } from '@lib/i18n';
+import { localizeDecimals, parseTypedNumber, t } from '@lib/i18n';
 import { parseSeriesString } from '@lib/parsers';
 import { getImprovementDisplay } from '@lib/utils';
 import { GradientFill } from './GradientFill';
@@ -137,8 +137,9 @@ export function ExerciseInputField({
   const handleAddSet = () => {
     const weightStr = (weightValue.trim() || getWeightPlaceholder()).trim();
     const repsStr = (repsValue.trim() || getRepPlaceholder()).trim();
-    const weight = parseFloat(weightStr);
-    const reps = parseFloat(repsStr);
+    // El teclado español escribe coma: "22,5" es un peso válido.
+    const weight = parseTypedNumber(weightStr);
+    const reps = parseTypedNumber(repsStr);
     if (!isNaN(weight) && !isNaN(reps) && weight >= 0 && reps > 0) {
       onAddSet({ weight, reps });
       setWeightValue('');
@@ -276,7 +277,7 @@ export function ExerciseInputField({
               <Text style={[styles.serieTagText, { color: cardAccent }]}>
                 {set.weight === -1 || set.reps === -1
                   ? '—'
-                  : `${set.weight}×${set.reps}`}
+                  : localizeDecimals(`${set.weight}×${set.reps}`)}
               </Text>
             </Animated.View>
           ))}
@@ -433,7 +434,7 @@ export function ExerciseInputField({
                 <Text style={styles.inputLabel}>{t('Peso · kg')}</Text>
                 <TextInput
                   style={styles.bigInput}
-                  placeholder={getWeightPlaceholder()}
+                  placeholder={localizeDecimals(getWeightPlaceholder())}
                   placeholderTextColor={theme.colors.textMuted}
                   value={weightValue}
                   onChangeText={setWeightValue}
@@ -450,7 +451,7 @@ export function ExerciseInputField({
                 </Text>
                 <TextInput
                   style={styles.bigInput}
-                  placeholder={getRepPlaceholder()}
+                  placeholder={localizeDecimals(getRepPlaceholder())}
                   placeholderTextColor={theme.colors.textMuted}
                   value={repsValue}
                   onChangeText={setRepsValue}
@@ -464,7 +465,7 @@ export function ExerciseInputField({
             <Pressable
               style={({ pressed }) => [
                 styles.addButton,
-                { backgroundColor: theme.colors.accent },
+                { backgroundColor: theme.colors.primaryFill },
                 pressed && styles.addButtonPressed,
               ]}
               onPress={handleAddSet}
@@ -569,9 +570,16 @@ export function ExerciseInputField({
                     <MaterialCommunityIcons
                       name={timerRunning ? 'stop' : 'play'}
                       size={16}
-                      color={theme.colors.onGold}
+                      color={theme.colors.onDanger}
                     />
-                    <Text style={styles.stopwatchButtonText}>
+                    {/* Iniciar/Parar van sobre verde/rojo, no sobre el oro: su
+                        tinta es la de estado, no la del oro (ver theme.ts). */}
+                    <Text
+                      style={[
+                        styles.stopwatchButtonText,
+                        { color: theme.colors.onDanger },
+                      ]}
+                    >
                       {timerRunning ? t('Parar') : t('Iniciar')}
                     </Text>
                   </Pressable>
@@ -974,7 +982,7 @@ const styles = StyleSheet.create({
   },
   stopwatchBtnStart: { backgroundColor: theme.colors.success },
   stopwatchBtnStop: { backgroundColor: theme.colors.error },
-  stopwatchBtnUse: { backgroundColor: theme.colors.primary },
+  stopwatchBtnUse: { backgroundColor: theme.colors.primaryFill },
   stopwatchButtonText: {
     color: theme.colors.onGold,
     fontWeight: '800',

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -11,13 +11,20 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
-  Button,
   StretchScrollView,
 } from '@components';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
-import { cardioSessionFromLog, fmtNum, rangeStr } from '@lib/cardio';
-import { formatDate } from '@lib/storage';
-import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
+import {
+  cardioSessionFromLog,
+  disciplineIconName,
+  estimateEntryKcal,
+  fmtNum,
+  hasIncline,
+  weightForTimestamp,
+  WeightSegment,
+} from '@lib/cardio';
+import { getCardioWeightHistory } from '@lib/storage';
+import { formatDate, getImprovementDisplay, getLogTimestamp } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
@@ -25,14 +32,12 @@ import { t, dateLocale } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   getExerciseStrengthScore,
-  getWorkoutStrengthScore,
 } from '@lib/progress';
 
 interface DetailScreenProps {
   log: WorkoutLog;
   day: WorkoutDay;
   onBack: () => void;
-  onEdit: (log: WorkoutLog, day: WorkoutDay) => void;
 }
 
 function extractIncline(rawInput: string): string | null {
@@ -49,7 +54,7 @@ function extractPaceNumber(pace: string): string {
   return match ? match[1] : pace;
 }
 
-export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
+export function DetailScreen({ log, day, onBack }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const dayAccent = getTrainingAccent({ emoji: day.emoji, name: day.name });
@@ -59,8 +64,22 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
   const scrollBottomPadding =
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
+  // Tramos de peso: las kcal de cada entrada se estiman con el peso vigente
+  // cuando se registró el cardio (mismo criterio que la pantalla de Cardio).
+  const [weightHistory, setWeightHistory] = useState<WeightSegment[]>([]);
+  useEffect(() => {
+    getCardioWeightHistory()
+      .then((history) => {
+        if (history.length) setWeightHistory(history);
+      })
+      .catch(() => {});
+  }, []);
+  const weightKg = weightForTimestamp(weightHistory, log.createdAt);
+
   // Sesión de cardio parseada del log (null si no hay cardio parseable).
-  const cardioSession = log.cardio ? cardioSessionFromLog(log) : null;
+  const cardioSession = log.cardio
+    ? cardioSessionFromLog(log, weightHistory)
+    : null;
 
   const displayedDate = log.date
     ? new Date(`${log.date}T00:00:00`)
@@ -80,13 +99,6 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
           l.dayId === log.dayId && getLogTimestamp(l) < getLogTimestamp(log)
       )
       .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
-
-  const detailImprovement = previousLog
-    ? buildImprovementFromStrengthScores(
-        getWorkoutStrengthScore(log),
-        getWorkoutStrengthScore(previousLog)
-      )
-    : null;
 
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
@@ -226,29 +238,47 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
               </Text>
             )}
             {cardioSession ? (
-              // Todas las disciplinas registradas en el día (el rawInput puede
-              // traer varias entradas unidas por " | "), una caja por disciplina.
-              cardioSession.disciplines.map((discipline) => (
-                <View key={discipline.type} style={styles.cardioBox}>
-                  <GradientFill accent={dayAccent} />
-                  <Text style={styles.cardioLabel}>
-                    {discipline.type.toUpperCase()}
-                  </Text>
-                  <View style={styles.cardioDetails}>
-                    {discipline.totalMinutes > 0 && (
-                      <View style={styles.cardioDetailRow}>
-                        <MaterialCommunityIcons
-                          name="timer-sand"
-                          size={14}
-                          color={theme.colors.textSecondary}
-                        />
-                        <Text style={styles.cardioDetail}>
-                          {fmtNum(discipline.totalMinutes)} min
-                        </Text>
-                      </View>
-                    )}
-                    {discipline.minSpeed != null &&
-                      discipline.maxSpeed != null && (
+              // Una caja por entrada registrada (el rawInput puede traer varias
+              // unidas por " | "): sin agrupar por disciplina, para poder leer
+              // cada tanda tal cual se metió.
+              cardioSession.entries.map((entry, index) => {
+                const kcal = estimateEntryKcal(entry, weightKg);
+                return (
+                  <View key={`${entry.raw}-${index}`} style={styles.cardioBox}>
+                    <GradientFill accent={dayAccent} />
+                    <View style={styles.cardioLabelRow}>
+                      <MaterialCommunityIcons
+                        name={
+                          disciplineIconName(
+                            entry.type,
+                            hasIncline(entry.pendiente)
+                          ) as React.ComponentProps<
+                            typeof MaterialCommunityIcons
+                          >['name']
+                        }
+                        size={16}
+                        color={theme.colors.textSecondary}
+                      />
+                      <Text
+                        style={[styles.cardioLabel, styles.cardioLabelInRow]}
+                      >
+                        {entry.type.toUpperCase()}
+                      </Text>
+                    </View>
+                    <View style={styles.cardioDetails}>
+                      {entry.minutes != null && (
+                        <View style={styles.cardioDetailRow}>
+                          <MaterialCommunityIcons
+                            name="timer-sand"
+                            size={14}
+                            color={theme.colors.textSecondary}
+                          />
+                          <Text style={styles.cardioDetail}>
+                            {fmtNum(entry.minutes)} min
+                          </Text>
+                        </View>
+                      )}
+                      {entry.speed != null && (
                         <View style={styles.cardioDetailRow}>
                           <MaterialCommunityIcons
                             name="map-marker-path"
@@ -256,13 +286,11 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
                             color={theme.colors.textSecondary}
                           />
                           <Text style={styles.cardioDetail}>
-                            {rangeStr(discipline.minSpeed, discipline.maxSpeed)}{' '}
-                            km/h
+                            {fmtNum(entry.speed)} km/h
                           </Text>
                         </View>
                       )}
-                    {discipline.minPendiente != null &&
-                      discipline.maxPendiente != null && (
+                      {entry.pendiente != null && (
                         <View style={styles.cardioDetailRow}>
                           <MaterialCommunityIcons
                             name="chart-line"
@@ -270,17 +298,26 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
                             color={theme.colors.textSecondary}
                           />
                           <Text style={styles.cardioDetail}>
-                            {rangeStr(
-                              discipline.minPendiente,
-                              discipline.maxPendiente
-                            )}
-                            %
+                            {fmtNum(entry.pendiente)}%
                           </Text>
                         </View>
                       )}
+                      {kcal > 0 && (
+                        <View style={styles.cardioDetailRow}>
+                          <MaterialCommunityIcons
+                            name="fire"
+                            size={14}
+                            color={theme.colors.textSecondary}
+                          />
+                          <Text style={styles.cardioDetail}>
+                            {Math.round(kcal)} kcal
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
-                </View>
-              ))
+                );
+              })
             ) : (
               // Fallback legado: rawInput no parseable, se muestra el resumen
               // simple del primer registro como antes.
@@ -332,15 +369,6 @@ export function DetailScreen({ log, day, onBack, onEdit }: DetailScreenProps) {
             )}
           </>
         )}
-
-        {/* <View style={styles.editButtonContainer}>
-          <Button
-            title="Editar entrenamiento"
-            onPress={() => onEdit(log, day)}
-            variant="primary"
-            size="large"
-          />
-        </View> */}
       </StretchScrollView>
 
       <GlassTopBar
@@ -404,6 +432,16 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     ...theme.shadow.soft,
   },
+  cardioLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 6,
+  },
+  // El margen inferior lo pone la fila: aquí desalinearía el icono.
+  cardioLabelInRow: {
+    marginBottom: 0,
+  },
   cardioLabel: {
     fontSize: 14,
     fontWeight: '600',
@@ -414,7 +452,10 @@ const styles = StyleSheet.create({
   },
   cardioDetails: {
     flexDirection: 'row',
-    gap: 16,
+    // Con las kcal ya son cuatro datos: en pantallas estrechas pasan a dos filas.
+    flexWrap: 'wrap',
+    columnGap: 16,
+    rowGap: 8,
     alignItems: 'center',
     marginTop: 8,
   },
@@ -428,8 +469,5 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-  },
-  editButtonContainer: {
-    marginTop: 20,
   },
 });

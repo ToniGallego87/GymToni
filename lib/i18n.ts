@@ -12,6 +12,31 @@ export const language: Language = getStoredLanguage();
 // Locale para toLocaleDateString y similares.
 export const dateLocale = language === 'en' ? 'en-GB' : 'es-ES';
 
+// Separador decimal del idioma: coma en español, punto en inglés.
+//
+// IMPORTANTE: los datos se GUARDAN y se PARSEAN siempre con punto (`rawInput`
+// separa las series por comas: "60x8, 60x8" — una coma decimal ahí partiría la
+// serie en dos, y los regex de parsers.ts/cardio.ts esperan punto). Así que la
+// coma vive solo en los extremos: al pintar (localizeDecimals) y al teclear
+// (canonicalDecimals / parseTypedNumber).
+export const decimalSeparator = language === 'en' ? '.' : ',';
+
+/** Pinta los decimales de un texto ("12.6 km/h" → "12,6 km/h") en el idioma. */
+export function localizeDecimals(text: string): string {
+  if (decimalSeparator === '.') return text;
+  return text.replace(/(\d)\.(\d)/g, `$1${decimalSeparator}$2`);
+}
+
+/** Pasa a punto lo tecleado por el usuario, que puede venir con coma. */
+export function canonicalDecimals(text: string): string {
+  return text.replace(',', '.');
+}
+
+/** Lee un número tecleado por el usuario (admite coma o punto). */
+export function parseTypedNumber(text: string): number {
+  return parseFloat(canonicalDecimals(text));
+}
+
 const EN: Record<string, string> = {};
 
 export function t(
@@ -49,6 +74,9 @@ register({
   // Perfil
   'Mis rutinas': 'My routines',
   'Consulta, comparte o cambia de rutina': 'View, share or switch routines',
+  'Progreso por ejercicio': 'Progress by exercise',
+  'Tu evolución y tus récords, ejercicio a ejercicio':
+    'Your progress and records, exercise by exercise',
   'Importa, exporta o limpia la información':
     'Import, export or wipe your data',
   'Tema, idioma y novedades': "Theme, language and what's new",
@@ -58,8 +86,8 @@ register({
 
   // Configuración
   Tema: 'Theme',
-  Noche: 'Dark',
-  Día: 'Day',
+  Oscuro: 'Dark',
+  Claro: 'Light',
   Idioma: 'Language',
   'El cambio de tema o idioma reinicia la app.':
     'Changing the theme or language restarts the app.',
@@ -81,7 +109,6 @@ register({
   Preparada: 'Prepared',
   'Solo cardio': 'Cardio only',
   'Registra solo tu cardio': 'Log just your cardio',
-  'Registra tu cardio': 'Log your cardio',
   'Añade tu cardio antes de guardar': 'Add your cardio before saving',
   'Empezar una nueva semana con este día': 'Start a new week with this day',
   'Empezar sesión': 'Start session',
@@ -93,6 +120,10 @@ register({
   '{n} semanas seguidas': '{n} weeks in a row',
   Semana: 'Week',
   'Semana completa': 'Full week',
+  '1 día': '1 day',
+  '{n} días': '{n} days',
+  'Ver logros de la semana': "See the week's achievements",
+  'Más opciones': 'More options',
   '¿Qué deseas hacer?': 'What do you want to do?',
   'Puedes editar o eliminar el registro': 'You can edit or delete the entry',
   'Puedes continuar o eliminar el registro':
@@ -106,6 +137,10 @@ register({
   '{n} días de entrenamiento': '{n} training days',
   'Consulta la que desees o crea una nueva':
     'Check any routine or create a new one',
+  Duplicar: 'Duplicate',
+  '(copia)': '(copy)',
+  '(copia {n})': '(copy {n})',
+  'Copiada como "{name}"': 'Copied as "{name}"',
   '¿Eliminar rutina?': 'Delete routine?',
   '¿Eliminar entrenamiento?': 'Delete workout?',
   'Esta acción no se puede deshacer. ¿Estás seguro?':
@@ -113,6 +148,8 @@ register({
 
   // Selector de día
   'Elige la sesión': 'Pick a session',
+  'Borrar también el cardio': 'Delete the cardio too',
+  Día: 'Day',
   'Selecciona el día que vas a registrar': "Select the day you'll log",
   '{n} ejercicios': '{n} exercises',
 
@@ -139,7 +176,10 @@ register({
   Iniciar: 'Start',
   Parar: 'Stop',
   'Tiempo hasta la siguiente serie': 'Time until your next set',
+  'Tocar: +30s | Mantener: elimina temporizador':
+    'Tap: +30s | Hold: cancel the timer',
   'Usar {n}s': 'Use {n}s',
+  '¡Ánimo con tu nueva rutina!': 'Good luck with your new routine!',
 
   // Cardio
   'Añadir cardio': 'Add cardio',
@@ -155,6 +195,7 @@ register({
   'Ej: Escalador, Remo, etc.': 'E.g.: Stair climber, Rowing, etc.',
   Continuar: 'Continue',
   Atrás: 'Back',
+  'Disciplinas ejecutadas:': 'Disciplines done:',
   'Detalles del cardio': 'Cardio details',
   Minutos: 'Minutes',
   'Pendiente %': 'Incline %',
@@ -163,10 +204,16 @@ register({
   'Aún no hay cardio. Añádelo dentro de un día de fuerza.':
     'No cardio yet. Add it inside a strength day.',
   'Esta semana': 'This week',
-  'Aún sin cardio esta semana': 'No cardio yet this week',
   'semana pasada': 'last week',
   'media semanal': 'weekly average',
   'mejor semana': 'best week',
+  Hoy: 'Today',
+  'Aún sin cardio hoy': 'No cardio yet today',
+  disciplina: 'discipline',
+  disciplinas: 'disciplines',
+  'hace 7 días': '7 days ago',
+  'media diaria': 'daily average',
+  'mejor día': 'best day',
   'vs mismos días': 'vs same days',
   ejercicios: 'exercises',
   'Pulsa para indicar tu peso': 'Tap to set your weight',
@@ -174,8 +221,8 @@ register({
   '{d} kg desde el anterior': '{d} kg since the previous one',
   'Últimos {n} registros': 'Last {n} entries',
   'Tu peso': 'Your weight',
-  'Se usa para estimar las kcalorías del cardio. Al cambiarlo, todas se recalculan.':
-    'Used to estimate cardio kcal. Changing it recalculates everything.',
+  'Se usa para estimar las kcalorías del cardio. Se aplica a los próximos; los cardios ya registrados mantienen el peso que tenías entonces.':
+    'Used to estimate cardio kcal. It applies from now on; cardio already logged keeps the weight you had back then.',
   mes: 'month',
   Distancia: 'Distance',
   Velocidad: 'Speed',
@@ -221,10 +268,9 @@ register({
     'Load an exported file with routines and workouts.',
   'Importando…': 'Importing…',
   Importar: 'Import',
-  'Limpiar datos': 'Wipe data',
+  'Borrar datos': 'Clear data',
   'Elimina todas las rutinas y entrenamientos guardados.':
     'Deletes all saved routines and workouts.',
-  Limpiar: 'Wipe',
   'Esta acción eliminará los datos actuales y los reemplazará con los del fichero. ¿Estás seguro?':
     'This will delete your current data and replace it with the file contents. Are you sure?',
   'Esta acción borrará toda la información guardada en la app.':
@@ -277,6 +323,7 @@ register({
   'Añade al menos un día': 'Add at least one day',
   'Falta el título del Día {n}': 'Day {n} is missing a title',
   'Faltan ejercicios en el Día {n}': 'Day {n} is missing exercises',
+  'Añade al menos un ejercicio': 'Add at least one exercise',
   'Elige un icono para el Día {n}': 'Pick an icon for Day {n}',
   'Nueva rutina creada': 'New routine created',
   'No se pudo crear la rutina': 'Could not create the routine',
@@ -370,6 +417,34 @@ register({
   series: 'sets',
   entreno: 'workout',
   serie: 'set',
+
+  // Progreso por ejercicio
+  Progreso: 'Progress',
+  'Elige un ejercicio para ver su evolución':
+    'Pick an exercise to see how it evolved',
+  'Tu evolución': 'Your progress',
+  'Sesión a sesión y tus mejores marcas': 'Session by session and your bests',
+  'Registra un entrenamiento y aquí verás tu evolución.':
+    'Log a workout and your progress will show up here.',
+  'Aún no hay dos sesiones que comparar con esta medida.':
+    'Not enough sessions to compare with this metric yet.',
+  '{n} sesiones · última el {date}': '{n} sessions · last one on {date}',
+  '{n} sesiones · {date}': '{n} sessions · {date}',
+  Volumen: 'Volume',
+  Reps: 'Reps',
+  Peso: 'Weight',
+  Reciente: 'Recent',
+  Nombre: 'Name',
+  Sesiones: 'Sessions',
+  'Ver más ({n})': 'Show more ({n})',
+  Récords: 'Records',
+  '1RM estimado': 'Estimated 1RM',
+  'Peso máximo': 'Max weight',
+  'Más repeticiones': 'Most reps',
+  'Mejor sesión': 'Best session',
+  '{w} kg × {r}': '{w} kg × {r}',
+  '{r} reps con {w} kg': '{r} reps at {w} kg',
+  '{r} reps': '{r} reps',
 
   // Hero cards (carrusel de estados)
   'Ver rutinas': 'View routines',

@@ -1,4 +1,5 @@
 import { ParsedSet } from '../types';
+import { localizeDecimals } from './i18n';
 
 /**
  * Parsea un string de formato "60x8, 65x6, 65x4" a array de sets.
@@ -83,5 +84,6 @@ export function formatParsedSet(set: ParsedSet): string {
   if (set.weight === -1 || set.reps === -1) {
     return '—';
   }
-  return `${set.weight}x${set.reps}`;
+  // Pintado: el decimal va en el separador del idioma ("22,5x10" en español).
+  return localizeDecimals(`${set.weight}x${set.reps}`);
 }

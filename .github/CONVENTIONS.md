@@ -9,7 +9,7 @@
 | Archivos lib     | camelCase             | `parsers.ts`, `storage.ts` |
 | Tipos/Interfaces | PascalCase            | `WorkoutLog`, `ParsedSet`  |
 | Acciones reducer | UPPER_SNAKE_CASE      | `ADD_WORKOUT_LOG`          |
-| Props interfaces | PascalCase + Props    | `DayCardProps`             |
+| Props interfaces | PascalCase + Props    | `HeroCardProps`            |
 | IDs              | camelCase con prefijo | `day1-ex3`, `routine1`     |
 
 ## Estructura de archivos nuevos

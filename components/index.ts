@@ -1,4 +1,3 @@
-export { DayCard } from './DayCard';
 export { HeroCard } from './HeroCard';
 export type { HeroVariant } from './HeroCard';
 export { HeroCarousel } from './HeroCarousel';
@@ -12,6 +11,8 @@ export {
 } from './AchievementPoster';
 export { GradientFill } from './GradientFill';
 export { AnimatedCounter } from './AnimatedCounter';
+export { BarChart } from './BarChart';
+export type { BarChartPoint } from './BarChart';
 export { DayAccentIcon } from './DayAccentIcon';
 export {
   GymIcon,
@@ -24,10 +25,12 @@ export {
 export type { GymIconName } from './GymIcon';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
+export { ExerciseFormRow, ExerciseSummaryRow } from './ExerciseFormRow';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
 export { WhatsNewModal } from './WhatsNewModal';
 export { Button } from './Button';
+export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';
 export { GlassTopBar, GLASS_TOP_BAR_BASE_HEIGHT } from './GlassTopBar';
 export {
@@ -35,20 +38,9 @@ export {
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
 } from './FloatingBackButton';
-export {
-  FloatingGlassBar,
-  FLOATING_GLASS_BAR_HEIGHT,
-  FLOATING_GLASS_BAR_MARGIN,
-  getFloatingPrimaryNavMetrics,
-} from './FloatingGlassBar';
+export { getFloatingPrimaryNavMetrics } from './FloatingGlassBar';
 export { FloatingPrimaryNav } from './FloatingPrimaryNav';
 export { StretchScrollView } from './StretchScrollView';
 export { Collapsible } from './Collapsible';
-export {
-  GLASS_BLUR_INTENSITY,
-  GLASS_TOP_BAR_BG,
-  GLASS_TOP_BAR_OVERLAY,
-  GLASS_FLOATING_BG,
-  GLASS_FLOATING_OVERLAY,
-  GLASS_FLOATING_BORDER,
-} from './glassTokens';
+export { SegmentedFilter } from './SegmentedFilter';
+export type { SegmentedOption } from './SegmentedFilter';

@@ -101,7 +101,7 @@ export function DataScreen({
       >
         {!hasNoData && (
           <View style={styles.actionCard}>
-            <GradientFill accent={theme.colors.primary} />
+            <GradientFill accent={theme.colors.primaryLine} />
             <View style={styles.titleRow}>
               <MaterialCommunityIcons
                 name="export-variant"
@@ -123,7 +123,7 @@ export function DataScreen({
         )}
 
         <View style={styles.actionCard}>
-          <GradientFill accent={theme.colors.primary} />
+          <GradientFill accent={theme.colors.primaryLine} />
           <View style={styles.titleRow}>
             <MaterialCommunityIcons
               name="import"
@@ -154,14 +154,14 @@ export function DataScreen({
                 color={theme.colors.error}
               />
               <Text style={[styles.actionTitle, styles.dangerTitle]}>
-                {t('Limpiar datos')}
+                {t('Borrar datos')}
               </Text>
             </View>
             <Text style={[styles.actionSubtitle, styles.dangerSubtitle]}>
               {t('Elimina todas las rutinas y entrenamientos guardados.')}
             </Text>
             <Button
-              title={t('Limpiar')}
+              title={t('Borrar')}
               onPress={() => setShowClearModal(true)}
               variant="danger"
               size="large"
@@ -194,11 +194,11 @@ export function DataScreen({
 
       <ConfirmModal
         visible={showClearModal}
-        title={t('Limpiar datos')}
+        title={t('Borrar datos')}
         message={t(
           'Esta acción borrará toda la información guardada en la app.'
         )}
-        confirmLabel={t('Limpiar')}
+        confirmLabel={t('Borrar')}
         onConfirm={async () => {
           setShowClearModal(false);
           await onClearData();

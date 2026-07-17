@@ -31,7 +31,11 @@ function resizeDown(src, targetW, targetH) {
     for (let tx = 0; tx < targetW; tx++) {
       const sx0 = Math.floor(tx * scaleX);
       const sx1 = Math.max(sx0 + 1, Math.floor((tx + 1) * scaleX));
-      let r = 0, g = 0, b = 0, a = 0, count = 0;
+      let r = 0,
+        g = 0,
+        b = 0,
+        a = 0,
+        count = 0;
       for (let sy = sy0; sy < sy1 && sy < src.height; sy++) {
         for (let sx = sx0; sx < sx1 && sx < src.width; sx++) {
           const idx = (sy * src.width + sx) * 4;
@@ -69,9 +73,14 @@ function blitOver(dst, src, dx, dy) {
       const sa = src.data[sIdx + 3] / 255;
       if (sa <= 0) continue;
       for (let c = 0; c < 3; c++) {
-        dst.data[dIdx + c] = Math.round(src.data[sIdx + c] * sa + dst.data[dIdx + c] * (1 - sa));
+        dst.data[dIdx + c] = Math.round(
+          src.data[sIdx + c] * sa + dst.data[dIdx + c] * (1 - sa)
+        );
       }
-      dst.data[dIdx + 3] = Math.min(255, Math.round(sa * 255 + dst.data[dIdx + 3] * (1 - sa)));
+      dst.data[dIdx + 3] = Math.min(
+        255,
+        Math.round(sa * 255 + dst.data[dIdx + 3] * (1 - sa))
+      );
     }
   }
 }
@@ -91,10 +100,29 @@ function writePng(image, filePath, opaque) {
 function verify(image, label) {
   function px(x, y) {
     const idx = (y * image.width + x) * 4;
-    return [image.data[idx], image.data[idx + 1], image.data[idx + 2], image.data[idx + 3]];
+    return [
+      image.data[idx],
+      image.data[idx + 1],
+      image.data[idx + 2],
+      image.data[idx + 3],
+    ];
   }
-  const cx = Math.floor(image.width / 2), cy = Math.floor(image.height / 2);
-  console.log(`[verify] ${label} ${image.width}x${image.height} corner=${px(2,2)} center=${px(cx,cy)}`);
+  const cx = Math.floor(image.width / 2),
+    cy = Math.floor(image.height / 2);
+  console.log(
+    `[verify] ${label} ${image.width}x${image.height} corner=${px(
+      2,
+      2
+    )} center=${px(cx, cy)}`
+  );
 }
 
-module.exports = { readPng, blankCanvas, resizeDown, identity, blitOver, writePng, verify };
+module.exports = {
+  readPng,
+  blankCanvas,
+  resizeDown,
+  identity,
+  blitOver,
+  writePng,
+  verify,
+};

@@ -1,7 +1,13 @@
 const { chromium } = require('playwright');
 const path = require('path');
 
-const OUT_DIR = path.join(__dirname, '..', 'store-assets', 'screenshots', 'phone');
+const OUT_DIR = path.join(
+  __dirname,
+  '..',
+  'store-assets',
+  'screenshots',
+  'phone'
+);
 const URL = 'http://localhost:8081';
 
 (async () => {
@@ -14,7 +20,10 @@ const URL = 'http://localhost:8081';
   page.setDefaultTimeout(10000);
 
   await page.goto(URL, { waitUntil: 'load', timeout: 30000 });
-  await page.getByText('Empezar entrenamiento', { exact: false }).first().waitFor({ timeout: 30000 });
+  await page
+    .getByText('Empezar entrenamiento', { exact: false })
+    .first()
+    .waitFor({ timeout: 30000 });
   await page.waitForTimeout(1000);
 
   // "Semana 6" es una semana pasada ya completada (5 dias). Long-press en su
@@ -33,7 +42,9 @@ const URL = 'http://localhost:8081';
   await page.mouse.up();
   await page.waitForTimeout(800);
 
-  await page.screenshot({ path: path.join(OUT_DIR, '05-logros-semanales.png') });
+  await page.screenshot({
+    path: path.join(OUT_DIR, '05-logros-semanales.png'),
+  });
   console.log('capturado: 05-logros-semanales.png');
 
   await browser.close();

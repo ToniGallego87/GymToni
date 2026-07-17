@@ -1,7 +1,6 @@
 import { Platform } from 'react-native';
 import { WorkoutAction, WorkoutAppData, WorkoutState } from '../types';
 import {
-  clearAppDataInDb,
   dbDeleteRoutine,
   dbDeleteWorkoutLog,
   dbSetActiveRoutine,
@@ -9,7 +8,6 @@ import {
   dbUpdateDay,
   dbUpsertRoutine,
   dbUpsertWorkoutLog,
-  saveAppDataToDb,
 } from './db';
 import { saveAppData } from './storage';
 
@@ -61,7 +59,7 @@ function scheduleWebSave(data: WorkoutAppData): void {
  * Persiste el efecto de una acción ya aplicada por el reducer.
  *
  * - SET_APP_DATA / CLEAR_DATA se persisten explícitamente en sus handlers
- *   (import, clear) y SET_CURRENT_DAY es estado de UI: aquí se ignoran.
+ *   (import, clear): aquí se ignoran.
  * - En web se mantiene el guardado completo en JSON (con debounce).
  * - En nativo se hacen escrituras granulares en SQLite.
  *
@@ -69,11 +67,7 @@ function scheduleWebSave(data: WorkoutAppData): void {
  * calcula (p. ej. la rutina activa tras crear/borrar).
  */
 export function persistAction(action: WorkoutAction, next: WorkoutState): void {
-  if (
-    action.type === 'SET_CURRENT_DAY' ||
-    action.type === 'SET_APP_DATA' ||
-    action.type === 'CLEAR_DATA'
-  ) {
+  if (action.type === 'SET_APP_DATA' || action.type === 'CLEAR_DATA') {
     return;
   }
 
@@ -124,11 +118,6 @@ export function persistAction(action: WorkoutAction, next: WorkoutState): void {
       break;
     case 'UPDATE_DAY':
       enqueue(() => dbUpdateDay(action.payload.routineId, action.payload.day));
-      break;
-    // Acciones de reemplazo masivo poco frecuentes: guardado completo.
-    case 'SET_ROUTINES':
-    case 'SET_LOGS':
-      enqueue(() => saveAppDataToDb(toAppData(next)));
       break;
     default:
       break;

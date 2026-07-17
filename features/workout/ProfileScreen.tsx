@@ -19,6 +19,7 @@ import { t } from '@lib/i18n';
 
 interface ProfileScreenProps {
   onOpenRoutines?: () => void;
+  onOpenExerciseProgress?: () => void;
   onOpenData?: () => void;
   onOpenSettings?: () => void;
   onNavigateHome?: () => void;
@@ -36,6 +37,7 @@ type MenuEntry = {
 
 export function ProfileScreen({
   onOpenRoutines,
+  onOpenExerciseProgress,
   onOpenData,
   onOpenSettings,
   onNavigateHome,
@@ -60,6 +62,12 @@ export function ProfileScreen({
       label: t('Mis rutinas'),
       hint: t('Consulta, comparte o cambia de rutina'),
       onPress: onOpenRoutines,
+    },
+    {
+      icon: 'chart-line',
+      label: t('Progreso por ejercicio'),
+      hint: t('Tu evolución y tus récords, ejercicio a ejercicio'),
+      onPress: onOpenExerciseProgress,
     },
     {
       icon: 'folder-cog-outline',
@@ -95,7 +103,7 @@ export function ProfileScreen({
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.summaryCard}>
-          <GradientFill accent={theme.colors.primary} />
+          <GradientFill accent={theme.colors.primaryLine} />
           <View style={styles.titleRow}>
             <MaterialCommunityIcons
               name="chart-box-outline"

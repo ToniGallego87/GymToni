@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
+  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -30,6 +31,8 @@ interface HeroWeightCardProps {
   onPress: () => void;
   /** Dirección de entrada del contenido en un carrusel (el frame no se mueve). */
   enterFrom?: 'left' | 'right';
+  /** Escala de pulsación del carrusel: si viene, escala él el conjunto. */
+  pressScale?: SharedValue<number>;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -109,10 +112,14 @@ export function HeroWeightCard({
   history,
   onPress,
   enterFrom,
+  pressScale,
 }: HeroWeightCardProps) {
-  const scale = useSharedValue(1);
+  const localScale = useSharedValue(1);
+  const scale = pressScale ?? localScale;
+
+  // Suelta, la tarjeta se escala a sí misma; en un carrusel escala el conjunto.
   const pressStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [{ scale: pressScale ? 1 : localScale.value }],
   }));
 
   // Animación de solo el contenido (el frame/gradiente queda fijo en el carrusel).
@@ -242,7 +249,8 @@ const styles = StyleSheet.create({
   mainValue: {
     fontFamily: theme.fonts.display,
     fontSize: 34,
-    lineHeight: 40,
+    // Mismos lineHeight y compensación que HeroStatsCard (el porqué, allí).
+    lineHeight: 44,
     includeFontPadding: false,
     transform: [{ translateY: 4 }],
     color: theme.colors.onGold,

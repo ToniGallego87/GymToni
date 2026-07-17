@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Text, TextStyle, StyleProp } from 'react-native';
+import { localizeDecimals } from '@lib/i18n';
 
 interface AnimatedCounterProps {
   value: number;
@@ -44,7 +45,7 @@ export function AnimatedCounter({
   return (
     <Text style={style}>
       {prefix}
-      {display.toFixed(decimals)}
+      {localizeDecimals(display.toFixed(decimals))}
       {suffix}
     </Text>
   );

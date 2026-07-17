@@ -2,14 +2,11 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
-  FlatList,
   Text,
   StyleSheet,
   TouchableOpacity,
   Pressable,
   useWindowDimensions,
-  Modal,
-  Alert,
   Image,
   Platform,
 } from 'react-native';
@@ -17,7 +14,6 @@ import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
-import { DayCard } from '@components/DayCard';
 import {
   WorkoutDay,
   WorkoutRoutine,
@@ -32,17 +28,26 @@ import {
   ImprovementResult,
 } from '@lib/progress';
 import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
-import { hasAnyCardio } from '@lib/cardio';
+import { CARDIO_ONLY_DAY_ID, hasAnyCardio } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
-import { groupLogsIntoWeekBlocks, getWeekStrengthScore } from '@lib/weeks';
+import {
+  buildWeekProgress,
+  computeStreak,
+  getWeekImprovement,
+  groupLogsIntoWeekBlocks,
+  isWeekCompleted,
+  logsBeforeBlock,
+  orderedBlockNumbers,
+  workoutsUpToBlock,
+  WeekProgressPoint,
+} from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
+  AppModal,
+  Button,
   Collapsible,
   ConfirmModal,
   DayAccentIcon,
-  FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
   getFloatingPrimaryNavMetrics,
   FloatingPrimaryNav,
   GlassTopBar,
@@ -54,6 +59,11 @@ import {
   HeroVariant,
   GradientFill,
   AnimatedCounter,
+  BarChart,
+  BarChartPoint,
+  resolveDayIcon,
+  SegmentedFilter,
+  SegmentedOption,
   StretchScrollView,
 } from '../../components';
 
@@ -67,314 +77,63 @@ interface HomeScreenProps {
   onNavigateProfile?: () => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
-  onOpenRoutineDetails?: (routine: WorkoutRoutine) => void;
   onCreateRoutine?: () => void;
-  onScanRoutineQR?: () => void;
-  onDeleteCurrentRoutine?: () => void;
   onShowWeekAchievement?: (
     achievements: WeekAchievements,
     routineName?: string
   ) => void;
-  canDeleteCurrentRoutine?: boolean;
-  initialShowRoutineSelector?: boolean;
-  onCloseRoutineSelector?: () => void;
 }
 
-interface WeekProgressPoint {
-  week: number;
-  improvement: number;
-  isCurrent?: boolean;
-  /** La semana no tiene todos los días de la rutina entrenados. */
-  isIncomplete?: boolean;
-}
-
-function buildWeekProgress(
-  logs: WorkoutLog[],
-  activeRoutineId?: string,
-  activeDays: WorkoutDay[] = [],
-  dayFilter?: string
-): WeekProgressPoint[] {
-  if (!activeRoutineId) return [];
-
-  // El progreso solo se calcula con la rutina actualmente seleccionada en
-  // Inicio. Las sesiones de solo cardio no cuentan como entrenamiento de fuerza.
-  const routineLogs = logs.filter(
-    (log) => log.routineId === activeRoutineId && !log.cardioOnly
-  );
-  if (routineLogs.length === 0) return [];
-
-  // Agrupación por dayId directamente — sin depender del mapping dayId→dayNumber,
-  // que puede fallar si la rutina fue modificada y los IDs de días cambiaron.
-  const sortedLogs = [...routineLogs].sort(
-    (a, b) => getLogTimestamp(a) - getLogTimestamp(b)
-  );
-  const groupedByBlock: Record<number, WorkoutLog[]> = {};
-  let blockNum = 1;
-  let blockLogs: WorkoutLog[] = [];
-  let seenDayIds = new Set<string>();
-
-  for (const log of sortedLogs) {
-    // Igual que lib/weeks.ts: se abre bloque nuevo si el usuario forzó nueva
-    // semana o si reaparece un día ya entrenado en el bloque.
-    const repeatsDay = !!log.dayId && seenDayIds.has(log.dayId);
-    if ((log.startsNewWeek || repeatsDay) && blockLogs.length > 0) {
-      groupedByBlock[blockNum++] = blockLogs;
-      blockLogs = [];
-      seenDayIds = new Set();
-    }
-    blockLogs.push(log);
-    if (log.dayId) seenDayIds.add(log.dayId);
-  }
-  if (blockLogs.length > 0) groupedByBlock[blockNum] = blockLogs;
-
-  const orderedBlocks = Object.keys(groupedByBlock)
-    .map(Number)
-    .sort((a, b) => a - b);
-
-  // Una semana está incompleta si no tiene entrenados todos los días de la rutina.
-  const isBlockIncomplete = (logsForBlock: WorkoutLog[]) =>
-    activeDays.length > 0 &&
-    !activeDays.every((d) => logsForBlock.some((l) => l.dayId === d.id));
-
-  const blockHasDay = (logsForBlock: WorkoutLog[], dayId: string) =>
-    logsForBlock.some((l) => l.dayId === dayId);
-
-  // El gráfico compara cada semana contra la PRIMERA (progreso acumulado),
-  // a diferencia del listado, que compara contra la semana anterior.
-  const points: WeekProgressPoint[] = orderedBlocks.map(
-    (blockNumber, index) => {
-      const currentWeekLogsForBlock = groupedByBlock[blockNumber] || [];
-
-      // Con filtro por día activo, una semana está "incompleta" si NO entrenó ese
-      // día; sin filtro, si le faltan días de la rutina.
-      const isIncomplete = dayFilter
-        ? !blockHasDay(currentWeekLogsForBlock, dayFilter)
-        : isBlockIncomplete(currentWeekLogsForBlock);
-
-      if (index === 0) {
-        return { week: 1, improvement: 0, isIncomplete };
-      }
-
-      const firstBlockNumber = orderedBlocks[0];
-      const previousWeekLogsForBlock = groupedByBlock[firstBlockNumber] || [];
-
-      if (!currentWeekLogsForBlock.length || !previousWeekLogsForBlock.length) {
-        return { week: index + 1, improvement: 0, isIncomplete };
-      }
-
-      // Con filtro activo, las semanas que no entrenaron ese día no puntúan (0%).
-      if (dayFilter && !blockHasDay(currentWeekLogsForBlock, dayFilter)) {
-        return { week: index + 1, improvement: 0, isIncomplete };
-      }
-
-      // Una semana incompleta NO se penaliza por días que faltan: solo se cuentan
-      // los días entrenados (o el día filtrado), comparándolos contra esos mismos
-      // días de la semana base (igual que el porcentaje del listado).
-      const currentDayIds = dayFilter
-        ? [dayFilter]
-        : Array.from(
-            new Set(
-              currentWeekLogsForBlock.map((log) => log.dayId).filter(Boolean)
-            )
-          );
-      const scoreOptions = {
-        activeDaysCount: activeDays.length,
-        restrictToDayIds: currentDayIds,
-        applyMissingPenalty: false,
-      };
-      const currentStrength = getWeekStrengthScore(
-        currentWeekLogsForBlock,
-        scoreOptions
-      );
-      const previousStrength = getWeekStrengthScore(
-        previousWeekLogsForBlock,
-        scoreOptions
-      );
-      const improvement = buildImprovementFromStrengthScores(
-        currentStrength,
-        previousStrength
-      );
-
-      const signedDelta = improvement
-        ? improvement.isImproved
-          ? improvement.percent
-          : -improvement.percent
-        : 0;
-
-      return {
-        week: index + 1,
-        improvement: Math.round(signedDelta * 10) / 10,
-        isIncomplete,
-      };
-    }
-  );
-
-  // La última semana entrenada es la "semana en curso" SOLO si aún le faltan días.
-  // Si está completa, no hay semana en curso abierta: no se añade ningún punto
-  // sintético (evita mostrar una semana fantasma extra en rutinas cerradas o
-  // recién completadas que nunca se entrenó).
-  const lastBlockNumber = orderedBlocks[orderedBlocks.length - 1];
-  const lastBlockLogs = groupedByBlock[lastBlockNumber] || [];
-  const trainedDayIds = new Set(lastBlockLogs.map((l: WorkoutLog) => l.dayId));
-  const lastBlockIsComplete =
-    activeDays.length > 0 && activeDays.every((d) => trainedDayIds.has(d.id));
-
-  if (!lastBlockIsComplete && points.length > 0) {
-    points[points.length - 1] = {
-      ...points[points.length - 1],
-      isCurrent: true,
-    };
-  }
-
-  return points;
-}
-
-function ProgressBarChart({
-  points,
-  width,
-}: {
-  points: WeekProgressPoint[];
-  width: number;
-}) {
+// Traduce las semanas a barras: color y etiquetas del progreso semanal. El
+// dibujo lo hace <BarChart/> (compartido con la gráfica de Cardio).
+function buildProgressChart(points: WeekProgressPoint[]): {
+  bars: BarChartPoint[];
+  domain: { min: number; max: number };
+} {
   // Semana 1 es siempre la base (mejora 0), no se muestra.
-  const filteredPoints = points.slice(1);
+  const weeks = points.slice(1);
 
-  const chartPadding = { top: 16, right: 12, bottom: 28, left: 38 };
-  const chartHeight = 170;
-  const chartWidth = width;
-  const plotWidth = chartWidth - chartPadding.left - chartPadding.right;
-  const plotHeight = chartHeight - chartPadding.top - chartPadding.bottom;
-
-  const values = filteredPoints.map((point) => point.improvement);
+  const values = weeks.map((point) => point.improvement);
   const minValue = Math.min(...values, 0);
   const maxValue = Math.max(...values, 0);
-  const sameValueRange = minValue === maxValue;
-  const domainPadding = sameValueRange
-    ? 10
-    : Math.max((maxValue - minValue) * 0.15, 5);
-  const domainMin = Math.min(minValue - domainPadding, 0);
-  const domainMax = Math.max(maxValue + domainPadding, 0);
+  const domainPadding =
+    minValue === maxValue ? 10 : Math.max((maxValue - minValue) * 0.15, 5);
 
-  const barSlotWidth =
-    filteredPoints.length > 0 ? plotWidth / filteredPoints.length : plotWidth;
-  const barWidth = Math.max(18, Math.min(barSlotWidth * 0.55, 34));
-  const getBarX = (index: number) => {
-    return (
-      chartPadding.left + index * barSlotWidth + (barSlotWidth - barWidth) / 2
-    );
+  const bars = weeks.map((point) => {
+    const isCurrentWeek = !!point.isCurrent;
+    // Amarillo solo para la semana en curso; azul para una semana anterior
+    // (no en curso) que quedó incompleta en días.
+    const isPrevIncomplete = !isCurrentWeek && !!point.isIncomplete;
+    const color = isCurrentWeek
+      ? theme.colors.primaryLine
+      : isPrevIncomplete
+      ? theme.colors.emoji_blue
+      : point.improvement >= 0
+      ? theme.colors.success
+      : theme.colors.error;
+
+    return {
+      key: `week-${point.week}`,
+      value: point.improvement,
+      label: `S${point.week}`,
+      valueLabel: `${point.improvement > 0 ? '+' : ''}${Math.round(
+        point.improvement
+      )}%`,
+      color,
+      // La barra en curso es oro de LÍNEA; su etiqueta es texto y necesita la
+      // tinta (ver theme.ts).
+      valueColor: isCurrentWeek ? theme.colors.primary : color,
+      highlighted: isCurrentWeek,
+    };
+  });
+
+  return {
+    bars,
+    domain: {
+      min: Math.min(minValue - domainPadding, 0),
+      max: Math.max(maxValue + domainPadding, 0),
+    },
   };
-
-  const getY = (value: number) => {
-    if (domainMax === domainMin) return chartPadding.top + plotHeight / 2;
-    return (
-      chartPadding.top +
-      ((domainMax - value) / (domainMax - domainMin)) * plotHeight
-    );
-  };
-
-  const zeroAxisY = getY(0);
-  const yTicks = [domainMax, (domainMax + domainMin) / 2, domainMin];
-
-  return (
-    <View style={styles.progressChartWrapper}>
-      <View style={[styles.progressChart, { width: chartWidth }]}>
-        {yTicks.map((tick, idx) => {
-          const y = getY(tick);
-          return (
-            <View
-              key={`grid-${idx}`}
-              style={[
-                styles.chartGridLine,
-                { top: y, left: chartPadding.left, width: plotWidth },
-              ]}
-            />
-          );
-        })}
-
-        <View
-          style={[
-            styles.chartAxisLine,
-            { top: zeroAxisY, left: chartPadding.left, width: plotWidth },
-          ]}
-        />
-
-        {filteredPoints.map((point, index) => {
-          const x = getBarX(index);
-          const y = getY(point.improvement);
-          const barTop = point.improvement >= 0 ? y : zeroAxisY;
-          const barHeight = Math.max(Math.abs(zeroAxisY - y), 4);
-          const isPositive = point.improvement >= 0;
-          const isCurrentWeek = !!point.isCurrent;
-          // Amarillo solo para la semana en curso; azul para una semana anterior
-          // (no en curso) que quedó incompleta en días.
-          const isPrevIncomplete = !isCurrentWeek && !!point.isIncomplete;
-          const isHighlighted = isCurrentWeek || isPrevIncomplete;
-          const barColor = isCurrentWeek
-            ? theme.colors.primary
-            : isPrevIncomplete
-            ? theme.colors.emoji_blue
-            : isPositive
-            ? theme.colors.success
-            : theme.colors.error;
-          const valueLabelTop = isPositive
-            ? barTop - 16
-            : barTop + barHeight + 2;
-          const signedLabel = `${point.improvement > 0 ? '+' : ''}${Math.round(
-            point.improvement
-          )}%`;
-
-          return (
-            <React.Fragment key={`point-${point.week}-${index}`}>
-              <View
-                style={[
-                  styles.chartBar,
-                  {
-                    left: x,
-                    top: barTop,
-                    height: barHeight,
-                    width: barWidth,
-                    backgroundColor: barColor,
-                  },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.chartValueLabel,
-                  isHighlighted && styles.chartValueLabelCurrent,
-                  isPrevIncomplete && styles.chartLabelBlue,
-                  { left: x + barWidth / 2 - 20, top: valueLabelTop },
-                ]}
-                numberOfLines={1}
-              >
-                {signedLabel}
-              </Text>
-              <Text
-                style={[
-                  styles.chartXLabel,
-                  isCurrentWeek && styles.chartXLabelCurrent,
-                  { left: x + barWidth / 2 - 16, top: chartHeight - 20 },
-                ]}
-              >
-                S{point.week}
-              </Text>
-            </React.Fragment>
-          );
-        })}
-
-        {yTicks.map((tick, idx) => {
-          const y = getY(tick);
-          return (
-            <Text
-              key={`y-label-${idx}`}
-              style={[styles.chartYLabel, { top: y - 8 }]}
-            >
-              {`${Math.round(tick)}%`}
-            </Text>
-          );
-        })}
-      </View>
-    </View>
-  );
 }
 
 // Contenido desplegable de cada semana. El layout refluye de forma síncrona
@@ -416,21 +175,12 @@ export function HomeScreen({
   onNavigateProfile,
   onOpenDaySelector,
   onOpenRoutineSelector,
-  onOpenRoutineDetails,
   onCreateRoutine,
-  onScanRoutineQR,
-  onDeleteCurrentRoutine,
   onShowWeekAchievement,
-  canDeleteCurrentRoutine = false,
-  initialShowRoutineSelector = false,
-  onCloseRoutineSelector,
 }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const showCardioTab = hasAnyCardio(state.logs);
-  const [showRoutineSelector, setShowRoutineSelector] = useState(
-    initialShowRoutineSelector
-  );
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [chartDayFilter, setChartDayFilter] = useState<string | undefined>(
     undefined
@@ -438,12 +188,12 @@ export function HomeScreen({
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<
     Record<number, boolean>
   >({});
-  const [routineToDeleteId, setRoutineToDeleteId] = useState<
-    string | undefined
-  >(undefined);
   const [logToDeleteId, setLogToDeleteId] = useState<string | undefined>(
     undefined
   );
+  // Al eliminar un día con cardio: marcado borra el log entero, desmarcado (por
+  // defecto) conserva el cardio degradando el día a "Solo cardio".
+  const [deleteCardioToo, setDeleteCardioToo] = useState(false);
   const [logWithOptionsId, setLogWithOptionsId] = useState<string | undefined>(
     undefined
   );
@@ -451,10 +201,6 @@ export function HomeScreen({
     WorkoutDay | undefined
   >(undefined);
   const { width: windowWidth } = useWindowDimensions();
-
-  const activeRoutine = state.routines.find(
-    (routine: WorkoutRoutine) => routine.id === state.activeRoutineId
-  );
 
   // La rutina que se muestra en Inicio es la SELECCIONADA (persistida en el
   // estado; se marca en la vista de Rutinas). Si la seleccionada ya no existe,
@@ -508,16 +254,8 @@ export function HomeScreen({
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const {
     bottom: floatingNavBottom,
-    scrollBottomPadding: floatingNavScrollBottomPadding,
+    scrollBottomPadding: homeScrollBottomPadding,
   } = getFloatingPrimaryNavMetrics(insets.bottom);
-  // El selector de rutinas no es una pestaña de navegación: lleva botón Volver
-  // abajo en lugar de la barra, así que su padding se calcula con la altura del
-  // botón (no con la de la barra flotante).
-  const selectorBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const selectorScrollBottomPadding =
-    selectorBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
-  const homeScrollBottomPadding = floatingNavScrollBottomPadding;
   const appVersion = Constants.expoConfig?.version ?? '';
 
   const formatImprovementDisplay = (imp: {
@@ -632,21 +370,6 @@ export function HomeScreen({
     return undefined;
   };
 
-  const isWeekCompleted = (weekLogs: WorkoutLog[]): boolean => {
-    if (weekLogs.length === 0) return false;
-    if (activeDays.length === 0) return false;
-
-    const daysWithLogs = new Set(weekLogs.map((log) => log.dayId));
-    return activeDays.every((day) => daysWithLogs.has(day.id));
-  };
-
-  const buildWeekDataForLogs = (sourceLogs: WorkoutLog[]) => ({
-    groupedByBlock: groupLogsIntoWeekBlocks(
-      sourceLogs,
-      (log) => getDay(log.dayId)?.dayNumber
-    ),
-  });
-
   const getPreviousFilledLogForSameDay = (currentLog: WorkoutLog) => {
     const currentTs = getLogTimestamp(currentLog);
     return (
@@ -683,99 +406,29 @@ export function HomeScreen({
       getPreviousFilledLogForSameDay(currentLog)
     );
 
-  const getWeekImprovement = (
-    groupedByBlock: Record<number, WorkoutLog[]>,
-    blockNumber: number
-  ) => {
-    if (blockNumber === 1) return null;
-
-    const currentWeekLogs = groupedByBlock[blockNumber] || [];
-    const previousWeekLogs = groupedByBlock[blockNumber - 1] || [];
-
-    if (activeDays.length === 0) return null;
-
-    // Solo se comparan los días entrenados esta semana, contra esos mismos días de
-    // la semana anterior (sin penalizar los que falten), igual que la gráfica.
-    const currentDayIds = Array.from(
-      new Set(currentWeekLogs.map((log) => log.dayId).filter(Boolean))
-    );
-    if (currentDayIds.length === 0) return null;
-
-    const scoreOptions = {
-      activeDaysCount: activeDays.length,
-      restrictToDayIds: currentDayIds,
-      applyMissingPenalty: false,
-    };
-    const currentStrength = getWeekStrengthScore(currentWeekLogs, scoreOptions);
-    const previousStrength = getWeekStrengthScore(
-      previousWeekLogs,
-      scoreOptions
-    );
-
-    return buildImprovementFromStrengthScores(
-      currentStrength,
-      previousStrength
-    );
-  };
-
   const { groupedByBlock, blocks, currentWeekBlock } = useMemo(() => {
-    const { groupedByBlock } = buildWeekDataForLogs(displayedRoutineLogs);
-    const blocks = Object.keys(groupedByBlock)
-      .map(Number)
-      .sort((a, b) => b - a);
-    return {
-      groupedByBlock,
-      blocks,
-      currentWeekBlock: blocks[0],
-    };
+    const groupedByBlock = groupLogsIntoWeekBlocks(
+      displayedRoutineLogs,
+      (log) => getDay(log.dayId)?.dayNumber
+    );
+    // De la semana más reciente a la más antigua: así se listan en Inicio.
+    const blocks = orderedBlockNumbers(groupedByBlock).reverse();
+    return { groupedByBlock, blocks, currentWeekBlock: blocks[0] };
   }, [displayedRoutineLogs]);
 
-  // Racha: semanas completadas consecutivas hasta la última. Una semana en curso
-  // (la más reciente, aún incompleta) no rompe la racha.
-  const completedStreak = useMemo(() => {
-    const asc = Object.keys(groupedByBlock)
-      .map(Number)
-      .sort((a, b) => a - b);
-    let streak = 0;
-    for (let i = asc.length - 1; i >= 0; i--) {
-      const weekLogs = groupedByBlock[asc[i]] || [];
-      if (isWeekCompleted(weekLogs)) {
-        streak++;
-      } else if (i === asc.length - 1) {
-        continue;
-      } else {
-        break;
-      }
-    }
-    return streak;
-  }, [groupedByBlock, activeDays]);
-
-  // Días entrenados consecutivos sin saltarse ningún entreno: suma de días de
-  // cada semana completa de la racha actual (la métrica que muestra el póster).
-  const streakDays = useMemo(() => {
-    const asc = Object.keys(groupedByBlock)
-      .map(Number)
-      .sort((a, b) => a - b);
-    let days = 0;
-    for (let i = asc.length - 1; i >= 0; i--) {
-      const weekLogs = groupedByBlock[asc[i]] || [];
-      if (isWeekCompleted(weekLogs)) {
-        days += new Set(weekLogs.map((l) => l.dayId).filter(Boolean)).size;
-      } else if (i === asc.length - 1) {
-        continue;
-      } else {
-        break;
-      }
-    }
-    return days;
-  }, [groupedByBlock, activeDays]);
+  // Racha de semanas completas y si nunca se ha faltado a un día.
+  const streak = useMemo(
+    () => computeStreak(groupedByBlock, activeDays),
+    [groupedByBlock, activeDays]
+  );
 
   // Semana en curso completada: todos los días de la rutina activa entrenados en
   // el bloque más reciente. Es la condición que convierte la tarjeta principal en
   // "¡Semana completada!" y habilita la imagen de logros.
   const currentWeekLogsBlock = groupedByBlock[currentWeekBlock] || [];
   const isCurrentWeekCompleted =
-    isDisplayedRoutineActive && isWeekCompleted(currentWeekLogsBlock);
+    isDisplayedRoutineActive &&
+    isWeekCompleted(currentWeekLogsBlock, activeDays);
 
   // El botón/tarjeta "¡Semana completada!" solo está disponible el mismo día en que
   // se completó la semana (hay algún log del bloque con fecha de hoy). Al día
@@ -790,109 +443,42 @@ export function HomeScreen({
     );
   }, [isCurrentWeekCompleted, currentWeekLogsBlock]);
 
-  // Racha perfecta: todas las semanas registradas están completas (nunca se ha
-  // faltado un solo día de la rutina).
-  const streakIsPerfect = useMemo(() => {
-    const allBlocks = Object.keys(groupedByBlock).map(Number);
-    return (
-      allBlocks.length > 0 &&
-      allBlocks.every((block) => isWeekCompleted(groupedByBlock[block] || []))
-    );
-  }, [groupedByBlock, activeDays]);
-
-  // Logs de todas las semanas anteriores a un bloque (histórico para récords) y
-  // entrenos totales (días distintos entrenados) hasta un bloque inclusive.
-  const logsBeforeBlock = (block: number): WorkoutLog[] =>
-    Object.keys(groupedByBlock)
-      .map(Number)
-      .filter((b) => b < block)
-      .flatMap((b) => groupedByBlock[b] || []);
-  const workoutsUpToBlock = (block: number): number =>
-    Object.keys(groupedByBlock)
-      .map(Number)
-      .filter((b) => b <= block)
-      .reduce(
-        (sum, b) =>
-          sum +
-          new Set(
-            (groupedByBlock[b] || []).map((log) => log.dayId).filter(Boolean)
-          ).size,
-        0
-      );
-
-  const weekAchievements = useMemo<WeekAchievements | null>(() => {
-    if (!isCurrentWeekCompleted) return null;
-    return computeWeekAchievements({
-      weekLogs: currentWeekLogsBlock,
-      previousWeekLogs: groupedByBlock[currentWeekBlock - 1] || [],
-      weekNumber: currentWeekBlock,
-      streakDays,
-      streakIsPerfect,
-      historyLogs: logsBeforeBlock(currentWeekBlock),
-      totalWorkouts: workoutsUpToBlock(currentWeekBlock),
-      progressSeries: weeklyProgress.map((point) => ({
-        week: point.week,
-        improvement: point.improvement,
-      })),
-    });
-  }, [
-    isCurrentWeekCompleted,
-    currentWeekLogsBlock,
-    groupedByBlock,
-    currentWeekBlock,
-    streakDays,
-    streakIsPerfect,
-    weeklyProgress,
-  ]);
-
-  const handleShowWeekAchievement = () => {
-    if (weekAchievements && onShowWeekAchievement) {
-      onShowWeekAchievement(weekAchievements, displayedRoutine?.name);
-    }
-  };
-
-  // Logros de una semana pasada concreta (long-press en su cabecera). Reconstruye
-  // racha y serie de progreso tal como estaban al cerrar esa semana.
-  const handleShowWeekAchievementForBlock = (block: number) => {
-    if (!onShowWeekAchievement) return;
+  // Logros de una semana concreta. Reconstruye racha y serie de progreso tal
+  // como estaban al cerrar esa semana, así que sirve igual para la semana en
+  // curso recién completada que para una pasada.
+  const buildAchievementsForBlock = (
+    block: number
+  ): WeekAchievements | null => {
     const weekLogs = groupedByBlock[block];
-    if (!weekLogs || weekLogs.length === 0) return;
+    if (!weekLogs || weekLogs.length === 0) return null;
 
-    const asc = Object.keys(groupedByBlock)
-      .map(Number)
-      .sort((a, b) => a - b);
+    const streakForBlock = computeStreak(groupedByBlock, activeDays, block);
 
-    // Racha (días consecutivos sin saltar entreno) hasta esta semana inclusive.
-    let streakDaysForBlock = 0;
-    for (let i = asc.indexOf(block); i >= 0; i--) {
-      const logs = groupedByBlock[asc[i]] || [];
-      if (isWeekCompleted(logs)) {
-        streakDaysForBlock += new Set(logs.map((l) => l.dayId).filter(Boolean))
-          .size;
-      } else {
-        break;
-      }
-    }
-
-    const blocksUpTo = asc.filter((b) => b <= block);
-    const streakIsPerfectForBlock =
-      blocksUpTo.length > 0 &&
-      blocksUpTo.every((b) => isWeekCompleted(groupedByBlock[b] || []));
-
-    const achievements = computeWeekAchievements({
+    return computeWeekAchievements({
       weekLogs,
       previousWeekLogs: groupedByBlock[block - 1] || [],
       weekNumber: block,
-      streakDays: streakDaysForBlock,
-      streakIsPerfect: streakIsPerfectForBlock,
-      historyLogs: logsBeforeBlock(block),
-      totalWorkouts: workoutsUpToBlock(block),
+      streakDays: streakForBlock.days,
+      streakIsPerfect: streakForBlock.isPerfect,
+      historyLogs: logsBeforeBlock(groupedByBlock, block),
+      totalWorkouts: workoutsUpToBlock(groupedByBlock, block),
       progressSeries: weeklyProgress
         .filter((point) => point.week <= block)
         .map((point) => ({ week: point.week, improvement: point.improvement })),
     });
+  };
 
-    onShowWeekAchievement(achievements, displayedRoutine?.name);
+  const handleShowWeekAchievementForBlock = (block: number) => {
+    const achievements = buildAchievementsForBlock(block);
+    if (achievements) {
+      onShowWeekAchievement?.(achievements, displayedRoutine?.name);
+    }
+  };
+
+  const handleShowWeekAchievement = () => {
+    if (isCurrentWeekCompleted) {
+      handleShowWeekAchievementForBlock(currentWeekBlock);
+    }
   };
 
   // El gráfico muestra todas las semanas entrenadas tal cual: la última semana en
@@ -909,6 +495,26 @@ export function HomeScreen({
           )
         : weeklyProgress,
     [chartDayFilter, weeklyProgress, state.logs, displayedRoutineId, activeDays]
+  );
+
+  // Opciones del filtro de la gráfica: la semana completa (por defecto) o cada
+  // día de la rutina. Los días se identifican por su silueta (el nombre real,
+  // "Pecho y tríceps", no cabe en el chip): el texto solo sale en el activo.
+  const dayFilterOptions: SegmentedOption<string | undefined>[] = useMemo(
+    () => [
+      { id: undefined, label: t('Semana completa'), icon: 'calendar-week' },
+      ...activeDays.map((day: WorkoutDay, index: number) => ({
+        id: day.id as string | undefined,
+        label: getDisplayDayName(day.name) || `${t('Día')} ${index + 1}`,
+        gymIcon: resolveDayIcon(day.emoji, day.name),
+      })),
+    ],
+    [activeDays]
+  );
+
+  const progressChart = useMemo(
+    () => buildProgressChart(filteredWeeklyProgress),
+    [filteredWeeklyProgress]
   );
 
   const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
@@ -1093,24 +699,6 @@ export function HomeScreen({
         { value: fmtInt(strengthStats.ejercicios), label: t('ejercicios') },
       ];
 
-  const handleSelectRoutine = (routineId: string) => {
-    // Pulsar una rutina solo la marca como seleccionada: NO la activa ni
-    // navega a Inicio. Queda seleccionada (persistente) hasta elegir otra.
-    dispatch({ type: 'SET_SELECTED_ROUTINE', payload: routineId });
-  };
-
-  const handleDeleteRoutine = () => {
-    if (!routineToDeleteId) return;
-
-    const routine = state.routines.find((r) => r.id === routineToDeleteId);
-    if (!routine) return;
-
-    // El reducer reajusta la selección si se borra la seleccionada.
-    dispatch({ type: 'DELETE_ROUTINE', payload: routineToDeleteId });
-
-    setRoutineToDeleteId(undefined);
-  };
-
   const getExecutionDateLabel = (log: WorkoutLog): string => {
     if (log.date) {
       return new Date(`${log.date}T00:00:00`).toLocaleDateString(dateLocale);
@@ -1140,129 +728,45 @@ export function HomeScreen({
     isLogFromToday(optionsLog) &&
     todayWorkoutStatus === 'in-progress';
 
-  const handleDeleteLog = () => {
-    if (!logToDeleteId) return;
-    dispatch({ type: 'DELETE_WORKOUT_LOG', payload: logToDeleteId });
+  const logToDelete = state.logs.find(
+    (l: WorkoutLog) => l.id === logToDeleteId
+  );
+  // El check del cardio solo se ofrece si el día tiene cardio que salvar.
+  const logToDeleteHasCardio = !!logToDelete?.cardio?.rawInput?.trim();
+
+  const closeDeleteLogModal = () => {
     setLogToDeleteId(undefined);
+    setDeleteCardioToo(false);
   };
 
-  const handleCloseRoutineSelector = () => {
-    if (onCloseRoutineSelector) {
-      onCloseRoutineSelector();
-      return;
+  const closeLogOptions = () => {
+    setLogWithOptionsId(undefined);
+    setSelectedLogDayForOptions(undefined);
+  };
+
+  const handleDeleteLog = () => {
+    if (!logToDelete) return;
+
+    // Sin marcar el check, el cardio sobrevive: el log se queda sin la fuerza y
+    // pasa a ser una sesión de "Solo cardio" de ese mismo día.
+    if (logToDeleteHasCardio && !deleteCardioToo) {
+      dispatch({
+        type: 'UPDATE_WORKOUT_LOG',
+        payload: {
+          ...logToDelete,
+          dayId: CARDIO_ONLY_DAY_ID,
+          exercises: [],
+          cardioOnly: true,
+          startsNewWeek: undefined,
+          updatedAt: Date.now(),
+        },
+      });
+    } else {
+      dispatch({ type: 'DELETE_WORKOUT_LOG', payload: logToDelete.id });
     }
 
-    setShowRoutineSelector(false);
+    closeDeleteLogModal();
   };
-
-  if (showRoutineSelector) {
-    const selectedRoutineInSelector = state.routines.find(
-      (r) => r.id === displayedRoutineId
-    );
-
-    return (
-      <View style={styles.container}>
-        <StatusBar
-          style={theme.statusBarStyle}
-          translucent
-          backgroundColor="transparent"
-        />
-
-        <StretchScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.routineListContainer,
-            {
-              paddingTop: topBarHeight + 28,
-              paddingBottom: selectorScrollBottomPadding,
-            },
-          ]}
-          scrollEnabled={true}
-          showsVerticalScrollIndicator={false}
-        >
-          {state.routines.map((routine: WorkoutRoutine) => {
-            const routineHasLogs = state.logs.some(
-              (log) => log.routineId === routine.id
-            );
-            const isActive = routine.id === state.activeRoutineId;
-            // "Preparada": creada pero aún no entrenada (no es la activa y sin
-            // historial). Se activará al registrar su primer día.
-            const isPrepared = !isActive && !routineHasLogs;
-            const canDelete = !routineHasLogs;
-
-            return (
-              <RoutineCard
-                key={routine.id}
-                routine={routine}
-                isViewed={routine.id === displayedRoutineId}
-                isActive={isActive}
-                isPrepared={isPrepared}
-                onPress={() => handleSelectRoutine(routine.id)}
-                onLongPress={
-                  canDelete ? () => setRoutineToDeleteId(routine.id) : undefined
-                }
-              />
-            );
-          })}
-
-          {onCreateRoutine && (
-            <TouchableOpacity
-              style={styles.newRoutineCard}
-              onPress={() => {
-                setShowRoutineSelector(false);
-                onCreateRoutine();
-              }}
-            >
-              <Text style={styles.newRoutineCardText}>
-                {t('+ Nueva rutina')}
-              </Text>
-            </TouchableOpacity>
-          )}
-
-          {!!selectedRoutineInSelector && !!onOpenRoutineDetails && (
-            <TouchableOpacity
-              style={styles.selectorDetailsButton}
-              onPress={() => onOpenRoutineDetails(selectedRoutineInSelector)}
-            >
-              <Text style={styles.selectorDetailsButtonText}>
-                {t('Consultar detalles de esta rutina')}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </StretchScrollView>
-
-        <GlassTopBar
-          title={t('Rutinas')}
-          icon="book-open-variant"
-          subtitle={t('Consulta la que desees o crea una nueva')}
-          topInset={insets.top}
-        />
-
-        <FloatingBackButton
-          onPress={handleCloseRoutineSelector}
-          bottom={selectorBackBottom}
-        />
-
-        <ConfirmModal
-          visible={!!routineToDeleteId}
-          title={t('¿Eliminar rutina?')}
-          message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
-          confirmLabel={t('Eliminar')}
-          onConfirm={handleDeleteRoutine}
-          onCancel={() => setRoutineToDeleteId(undefined)}
-        />
-
-        <ConfirmModal
-          visible={!!logToDeleteId}
-          title={t('¿Eliminar entrenamiento?')}
-          message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
-          confirmLabel={t('Eliminar')}
-          onConfirm={handleDeleteLog}
-          onCancel={() => setLogToDeleteId(undefined)}
-        />
-      </View>
-    );
-  }
 
   return (
     <View style={styles.container}>
@@ -1342,11 +846,11 @@ export function HomeScreen({
           />
         )}
 
-        {isDisplayedRoutineActive && completedStreak >= 2 && (
+        {isDisplayedRoutineActive && streak.weeks >= 2 && (
           <View style={styles.streakChip}>
             <Text style={styles.streakEmoji}>🔥</Text>
             <Text style={styles.streakText}>
-              {t('{n} semanas seguidas', { n: completedStreak })}
+              {t('{n} semanas seguidas', { n: streak.weeks })}
             </Text>
           </View>
         )}
@@ -1357,9 +861,10 @@ export function HomeScreen({
             // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
             // sin flecha ni porcentaje, solo un mensaje de ánimo.
             const isFirstWeek = filteredWeeklyProgress.length <= 1;
-            // El borde de la tarjeta de la gráfica es siempre blanco. El
-            // verde/rojo solo aparece en el dato de subida/bajada de dentro.
-            const progressAccent = theme.colors.white;
+            // El borde de la tarjeta de la gráfica es siempre el acento
+            // estructural. El verde/rojo solo aparece en el dato de
+            // subida/bajada de dentro.
+            const progressAccent = theme.colors.accentLine;
             return (
               <View
                 style={[styles.progressCard, { borderColor: progressAccent }]}
@@ -1385,11 +890,10 @@ export function HomeScreen({
                         size={18}
                         style={styles.progressTitleIcon}
                       />
-                      <Text style={styles.progressTitle}>
-                        Rutina{' '}
-                        {state.routines.findIndex(
-                          (r: WorkoutRoutine) => r.id === displayedRoutineId
-                        ) + 1}
+                      {/* El nombre que puso el usuario, no "Rutina N" (que era
+                          el índice del array y no decía qué rutina es). */}
+                      <Text style={styles.progressTitle} numberOfLines={1}>
+                        {displayedRoutine?.name ?? t('Rutina')}
                       </Text>
                       {!isFirstWeek && (
                         <MaterialCommunityIcons
@@ -1405,7 +909,7 @@ export function HomeScreen({
                     </View>
                     {isFirstWeek ? (
                       <Text style={styles.progressEncourage} numberOfLines={2}>
-                        ¡Ánimo con tu nueva rutina!
+                        {t('¡Ánimo con tu nueva rutina!')}
                       </Text>
                     ) : latestPoint ? (
                       <View style={styles.deltaRow}>
@@ -1440,60 +944,27 @@ export function HomeScreen({
                   </View>
                 </TouchableOpacity>
 
-                {!isFirstWeek &&
-                  showWeeklyProgressChart &&
-                  (() => {
-                    // Un único botón que rota entre "Semana completa" y cada día de la
-                    // rutina a cada pulsación (vuelve al principio al llegar al final).
-                    const dayOptions = [
-                      {
-                        id: undefined as string | undefined,
-                        label: t('Semana completa'),
-                      },
-                      ...activeDays.map((day: WorkoutDay, index: number) => ({
-                        id: day.id,
-                        label:
-                          getDisplayDayName(day.name) ||
-                          `${t('Día')} ${index + 1}`,
-                      })),
-                    ];
-                    const currentIndex = Math.max(
-                      0,
-                      dayOptions.findIndex((opt) => opt.id === chartDayFilter)
-                    );
-                    const current = dayOptions[currentIndex];
-                    const cycleDay = () => {
-                      animateLayout();
-                      const next =
-                        dayOptions[(currentIndex + 1) % dayOptions.length];
-                      setChartDayFilter(next.id);
-                    };
-                    return (
-                      <>
-                        <ProgressBarChart
-                          points={filteredWeeklyProgress}
-                          width={chartWidth}
-                        />
-                        <TouchableOpacity
-                          style={styles.chartFilterButton}
-                          onPress={cycleDay}
-                          activeOpacity={0.8}
-                        >
-                          <MaterialCommunityIcons
-                            name="autorenew"
-                            size={16}
-                            color={theme.colors.text}
-                          />
-                          <Text
-                            style={styles.chartFilterButtonText}
-                            numberOfLines={1}
-                          >
-                            {current.label}
-                          </Text>
-                        </TouchableOpacity>
-                      </>
-                    );
-                  })()}
+                {!isFirstWeek && showWeeklyProgressChart && (
+                  <>
+                    <BarChart
+                      points={progressChart.bars}
+                      domain={progressChart.domain}
+                      width={chartWidth}
+                      formatYTick={(value) => `${Math.round(value)}%`}
+                      signed
+                    />
+                    <SegmentedFilter
+                      style={{ width: chartWidth }}
+                      options={dayFilterOptions}
+                      labelMode="below"
+                      value={chartDayFilter}
+                      onChange={(id) => {
+                        animateLayout();
+                        setChartDayFilter(id);
+                      }}
+                    />
+                  </>
+                )}
               </View>
             );
           })()}
@@ -1506,8 +977,10 @@ export function HomeScreen({
             <View>
               {blocks.map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
-                const weekLogsFull = groupedByBlock[block];
-                const weekCompleted = isWeekCompleted(weekLogsFull);
+                const weekCompleted = isWeekCompleted(
+                  groupedByBlock[block],
+                  activeDays
+                );
                 // Si la rutina no es activa, todas las semanas están colapsadas
                 // Si es activa y la semana no está completada, la última semana está expandida por defecto
                 // Las semanas completadas están colapsadas por defecto, pero se pueden expandir/colapsar manualmente
@@ -1515,17 +988,27 @@ export function HomeScreen({
                   isDisplayedRoutineActive && !weekCompleted
                     ? expandedWeekBlocks[block] ?? block === currentWeekBlock
                     : expandedWeekBlocks[block] ?? false;
-                const weekImprovement = getWeekImprovement(
-                  groupedByBlock,
-                  block
-                );
+                // La primera semana no tiene anterior con la que compararse.
+                const weekImprovement =
+                  block === 1
+                    ? null
+                    : getWeekImprovement(
+                        groupedByBlock[block] || [],
+                        groupedByBlock[block - 1] || [],
+                        activeDays
+                      );
                 const isCurrentWeek =
                   isDisplayedRoutineActive && block === currentWeekBlock;
-                // Tarjeta: siempre blanca salvo la semana en curso (amarilla).
-                // El verde/rojo solo se usa en el dato de subida/bajada.
+                // Tarjeta: acento estructural salvo la semana en curso
+                // (amarilla). El verde/rojo solo se usa en el dato de
+                // subida/bajada.
                 const weekAccent = isCurrentWeek
-                  ? theme.colors.primary
-                  : theme.colors.white;
+                  ? theme.colors.primaryLine
+                  : theme.colors.accentLine;
+                // Los logros solo tienen sentido en una semana ya cerrada: la
+                // que está en curso todavía está sumando.
+                const canShowWeekAchievement =
+                  !isCurrentWeek && !!onShowWeekAchievement;
 
                 return (
                   // Sin `Animated.View layout`: un padre con animación de layout
@@ -1549,12 +1032,6 @@ export function HomeScreen({
                           })
                         );
                       }}
-                      onLongPress={
-                        !isCurrentWeek
-                          ? () => handleShowWeekAchievementForBlock(block)
-                          : undefined
-                      }
-                      delayLongPress={3000}
                     >
                       <GradientFill accent={weekAccent} />
 
@@ -1593,9 +1070,33 @@ export function HomeScreen({
                         )}
                       </View>
                       <View style={styles.weekMetaRow}>
+                        {/* Los logros de una semana pasada se abrían con un
+                            long-press de 3s en la cabecera: nada lo insinuaba.
+                            Ahora es un botón. */}
+                        {canShowWeekAchievement && (
+                          <Pressable
+                            style={({ pressed }: { pressed: boolean }) => [
+                              styles.weekAchievementButton,
+                              pressed && styles.weekAchievementButtonPressed,
+                            ]}
+                            onPress={() =>
+                              handleShowWeekAchievementForBlock(block)
+                            }
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={t('Ver logros de la semana')}
+                          >
+                            <MaterialCommunityIcons
+                              name="trophy-variant-outline"
+                              size={17}
+                              color={theme.colors.primary}
+                            />
+                          </Pressable>
+                        )}
                         <Text style={styles.weekHeaderMeta}>
-                          {weekLogs.length} día
-                          {weekLogs.length === 1 ? '' : 's'}
+                          {weekLogs.length === 1
+                            ? t('1 día')
+                            : t('{n} días', { n: weekLogs.length })}
                         </Text>
                         <MaterialCommunityIcons
                           name={isExpanded ? 'chevron-up' : 'chevron-down'}
@@ -1606,7 +1107,7 @@ export function HomeScreen({
                     </Pressable>
 
                     <Collapsible open={isExpanded}>
-                      {weekLogs.map((log: WorkoutLog, logIndex: number) => {
+                      {weekLogs.map((log: WorkoutLog) => {
                         const day = getDay(log.dayId);
                         const improvement = getLogImprovement(log);
                         const improvementFmt = improvement
@@ -1633,15 +1134,11 @@ export function HomeScreen({
                                   onSelectLog?.(log, day);
                                 }
                               }}
-                              onLongPress={() => {
-                                // Long press en cualquier log para opciones (editar / eliminar)
-                                setLogWithOptionsId(log.id);
-                                setSelectedLogDayForOptions(day);
-                              }}
-                              delayLongPress={1000}
                             >
                               {isToday && (
-                                <GradientFill accent={theme.colors.primary} />
+                                <GradientFill
+                                  accent={theme.colors.primaryLine}
+                                />
                               )}
                               <View style={styles.historyLogHeader}>
                                 <View style={styles.historyLogLeft}>
@@ -1687,6 +1184,31 @@ export function HomeScreen({
                                       }${improvementFmt.display}%`
                                     : '—'}
                                 </Text>
+                                {/* Editar/eliminar estaba solo tras un
+                                    long-press de 1s, sin nada que lo indicara. */}
+                                <Pressable
+                                  style={({
+                                    pressed,
+                                  }: {
+                                    pressed: boolean;
+                                  }) => [
+                                    styles.logOptionsButton,
+                                    pressed && styles.logOptionsButtonPressed,
+                                  ]}
+                                  onPress={() => {
+                                    setLogWithOptionsId(log.id);
+                                    setSelectedLogDayForOptions(day);
+                                  }}
+                                  hitSlop={8}
+                                  accessibilityRole="button"
+                                  accessibilityLabel={t('Más opciones')}
+                                >
+                                  <MaterialCommunityIcons
+                                    name="dots-horizontal"
+                                    size={20}
+                                    color={theme.colors.textSecondary}
+                                  />
+                                </Pressable>
                               </View>
                             </Pressable>
                           </View>
@@ -1701,104 +1223,67 @@ export function HomeScreen({
         )}
       </StretchScrollView>
 
-      <Modal
+      <AppModal
         visible={!!logWithOptionsId}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {
-          setLogWithOptionsId(undefined);
-          setSelectedLogDayForOptions(undefined);
-        }}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{t('¿Qué deseas hacer?')}</Text>
-            <Text style={styles.modalMessage}>
-              {isTodayLogInProgress
-                ? t('Puedes continuar o eliminar el registro')
-                : t('Puedes editar o eliminar el registro')}
-            </Text>
-            <View style={styles.modalButtonsContainer}>
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={styles.modalButtonEdit}
-                  onPress={() => {
-                    const log = displayedRoutineLogs.find(
-                      (l) => l.id === logWithOptionsId
-                    );
-                    if (log && selectedLogDayForOptions && onEditLog) {
-                      onEditLog(log, selectedLogDayForOptions);
-                    }
-                    setLogWithOptionsId(undefined);
-                    setSelectedLogDayForOptions(undefined);
-                  }}
-                >
-                  <View style={styles.modalActionRow}>
-                    <MaterialCommunityIcons
-                      name={
-                        isTodayLogInProgress ? 'play-outline' : 'pencil-outline'
-                      }
-                      size={16}
-                      color={theme.colors.onGold}
-                    />
-                    <Text style={styles.modalButtonEditText}>
-                      {isTodayLogInProgress ? t('Continuar') : t('Editar')}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.modalButtonDelete}
-                  onPress={() => {
-                    setLogToDeleteId(logWithOptionsId);
-                    setLogWithOptionsId(undefined);
-                    setSelectedLogDayForOptions(undefined);
-                  }}
-                >
-                  <View style={styles.modalActionRow}>
-                    <MaterialCommunityIcons
-                      name="delete-outline"
-                      size={16}
-                      color={theme.colors.onGold}
-                    />
-                    <Text style={styles.modalButtonDeleteText}>
-                      {t('Eliminar')}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-              <TouchableOpacity
-                style={[
-                  styles.modalButtonCancel,
-                  styles.modalButtonCancelFullWidth,
-                ]}
+        onRequestClose={closeLogOptions}
+        title={t('¿Qué deseas hacer?')}
+        icon="dots-horizontal-circle-outline"
+        message={
+          isTodayLogInProgress
+            ? t('Puedes continuar o eliminar el registro')
+            : t('Puedes editar o eliminar el registro')
+        }
+        footer={
+          <>
+            <View style={styles.modalButtonRow}>
+              <Button
+                title={isTodayLogInProgress ? t('Continuar') : t('Editar')}
                 onPress={() => {
-                  setLogWithOptionsId(undefined);
-                  setSelectedLogDayForOptions(undefined);
+                  const log = displayedRoutineLogs.find(
+                    (l) => l.id === logWithOptionsId
+                  );
+                  if (log && selectedLogDayForOptions && onEditLog) {
+                    onEditLog(log, selectedLogDayForOptions);
+                  }
+                  closeLogOptions();
                 }}
-              >
-                <View style={styles.modalActionRow}>
-                  <MaterialCommunityIcons
-                    name="arrow-left"
-                    size={16}
-                    color={theme.colors.primary}
-                  />
-                  <Text style={styles.modalButtonCancelText}>
-                    {t('Volver')}
-                  </Text>
-                </View>
-              </TouchableOpacity>
+                variant="primary"
+                size="medium"
+                style={styles.modalButton}
+              />
+              <Button
+                title={t('Eliminar')}
+                onPress={() => {
+                  setLogToDeleteId(logWithOptionsId);
+                  closeLogOptions();
+                }}
+                variant="danger"
+                size="medium"
+                style={styles.modalButton}
+              />
             </View>
-          </View>
-        </View>
-      </Modal>
+            <Button
+              title={t('Volver')}
+              onPress={closeLogOptions}
+              variant="secondary"
+              size="medium"
+            />
+          </>
+        }
+      />
 
       <ConfirmModal
         visible={!!logToDeleteId}
         title={t('¿Eliminar entrenamiento?')}
         message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
         confirmLabel={t('Eliminar')}
+        checkLabel={
+          logToDeleteHasCardio ? t('Borrar también el cardio') : undefined
+        }
+        checked={deleteCardioToo}
+        onToggleCheck={() => setDeleteCardioToo((prev) => !prev)}
         onConfirm={handleDeleteLog}
-        onCancel={() => setLogToDeleteId(undefined)}
+        onCancel={closeDeleteLogModal}
       />
 
       {!hasNoRoutines && (
@@ -1833,61 +1318,6 @@ export function HomeScreen({
   );
 }
 
-interface RoutineCardProps {
-  routine: WorkoutRoutine;
-  isViewed: boolean; // Para el borde grueso (seleccionada)
-  isActive: boolean; // Para el check "Activa"
-  isPrepared: boolean; // Para la etiqueta "Preparada"
-  onPress: () => void;
-  onLongPress?: () => void;
-}
-
-function RoutineCard({
-  routine,
-  isViewed,
-  isActive,
-  isPrepared,
-  onPress,
-  onLongPress,
-}: RoutineCardProps) {
-  return (
-    <TouchableOpacity
-      style={[styles.routineCard, isViewed && styles.routineCardActive]}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      delayLongPress={1000}
-    >
-      <GradientFill accent={theme.colors.primary} />
-      <View style={styles.routineCardContent}>
-        <Text style={styles.routineCardName}>{routine.name}</Text>
-        <Text style={styles.routineCardDesc}>{routine.description}</Text>
-        <Text style={styles.routineCardDays}>
-          {t('{n} días de entrenamiento', { n: routine.days.length })}
-        </Text>
-      </View>
-      {isActive ? (
-        <View style={styles.routineCardActiveIndicator}>
-          <MaterialCommunityIcons
-            name="check-bold"
-            size={13}
-            color={theme.colors.primaryLight}
-          />
-          <Text style={styles.routineCardActiveText}>{t('Activa')}</Text>
-        </View>
-      ) : isPrepared ? (
-        <View style={styles.routineCardPreparedIndicator}>
-          <MaterialCommunityIcons
-            name="progress-clock"
-            size={13}
-            color={theme.colors.emoji_blue}
-          />
-          <Text style={styles.routineCardPreparedText}>{t('Preparada')}</Text>
-        </View>
-      ) : null}
-    </TouchableOpacity>
-  );
-}
-
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -1911,7 +1341,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
     borderWidth: 2,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     paddingVertical: 16,
     paddingHorizontal: 0,
     overflow: 'hidden',
@@ -1951,6 +1381,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    // El nombre de la rutina lo pone el usuario: puede ser largo, así que la
+    // fila cede antes que el dato de mejora de la derecha.
+    flexShrink: 1,
+    minWidth: 0,
   },
   deltaRow: {
     flexDirection: 'row',
@@ -1978,6 +1412,7 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     includeFontPadding: false,
     textAlignVertical: 'center',
+    flexShrink: 1,
     transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
   },
   progressLatest: {
@@ -2000,94 +1435,6 @@ const styles = StyleSheet.create({
   progressLatestDown: {
     color: theme.colors.error,
   },
-  progressChartWrapper: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    overflow: 'hidden',
-    flexDirection: 'row',
-    marginTop: 12,
-  },
-  chartFilterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    alignSelf: 'center',
-    gap: 8,
-    marginTop: 18,
-    paddingVertical: 9,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  chartFilterButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  progressChart: {
-    height: 170,
-    position: 'relative',
-  },
-  chartGridLine: {
-    position: 'absolute',
-    height: 1,
-    backgroundColor: theme.colors.border,
-    opacity: 0.8,
-  },
-  chartAxisLine: {
-    position: 'absolute',
-    height: 1,
-    backgroundColor: theme.colors.veryLightGray,
-    opacity: 0.65,
-  },
-  chartBar: {
-    position: 'absolute',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.surface,
-  },
-  chartValueLabel: {
-    position: 'absolute',
-    width: 40,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    lineHeight: 14,
-  },
-  chartValueLabelCurrent: {
-    color: theme.colors.primary,
-    fontWeight: '800',
-  },
-  chartLabelBlue: {
-    color: theme.colors.emoji_blue,
-  },
-  chartXLabel: {
-    position: 'absolute',
-    width: 32,
-    textAlign: 'center',
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    fontWeight: '700',
-    lineHeight: 16,
-  },
-  chartXLabelCurrent: {
-    color: theme.colors.primary,
-    fontWeight: '800',
-  },
-  chartYLabel: {
-    position: 'absolute',
-    left: 0,
-    width: 36,
-    textAlign: 'right',
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    paddingRight: 6,
-    lineHeight: 16,
-  },
   weeksSection: {
     marginHorizontal: theme.spacing.md,
     // Misma separación que hay entre la HeroCard y la tarjeta de la gráfica
@@ -2107,7 +1454,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     backgroundColor: theme.colors.surface,
     borderLeftWidth: 5,
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     overflow: 'hidden',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2148,6 +1495,14 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     lineHeight: 16,
   },
+  weekAchievementButton: {
+    padding: 4,
+    marginRight: 4,
+    borderRadius: theme.borderRadius.sm,
+  },
+  weekAchievementButtonPressed: {
+    opacity: 0.6,
+  },
   historyLogCard: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
@@ -2161,10 +1516,10 @@ const styles = StyleSheet.create({
     ...theme.shadow.soft,
   },
   historyLogCardToday: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     borderWidth: 2.5,
     borderLeftWidth: 2.5,
-    borderLeftColor: theme.colors.primary,
+    borderLeftColor: theme.colors.primaryLine,
   },
   historyLogCardPressed: {
     opacity: 0.8,
@@ -2232,198 +1587,19 @@ const styles = StyleSheet.create({
     color: theme.colors.warning,
     backgroundColor: 'rgba(255, 196, 0, 0.12)',
   },
-  routineListContainer: {
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 0,
+  logOptionsButton: {
+    padding: 2,
+    marginRight: -4,
+    borderRadius: theme.borderRadius.sm,
   },
-  routineCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    padding: 18,
-    marginBottom: 12,
+  logOptionsButtonPressed: {
+    opacity: 0.6,
+  },
+  modalButtonRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
+    gap: 10,
   },
-  routineCardActive: {
-    borderColor: theme.colors.primary,
-    borderWidth: 3,
-  },
-  routineCardContent: {
+  modalButton: {
     flex: 1,
-  },
-  routineCardName: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.text,
-    marginBottom: 4,
-    lineHeight: 26,
-  },
-  routineCardDesc: {
-    fontSize: 15,
-    color: theme.colors.textSecondary,
-    marginBottom: 4,
-  },
-  routineCardDays: {
-    fontSize: 14,
-    color: theme.colors.lightGray,
-  },
-  routineCardActiveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.pill,
-    overflow: 'hidden',
-  },
-  routineCardActiveText: {
-    fontSize: 13,
-    color: theme.colors.primaryLight,
-    fontWeight: '800',
-  },
-  routineCardPreparedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: 'rgba(0, 122, 255, 0.14)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.pill,
-    overflow: 'hidden',
-  },
-  routineCardPreparedText: {
-    fontSize: 13,
-    color: theme.colors.emoji_blue,
-    fontWeight: '800',
-  },
-  newRoutineCard: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  newRoutineCardText: {
-    color: theme.colors.primary,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  selectorDetailsButton: {
-    marginTop: 4,
-    marginBottom: 4,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  selectorDetailsButtonText: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: theme.colors.overlay,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: theme.spacing.md,
-  },
-  modalContent: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.lg,
-    padding: theme.spacing.lg,
-    width: '100%',
-    maxWidth: 320,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.card,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-    marginBottom: theme.spacing.sm,
-  },
-  modalMessage: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    marginBottom: theme.spacing.md,
-    lineHeight: 19,
-  },
-  modalButtonsContainer: {
-    flexDirection: 'column',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.md,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  modalButtonCancel: {
-    flex: 1,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalButtonCancelFullWidth: {
-    flex: 0,
-    width: '100%',
-  },
-  modalButtonCancelText: {
-    fontSize: 16,
-    fontWeight: '700',
-    lineHeight: 20,
-    color: theme.colors.primary,
-  },
-  modalButtonDelete: {
-    flex: 1,
-    backgroundColor: theme.colors.error,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  modalButtonDeleteText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.onGold,
-  },
-  modalButtonEdit: {
-    flex: 1,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    alignItems: 'center',
-  },
-  modalButtonEditText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.onGold,
-  },
-  modalActionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
   },
 });

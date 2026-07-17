@@ -67,8 +67,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     label: string;
     icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   }[] = [
-    { value: 'dark', label: t('Noche'), icon: 'weather-night' },
-    { value: 'light', label: t('Día'), icon: 'white-balance-sunny' },
+    { value: 'dark', label: t('Oscuro'), icon: 'weather-night' },
+    { value: 'light', label: t('Claro'), icon: 'white-balance-sunny' },
   ];
 
   const languageOptions: { value: Language; label: string }[] = [
@@ -96,7 +96,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.sectionCard}>
-          <GradientFill accent={theme.colors.primary} />
+          <GradientFill accent={theme.colors.primaryLine} />
           <View style={styles.sectionTitleRow}>
             <MaterialCommunityIcons
               name="theme-light-dark"
@@ -144,7 +144,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
         </View>
 
         <View style={styles.sectionCard}>
-          <GradientFill accent={theme.colors.primary} />
+          <GradientFill accent={theme.colors.primaryLine} />
           <View style={styles.sectionTitleRow}>
             <MaterialCommunityIcons
               name="translate"
@@ -311,7 +311,7 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.surfaceAlt,
   },
   optionActive: {
-    borderColor: theme.colors.primary,
+    borderColor: theme.colors.primaryLine,
     backgroundColor: theme.colors.primaryMuted,
   },
   optionLabel: {

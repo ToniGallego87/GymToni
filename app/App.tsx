@@ -20,11 +20,13 @@ import {
   DataScreen,
   DaySelectorScreen,
   DetailScreen,
+  ExerciseProgressScreen,
   HomeScreen,
   NewRoutineScreen,
   ProfileScreen,
   QRScannerScreen,
   RoutineDetailScreen,
+  RoutineSelectorScreen,
   SettingsScreen,
   WeekAchievementScreen,
   WorkoutProvider,
@@ -71,6 +73,7 @@ type Screen =
       log?: WorkoutLog;
       startsNewWeek?: boolean;
       cardioOnly?: boolean;
+      origin?: 'home' | 'calendar' | 'cardio';
     }
   | {
       type: 'detail';
@@ -82,6 +85,7 @@ type Screen =
   | { type: 'profile' }
   | { type: 'settings' }
   | { type: 'data' }
+  | { type: 'exercise-progress' }
   | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
   | {
       type: 'routine-details';
@@ -241,14 +245,6 @@ function AppContent() {
     return selected ?? activeRoutine;
   }, [state.routines, state.selectedRoutineId, activeRoutine]);
 
-  const activeRoutineLogs = useMemo(
-    () => state.logs.filter((log) => log.routineId === state.activeRoutineId),
-    [state.activeRoutineId, state.logs]
-  );
-
-  const canDeleteCurrentRoutine =
-    activeRoutineLogs.length === 0 && state.routines.length > 1;
-
   const openWorkoutFromNotificationData = (
     data: Record<string, unknown> | undefined
   ) => {
@@ -349,15 +345,6 @@ function AppContent() {
     setScreen({ type: 'home' });
   };
 
-  const handleDeleteCurrentRoutine = () => {
-    if (!activeRoutine || !canDeleteCurrentRoutine) {
-      return;
-    }
-
-    dispatch({ type: 'DELETE_ROUTINE', payload: activeRoutine.id });
-    setScreen({ type: 'home' });
-  };
-
   const handleClearData = async () => {
     await clearAppData();
     dispatch({ type: 'CLEAR_DATA' });
@@ -446,23 +433,7 @@ function AppContent() {
       />
 
       {screen.type === 'routine-selector' && (
-        <HomeScreen
-          onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
-          onSelectLog={(log, day) =>
-            setScreen({ type: 'detail', log, day, origin: 'home' })
-          }
-          onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateProfile={() => setScreen({ type: 'profile' })}
-          onOpenDaySelector={() => {
-            if (displayedRoutine?.days.length) {
-              setScreen({ type: 'day-selector' });
-            } else {
-              setScreen({ type: 'new-routine' });
-            }
-          }}
+        <RoutineSelectorScreen
           onOpenRoutineDetails={(routine) =>
             setScreen({
               type: 'routine-details',
@@ -471,12 +442,8 @@ function AppContent() {
             })
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
-          onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
-          onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
-          canDeleteCurrentRoutine={canDeleteCurrentRoutine}
-          initialShowRoutineSelector={true}
           // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
-          onCloseRoutineSelector={() =>
+          onBack={() =>
             setScreen({ type: screen.origin === 'home' ? 'home' : 'profile' })
           }
         />
@@ -503,16 +470,10 @@ function AppContent() {
           onOpenRoutineSelector={() =>
             setScreen({ type: 'routine-selector', origin: 'home' })
           }
-          onOpenRoutineDetails={(routine) =>
-            setScreen({ type: 'routine-details', routine, origin: 'home' })
-          }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
-          onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
-          onDeleteCurrentRoutine={handleDeleteCurrentRoutine}
           onShowWeekAchievement={(achievements, routineName) =>
             setScreen({ type: 'week-achievement', achievements, routineName })
           }
-          canDeleteCurrentRoutine={canDeleteCurrentRoutine}
         />
       )}
 
@@ -526,6 +487,7 @@ function AppContent() {
               type: 'workout-log',
               day: CARDIO_ONLY_DAY,
               cardioOnly: true,
+              origin: 'cardio',
             })
           }
           onNavigateHome={() => setScreen({ type: 'home' })}
@@ -572,8 +534,8 @@ function AppContent() {
           log={screen.log}
           startsNewWeek={screen.startsNewWeek}
           cardioOnly={screen.cardioOnly}
-          onSave={() => setScreen({ type: 'home' })}
-          onBack={() => setScreen({ type: 'home' })}
+          onSave={() => setScreen({ type: screen.origin ?? 'home' })}
+          onBack={() => setScreen({ type: screen.origin ?? 'home' })}
         />
       )}
 
@@ -591,7 +553,6 @@ function AppContent() {
                   : 'home',
             })
           }
-          onEdit={(log, day) => setScreen({ type: 'workout-log', day, log })}
         />
       )}
 
@@ -599,6 +560,15 @@ function AppContent() {
         <CalendarScreen
           onSelectLog={(log, day) =>
             setScreen({ type: 'detail', log, day, origin: 'calendar' })
+          }
+          onEditCardioOnly={(log) =>
+            setScreen({
+              type: 'workout-log',
+              day: CARDIO_ONLY_DAY,
+              log,
+              cardioOnly: true,
+              origin: 'calendar',
+            })
           }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
@@ -612,6 +582,9 @@ function AppContent() {
           onOpenRoutines={() =>
             setScreen({ type: 'routine-selector', origin: 'profile' })
           }
+          onOpenExerciseProgress={() =>
+            setScreen({ type: 'exercise-progress' })
+          }
           onOpenData={() => setScreen({ type: 'data' })}
           onOpenSettings={() => setScreen({ type: 'settings' })}
           onNavigateHome={() => setScreen({ type: 'home' })}
@@ -623,6 +596,10 @@ function AppContent() {
 
       {screen.type === 'settings' && (
         <SettingsScreen onBack={() => setScreen({ type: 'profile' })} />
+      )}
+
+      {screen.type === 'exercise-progress' && (
+        <ExerciseProgressScreen onBack={() => setScreen({ type: 'profile' })} />
       )}
 
       {screen.type === 'data' && (
