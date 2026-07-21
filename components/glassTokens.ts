@@ -34,7 +34,7 @@ function recomputeGlassTokens() {
   GLASS_TINT = isLight ? 'light' : 'dark';
 
   GLASS_TOP_BAR_BG = isLight
-    ? 'rgba(237, 240, 246, 0.7)'
+    ? 'rgba(237, 240, 246, 0.5)'
     : 'rgba(15, 17, 21, 0.56)';
   GLASS_TOP_BAR_OVERLAY = isLight
     ? 'rgba(237, 240, 246, 0.08)'
@@ -44,7 +44,7 @@ function recomputeGlassTokens() {
     : 'rgba(255, 255, 255, 0.08)';
 
   GLASS_FLOATING_BG = isLight
-    ? 'rgba(255, 255, 255, 0.55)'
+    ? 'rgba(255, 255, 255, 0.38)'
     : 'rgba(14, 20, 27, 0.05)';
   GLASS_FLOATING_OVERLAY = isLight
     ? 'rgba(255, 255, 255, 0)'

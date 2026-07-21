@@ -21,6 +21,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'Si escribes un valor imposible en una serie (un símbolo raro, un número negativo o un peso o repeticiones disparatados), la app te avisa de qué ha pasado en cada caso y no deja que estropee tus gráficas.',
       'Mejorar en un ejercicio de peso corporal ya no te penaliza: añadir algo de lastre siempre sube la nota, nunca la baja.',
       'Cambiar entre modo oscuro y claro es ahora instantáneo: la app ya no se reinicia al hacerlo (cambiar de idioma sí la sigue reiniciando).',
+      'El modo claro se ve más pulido y legible: dorado un poco más luminoso, cristal más transparente y el botón "Volver", las gráficas de cardio y el calendario mejor colocados.',
       'Ajustes internos para mejorar la estabilidad y el rendimiento.',
     ],
   },

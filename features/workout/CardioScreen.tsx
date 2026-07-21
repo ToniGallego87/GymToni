@@ -519,7 +519,11 @@ export function CardioScreen({
             </TouchableOpacity>
 
             {showChart && (
-              <>
+              // Centrado: el `progressCard` no puede llevar alignItems:'center'
+              // (su cabecera usa space-between y necesita el ancho completo), así
+              // que la gráfica y su selector —ambos de ancho fijo `chartWidth`—
+              // se centran en su propio contenedor.
+              <View style={styles.chartArea}>
                 {!!metricChart && (
                   <BarChart
                     points={metricChart.bars}
@@ -543,7 +547,7 @@ export function CardioScreen({
                     );
                   }}
                 />
-              </>
+              </View>
             )}
           </View>
         )}
@@ -820,6 +824,11 @@ const makeStyles = () => StyleSheet.create({
     overflow: 'hidden',
     backgroundColor: theme.colors.surface,
     ...theme.shadow.card,
+  },
+  // Centra la gráfica y su selector (ambos de ancho fijo `chartWidth`) dentro
+  // del `progressCard`, que no puede centrar por su cabecera de ancho completo.
+  chartArea: {
+    alignItems: 'center',
   },
   progressToggle: {
     width: '100%',

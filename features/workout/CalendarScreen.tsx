@@ -610,6 +610,11 @@ const makeStyles = () => StyleSheet.create({
     letterSpacing: 0.5,
     color: theme.colors.text,
     lineHeight: 27,
+    // Anton pega el glifo al borde superior de su caja; sin esto el mes/año
+    // queda descentrado frente a las flechas (mismo patrón que HeroCard).
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    transform: [{ translateY: 2 }],
   },
   monthNavButton: {
     paddingHorizontal: 10,

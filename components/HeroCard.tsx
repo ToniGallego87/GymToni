@@ -34,17 +34,6 @@ interface HeroCardProps {
   pressScale?: SharedValue<number>;
 }
 
-// Paletas de gradiente por estado. El orden es claro→base→oscuro (diagonal).
-// La hero card de Fuerza se mantiene siempre en amarillo/dorado, también
-// completado el entrenamiento o cerrada la rutina (consistente con la de Cardio).
-const GRADIENTS: Record<HeroVariant, [string, string, string]> = {
-  start: theme.gradients.primary,
-  completed: theme.gradients.primary,
-  'week-completed': theme.gradients.amber,
-  closed: theme.gradients.primary,
-  add: theme.gradients.warning,
-};
-
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export function HeroCard({
@@ -57,6 +46,18 @@ export function HeroCard({
   enterFrom,
   pressScale,
 }: HeroCardProps) {
+  // Paletas de gradiente por estado (orden claro→base→oscuro, diagonal). Se
+  // definen en render para leer los gradientes del tema VIVO (cambio en
+  // caliente). La hero de Fuerza es SIEMPRE el mismo oro (`primary`) en todos
+  // sus estados dorados —empezar, completado, semana completada y cerrada—,
+  // consistente con la de Cardio; solo "añadir rutina" usa el naranja de aviso.
+  const GRADIENTS: Record<HeroVariant, [string, string, string]> = {
+    start: theme.gradients.primary,
+    completed: theme.gradients.primary,
+    'week-completed': theme.gradients.primary,
+    closed: theme.gradients.primary,
+    add: theme.gradients.warning,
+  };
   const colors = GRADIENTS[variant];
   const localScale = useSharedValue(1);
   const scale = pressScale ?? localScale;

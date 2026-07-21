@@ -21,16 +21,16 @@ interface FloatingBackButtonProps {
   label?: string;
 }
 
-// En modo día el botón se pinta como una píldora oscura sólida con texto
-// blanco (en noche ya era cristal oscuro con texto blanco); así destaca sobre
-// el fondo claro en vez de fundirse con él.
-const isLight = theme.mode === 'light';
-
 export function FloatingBackButton({
   onPress,
   bottom,
   label = `← ${t('Volver')}`,
 }: FloatingBackButtonProps) {
+  // En modo día el botón se pinta como una píldora oscura sólida con texto
+  // blanco (en noche ya era cristal oscuro con texto blanco); así destaca sobre
+  // el fondo claro en vez de fundirse con él. Se lee en render (no a nivel de
+  // módulo) para que el cambio de tema en caliente aplique la variante correcta.
+  const isLight = theme.mode === 'light';
   return (
     <Pressable
       style={[

@@ -54,13 +54,6 @@ const STATUS_GLYPH: Record<ComparisonStatus, string> = {
   missing: '·',
 };
 
-const STATUS_COLOR: Record<ComparisonStatus, string> = {
-  up: theme.colors.success,
-  down: theme.colors.error,
-  same: theme.colors.textSecondary,
-  missing: theme.colors.textMuted,
-};
-
 export function ExerciseResultDisplay({
   exerciseName,
   catalogId,
@@ -76,6 +69,13 @@ export function ExerciseResultDisplay({
   isDetail = false,
   accent = theme.colors.current,
 }: ExerciseResultDisplayProps) {
+  // En render para leer los colores del tema VIVO (cambio de tema en caliente).
+  const STATUS_COLOR: Record<ComparisonStatus, string> = {
+    up: theme.colors.success,
+    down: theme.colors.error,
+    same: theme.colors.textSecondary,
+    missing: theme.colors.textMuted,
+  };
   const effectiveParsedSets =
     parsedSets && parsedSets.length > 0
       ? parsedSets

@@ -20,13 +20,6 @@ interface ButtonProps {
   size?: 'small' | 'medium' | 'large';
 }
 
-// Degradado por variante: da sensación de volumen (claro arriba → oscuro abajo),
-// igual que el botón "Guardar" de registrar un día.
-const GRADIENTS: Record<'primary' | 'danger', [string, string, string]> = {
-  primary: theme.gradients.primary,
-  danger: theme.gradients.danger,
-};
-
 export function Button({
   title,
   onPress,
@@ -35,6 +28,13 @@ export function Button({
   style,
   size = 'medium',
 }: ButtonProps) {
+  // Degradado por variante: da sensación de volumen (claro arriba → oscuro
+  // abajo), igual que el botón "Guardar" de registrar un día. En render para
+  // leer los gradientes del tema VIVO (cambio de tema en caliente).
+  const GRADIENTS: Record<'primary' | 'danger', [string, string, string]> = {
+    primary: theme.gradients.primary,
+    danger: theme.gradients.danger,
+  };
   const isFilled = !disabled && (variant === 'primary' || variant === 'danger');
 
   const getFlatBackgroundColor = () => {

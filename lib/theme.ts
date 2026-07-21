@@ -100,9 +100,9 @@ const lightColors: typeof darkColors = {
   // como tinta), así que es más oscuro que `primary`, no más claro.
   primaryLight: '#7A5200',
   primaryMuted: 'rgba(150, 97, 0, 0.14)',
-  primaryFill: '#F2B307',
-  primaryFillLight: '#FFCE3F',
-  primaryFillDark: '#D99405',
+  primaryFill: '#F7C21A',
+  primaryFillLight: '#FFD75A',
+  primaryFillDark: '#E2A80C',
   // Ámbar: 3.2:1 sobre el fondo y 3.6:1 sobre las tarjetas. La tinta (`primary`)
   // aquí se leía marrón; el oro de relleno, en cambio, se perdería (1.6:1).
   primaryLine: '#B87A00',
@@ -168,7 +168,7 @@ function buildTheme(mode: ThemeMode) {
   // claro). El resto (verde/rojo/naranja) ya contrasta en ambos.
   gradients: {
     primary: (mode === 'light'
-      ? ['#FFCF43', '#F2B307', '#D19205']
+      ? ['#FFD858', '#F7C21A', '#E0A50C']
       : ['#F9D85A', '#F7CC3D', '#E0B226']) as [string, string, string],
     success: ['#7CD99A', '#52C878', '#3DA866'] as [string, string, string],
     danger: ['#F59898', '#F06A6A', '#D85151'] as [string, string, string],
