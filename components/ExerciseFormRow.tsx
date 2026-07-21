@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
+import { exerciseName } from '@data/exerciseCatalog';
 import {
   buildTargetReps,
   ExerciseForm,
@@ -10,6 +11,8 @@ import {
   MIN_SETS,
   RepUnit,
 } from '@lib/exerciseForm';
+import { ExercisePickerModal } from './ExercisePickerModal';
+import { GifViewerModal } from './GifViewerModal';
 
 interface ExerciseFormRowProps {
   exercise: ExerciseForm;
@@ -34,6 +37,9 @@ export function ExerciseFormRow({
   onRemove,
   onCollapse,
 }: ExerciseFormRowProps) {
+  const [showPicker, setShowPicker] = useState(false);
+  const [showGif, setShowGif] = useState(false);
+
   const adjustSets = (delta: number) => {
     const next = Math.min(MAX_SETS, Math.max(MIN_SETS, exercise.sets + delta));
     onChange({ sets: next });
@@ -42,6 +48,7 @@ export function ExerciseFormRow({
   const hasName = !!exercise.name.trim();
 
   return (
+    <>
     <View style={styles.exerciseRow}>
       <View style={styles.exerciseNameRow}>
         <TextInput
@@ -49,8 +56,43 @@ export function ExerciseFormRow({
           placeholder={t('Ej: Press banca')}
           placeholderTextColor={theme.colors.textSecondary}
           value={exercise.name}
-          onChangeText={(value) => onChange({ name: value })}
+          // Escribir a mano rompe el vínculo con el catálogo (ya no es ese GIF).
+          onChangeText={(value) =>
+            onChange({ name: value, catalogId: undefined })
+          }
         />
+        <Pressable
+          style={({ pressed }) => [
+            styles.iconButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => setShowPicker(true)}
+          hitSlop={8}
+          accessibilityLabel={t('Buscar en el catálogo')}
+        >
+          <MaterialCommunityIcons
+            name="magnify"
+            size={18}
+            color={theme.colors.primary}
+          />
+        </Pressable>
+        {!!exercise.catalogId && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => setShowGif(true)}
+            hitSlop={8}
+            accessibilityLabel={t('Ver GIF')}
+          >
+            <MaterialCommunityIcons
+              name="play-box-outline"
+              size={18}
+              color={theme.colors.primary}
+            />
+          </Pressable>
+        )}
         {hasName && (
           <Pressable
             style={({ pressed }) => [
@@ -172,6 +214,22 @@ export function ExerciseFormRow({
         </View>
       </View>
     </View>
+
+      <ExercisePickerModal
+        visible={showPicker}
+        onRequestClose={() => setShowPicker(false)}
+        onSelect={(picked) => {
+          onChange({ name: exerciseName(picked), catalogId: picked.id });
+          setShowPicker(false);
+        }}
+      />
+      <GifViewerModal
+        visible={showGif}
+        onRequestClose={() => setShowGif(false)}
+        catalogId={exercise.catalogId}
+        fallbackName={exercise.name}
+      />
+    </>
   );
 }
 
@@ -189,7 +247,10 @@ export function ExerciseSummaryRow({
   onEdit,
   onRemove,
 }: ExerciseSummaryRowProps) {
+  const [showGif, setShowGif] = useState(false);
+
   return (
+    <>
     <View style={styles.summaryRow}>
       <Pressable
         style={({ pressed }) => [
@@ -212,6 +273,23 @@ export function ExerciseSummaryRow({
           color={theme.colors.textSecondary}
         />
       </Pressable>
+      {!!exercise.catalogId && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.iconButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => setShowGif(true)}
+          hitSlop={8}
+          accessibilityLabel={t('Ver GIF')}
+        >
+          <MaterialCommunityIcons
+            name="play-box-outline"
+            size={18}
+            color={theme.colors.primary}
+          />
+        </Pressable>
+      )}
       <Pressable
         style={({ pressed }) => [
           styles.removeExerciseButton,
@@ -229,6 +307,14 @@ export function ExerciseSummaryRow({
         />
       </Pressable>
     </View>
+
+      <GifViewerModal
+        visible={showGif}
+        onRequestClose={() => setShowGif(false)}
+        catalogId={exercise.catalogId}
+        fallbackName={exercise.name}
+      />
+    </>
   );
 }
 
@@ -275,6 +361,16 @@ const styles = StyleSheet.create({
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
     borderColor: theme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.surface,
+  },
+  iconButton: {
+    width: 34,
+    height: 38,
+    borderRadius: theme.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.primaryLine,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: theme.colors.surface,

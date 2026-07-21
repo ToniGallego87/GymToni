@@ -4,6 +4,10 @@ export interface WorkoutExercise {
   order: number;
   targetReps?: string;
   targetSets?: number;
+  // Id del ejercicio en el catálogo (data/exerciseCatalog) si se eligió de ahí.
+  // Permite mostrar su GIF de referencia. Opcional: los ejercicios tecleados a
+  // mano no lo tienen.
+  catalogId?: string;
 }
 
 export interface WorkoutDay {

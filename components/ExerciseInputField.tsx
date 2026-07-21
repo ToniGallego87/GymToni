@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Pressable,
   GestureResponderEvent,
-  ScrollView,
   Keyboard,
 } from 'react-native';
 import Animated, {
@@ -19,9 +18,14 @@ import Animated, {
 import { ParsedSet, ExerciseLog } from '../types';
 import { theme } from '@lib/theme';
 import { localizeDecimals, parseTypedNumber, t } from '@lib/i18n';
-import { parseSeriesString } from '@lib/parsers';
+import {
+  MAX_SET_REPS,
+  MAX_SET_WEIGHT_KG,
+  parseSeriesString,
+} from '@lib/parsers';
 import { getImprovementDisplay } from '@lib/utils';
 import { GradientFill } from './GradientFill';
+import { ExerciseGifButton } from './ExerciseGifButton';
 
 // Transiciones reutilizables para recolocar y mostrar/ocultar contenido
 const layoutTransition = LinearTransition.duration(220).easing(
@@ -30,9 +34,15 @@ const layoutTransition = LinearTransition.duration(220).easing(
 const fadeIn = FadeIn.duration(180);
 const fadeOut = FadeOut.duration(140);
 
+// Motivo por el que "Añadir serie" no se pudo completar, para que el padre
+// muestre el aviso correcto en vez de un "rellena los datos" genérico.
+export type InvalidAddReason = 'empty' | 'format' | 'negative' | 'too-large';
+
 interface ExerciseInputFieldProps {
   order: number;
   exerciseName: string;
+  // Id del catálogo del ejercicio (si viene de ahí), para la lupa de consulta.
+  catalogId?: string;
   target?: {
     sets?: number;
     reps?: string;
@@ -40,8 +50,9 @@ interface ExerciseInputFieldProps {
   addedSets: ParsedSet[];
   onAddSet: (set: ParsedSet) => void;
   // Se invoca al pulsar "Añadir serie" sin datos válidos (p. ej. 0×0 sin caso
-  // anterior que rellene los placeholders). El padre muestra el aviso.
-  onInvalidAdd?: () => void;
+  // anterior que rellene los placeholders, un valor negativo o uno disparatado).
+  // El padre muestra el aviso según el motivo.
+  onInvalidAdd?: (reason: InvalidAddReason) => void;
   onRemoveLastSet: () => void;
   onFinishExercise: () => void;
   onNotesPress: (event: GestureResponderEvent) => void;
@@ -54,6 +65,7 @@ interface ExerciseInputFieldProps {
 export function ExerciseInputField({
   order,
   exerciseName,
+  catalogId,
   target,
   addedSets,
   onAddSet,
@@ -140,14 +152,30 @@ export function ExerciseInputField({
     // El teclado español escribe coma: "22,5" es un peso válido.
     const weight = parseTypedNumber(weightStr);
     const reps = parseTypedNumber(repsStr);
-    if (!isNaN(weight) && !isNaN(reps) && weight >= 0 && reps > 0) {
-      onAddSet({ weight, reps });
-      setWeightValue('');
-      setRepsValue('');
-      Keyboard.dismiss();
-    } else {
-      onInvalidAdd?.();
+
+    if (isNaN(weight) || isNaN(reps)) {
+      onInvalidAdd?.('format');
+      return;
     }
+    if (weight < 0 || reps < 0) {
+      onInvalidAdd?.('negative');
+      return;
+    }
+    if (weight > MAX_SET_WEIGHT_KG || reps > MAX_SET_REPS) {
+      onInvalidAdd?.('too-large');
+      return;
+    }
+    if (reps === 0) {
+      // Campo vacío y sin serie anterior ni objetivo del que tirar como
+      // placeholder: no hay nada que añadir, no es un valor "negativo".
+      onInvalidAdd?.('empty');
+      return;
+    }
+
+    onAddSet({ weight, reps });
+    setWeightValue('');
+    setRepsValue('');
+    Keyboard.dismiss();
   };
 
   const isMaxSetsReached = target?.sets
@@ -260,28 +288,21 @@ export function ExerciseInputField({
     if (!hasAddedSets) return null;
     return (
       <View style={styles.seriesRow}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.seriesList}
-          style={styles.seriesScroll}
-        >
-          {addedSets.map((set, idx) => (
-            <Animated.View
-              key={idx}
-              entering={fadeIn}
-              exiting={fadeOut}
-              layout={layoutTransition}
-              style={[styles.serieTag, { backgroundColor: cardAccent + '2E' }]}
-            >
-              <Text style={[styles.serieTagText, { color: cardAccent }]}>
-                {set.weight === -1 || set.reps === -1
-                  ? '—'
-                  : localizeDecimals(`${set.weight}×${set.reps}`)}
-              </Text>
-            </Animated.View>
-          ))}
-        </ScrollView>
+        {addedSets.map((set, idx) => (
+          <Animated.View
+            key={idx}
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+            style={[styles.serieTag, { backgroundColor: cardAccent + '2E' }]}
+          >
+            <Text style={[styles.serieTagText, { color: cardAccent }]}>
+              {set.weight === -1 || set.reps === -1
+                ? '—'
+                : localizeDecimals(`${set.weight}×${set.reps}`)}
+            </Text>
+          </Animated.View>
+        ))}
         {renderImprovementBadge()}
       </View>
     );
@@ -294,32 +315,36 @@ export function ExerciseInputField({
     >
       <GradientFill accent={cardAccent} />
 
-      {/* Cabecera: título + flecha */}
-      <Pressable
+      {/* Cabecera: título + lupa de consulta + flecha. El título y la flecha
+          despliegan; la lupa va aparte para no anidar Pressables. */}
+      <View
         style={[
           styles.header,
           // Colapsada: sin margen inferior (el bloque de resultados aporta su
           // propia separación; evita doble hueco bajo la cabecera).
           !expanded && styles.headerCollapsedEmpty,
         ]}
-        onPress={toggleExpanded}
       >
-        <View style={styles.titleSection}>
+        <Pressable style={styles.titleSection} onPress={toggleExpanded}>
           <View style={[styles.orderBadge, { backgroundColor: cardAccent }]}>
             <Text style={styles.orderBadgeText}>{order}</Text>
           </View>
           <Text style={styles.exerciseName} numberOfLines={2}>
             {exerciseName}
           </Text>
-        </View>
-        <View style={[styles.headerRight, { borderColor: cardAccent + '40' }]}>
+        </Pressable>
+        <ExerciseGifButton name={exerciseName} catalogId={catalogId} />
+        <Pressable
+          style={[styles.headerRight, { borderColor: cardAccent + '40' }]}
+          onPress={toggleExpanded}
+        >
           <MaterialCommunityIcons
             name={expanded ? 'chevron-up' : 'chevron-down'}
             size={24}
             color={cardAccent}
           />
-        </View>
-      </Pressable>
+        </Pressable>
+      </View>
 
       {/* Sección superior desplegable: contexto + nota. El wrapper se mantiene
           montado siempre (solo se alterna el contenido) para que `exiting` se
@@ -500,7 +525,7 @@ export function ExerciseInputField({
                       { color: theme.colors.error },
                     ]}
                   >
-                    Borrar
+                    {t('Borrar')}
                   </Text>
                 </Pressable>
               )}
@@ -523,7 +548,7 @@ export function ExerciseInputField({
                     { color: theme.colors.accent },
                   ]}
                 >
-                  Terminar
+                  {t('Terminar')}
                 </Text>
               </Pressable>
               <Pressable
@@ -545,7 +570,7 @@ export function ExerciseInputField({
                     { color: theme.colors.textSecondary },
                   ]}
                 >
-                  Nota
+                  {t('Nota')}
                 </Text>
               </Pressable>
             </View>
@@ -623,8 +648,10 @@ export function ExerciseInputField({
                 color={theme.colors.success}
               />
               <Text style={styles.completedText}>
-                Completado · {addedSets.length}/
-                {target?.sets ?? addedSets.length} series
+                {t('Completado · {a}/{b} series', {
+                  a: addedSets.length,
+                  b: target?.sets ?? addedSets.length,
+                })}
               </Text>
             </View>
             <Pressable
@@ -740,15 +767,9 @@ const styles = StyleSheet.create({
   },
   seriesRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 10,
-  },
-  seriesScroll: {
-    flex: 1,
-  },
-  seriesList: {
     gap: 6,
-    paddingRight: 4,
   },
   serieTag: {
     paddingHorizontal: 13,

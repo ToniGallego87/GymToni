@@ -2,6 +2,7 @@ import {
   getEstimatedOneRepMax,
   getTotalSetsStrengthScore,
   buildImprovementFromStrengthScores,
+  BODYWEIGHT_VIRTUAL_LOAD,
   FIRST_TIME_IMPROVEMENT_PERCENT,
 } from '../progress';
 
@@ -16,28 +17,62 @@ describe('getEstimatedOneRepMax (Epley)', () => {
   });
 });
 
-describe('getTotalSetsStrengthScore (1RM estimado)', () => {
-  it('cuenta reps cuando no hay carga externa', () => {
-    expect(getTotalSetsStrengthScore([{ weight: 0, reps: 20 }])).toBe(20);
+describe('getTotalSetsStrengthScore (1RM estimado sobre carga virtual)', () => {
+  it('puntúa sin carga externa con la carga virtual del cuerpo', () => {
+    expect(getTotalSetsStrengthScore([{ weight: 0, reps: 20 }])).toBeCloseTo(
+      getEstimatedOneRepMax(BODYWEIGHT_VIRTUAL_LOAD, 20),
+      5
+    );
+  });
+
+  it('mantiene la escala vieja del peso corporal a 15 reps', () => {
+    expect(getTotalSetsStrengthScore([{ weight: 0, reps: 15 }])).toBeCloseTo(
+      15,
+      5
+    );
   });
 
   it('devuelve 0 sin sets', () => {
     expect(getTotalSetsStrengthScore([])).toBe(0);
   });
 
-  it('suma el 1RM estimado de todos los sets', () => {
+  it('suma el 1RM estimado (con carga virtual) de todos los sets', () => {
     expect(
       getTotalSetsStrengthScore([
         { weight: 100, reps: 5 },
         { weight: 100, reps: 5 },
       ])
-    ).toBeCloseTo(getEstimatedOneRepMax(100, 5) * 2, 5);
+    ).toBeCloseTo(
+      getEstimatedOneRepMax(100 + BODYWEIGHT_VIRTUAL_LOAD, 5) * 2,
+      5
+    );
   });
 
   it('valora subir peso aunque baje alguna repetición', () => {
-    const conMasPeso = getTotalSetsStrengthScore([{ weight: 47.5, reps: 8 }]);
+    const conMasPeso = getTotalSetsStrengthScore([{ weight: 50, reps: 8 }]);
     const original = getTotalSetsStrengthScore([{ weight: 45, reps: 10 }]);
     expect(conMasPeso).toBeGreaterThan(original);
+  });
+
+  it('añadir lastre a una serie de peso corporal SIEMPRE sube la nota', () => {
+    const sinLastre = getTotalSetsStrengthScore([{ weight: 0, reps: 15 }]);
+    const conPocoLastre = getTotalSetsStrengthScore([{ weight: 5, reps: 15 }]);
+    expect(conPocoLastre).toBeGreaterThan(sinLastre);
+  });
+
+  it('el caso real (0·5·10 vs 0·0·0 a 15 reps) sale como mejora', () => {
+    const anterior = getTotalSetsStrengthScore([
+      { weight: 0, reps: 15 },
+      { weight: 0, reps: 15 },
+      { weight: 0, reps: 15 },
+    ]);
+    const hoy = getTotalSetsStrengthScore([
+      { weight: 0, reps: 15 },
+      { weight: 5, reps: 15 },
+      { weight: 10, reps: 15 },
+    ]);
+    const result = buildImprovementFromStrengthScores(hoy, anterior);
+    expect(result?.isImproved).toBe(true);
   });
 });
 

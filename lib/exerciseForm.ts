@@ -18,6 +18,8 @@ export interface ExerciseForm {
   // Reps/segundos como texto corto: admite rangos ("6-8") y matices ("10-12/lado").
   reps: string;
   unit: RepUnit;
+  // Id del catálogo si el ejercicio se eligió del catálogo (para su GIF).
+  catalogId?: string;
 }
 
 export const MIN_SETS = 1;
@@ -121,6 +123,7 @@ export function exerciseFormFromExercise(
     sets: clampSets(exercise.targetSets ?? 3),
     reps: reps || (isSeconds ? '30' : '10'),
     unit: isSeconds ? 'seg' : 'reps',
+    catalogId: exercise.catalogId,
   };
 }
 
@@ -139,5 +142,6 @@ export function buildWorkoutExercises(
       order: index + 1,
       targetSets: form.sets,
       targetReps: buildTargetReps(form),
+      catalogId: form.catalogId,
     }));
 }

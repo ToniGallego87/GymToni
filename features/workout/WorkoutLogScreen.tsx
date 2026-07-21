@@ -12,12 +12,6 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useKeepAwake } from 'expo-keep-awake';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 // expo-notifications does not support web; load it only on native platforms
@@ -27,18 +21,25 @@ import {
   AppModal,
   DayAccentIcon,
   ExerciseInputField,
+  InvalidAddReason,
   CardioInputField,
   Button,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
+  GradientCtaButton,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   Toast,
   StretchScrollView,
 } from '../../components';
 import { isCardioOnlyLog } from '@lib/cardio';
-import { parseCardioString, parseSeriesString } from '@lib/parsers';
+import {
+  MAX_SET_REPS,
+  MAX_SET_WEIGHT_KG,
+  parseCardioString,
+  parseSeriesString,
+} from '@lib/parsers';
 import { generateId, getToday } from '@lib/utils';
 import {
   WorkoutDay,
@@ -69,50 +70,6 @@ interface WorkoutLogScreenProps {
 }
 
 const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// Botón principal estilo HeroCard (gradiente dorado), coherente con Inicio y Nueva rutina.
-function SaveWorkoutButton({ onPress }: { onPress: () => void }) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <AnimatedPressable
-      style={[styles.saveWrapper, animatedStyle]}
-      onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.97, { damping: 18, stiffness: 320 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
-      }}
-    >
-      <LinearGradient
-        colors={theme.gradients.primary}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.saveGradient}
-      >
-        <LinearGradient
-          colors={theme.gradients.sheen}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.saveSheen}
-          pointerEvents="none"
-        />
-        <MaterialCommunityIcons
-          name="content-save-check"
-          size={22}
-          color={theme.colors.onGold}
-        />
-        <Text style={styles.saveText}>{t('Guardar')}</Text>
-      </LinearGradient>
-    </AnimatedPressable>
-  );
-}
 
 export function WorkoutLogScreen({
   day,
@@ -462,6 +419,25 @@ export function WorkoutLogScreen({
     };
   }, [timerNotificationId]);
 
+  // Mensaje de "Añadir serie" fallido según la causa real, en vez de un único
+  // aviso genérico que confunde cuando el dato tecleado no está vacío.
+  const getInvalidAddMessage = (reason: InvalidAddReason): string => {
+    switch (reason) {
+      case 'negative':
+        return t('El peso y las repeticiones no pueden ser negativos');
+      case 'too-large':
+        return t('Valor demasiado alto (máx. {max}kg / {reps} reps)', {
+          max: MAX_SET_WEIGHT_KG,
+          reps: MAX_SET_REPS,
+        });
+      case 'format':
+        return t('Valor no válido: usa solo números');
+      case 'empty':
+      default:
+        return t('Rellena primero los datos');
+    }
+  };
+
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     const targetSets =
       selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets || 0;
@@ -782,15 +758,16 @@ export function WorkoutLogScreen({
               <ExerciseInputField
                 order={exercise.order}
                 exerciseName={exercise.name}
+                catalogId={exercise.catalogId}
                 target={{
                   sets: exercise.targetSets,
                   reps: exercise.targetReps,
                 }}
                 addedSets={currentSets}
                 onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
-                onInvalidAdd={() =>
+                onInvalidAdd={(reason) =>
                   setToast({
-                    message: t('Rellena primero los datos'),
+                    message: getInvalidAddMessage(reason),
                     type: 'error',
                     duration: 2000,
                   })
@@ -850,7 +827,11 @@ export function WorkoutLogScreen({
         />
 
         <View style={styles.buttonContainer}>
-          <SaveWorkoutButton onPress={handleSaveWorkout} />
+          <GradientCtaButton
+            icon="content-save-check"
+            title={t('Guardar')}
+            onPress={handleSaveWorkout}
+          />
         </View>
       </StretchScrollView>
 
@@ -961,38 +942,6 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     marginTop: 15,
-  },
-  saveWrapper: {
-    borderRadius: theme.borderRadius.lg,
-    ...theme.shadow.card,
-  },
-  saveGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderRadius: theme.borderRadius.lg,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    overflow: 'hidden',
-  },
-  saveSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  saveText: {
-    color: theme.colors.onGold,
-    fontFamily: theme.fonts.display,
-    fontSize: 22,
-    letterSpacing: 0.5,
-    // Anton pega los glifos al borde superior de su caja de línea; sin padding
-    // el texto queda descentrado respecto al icono (mismo arreglo que createText
-    // de Nueva rutina).
-    lineHeight: 30,
-    includeFontPadding: true,
   },
   notesInput: {
     marginTop: 4,

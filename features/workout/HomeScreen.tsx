@@ -242,9 +242,76 @@ export function HomeScreen({
         .sort((a: WorkoutLog, b: WorkoutLog) => b.createdAt - a.createdAt),
     [displayedRoutineId, state.logs]
   );
+  // Log de hoy (si existe) para esta rutina, y si ya está completo. Se calcula
+  // aquí (antes de la gráfica y el agrupado por semanas) porque ambos deben
+  // ignorar ese log MIENTRAS esté a medias: un día empezado y sin terminar no
+  // debe sumar en el % de semana ni en la gráfica hasta que se complete o
+  // deje de ser "hoy" (ver `completionLogs`/`completionGroupedByBlock` más abajo).
+  const todayLog = useMemo(() => {
+    const todayKey = new Date().toISOString().split('T')[0];
+    return displayedRoutineLogs.find((log) =>
+      log.date
+        ? log.date === todayKey
+        : new Date(log.createdAt).toISOString().split('T')[0] === todayKey
+    );
+  }, [displayedRoutineLogs]);
+
+  const todayWorkoutStatus = useMemo(():
+    | 'none'
+    | 'in-progress'
+    | 'completed' => {
+    if (!todayLog) return 'none';
+
+    let todayDay: WorkoutDay | undefined;
+    for (const routine of state.routines) {
+      const day = routine.days.find((d) => d.id === todayLog.dayId);
+      if (day) {
+        todayDay = day;
+        break;
+      }
+    }
+
+    if (!todayDay || todayDay.exercises.length === 0) return 'completed';
+
+    // Un ejercicio está completo cuando alcanza su número de series objetivo
+    // (mismo criterio que `isTargetCompleted` en WorkoutLogScreen), no con que
+    // tenga solo una serie metida: si falta una serie del objetivo, el
+    // entrenamiento sigue en progreso.
+    const allFilled = todayDay.exercises.every((ex) => {
+      const exLog = todayLog.exercises.find(
+        (e: ExerciseLog) => e.exerciseId === ex.id
+      );
+      const setsCount = exLog?.parsedSets?.length ?? 0;
+      const targetSets = ex.targetSets && ex.targetSets > 0 ? ex.targetSets : 1;
+      return setsCount >= targetSets;
+    });
+    return allFilled ? 'completed' : 'in-progress';
+  }, [todayLog, state.routines]);
+
+  // Logs "de completitud": iguales a los reales salvo que excluyen el de hoy
+  // mientras esté a medias, para que streak/semana/gráfica no lo cuenten como
+  // un día ya entrenado. El log sigue existiendo y se ve en el historial (no
+  // se toca `state.logs` ni `displayedRoutineLogs`), solo se ignora en los
+  // cálculos de "¿está la semana completa?".
+  const completionLogs = useMemo(
+    () =>
+      todayWorkoutStatus === 'in-progress' && todayLog
+        ? displayedRoutineLogs.filter((log) => log.id !== todayLog.id)
+        : displayedRoutineLogs,
+    [displayedRoutineLogs, todayWorkoutStatus, todayLog]
+  );
+  const completionStateLogs = useMemo(
+    () =>
+      todayWorkoutStatus === 'in-progress' && todayLog
+        ? state.logs.filter((log) => log.id !== todayLog.id)
+        : state.logs,
+    [state.logs, todayWorkoutStatus, todayLog]
+  );
+
   const weeklyProgress = useMemo(
-    () => buildWeekProgress(state.logs, displayedRoutineId, activeDays),
-    [activeDays, state.logs, displayedRoutineId]
+    () =>
+      buildWeekProgress(completionStateLogs, displayedRoutineId, activeDays),
+    [activeDays, completionStateLogs, displayedRoutineId]
   );
   const chartWidth = Math.max(
     250,
@@ -272,44 +339,6 @@ export function HomeScreen({
     return { symbol, styleKey, display, kind };
   };
 
-  const todayWorkoutStatus = useMemo(():
-    | 'none'
-    | 'in-progress'
-    | 'completed' => {
-    const todayKey = new Date().toISOString().split('T')[0];
-    const todayLog = displayedRoutineLogs.find((log) =>
-      log.date
-        ? log.date === todayKey
-        : new Date(log.createdAt).toISOString().split('T')[0] === todayKey
-    );
-    if (!todayLog) return 'none';
-
-    let todayDay: WorkoutDay | undefined;
-    for (const routine of state.routines) {
-      const day = routine.days.find((d) => d.id === todayLog.dayId);
-      if (day) {
-        todayDay = day;
-        break;
-      }
-    }
-
-    if (!todayDay || todayDay.exercises.length === 0) return 'completed';
-
-    // Un ejercicio está completo cuando alcanza su número de series objetivo
-    // (mismo criterio que `isTargetCompleted` en WorkoutLogScreen), no con que
-    // tenga solo una serie metida: si falta una serie del objetivo, el
-    // entrenamiento sigue en progreso.
-    const allFilled = todayDay.exercises.every((ex) => {
-      const exLog = todayLog.exercises.find(
-        (e: ExerciseLog) => e.exerciseId === ex.id
-      );
-      const setsCount = exLog?.parsedSets?.length ?? 0;
-      const targetSets = ex.targetSets && ex.targetSets > 0 ? ex.targetSets : 1;
-      return setsCount >= targetSets;
-    });
-    return allFilled ? 'completed' : 'in-progress';
-  }, [displayedRoutineLogs, state.routines]);
-
   const handleStartPress = () => {
     if (hasNoRoutines) {
       onCreateRoutine?.();
@@ -335,19 +364,11 @@ export function HomeScreen({
     }
 
     // Entrenamiento iniciado pero con ejercicios pendientes: abrir directamente
-    if (todayWorkoutStatus === 'in-progress') {
-      const todayKey = new Date().toISOString().split('T')[0];
-      const todayLog = displayedRoutineLogs.find((log) =>
-        log.date
-          ? log.date === todayKey
-          : new Date(log.createdAt).toISOString().split('T')[0] === todayKey
-      );
-      if (todayLog) {
-        const todayDay = getDay(todayLog.dayId);
-        if (todayDay) {
-          onSelectDay(todayDay);
-          return;
-        }
+    if (todayWorkoutStatus === 'in-progress' && todayLog) {
+      const todayDay = getDay(todayLog.dayId);
+      if (todayDay) {
+        onSelectDay(todayDay);
+        return;
       }
     }
 
@@ -416,19 +437,39 @@ export function HomeScreen({
     return { groupedByBlock, blocks, currentWeekBlock: blocks[0] };
   }, [displayedRoutineLogs]);
 
+  // Mismo agrupado, pero sobre `completionLogs` (sin el día de hoy si está a
+  // medias): se usa para todo lo que decide si un día/semana cuenta como
+  // "entrenado" (racha, semana completada, gráfica), NUNCA para lo que se
+  // pinta en el historial (eso sigue usando `groupedByBlock`, que sí incluye
+  // el log de hoy para poder seguir editándolo). El log de hoy solo puede
+  // afectar al ÚLTIMO bloque (es el más reciente por fecha), así que los
+  // números de bloque coinciden con `groupedByBlock` para todo lo anterior.
+  const completionGroupedByBlock = useMemo(
+    () =>
+      groupLogsIntoWeekBlocks(
+        completionLogs,
+        (log) => getDay(log.dayId)?.dayNumber
+      ),
+    [completionLogs]
+  );
+
   // Racha de semanas completas y si nunca se ha faltado a un día.
   const streak = useMemo(
-    () => computeStreak(groupedByBlock, activeDays),
-    [groupedByBlock, activeDays]
+    () => computeStreak(completionGroupedByBlock, activeDays),
+    [completionGroupedByBlock, activeDays]
   );
 
   // Semana en curso completada: todos los días de la rutina activa entrenados en
   // el bloque más reciente. Es la condición que convierte la tarjeta principal en
-  // "¡Semana completada!" y habilita la imagen de logros.
+  // "¡Semana completada!" y habilita la imagen de logros. Usa el bloque de
+  // completitud: un día de hoy a medias no puede "cerrar" la semana.
   const currentWeekLogsBlock = groupedByBlock[currentWeekBlock] || [];
   const isCurrentWeekCompleted =
     isDisplayedRoutineActive &&
-    isWeekCompleted(currentWeekLogsBlock, activeDays);
+    isWeekCompleted(
+      completionGroupedByBlock[currentWeekBlock] || [],
+      activeDays
+    );
 
   // El botón/tarjeta "¡Semana completada!" solo está disponible el mismo día en que
   // se completó la semana (hay algún log del bloque con fecha de hoy). Al día
@@ -488,13 +529,19 @@ export function HomeScreen({
     () =>
       chartDayFilter
         ? buildWeekProgress(
-            state.logs,
+            completionStateLogs,
             displayedRoutineId,
             activeDays,
             chartDayFilter
           )
         : weeklyProgress,
-    [chartDayFilter, weeklyProgress, state.logs, displayedRoutineId, activeDays]
+    [
+      chartDayFilter,
+      weeklyProgress,
+      completionStateLogs,
+      displayedRoutineId,
+      activeDays,
+    ]
   );
 
   // Opciones del filtro de la gráfica: la semana completa (por defecto) o cada
@@ -978,7 +1025,7 @@ export function HomeScreen({
               {blocks.map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
                 const weekCompleted = isWeekCompleted(
-                  groupedByBlock[block],
+                  completionGroupedByBlock[block] || [],
                   activeDays
                 );
                 // Si la rutina no es activa, todas las semanas están colapsadas
@@ -993,8 +1040,8 @@ export function HomeScreen({
                   block === 1
                     ? null
                     : getWeekImprovement(
-                        groupedByBlock[block] || [],
-                        groupedByBlock[block - 1] || [],
+                        completionGroupedByBlock[block] || [],
+                        completionGroupedByBlock[block - 1] || [],
                         activeDays
                       );
                 const isCurrentWeek =
@@ -1126,9 +1173,10 @@ export function HomeScreen({
                               ]}
                               onPress={() => {
                                 if (isToday) {
-                                  // Hoy: mostrar modal con opciones (editar / eliminar)
-                                  setLogWithOptionsId(log.id);
-                                  setSelectedLogDayForOptions(day);
+                                  // Hoy: toque directo continúa/edita el registro
+                                  // (lo que se quiere el 95% de las veces). El
+                                  // ⋯ sigue dando acceso a eliminar.
+                                  onEditLog?.(log, day);
                                 } else {
                                   // Días pasados: ir directamente a la vista de detalle
                                   onSelectLog?.(log, day);
@@ -1286,17 +1334,18 @@ export function HomeScreen({
         onCancel={closeDeleteLogModal}
       />
 
-      {!hasNoRoutines && (
-        <FloatingPrimaryNav
-          bottom={floatingNavBottom}
-          activeTab="home"
-          showCardio={showCardioTab}
-          onPressHome={onNavigateHome}
-          onPressCardio={onNavigateCardio}
-          onPressCalendar={onNavigateCalendar}
-          onPressProfile={onNavigateProfile}
-        />
-      )}
+      {/* La nav se muestra siempre, también con la BD vacía: si no, no hay
+          forma de llegar a Perfil → Datos → Importar en el primer arranque
+          (restaurar un backup tras reinstalar o cambiar de móvil). */}
+      <FloatingPrimaryNav
+        bottom={floatingNavBottom}
+        activeTab="home"
+        showCardio={showCardioTab}
+        onPressHome={onNavigateHome}
+        onPressCardio={onNavigateCardio}
+        onPressCalendar={onNavigateCalendar}
+        onPressProfile={onNavigateProfile}
+      />
 
       <GlassTopBar
         title={t('Inicio')}
@@ -1358,9 +1407,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: theme.borderRadius.pill,
-    backgroundColor: 'rgba(255, 149, 0, 0.12)',
+    backgroundColor: theme.colors.emoji_orangeMuted,
     borderWidth: 1,
-    borderColor: 'rgba(255, 149, 0, 0.35)',
+    borderColor: theme.colors.emoji_orangeMutedBorder,
   },
   streakEmoji: {
     fontSize: 15,
@@ -1577,15 +1626,15 @@ const styles = StyleSheet.create({
   },
   historyLogBadgeUp: {
     color: theme.colors.success,
-    backgroundColor: 'rgba(52, 199, 89, 0.12)',
+    backgroundColor: theme.colors.successMuted,
   },
   historyLogBadgeDown: {
     color: theme.colors.error,
-    backgroundColor: 'rgba(255, 69, 58, 0.12)',
+    backgroundColor: theme.colors.errorMuted,
   },
   historyLogBadgeNeutral: {
     color: theme.colors.warning,
-    backgroundColor: 'rgba(255, 196, 0, 0.12)',
+    backgroundColor: theme.colors.warningMuted,
   },
   logOptionsButton: {
     padding: 2,

@@ -192,6 +192,7 @@ export function DetailScreen({ log, day, onBack }: DetailScreenProps) {
             <ExerciseResultDisplay
               key={exercise.id}
               exerciseName={exercise.name}
+              catalogId={exercise.catalogId}
               targetSets={exercise.targetSets}
               targetReps={exercise.targetReps as string | number | undefined}
               rawInput={selectedExercise?.rawInput || '-'}

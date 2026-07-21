@@ -6,9 +6,12 @@ import { getSetPerformanceScore } from '@lib/progress';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { GradientFill } from './GradientFill';
+import { ExerciseGifButton } from './ExerciseGifButton';
 
 interface ExerciseResultDisplayProps {
   exerciseName: string;
+  // Id del catálogo del ejercicio (si viene de ahí), para la lupa de consulta.
+  catalogId?: string;
   rawInput: string;
   parsedSets: ParsedSet[];
   notes?: string;
@@ -59,6 +62,7 @@ const STATUS_COLOR: Record<ComparisonStatus, string> = {
 
 export function ExerciseResultDisplay({
   exerciseName,
+  catalogId,
   rawInput,
   parsedSets,
   notes,
@@ -105,6 +109,7 @@ export function ExerciseResultDisplay({
         <Text style={styles.exerciseName} numberOfLines={2}>
           {exerciseName}
         </Text>
+        <ExerciseGifButton name={exerciseName} catalogId={catalogId} size={18} />
         {!!improvementText && (
           <Text
             style={[

@@ -9,6 +9,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.3',
+    items: [
+      'Nuevo buscador de ejercicios con vídeo de referencia: al montar o editar los ejercicios de un día, toca la lupa y elige entre más de 1.300 ejercicios (buscables en español o inglés, con filtro por zona del cuerpo y una miniatura de cada uno). Al elegir uno se rellena el nombre solo.',
+      'Ahora puedes ver cómo se hace cada ejercicio: un botón de play abre su vídeo de referencia, tanto mientras entrenas como al mirar un día que ya hiciste. Los vídeos se descargan solo cuando los abres, así que no ocupan sitio en el móvil.',
+      'Tocar la tarjeta de hoy en Inicio continúa tu entrenamiento directamente, sin pasar antes por un menú. Para borrarlo, usa el botón de los tres puntos de la tarjeta.',
+      'Ya puedes restaurar una copia de seguridad desde el primer momento, con la app recién instalada y sin ninguna rutina creada. Ideal si cambias de móvil o reinstalas.',
+      'Un día dejado a medias ya no cuenta como semana entrenada ni suma en la gráfica ni en la racha. En cuanto lo terminas, vuelve a contar como siempre.',
+      'Al elegir una sesión que ya tenías empezada hoy, la app la abre para seguir metiendo series, en vez de volver a Inicio sin avisar.',
+      'El botón físico de atrás del móvil ahora te lleva justo a donde esperas, igual que el botón "Volver" de cada pantalla.',
+      'Si escribes un valor imposible en una serie (un símbolo raro, un número negativo o un peso o repeticiones disparatados), la app te avisa de qué ha pasado en cada caso y no deja que estropee tus gráficas.',
+      'Mejorar en un ejercicio de peso corporal ya no te penaliza: añadir algo de lastre siempre sube la nota, nunca la baja.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.2',
     items: [
       'Nuevo Progreso por ejercicio (en Perfil): elige un ejercicio y ve cómo ha ido sesión a sesión, con tus récords de peso, repeticiones y mejor sesión, cada uno con su fecha. Aunque cambies de rutina, el histórico del ejercicio sigue entero.',

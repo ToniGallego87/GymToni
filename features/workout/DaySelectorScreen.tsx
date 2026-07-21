@@ -277,11 +277,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+    backgroundColor: theme.colors.emoji_blueMuted,
   },
   cardioOnlyBadge: {
     color: theme.colors.emoji_blue,
-    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+    backgroundColor: theme.colors.emoji_blueMuted,
   },
   dayCardPressed: {
     opacity: 0.85,

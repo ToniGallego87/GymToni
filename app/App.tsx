@@ -207,26 +207,83 @@ function AppContent() {
     }
   }, [hydrated]);
 
-  // Manejar botón atrás en móvil
+  // Navegación "atrás" compartida entre el botón físico de Android y el
+  // "Volver" en pantalla de cada vista: una sola función por pantalla para
+  // que ambos caminos lleven siempre al mismo sitio.
+  const goHome = () => setScreen({ type: 'home' });
+  const goProfile = () => setScreen({ type: 'profile' });
+  const backFromRoutineSelector = (origin?: 'home' | 'profile') =>
+    setScreen({ type: origin === 'home' ? 'home' : 'profile' });
+  const backFromWorkoutLog = (origin?: 'home' | 'calendar' | 'cardio') =>
+    setScreen({ type: origin ?? 'home' });
+  const backFromDetail = (origin: 'home' | 'calendar' | 'cardio') =>
+    setScreen({
+      type:
+        origin === 'calendar'
+          ? 'calendar'
+          : origin === 'cardio'
+          ? 'cardio'
+          : 'home',
+    });
+  const backFromRoutineDetails = (origin?: 'home' | 'profile') =>
+    setScreen({ type: 'routine-selector', origin });
+  const backToNewRoutine = () => setScreen({ type: 'new-routine' });
+
+  // Manejar botón atrás físico en móvil: debe reproducir el mismo destino que
+  // el "Volver" en pantalla (arriba), no saltar siempre a Inicio. Antes
+  // Configuración/Datos/Progreso volvían a Inicio con el físico pero a Perfil
+  // con el botón en pantalla, y un detalle abierto desde Calendario/Cardio
+  // ignoraba el origen.
   useEffect(() => {
     if (Platform.OS === 'android' || Platform.OS === 'ios') {
       const backHandler = BackHandler.addEventListener(
         'hardwareBackPress',
         () => {
-          if (screen.type === 'home') {
-            // Permitir que salga de la app desde la pantalla de inicio
-            return false;
-          } else {
-            // En cualquier otra pantalla, volver a inicio
-            setScreen({ type: 'home' });
-            return true;
+          switch (screen.type) {
+            case 'home':
+              // Permitir que salga de la app desde la pantalla de inicio
+              return false;
+            case 'cardio':
+            case 'calendar':
+            case 'profile':
+            case 'day-selector':
+            case 'new-routine':
+            case 'week-achievement':
+              // Pantallas sin "Volver" propio en pantalla (navegación inferior
+              // o destino final de un flujo corto): el físico vuelve a Inicio,
+              // igual que antes.
+              goHome();
+              return true;
+            case 'routine-selector':
+              backFromRoutineSelector(screen.origin);
+              return true;
+            case 'workout-log':
+              backFromWorkoutLog(screen.origin);
+              return true;
+            case 'detail':
+              backFromDetail(screen.origin);
+              return true;
+            case 'settings':
+            case 'data':
+            case 'exercise-progress':
+              goProfile();
+              return true;
+            case 'routine-details':
+              backFromRoutineDetails(screen.origin);
+              return true;
+            case 'qr-scanner':
+              backToNewRoutine();
+              return true;
+            default:
+              goHome();
+              return true;
           }
         }
       );
 
       return () => backHandler.remove();
     }
-  }, [screen.type]);
+  }, [screen]);
 
   const activeRoutine = useMemo(
     () =>
@@ -443,9 +500,7 @@ function AppContent() {
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
-          onBack={() =>
-            setScreen({ type: screen.origin === 'home' ? 'home' : 'profile' })
-          }
+          onBack={() => backFromRoutineSelector(screen.origin)}
         />
       )}
 
@@ -501,21 +556,11 @@ function AppContent() {
         <DaySelectorScreen
           routine={displayedRoutine}
           onSelectDay={(day, startsNewWeek) => {
-            // Si la rutina mostrada ya tiene un log de hoy para este día, volver a home
-            const today = new Date().toISOString().split('T')[0];
-            const hasLogToday = state.logs.some(
-              (log) =>
-                log.dayId === day.id &&
-                log.routineId === displayedRoutine?.id &&
-                (log.date === today ||
-                  new Date(log.createdAt).toISOString().split('T')[0] === today)
-            );
-
-            if (hasLogToday) {
-              setScreen({ type: 'home' });
-            } else {
-              setScreen({ type: 'workout-log', day, startsNewWeek });
-            }
+            // Si el día ya tiene un log de hoy, WorkoutLogScreen lo detecta solo
+            // (getLatestTodayLog) y abre ese registro para seguir metiendo series,
+            // igual que la hero "Continúa tu entrenamiento": no hay que volver a
+            // Inicio en silencio, eso solo confunde ("¿no ha funcionado el toque?").
+            setScreen({ type: 'workout-log', day, startsNewWeek });
           }}
           onSelectCardioOnly={() =>
             setScreen({
@@ -524,7 +569,7 @@ function AppContent() {
               cardioOnly: true,
             })
           }
-          onBack={() => setScreen({ type: 'home' })}
+          onBack={goHome}
         />
       )}
 
@@ -534,8 +579,8 @@ function AppContent() {
           log={screen.log}
           startsNewWeek={screen.startsNewWeek}
           cardioOnly={screen.cardioOnly}
-          onSave={() => setScreen({ type: screen.origin ?? 'home' })}
-          onBack={() => setScreen({ type: screen.origin ?? 'home' })}
+          onSave={() => backFromWorkoutLog(screen.origin)}
+          onBack={() => backFromWorkoutLog(screen.origin)}
         />
       )}
 
@@ -543,16 +588,7 @@ function AppContent() {
         <DetailScreen
           log={screen.log}
           day={screen.day}
-          onBack={() =>
-            setScreen({
-              type:
-                screen.origin === 'calendar'
-                  ? 'calendar'
-                  : screen.origin === 'cardio'
-                  ? 'cardio'
-                  : 'home',
-            })
-          }
+          onBack={() => backFromDetail(screen.origin)}
         />
       )}
 
@@ -594,12 +630,10 @@ function AppContent() {
         />
       )}
 
-      {screen.type === 'settings' && (
-        <SettingsScreen onBack={() => setScreen({ type: 'profile' })} />
-      )}
+      {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
 
       {screen.type === 'exercise-progress' && (
-        <ExerciseProgressScreen onBack={() => setScreen({ type: 'profile' })} />
+        <ExerciseProgressScreen onBack={goProfile} />
       )}
 
       {screen.type === 'data' && (
@@ -607,7 +641,7 @@ function AppContent() {
           onImportData={handleImportData}
           onExportData={handleExportData}
           onClearData={handleClearData}
-          onBack={() => setScreen({ type: 'profile' })}
+          onBack={goProfile}
         />
       )}
 
@@ -622,7 +656,7 @@ function AppContent() {
           }
           existingRoutineCount={state.routines.length}
           onCreateRoutine={handleCreateRoutine}
-          onBack={() => setScreen({ type: 'home' })}
+          onBack={goHome}
           onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
           initialDays={screen.initialDays}
         />
@@ -631,9 +665,7 @@ function AppContent() {
       {screen.type === 'routine-details' && (
         <RoutineDetailScreen
           routine={screen.routine}
-          onBack={() =>
-            setScreen({ type: 'routine-selector', origin: screen.origin })
-          }
+          onBack={() => backFromRoutineDetails(screen.origin)}
         />
       )}
 
@@ -642,7 +674,7 @@ function AppContent() {
           onScanSuccess={(shared: SharedRoutine) =>
             setScreen({ type: 'new-routine', initialDays: shared.days })
           }
-          onBack={() => setScreen({ type: 'new-routine' })}
+          onBack={backToNewRoutine}
         />
       )}
 
@@ -650,7 +682,7 @@ function AppContent() {
         <WeekAchievementScreen
           achievements={screen.achievements}
           routineName={screen.routineName}
-          onBack={() => setScreen({ type: 'home' })}
+          onBack={goHome}
         />
       )}
     </View>

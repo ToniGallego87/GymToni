@@ -22,6 +22,7 @@ import {
   buildCardioDays,
   buildCardioWeeks,
   buildCardioMonths,
+  disciplineIconName,
   formatMergedResults,
   fmtNum,
   hasIncline,
@@ -73,25 +74,15 @@ const dayMonth = (dateStr: string) =>
     .toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })
     .replace('.', '');
 
-// Icono de la disciplina; distinto si hay pendiente (cuesta arriba).
-function disciplineIcon(
+// Icono de la disciplina (cuesta arriba si hay pendiente): la lógica vive en
+// lib/cardio (disciplineIconName); aquí solo se castea al tipo del icono.
+const disciplineIcon = (
   type: string,
-  hasIncline: boolean
-): React.ComponentProps<typeof MaterialCommunityIcons>['name'] {
-  const t = type.toLowerCase();
-  if (hasIncline) return 'slope-uphill';
-  if (t.includes('andar') || t.includes('walk')) return 'walk';
-  if (t.includes('bici') || t.includes('bike')) return 'bike';
-  if (
-    t.includes('elíptica') ||
-    t.includes('eliptica') ||
-    t.includes('elliptical')
-  )
-    return 'human-handsup';
-  if (t.includes('correr') || t.includes('cinta') || t.includes('run'))
-    return 'run-fast';
-  return 'run';
-}
+  incline: boolean
+): React.ComponentProps<typeof MaterialCommunityIcons>['name'] =>
+  disciplineIconName(type, incline) as React.ComponentProps<
+    typeof MaterialCommunityIcons
+  >['name'];
 
 // "jul" a partir de un mes.
 const monthLabel = (m: CardioMonth) =>
@@ -537,7 +528,9 @@ export function CardioScreen({
                   />
                 )}
                 <SegmentedFilter
+                  style={{ width: chartWidth }}
                   options={METRIC_OPTIONS}
+                  labelMode="below"
                   value={metric.id}
                   onChange={(id) => {
                     const next = CHART_METRICS.findIndex((m) => m.id === id);

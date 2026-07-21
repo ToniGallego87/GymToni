@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(0, 122, 255, 0.14)',
+    backgroundColor: theme.colors.emoji_blueMuted,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,

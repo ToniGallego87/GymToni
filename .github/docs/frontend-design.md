@@ -105,6 +105,10 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
 
 - **`Button`** — acción estándar. Variants: `primary` (gradiente dorado),
   `secondary` (surface + borde), `danger` (gradiente rojo). Sizes s/m/l.
+- **`GradientCtaButton`** — el CTA hero (gradiente dorado + sheen + encogido al
+  pulsar) de "Guardar" del registro y "Crear rutina". No recrearlo a mano.
+- **`GymIconGrid`** — rejilla del selector de icono de día (modales de Nueva
+  rutina y detalle de rutina).
 - **`ConfirmModal`** — TODA confirmación (eliminar, importar, limpiar).
   Overlay `colors.overlay`, tarjeta surface centrada (max 340), título 18/800
   centrado con icono, botones `Button`. No montar `Modal` a mano para un confirm.

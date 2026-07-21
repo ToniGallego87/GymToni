@@ -48,7 +48,8 @@
   (los únicos hex viven en `lib/theme.ts` y `components/glassTokens.ts`)
 - Degradados desde `theme.gradients` (`primary`, `success`, `danger`, `warning`, `amber`, `sheen`);
   no duplicar los tríos de color
-- Texto/iconos sobre fondo amarillo (`primary`): siempre `theme.colors.darkGray` (contraste)
+- Texto/iconos sobre fondo dorado (`primaryFill`/gradientes de oro): siempre `theme.colors.onGold`;
+  sobre rellenos sólidos rojo/verde, `theme.colors.onDanger` (ver frontend-design.md)
 
 ### Patrones UI compartidos
 

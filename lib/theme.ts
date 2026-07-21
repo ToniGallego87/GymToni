@@ -22,9 +22,6 @@ const darkColors = {
   // contorno de checkboxes. Como no es texto le basta 3:1, así que en día puede
   // ser bastante más amarillo que la tinta. En noche es el oro de siempre.
   primaryLine: '#F7CC3D',
-  darkGray: '#101318',
-  gray: '#1E232D',
-  mediumGray: '#232734',
   lightGray: '#8A90A2',
   veryLightGray: '#D7DBE3',
   white: '#ffffff',
@@ -42,8 +39,7 @@ const darkColors = {
   // oscura lee como un halo suave, pero su inverso literal en día (#171B23) da
   // un aro casi negro con aspecto de pegatina. Ver lightColors.
   accentLine: '#ffffff',
-  // Fondo de inputs/controles hundidos. En oscuro coincide con darkGray (que
-  // se mantiene como tinta oscura sobre amarillo en AMBOS temas).
+  // Fondo de inputs/controles hundidos.
   inputBg: '#101318',
   // Tinta sobre el oro de superficie (`primaryFill` / `gradients.primary`). El
   // oro es vivo en AMBOS temas, así que la tinta es oscura en ambos.
@@ -53,24 +49,27 @@ const darkColors = {
   // coincidir: sobre el rojo profundo de día la tinta tiene que ser blanca.
   onDanger: '#101318',
   success: '#52C878',
-  successLight: '#7CD99A',
   error: '#F06A6A',
   errorLight: '#F59898',
   warning: '#FFB347',
   current: '#6F8FDF',
-  previous: '#FFB347',
   accent: '#F7CC3D',
   overlay: 'rgba(6, 8, 12, 0.72)',
   emoji_blue: '#6F8FDF',
-  emoji_purple: '#B189DA',
-  emoji_green: '#67B58C',
   emoji_orange: '#FF9500',
-  emoji_brown: '#A0633A',
+  // Tintes translúcidos (fondos de chip/badge) de los colores de arriba: mismo
+  // tono, alfa baja. Igual que `primaryMuted`, para que el modo día pueda
+  // ajustarlos (nada de rgba a mano sueltos en pantallas).
+  emoji_blueMuted: 'rgba(111, 143, 223, 0.14)',
+  emoji_orangeMuted: 'rgba(255, 149, 0, 0.12)',
+  emoji_orangeMutedBorder: 'rgba(255, 149, 0, 0.35)',
+  successMuted: 'rgba(82, 200, 120, 0.12)',
+  errorMuted: 'rgba(240, 106, 106, 0.12)',
+  warningMuted: 'rgba(255, 179, 71, 0.12)',
 };
 
 // Modo día: mismas CLAVES con roles invertidos donde toca. `white` funciona
-// como "tinta de acento" (blanca en noche, oscura en día); `darkGray` sigue
-// siendo tinta oscura porque siempre se pinta sobre el degradado amarillo.
+// como "tinta de acento" (blanca en noche, oscura en día).
 const lightColors: typeof darkColors = {
   // El oro de día se parte en dos roles porque un solo tono no puede servir a
   // los dos sobre un lienzo claro:
@@ -95,9 +94,6 @@ const lightColors: typeof darkColors = {
   // Ámbar: 3.2:1 sobre el fondo y 3.6:1 sobre las tarjetas. La tinta (`primary`)
   // aquí se leía marrón; el oro de relleno, en cambio, se perdería (1.6:1).
   primaryLine: '#B87A00',
-  darkGray: '#101318',
-  gray: '#E2E6EE',
-  mediumGray: '#D2D8E3',
   lightGray: '#7C8496',
   veryLightGray: '#3C4352',
   white: '#171B23',
@@ -122,19 +118,20 @@ const lightColors: typeof darkColors = {
   // Sobre los rojos/verdes profundos de día el blanco es la tinta que contrasta.
   onDanger: '#FFFFFF',
   success: '#1F8A49',
-  successLight: '#1A723D',
   error: '#C93B3B',
   errorLight: '#A82F2F',
   warning: '#B26E0E',
   current: '#3E60B8',
-  previous: '#B26E0E',
   accent: '#966100',
   overlay: 'rgba(13, 16, 23, 0.5)',
   emoji_blue: '#3E60B8',
-  emoji_purple: '#7E51B3',
-  emoji_green: '#357F57',
   emoji_orange: '#C26F00',
-  emoji_brown: '#96582F',
+  emoji_blueMuted: 'rgba(62, 96, 184, 0.14)',
+  emoji_orangeMuted: 'rgba(194, 111, 0, 0.12)',
+  emoji_orangeMutedBorder: 'rgba(194, 111, 0, 0.35)',
+  successMuted: 'rgba(31, 138, 73, 0.12)',
+  errorMuted: 'rgba(201, 59, 59, 0.12)',
+  warningMuted: 'rgba(178, 110, 14, 0.12)',
 };
 
 export const theme = {

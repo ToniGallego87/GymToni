@@ -1,11 +1,20 @@
 import { ParsedSet } from '../types';
 import { localizeDecimals } from './i18n';
 
+// Topes de cordura para peso/reps: por encima son claramente un error de
+// tecleo (p. ej. "2000x8" en vez de "20x8"), no una marca real. Compartido
+// entre la validación al añadir una serie (ExerciseInputField) y el parseo de
+// texto de series ya guardadas (esta función), para que un valor disparatado
+// no pueda colarse por ninguna de las dos vías.
+export const MAX_SET_WEIGHT_KG = 500;
+export const MAX_SET_REPS = 100;
+
 /**
  * Parsea un string de formato "60x8, 65x6, 65x4" a array de sets.
  * - Soporta decimales: "12.5x15".
  * - Soporta pesos combinados (p. ej. mancuernas) sumándolos: "8+8x11" -> { weight: 16, reps: 11 }.
- * - Ignora entradas sin reps ("80x") o con formato no reconocido.
+ * - Ignora entradas sin reps ("80x"), con formato no reconocido o fuera de
+ *   rango (MAX_SET_WEIGHT_KG / MAX_SET_REPS).
  * Retorna array vacío si no puede parsear nada.
  */
 export function parseSeriesString(input: string): ParsedSet[] {
@@ -28,7 +37,12 @@ export function parseSeriesString(input: string): ParsedSet[] {
         .reduce((total, part) => total + (parseFloat(part) || 0), 0);
       const reps = parseFloat(match[2]);
 
-      if (!isNaN(weight) && !isNaN(reps)) {
+      if (
+        !isNaN(weight) &&
+        !isNaN(reps) &&
+        weight <= MAX_SET_WEIGHT_KG &&
+        reps <= MAX_SET_REPS
+      ) {
         sets.push({ weight, reps });
       }
     }

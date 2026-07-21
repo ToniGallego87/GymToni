@@ -174,7 +174,7 @@ parseCardioString('Cinta: 22.5mins, 11.5kmh')
 - **Nativo**: SQLite (`expo-sqlite`, BD `gymbro.db`) via `lib/db/`. Esquema relacional:
   - Plan: `routines` → `workout_days` → `exercises` (FK `NOT NULL` + `ON DELETE CASCADE`).
   - Historial: `workout_logs` → `exercise_logs` → `log_sets`, más `cardio_logs` (1:1 con log). Referencias al plan débiles (`ON DELETE SET NULL`) para que el historial sobreviva a cambios de rutina; `exercise_name` es snapshot intencionado.
-  - `settings` (clave/valor): `active_routine_id` y la marca `initialized`.
+  - `settings` (clave/valor): `active_routine_id`, `selected_routine_id` y la marca `initialized`.
   - Convención FK: nombre de la tabla referenciada + `_id` (p. ej. `workout_days_id`). Ids GUID.
 - Migraciones por `PRAGMA user_version` (`lib/db/schema.ts`).
 - **Escrituras granulares** (`lib/persistence.ts`): el wrapper de `dispatch` traduce cada acción a su escritura mínima (upsert/borrado de una rutina, día o log; cambio de rutina activa), serializadas en una cola. `UPDATE_ROUTINE`/`UPDATE_DAY` hacen upsert preservando la identidad de rutina y días para no romper (`SET NULL`) las referencias del historial. `saveAppDataToDb` (reemplazo completo en transacción) se reserva para importación, migración legacy y seed inicial.

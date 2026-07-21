@@ -23,9 +23,15 @@ export {
   resolveDayIcon,
 } from './GymIcon';
 export type { GymIconName } from './GymIcon';
+export { GymIconGrid } from './GymIconGrid';
+export { GradientCtaButton } from './GradientCtaButton';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
+export type { InvalidAddReason } from './ExerciseInputField';
 export { ExerciseFormRow, ExerciseSummaryRow } from './ExerciseFormRow';
+export { ExercisePickerModal } from './ExercisePickerModal';
+export { GifViewerModal } from './GifViewerModal';
+export { ExerciseGifButton } from './ExerciseGifButton';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
 export { WhatsNewModal } from './WhatsNewModal';

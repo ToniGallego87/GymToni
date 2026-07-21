@@ -2,12 +2,6 @@ import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import { LinearGradient } from 'expo-linear-gradient';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppModal,
@@ -17,11 +11,12 @@ import {
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
+  GradientCtaButton,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
   GymIcon,
-  GYM_ICON_NAMES,
+  GymIconGrid,
   GYM_ICON_LABELS,
   detectGymIcon,
   Toast,
@@ -90,50 +85,6 @@ function buildDaysFromRoutineText(text: string): NewRoutineDayForm[] {
         exercises: exercises.length ? exercises : [createEmptyExercise()],
       };
     });
-}
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-// Botón principal estilo HeroCard (gradiente dorado), coherente con "Empezar entrenamiento".
-function CreateRoutineButton({ onPress }: { onPress: () => void }) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <AnimatedPressable
-      style={[styles.createWrapper, animatedStyle]}
-      onPress={onPress}
-      onPressIn={() => {
-        scale.value = withSpring(0.97, { damping: 18, stiffness: 320 });
-      }}
-      onPressOut={() => {
-        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
-      }}
-    >
-      <LinearGradient
-        colors={theme.gradients.primary}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.createGradient}
-      >
-        <LinearGradient
-          colors={theme.gradients.sheen}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 0, y: 1 }}
-          style={styles.createSheen}
-          pointerEvents="none"
-        />
-        <MaterialCommunityIcons
-          name="check-bold"
-          size={22}
-          color={theme.colors.onGold}
-        />
-        <Text style={styles.createText}>{t('Crear rutina')}</Text>
-      </LinearGradient>
-    </AnimatedPressable>
-  );
 }
 
 export function NewRoutineScreen({
@@ -544,7 +495,12 @@ export function NewRoutineScreen({
           </Pressable>
         </View>
 
-        <CreateRoutineButton onPress={handleCreate} />
+        <GradientCtaButton
+          icon="check-bold"
+          title={t('Crear rutina')}
+          onPress={handleCreate}
+          style={styles.createButton}
+        />
 
         {onScanRoutineQR && (
           <Pressable
@@ -645,40 +601,16 @@ export function NewRoutineScreen({
           />
         }
       >
-        <View style={styles.iconGrid}>
-          {GYM_ICON_NAMES.map((iconName) => {
+        <GymIconGrid
+          style={styles.iconGrid}
+          activeIcon={(() => {
             const day = days.find((d) => d.id === iconPickerDayId);
-            const active = day ? effectiveDayIcon(day) === iconName : false;
-            return (
-              <Pressable
-                key={iconName}
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  active && styles.iconButtonActive,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() =>
-                  iconPickerDayId && handleSelectIcon(iconPickerDayId, iconName)
-                }
-              >
-                <GymIcon
-                  name={iconName}
-                  size={30}
-                  color={active ? theme.colors.primary : theme.colors.white}
-                />
-                <Text
-                  style={[
-                    styles.iconButtonLabel,
-                    active && { color: theme.colors.primary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {t(GYM_ICON_LABELS[iconName])}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+            return day ? effectiveDayIcon(day) : null;
+          })()}
+          onSelect={(iconName) =>
+            iconPickerDayId && handleSelectIcon(iconPickerDayId, iconName)
+          }
+        />
       </AppModal>
 
       {toast && (
@@ -825,37 +757,8 @@ const styles = StyleSheet.create({
   dayChipTextDisabled: {
     color: theme.colors.textSecondary,
   },
-  createWrapper: {
-    borderRadius: theme.borderRadius.lg,
+  createButton: {
     marginTop: 4,
-    ...theme.shadow.card,
-  },
-  createGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderRadius: theme.borderRadius.lg,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    overflow: 'hidden',
-  },
-  createSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  createText: {
-    color: theme.colors.onGold,
-    fontFamily: theme.fonts.display,
-    fontSize: 22,
-    letterSpacing: 0.5,
-    // Anton pega los glifos al borde superior de su caja de línea; con
-    // includeFontPadding y lineHeight holgado se reserva sitio y no se corta arriba.
-    lineHeight: 30,
-    includeFontPadding: true,
   },
   qrButton: {
     flexDirection: 'row',
@@ -902,28 +805,5 @@ const styles = StyleSheet.create({
   },
   iconGrid: {
     marginTop: 12,
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-  },
-  iconButton: {
-    width: '30%',
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.inputBg,
-    alignItems: 'center',
-    gap: 6,
-  },
-  iconButtonActive: {
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.primary + '1A',
-  },
-  iconButtonLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
   },
 });

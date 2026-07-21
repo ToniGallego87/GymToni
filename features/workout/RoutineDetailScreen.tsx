@@ -24,9 +24,7 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
-  GymIcon,
-  GYM_ICON_NAMES,
-  GYM_ICON_LABELS,
+  GymIconGrid,
   resolveDayIcon,
   StretchScrollView,
   Toast,
@@ -483,43 +481,18 @@ export function RoutineDetailScreen({
           />
         }
       >
-        <View style={styles.iconGrid}>
-          {GYM_ICON_NAMES.map((iconName) => {
+        <GymIconGrid
+          style={styles.iconGrid}
+          activeIcon={(() => {
             const selectedDay = currentRoutine.days.find(
               (d) => d.id === selectedDayId
             );
-            const current = selectedDay
+            return selectedDay
               ? resolveDayIcon(selectedDay.emoji, selectedDay.name)
               : null;
-            const active = current === iconName;
-            return (
-              <Pressable
-                key={iconName}
-                style={({ pressed }) => [
-                  styles.iconButton,
-                  active && styles.iconButtonActive,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => handleSelectEmoji(iconName)}
-              >
-                <GymIcon
-                  name={iconName}
-                  size={30}
-                  color={active ? theme.colors.primary : theme.colors.white}
-                />
-                <Text
-                  style={[
-                    styles.iconButtonLabel,
-                    active && { color: theme.colors.primary },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {t(GYM_ICON_LABELS[iconName])}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
+          })()}
+          onSelect={handleSelectEmoji}
+        />
       </AppModal>
 
       <AppModal
@@ -927,30 +900,7 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   iconGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
     marginBottom: theme.spacing.sm,
-  },
-  iconButton: {
-    width: '30%',
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.inputBg,
-    alignItems: 'center',
-    gap: 6,
-  },
-  iconButtonActive: {
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.primary + '1A',
-  },
-  iconButtonLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
   },
   buttonPressed: {
     opacity: 0.8,

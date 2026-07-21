@@ -160,6 +160,11 @@ register({
   'Entrenamiento guardado': 'Workout saved',
   'Error al guardar.': 'Could not save.',
   'Rellena primero los datos': 'Fill in the data first',
+  'El peso y las repeticiones no pueden ser negativos':
+    'Weight and reps cannot be negative',
+  'Valor demasiado alto (máx. {max}kg / {reps} reps)':
+    'Value too high (max. {max}kg / {reps} reps)',
+  'Valor no válido: usa solo números': 'Invalid value: numbers only',
   'Rellena los ejercicios': 'Fill in the exercises',
   'Notas del ejercicio': 'Exercise notes',
   'Añade una nota (ej: muy cansado, fallo en última serie)':
@@ -173,6 +178,9 @@ register({
   Repeticiones: 'Reps',
   Segundos: 'Seconds',
   'Añadir serie': 'Add set',
+  Terminar: 'Finish',
+  Nota: 'Note',
+  'Completado · {a}/{b} series': 'Completed · {a}/{b} sets',
   Iniciar: 'Start',
   Parar: 'Stop',
   'Tiempo hasta la siguiente serie': 'Time until your next set',
