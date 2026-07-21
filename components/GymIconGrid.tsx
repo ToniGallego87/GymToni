@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import {
   Pressable,
@@ -58,7 +59,7 @@ export function GymIconGrid({ activeIcon, onSelect, style }: GymIconGridProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   iconGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -87,4 +88,9 @@ const styles = StyleSheet.create({
   buttonPressed: {
     opacity: 0.85,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

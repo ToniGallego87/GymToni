@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
@@ -137,7 +138,7 @@ export function HeroCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   wrapper: {
     marginHorizontal: theme.spacing.md,
     marginBottom: theme.spacing.md,
@@ -209,4 +210,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     opacity: 0.85,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

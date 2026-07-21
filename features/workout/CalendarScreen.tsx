@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
@@ -576,7 +577,7 @@ export function CalendarScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -755,4 +756,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 18,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

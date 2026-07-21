@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import {
   ActivityIndicator,
@@ -102,7 +103,7 @@ export function GifViewerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   stage: {
     marginTop: 12,
     aspectRatio: 1,
@@ -143,4 +144,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

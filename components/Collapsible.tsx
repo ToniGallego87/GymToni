@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useRef } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import Animated, {
@@ -96,7 +97,7 @@ export function Collapsible({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   measurer: {
     position: 'absolute',
     // Mismo ancho que la copia visible (que usa marginHorizontal negativo):
@@ -115,4 +116,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: SHADOW_BLEED,
     paddingBottom: SHADOW_BLEED_BOTTOM,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

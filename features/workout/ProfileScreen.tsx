@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
@@ -183,7 +184,7 @@ export function ProfileScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -287,4 +288,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.textMuted,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

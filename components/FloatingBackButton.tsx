@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -65,7 +66,7 @@ export function FloatingBackButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   floatingBackButton: {
     position: 'absolute',
     zIndex: 30,
@@ -103,4 +104,9 @@ const styles = StyleSheet.create({
   backButtonTextLight: {
     color: '#F5F7FA',
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

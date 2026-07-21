@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import {
   Pressable,
@@ -119,7 +120,7 @@ export function Button({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   button: {
     borderRadius: theme.borderRadius.md,
     ...theme.shadow.card,
@@ -144,4 +145,9 @@ const styles = StyleSheet.create({
     opacity: 0.92,
     transform: [{ scale: 0.99 }],
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

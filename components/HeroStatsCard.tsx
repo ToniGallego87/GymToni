@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
@@ -120,7 +121,7 @@ export function HeroStatsCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   hero: {
     marginHorizontal: theme.spacing.md,
     marginBottom: theme.spacing.md,
@@ -231,4 +232,9 @@ const styles = StyleSheet.create({
     marginTop: 2,
     textAlign: 'center',
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import {
   View,
@@ -339,7 +340,7 @@ export function CardioInputField({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     backgroundColor: theme.colors.surface,
     borderRadius: theme.borderRadius.md,
@@ -482,4 +483,9 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     minHeight: 40,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

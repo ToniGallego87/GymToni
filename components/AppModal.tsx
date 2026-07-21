@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { ReactNode } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -85,7 +86,7 @@ export function AppModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   overlay: {
     flex: 1,
     backgroundColor: theme.colors.overlay,
@@ -134,4 +135,9 @@ const styles = StyleSheet.create({
     gap: 10,
     marginTop: 18,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

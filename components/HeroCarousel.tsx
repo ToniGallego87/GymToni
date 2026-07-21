@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, View, Pressable } from 'react-native';
 import Animated, {
@@ -143,7 +144,7 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   wrapper: {
     position: 'relative',
   },
@@ -200,4 +201,9 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

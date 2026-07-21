@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { ParsedSet } from '../types';
@@ -162,7 +163,7 @@ export function ExerciseResultDisplay({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
@@ -279,4 +280,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 17,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

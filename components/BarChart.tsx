@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { theme } from '@lib/theme';
@@ -154,7 +155,7 @@ export function BarChart({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   wrapper: {
     marginTop: 12,
     flexDirection: 'row',
@@ -214,4 +215,9 @@ const styles = StyleSheet.create({
     paddingRight: 6,
     lineHeight: 16,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

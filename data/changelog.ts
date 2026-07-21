@@ -20,6 +20,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El botón físico de atrás del móvil ahora te lleva justo a donde esperas, igual que el botón "Volver" de cada pantalla.',
       'Si escribes un valor imposible en una serie (un símbolo raro, un número negativo o un peso o repeticiones disparatados), la app te avisa de qué ha pasado en cada caso y no deja que estropee tus gráficas.',
       'Mejorar en un ejercicio de peso corporal ya no te penaliza: añadir algo de lastre siempre sube la nota, nunca la baja.',
+      'Cambiar entre modo oscuro y claro es ahora instantáneo: la app ya no se reinicia al hacerlo (cambiar de idioma sí la sigue reiniciando).',
       'Ajustes internos para mejorar la estabilidad y el rendimiento.',
     ],
   },

@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -93,7 +94,7 @@ export function ConfirmModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   checkRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -127,4 +128,9 @@ const styles = StyleSheet.create({
   button: {
     flex: 1,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

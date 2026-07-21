@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   FlatList,
@@ -226,7 +227,7 @@ export function ExercisePickerModal({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -344,4 +345,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.8,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

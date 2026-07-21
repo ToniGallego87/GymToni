@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -42,7 +43,7 @@ export function GradientFill({ accent }: GradientFillProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   sheen: {
     position: 'absolute',
     top: 0,
@@ -50,4 +51,9 @@ const styles = StyleSheet.create({
     right: 0,
     height: '55%',
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import {
   Pressable,
@@ -134,7 +135,7 @@ export function SegmentedFilter<T extends string | undefined>({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   wrap: {
     marginTop: 18,
   },
@@ -191,4 +192,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     letterSpacing: 0.1,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

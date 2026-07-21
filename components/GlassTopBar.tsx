@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import {
   View,
@@ -120,7 +121,7 @@ export function GlassTopBar({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   topBarBackground: {
     position: 'absolute',
     top: 0,
@@ -182,4 +183,9 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     lineHeight: 19,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

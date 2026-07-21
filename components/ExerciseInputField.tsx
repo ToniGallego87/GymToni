@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useState, useRef, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -684,7 +685,7 @@ export function ExerciseInputField({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     backgroundColor: 'transparent',
     borderRadius: theme.borderRadius.md,
@@ -1009,4 +1010,9 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     fontSize: 14,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

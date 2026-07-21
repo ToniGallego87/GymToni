@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useMemo, useState, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -1367,7 +1368,7 @@ export function HomeScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -1651,4 +1652,9 @@ const styles = StyleSheet.create({
   modalButton: {
     flex: 1,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

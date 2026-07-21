@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import {
   View,
@@ -116,7 +117,7 @@ export function QRScannerScreen({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -229,4 +230,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
@@ -113,7 +114,7 @@ export function FloatingPrimaryNav({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   item: {
     flex: 1,
     borderRadius: 14,
@@ -152,4 +153,9 @@ const styles = StyleSheet.create({
   labelActive: {
     color: theme.colors.white,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

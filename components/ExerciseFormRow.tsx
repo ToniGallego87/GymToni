@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -318,7 +319,7 @@ export function ExerciseSummaryRow({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   exerciseRow: {
     backgroundColor: theme.colors.surfaceAlt,
     borderRadius: theme.borderRadius.sm,
@@ -505,4 +506,9 @@ const styles = StyleSheet.create({
   controlDisabled: {
     opacity: 0.4,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

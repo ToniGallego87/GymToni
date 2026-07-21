@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import { Pressable, StyleProp, StyleSheet, ViewStyle } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -70,7 +71,7 @@ export function ExerciseGifButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   button: {
     width: 34,
     height: 34,
@@ -84,4 +85,9 @@ const styles = StyleSheet.create({
   pressed: {
     opacity: 0.8,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

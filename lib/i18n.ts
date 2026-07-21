@@ -89,8 +89,8 @@ register({
   Oscuro: 'Dark',
   Claro: 'Light',
   Idioma: 'Language',
-  'El cambio de tema o idioma reinicia la app.':
-    'Changing the theme or language restarts the app.',
+  'El cambio de idioma reinicia la app.':
+    'Changing the language restarts the app.',
   'Cambiar tema': 'Change theme',
   'Cambiar idioma': 'Change language',
   'La app se reiniciará para aplicar el cambio. Tus datos no se tocan.':

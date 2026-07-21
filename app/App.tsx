@@ -52,7 +52,8 @@ import {
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
-import { theme } from '@lib/theme';
+import { theme, useThemeVersion } from '@lib/theme';
+import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import {
@@ -692,6 +693,10 @@ function AppContent() {
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
 export default function App() {
+  // Suscribe la RAÍZ del árbol al modo de tema: al cambiarlo (setThemeMode) todo
+  // el árbol se re-renderiza y cada componente relee sus `styles` vivos (ningún
+  // componente está memoizado, así que el re-render cascada llega a todos).
+  useThemeVersion();
   const [fontsLoaded] = useFonts({
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });
@@ -721,9 +726,15 @@ export default function App() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+  });
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

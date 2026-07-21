@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { forwardRef, ReactNode } from 'react';
 import { LayoutChangeEvent, ScrollViewProps, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -105,8 +106,13 @@ export const StretchScrollView = forwardRef<
   );
 });
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   grow: {
     flexGrow: 1,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

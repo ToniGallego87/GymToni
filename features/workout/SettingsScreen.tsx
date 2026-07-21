@@ -15,14 +15,14 @@ import {
   StretchScrollView,
   WhatsNewModal,
 } from '@components';
-import { theme, themeMode } from '@lib/theme';
+import { theme, setThemeMode } from '@lib/theme';
+import { subscribeTheme } from '@lib/themeStore';
 import { t, language } from '@lib/i18n';
 import {
   Language,
   ThemeMode,
   restartApp,
   setStoredLanguage,
-  setStoredThemeMode,
 } from '@lib/appSettings';
 import { CHANGELOG } from '@data/changelog';
 
@@ -30,10 +30,9 @@ interface SettingsScreenProps {
   onBack: () => void;
 }
 
-// Cambio pendiente de confirmar: tema o idioma (se aplican reiniciando).
-type PendingChange =
-  | { kind: 'theme'; value: ThemeMode }
-  | { kind: 'language'; value: Language };
+// Cambio de IDIOMA pendiente de confirmar (el idioma sí reinicia la app). El
+// tema, en cambio, se aplica en caliente al instante (setThemeMode), sin modal.
+type PendingChange = { kind: 'language'; value: Language };
 
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
@@ -52,13 +51,9 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
   const handleConfirmChange = () => {
     if (!pendingChange) return;
-    if (pendingChange.kind === 'theme') {
-      setStoredThemeMode(pendingChange.value);
-    } else {
-      setStoredLanguage(pendingChange.value);
-    }
+    setStoredLanguage(pendingChange.value);
     setPendingChange(null);
-    // Relanza el bundle para que theme.ts/i18n.ts se reevalúen con el nuevo valor.
+    // El idioma se lee al evaluar i18n.ts; relanzar el bundle lo reevalúa.
     restartApp();
   };
 
@@ -107,7 +102,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
           </View>
           <View style={styles.optionRow}>
             {themeOptions.map((option) => {
-              const active = themeMode === option.value;
+              const active = theme.mode === option.value;
               return (
                 <Pressable
                   key={option.value}
@@ -117,9 +112,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                     pressed && styles.pressed,
                   ]}
                   onPress={() => {
-                    if (!active) {
-                      setPendingChange({ kind: 'theme', value: option.value });
-                    }
+                    // Cambio de tema en caliente: se aplica al instante.
+                    if (!active) setThemeMode(option.value);
                   }}
                 >
                   <MaterialCommunityIcons
@@ -186,7 +180,7 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
             })}
           </View>
           <Text style={styles.sectionHint}>
-            {t('El cambio de tema o idioma reinicia la app.')}
+            {t('El cambio de idioma reinicia la app.')}
           </Text>
         </View>
 
@@ -255,7 +249,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () =>
+  StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: theme.colors.background,
@@ -356,4 +351,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: theme.colors.textMuted,
   },
+  });
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

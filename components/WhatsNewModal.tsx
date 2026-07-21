@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { Dimensions, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@lib/theme';
@@ -35,7 +36,7 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   list: {
     marginTop: 12,
     // La lista de novedades crece con cada versión: scrollea dentro de la
@@ -58,4 +59,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 21,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

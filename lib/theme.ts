@@ -1,13 +1,25 @@
-// Configuración de tema GymBro. El modo (oscuro/claro) se lee de forma
-// síncrona al evaluar el módulo (lib/appSettings) para que TODOS los
-// StyleSheet.create de la app, creados a nivel de módulo, capturen la paleta
-// correcta. Cambiar de tema requiere relanzar el bundle (SettingsScreen).
-import { getStoredThemeMode, ThemeMode } from './appSettings';
+// Configuración de tema GymBro. El modo (oscuro/claro) se aplica EN CALIENTE,
+// sin relanzar el bundle: `theme` es un singleton que se MUTA en su sitio al
+// cambiar de tema (setThemeMode) y los componentes se suscriben con
+// `useThemedStyles`, que recalcula sus StyleSheet y fuerza el re-render leyendo
+// la nueva paleta. El idioma (i18n) sí sigue reiniciando la app.
+import { useMemo } from 'react';
+import { useSyncExternalStore } from 'react';
+import {
+  getStoredThemeMode,
+  setStoredThemeMode,
+  ThemeMode,
+} from './appSettings';
+import {
+  getThemeVersion,
+  notifyThemeChange,
+  subscribeTheme,
+} from './themeStore';
 
-export const themeMode: ThemeMode = getStoredThemeMode();
-
-// Paleta original (modo noche).
-const darkColors = {
+// Paleta original (modo noche). Se exporta para superficies que van SIEMPRE en
+// oscuro con independencia del tema activo (p. ej. el póster de logros, que se
+// pinta sobre lienzo oscuro fijo). El resto de la app usa `theme.colors`.
+export const darkColors = {
   primary: '#F7CC3D',
   primaryDark: '#E5B82C',
   primaryLight: '#F9D85A',
@@ -134,13 +146,14 @@ const lightColors: typeof darkColors = {
   warningMuted: 'rgba(178, 110, 14, 0.12)',
 };
 
-export const theme = {
-  mode: themeMode,
+function buildTheme(mode: ThemeMode) {
+  return {
+  mode: mode,
   // Estilo de la barra de estado acorde al fondo del tema.
-  statusBarStyle: (themeMode === 'light' ? 'dark' : 'light') as
+  statusBarStyle: (mode === 'light' ? 'dark' : 'light') as
     | 'light'
     | 'dark',
-  colors: themeMode === 'light' ? lightColors : darkColors,
+  colors: mode === 'light' ? lightColors : darkColors,
 
   // Fuente display (Anton) para titulares. Cargada en App.tsx vía expo-font.
   fonts: {
@@ -154,20 +167,20 @@ export const theme = {
   // son un oro vivo (el bronce oscuro de antes se veía apagado sobre el lienzo
   // claro). El resto (verde/rojo/naranja) ya contrasta en ambos.
   gradients: {
-    primary: (themeMode === 'light'
+    primary: (mode === 'light'
       ? ['#FFCF43', '#F2B307', '#D19205']
       : ['#F9D85A', '#F7CC3D', '#E0B226']) as [string, string, string],
     success: ['#7CD99A', '#52C878', '#3DA866'] as [string, string, string],
     danger: ['#F59898', '#F06A6A', '#D85151'] as [string, string, string],
     warning: ['#FFC97A', '#FFB347', '#F2982C'] as [string, string, string],
-    amber: (themeMode === 'light'
+    amber: (mode === 'light'
       ? ['#FFC94F', '#F0A81C', '#C98505']
       : ['#F9D85A', '#F2B33D', '#E08A26']) as [string, string, string],
     // Sombreado del "peldaño" de las flechas del carrusel de heros: tinta oscura
     // translúcida, intensa en el borde exterior y desvanecida a nada hacia el
     // centro (ver HeroCarousel). En día pesa menos: sobre el oro vivo la misma
     // tinta que en noche ennegrecía el escalón.
-    heroStep: (themeMode === 'light'
+    heroStep: (mode === 'light'
       ? [
           'rgba(16, 19, 24, 0.15)',
           'rgba(16, 19, 24, 0.12)',
@@ -188,7 +201,7 @@ export const theme = {
     // Sheen de las tarjetas neutras (GradientFill). En noche es un velo mínimo;
     // en día tiene que ser mucho más blanco para dar volumen sobre superficies
     // ya claras (un 0.06 blanco sobre blanco es invisible).
-    cardSheen: (themeMode === 'light'
+    cardSheen: (mode === 'light'
       ? ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']
       : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']) as [string, string],
   },
@@ -252,7 +265,7 @@ export const theme = {
   // por sombras azuladas más suaves y con menos elevation (la sombra de
   // elevation en Android es negra sí o sí, así que se baja su intensidad).
   shadow:
-    themeMode === 'light'
+    mode === 'light'
       ? {
           card: {
             shadowColor: '#26314A',
@@ -285,7 +298,38 @@ export const theme = {
             elevation: 8,
           },
         },
-};
+  };
+}
+
+export type Theme = ReturnType<typeof buildTheme>;
+
+// Singleton VIVO del tema. Se MUTA en su sitio en setThemeMode (Object.assign)
+// para que el JSX (theme.colors.x) y las fábricas de estilos lean la paleta
+// nueva en el siguiente render, sin recrear el módulo.
+export const theme: Theme = buildTheme(getStoredThemeMode());
+
+// Cambia el modo de tema en caliente: muta el singleton, persiste y avisa a los
+// suscriptores (glassTokens recalcula sus tokens; los componentes se re-renderizan).
+export function setThemeMode(mode: ThemeMode): void {
+  if (mode === theme.mode) return;
+  Object.assign(theme, buildTheme(mode));
+  setStoredThemeMode(mode);
+  notifyThemeChange();
+}
+
+// Suscribe el componente a los cambios de tema (re-render en cada cambio).
+export function useThemeVersion(): number {
+  return useSyncExternalStore(subscribeTheme, getThemeVersion, getThemeVersion);
+}
+
+// Crea (y memoiza por versión de tema) los estilos del componente a partir de
+// una fábrica que lee el `theme` vivo. Sustituye al patrón de módulo
+// `const styles = StyleSheet.create({...})`, que capturaba la paleta una vez.
+export function useThemedStyles<T>(factory: () => T): T {
+  const version = useThemeVersion();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  return useMemo(factory, [version]);
+}
 
 type DayAccentTarget =
   | {

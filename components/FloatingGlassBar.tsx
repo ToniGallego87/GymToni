@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
@@ -69,7 +70,7 @@ export function FloatingGlassBar({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   container: {
     position: 'absolute',
     zIndex: 30,
@@ -123,4 +124,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

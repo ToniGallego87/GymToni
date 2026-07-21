@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
@@ -73,7 +74,7 @@ export function GradientCtaButton({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   wrapper: {
     borderRadius: theme.borderRadius.lg,
     ...theme.shadow.card,
@@ -105,4 +106,9 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     includeFontPadding: true,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

@@ -1,3 +1,4 @@
+import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
@@ -205,7 +206,7 @@ export function HeroWeightCard({
   );
 }
 
-const styles = StyleSheet.create({
+const makeStyles = () => StyleSheet.create({
   wrapper: {
     marginHorizontal: theme.spacing.md,
     marginBottom: theme.spacing.md,
@@ -289,4 +290,9 @@ const styles = StyleSheet.create({
     color: theme.colors.onGold,
     opacity: 0.7,
   },
+});
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

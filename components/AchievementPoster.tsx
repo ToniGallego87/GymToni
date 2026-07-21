@@ -12,7 +12,7 @@ import Svg, {
   Image as SvgImage,
 } from 'react-native-svg';
 import { WeekAchievements, SlotColor } from '@lib/achievements';
-import { theme } from '@lib/theme';
+import { darkColors } from '@lib/theme';
 import { t } from '@lib/i18n';
 
 // Lienzo vertical 9:16, ideal para historias/stories de redes.
@@ -23,13 +23,13 @@ export const POSTER_HEIGHT = 1920;
 // mismos colores de la app). PANEL_BORDER/TRACK son tonos propios del póster.
 // El póster se pinta siempre sobre lienzo oscuro (PANEL_BORDER/TRACK), así que
 // el oro es el de superficie: el bronce oscuro de la tinta de día se apagaba.
-const GOLD = theme.colors.primaryFill;
-const GOLD_SOFT = theme.colors.primaryFillLight;
-const GREEN = theme.colors.success;
+const GOLD = darkColors.primaryFill;
+const GOLD_SOFT = darkColors.primaryFillLight;
+const GREEN = darkColors.success;
 const PANEL_BORDER = '#2A2F3A';
 const TRACK = '#262B36';
-const TEXT = theme.colors.text;
-const MUTED = theme.colors.textSecondary;
+const TEXT = darkColors.text;
+const MUTED = darkColors.textSecondary;
 
 // Fuente display de la app (Anton, cargada en App.tsx). Se usa en los titulares,
 // números y etiquetas para que el póster sea coherente con el resto de la app.

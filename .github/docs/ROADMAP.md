@@ -40,16 +40,17 @@ tintes de color sueltos) se cerró y se retiró de aquí.
       `FloatingPrimaryNav` cuando `hasNoRoutines`), `features/workout/DataScreen.tsx:50`
       (`hasNoData`; la tarjeta de importar ya se muestra, falta el acceso).
       **Esfuerzo:** bajo.
-- [ ] **Tema/idioma sin reiniciar la app** — el reinicio está bien documentado
-      (los `StyleSheet.create` se evalúan a nivel de módulo y capturan la
-      paleta), pero es la fricción más visible de Configuración.
-      **Por qué:** cambiar un ajuste no debería cortar la sesión; hoy el cambio
-      relanza el bundle entero.
-      **Archivos:** `lib/theme.ts`, `lib/i18n.ts`,
-      `features/workout/SettingsScreen.tsx` y TODOS los `StyleSheet.create` de
-      módulo de la app (refactor grande: theming dinámico). Deuda anotada, no
-      abordar hasta que duela más.
-      **Esfuerzo:** alto.
+- [ ] **Idioma sin reiniciar la app** — el TEMA ya se aplica en caliente desde
+      la 0.6.3 (theming dinámico: `theme` singleton mutado + `themeStore` +
+      `makeStyles()` por componente). Falta el idioma, que sigue relanzando el
+      bundle porque `i18n` resuelve `language`/`dateLocale`/`decimalSeparator` al
+      evaluar el módulo y hay constantes con `t()` capturadas (incluye
+      `data/exerciseCatalog.ts`, cuyos nombres de ejercicio dependen del idioma).
+      **Por qué:** cambiar el idioma tampoco debería cortar la sesión.
+      **Archivos:** `lib/i18n.ts` (bindings vivos + versión de idioma como en
+      `themeStore`), `features/workout/SettingsScreen.tsx`, `data/exerciseCatalog.ts`
+      y los consumidores de `t()` en constantes de módulo. Deuda anotada.
+      **Esfuerzo:** medio.
 
 ## Nuevas funcionalidades
 
