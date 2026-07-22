@@ -56,6 +56,7 @@ export function AppModal({
   onOverlayPress,
 }: AppModalProps) {
   const centered = align === 'center';
+  const CardWrapper = onOverlayPress ? Pressable : View;
 
   return (
     <Modal
@@ -71,9 +72,14 @@ export function AppModal({
         // normales solo se cierran con botones): se desactiva el press.
         disabled={!onOverlayPress}
       >
-        {/* La tarjeta consume el toque para que pulsar dentro no dispare el
-            cierre del overlay. */}
-        <Pressable style={styles.card} onPress={() => {}}>
+        {/* Solo cuando el overlay cierra al tocar fuera, la tarjeta consume el
+            toque para que pulsar dentro no dispare ese cierre. Si no, es una
+            `View` normal: un `Pressable` aquí le robaría el gesto de arrastre a
+            un `ScrollView` del cuerpo (rompía el scroll del popup de novedades). */}
+        <CardWrapper
+          style={styles.card}
+          {...(onOverlayPress ? { onPress: () => {} } : {})}
+        >
           <View style={[styles.titleRow, centered && styles.titleRowCentered]}>
             {!!icon && (
               <MaterialCommunityIcons
@@ -96,7 +102,7 @@ export function AppModal({
           {children}
 
           {!!footer && <View style={styles.footer}>{footer}</View>}
-        </Pressable>
+        </CardWrapper>
       </Pressable>
     </Modal>
   );

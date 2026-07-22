@@ -82,6 +82,14 @@
 
 ### Correcciones
 
+- **El popup de novedades vuelve a scrollear** (`components/AppModal.tsx`): al
+  añadir `onOverlayPress` en 0.6.5 la tarjeta de todos los modales pasó a ser un
+  `Pressable`, que capturaba el gesto de arrastre y le robaba el scroll al
+  `ScrollView` del cuerpo; en el `WhatsNewModal` (lista de novedades larga) los
+  últimos puntos quedaban inaccesibles. Ahora la tarjeta solo es `Pressable`
+  cuando se pasa `onOverlayPress` (el modal de cardio, sin `ScrollView`); en el
+  resto es una `View` normal y el scroll interno vuelve a funcionar.
+
 - **Dos tests de `weeks` reconciliados con la fórmula de progreso de 0.6.3**
   (`lib/__tests__/weeks.test.ts`): `getWeekImprovement` y `buildWeekProgress`
   esperaban un 10% de mejora para 100→110 kg × 10 reps, el valor de la fórmula

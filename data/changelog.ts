@@ -19,6 +19,7 @@ export const CHANGELOG: ChangelogEntry[] = [
       'El menú de opciones (los tres puntos, arriba a la derecha) aparece ahora en todas las pantallas, siempre en el mismo sitio.',
       'En modo oscuro las tarjetas y las barras se distinguen mejor del fondo.',
       'Cuando ya has terminado el entrenamiento de hoy, tocar su tarjeta en Inicio lo abre para revisarlo o editarlo, en vez de no hacer nada.',
+      'Arreglado el popup de novedades: cuando la lista de cambios es larga, vuelve a poder deslizarse para leerla entera.',
       'Ajustes internos para mejorar la estabilidad y el rendimiento.',
     ],
   },
