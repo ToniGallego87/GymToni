@@ -215,7 +215,10 @@ describe('getWeekImprovement', () => {
 
     const improvement = getWeekImprovement(current, previous, days);
     expect(improvement?.isImproved).toBe(true);
-    expect(improvement?.percent).toBeCloseTo(10, 5);
+    // Epley sobre la carga virtual (peso + BODYWEIGHT_VIRTUAL_LOAD=10): 100→110kg
+    // ×10 reps da (120·4/3)/(110·4/3) − 1 = 9,0909%, no el 10% de la fórmula
+    // previa (peso a pelo). Ver progress.ts y UPDATES 0.6.3.
+    expect(improvement?.percent).toBeCloseTo(9.090909, 5);
   });
 
   it('sin días entrenados no hay nada que comparar', () => {
@@ -244,7 +247,8 @@ describe('buildWeekProgress', () => {
     expect(points).toHaveLength(2);
     expect(points[0]).toMatchObject({ week: 1, improvement: 0 });
     expect(points[1].week).toBe(2);
-    expect(points[1].improvement).toBeCloseTo(10, 1);
+    // 9,0909% con la carga virtual de progress.ts (ver test de getWeekImprovement).
+    expect(points[1].improvement).toBeCloseTo(9.1, 1);
   });
 
   it('marca en curso la última semana solo si le faltan días', () => {

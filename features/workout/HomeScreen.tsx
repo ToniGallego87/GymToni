@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -352,8 +352,13 @@ export function HomeScreen({
       return;
     }
 
-    // Entrenamiento del día completado: no hacer nada
+    // Entrenamiento del día completado: abrir el registro de hoy para revisarlo
+    // o editarlo (antes el toque no hacía nada y la tarjeta parecía rota).
     if (todayWorkoutStatus === 'completed') {
+      if (todayLog) {
+        const todayDay = getDay(todayLog.dayId);
+        if (todayDay) onEditLog?.(todayLog, todayDay);
+      }
       return;
     }
 
@@ -1368,291 +1373,292 @@ export function HomeScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  homeScrollContent: {
-    flexGrow: 1,
-  },
-  titleImage: {
-    width: 115,
-    height: 24,
-    alignSelf: 'flex-start',
-  },
-  progressCard: {
-    marginHorizontal: theme.spacing.md,
-    marginTop: theme.spacing.xs,
-    marginBottom: 0,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 2,
-    borderColor: theme.colors.primaryLine,
-    paddingVertical: 16,
-    paddingHorizontal: 0,
-    overflow: 'hidden',
-    alignItems: 'center',
-    ...theme.shadow.card,
-  },
-  streakChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'center',
-    gap: 7,
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: theme.borderRadius.pill,
-    backgroundColor: theme.colors.emoji_orangeMuted,
-    borderWidth: 1,
-    borderColor: theme.colors.emoji_orangeMutedBorder,
-  },
-  streakEmoji: {
-    fontSize: 15,
-    lineHeight: 18,
-  },
-  streakText: {
-    color: theme.colors.emoji_orange,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  progressHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  progressTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    // El nombre de la rutina lo pone el usuario: puede ser largo, así que la
-    // fila cede antes que el dato de mejora de la derecha.
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  deltaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  weekMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  progressTitleIcon: {
-    color: theme.colors.text,
-  },
-  progressToggleButton: {
-    paddingVertical: 0,
-    paddingHorizontal: 16,
-    width: '100%',
-  },
-  progressTitle: {
-    fontSize: 20,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.text,
-    lineHeight: 24,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    flexShrink: 1,
-    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-  },
-  progressLatest: {
-    fontSize: 17,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  progressEncourage: {
-    flexShrink: 1,
-    marginLeft: 12,
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.primary,
-    lineHeight: 17,
-    textAlign: 'right',
-  },
-  progressLatestUp: {
-    color: theme.colors.success,
-  },
-  progressLatestDown: {
-    color: theme.colors.error,
-  },
-  weeksSection: {
-    marginHorizontal: theme.spacing.md,
-    // Misma separación que hay entre la HeroCard y la tarjeta de la gráfica
-    // (HeroCard marginBottom md=16 + progressCard marginTop xs=6 = 22 = lg).
-    marginTop: theme.spacing.lg,
-    marginBottom: theme.spacing.md,
-  },
-  weekBlock: {
-    // Mismo ritmo vertical que Cardio: separación entre semanas = 10, y las
-    // tarjetas de día se separan 12 con su propio marginTop (ver historyLogCard).
-    marginBottom: 10,
-  },
-  weekHeaderButton: {
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    minHeight: 52,
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surface,
-    borderLeftWidth: 5,
-    borderColor: theme.colors.primaryLine,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    ...theme.shadow.soft,
-  },
-  weekTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  weekTitle: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.primary,
-    lineHeight: 26,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    // Anton se dibuja pegado al borde superior de su caja, así que hace falta un
-    // pequeño empuje hacia abajo para centrarlo frente al texto/icono de al lado.
-    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-  },
-  weekImprovementText: {
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  weekImprovementUp: {
-    color: theme.colors.success,
-  },
-  weekImprovementDown: {
-    color: theme.colors.error,
-  },
-  weekHeaderMeta: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    fontWeight: '700',
-    lineHeight: 16,
-  },
-  weekAchievementButton: {
-    padding: 4,
-    marginRight: 4,
-    borderRadius: theme.borderRadius.sm,
-  },
-  weekAchievementButtonPressed: {
-    opacity: 0.6,
-  },
-  historyLogCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    minHeight: 72,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  historyLogCardToday: {
-    borderColor: theme.colors.primaryLine,
-    borderWidth: 2.5,
-    borderLeftWidth: 2.5,
-    borderLeftColor: theme.colors.primaryLine,
-  },
-  historyLogCardPressed: {
-    opacity: 0.8,
-  },
-  historyLogHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  historyLogLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  historyLogAccent: {
-    marginLeft: -4,
-    marginRight: 12,
-  },
-  historyLogInfo: {
-    flex: 1,
-    minWidth: 0,
-  },
-  historyLogNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  historyLogDayName: {
-    fontSize: 19,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.text,
-    lineHeight: 22,
-  },
-  historyLogDate: {
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 16,
-    fontWeight: '500',
-  },
-  historyLogBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: theme.borderRadius.pill,
-    fontSize: 15,
-    fontFamily: theme.fonts.display,
-    fontWeight: '800',
-    overflow: 'hidden',
-    lineHeight: 18,
-    textAlign: 'center',
-    color: theme.colors.primaryLight,
-    backgroundColor: theme.colors.primaryMuted,
-  },
-  historyLogBadgeUp: {
-    color: theme.colors.success,
-    backgroundColor: theme.colors.successMuted,
-  },
-  historyLogBadgeDown: {
-    color: theme.colors.error,
-    backgroundColor: theme.colors.errorMuted,
-  },
-  historyLogBadgeNeutral: {
-    color: theme.colors.warning,
-    backgroundColor: theme.colors.warningMuted,
-  },
-  logOptionsButton: {
-    padding: 2,
-    marginRight: -4,
-    borderRadius: theme.borderRadius.sm,
-  },
-  logOptionsButtonPressed: {
-    opacity: 0.6,
-  },
-  modalButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalButton: {
-    flex: 1,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    homeScrollContent: {
+      flexGrow: 1,
+    },
+    titleImage: {
+      width: 115,
+      height: 24,
+      alignSelf: 'flex-start',
+    },
+    progressCard: {
+      marginHorizontal: theme.spacing.md,
+      marginTop: theme.spacing.xs,
+      marginBottom: 0,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 2,
+      borderColor: theme.colors.primaryLine,
+      paddingVertical: 16,
+      paddingHorizontal: 0,
+      overflow: 'hidden',
+      alignItems: 'center',
+      ...theme.shadow.card,
+    },
+    streakChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'center',
+      gap: 7,
+      marginHorizontal: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.emoji_orangeMuted,
+      borderWidth: 1,
+      borderColor: theme.colors.emoji_orangeMutedBorder,
+    },
+    streakEmoji: {
+      fontSize: 15,
+      lineHeight: 18,
+    },
+    streakText: {
+      color: theme.colors.emoji_orange,
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    progressHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    progressTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      // El nombre de la rutina lo pone el usuario: puede ser largo, así que la
+      // fila cede antes que el dato de mejora de la derecha.
+      flexShrink: 1,
+      minWidth: 0,
+    },
+    deltaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
+    weekMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
+    progressTitleIcon: {
+      color: theme.colors.text,
+    },
+    progressToggleButton: {
+      paddingVertical: 0,
+      paddingHorizontal: 16,
+      width: '100%',
+    },
+    progressTitle: {
+      fontSize: 20,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      color: theme.colors.text,
+      lineHeight: 24,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      flexShrink: 1,
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+    },
+    progressLatest: {
+      fontSize: 17,
+      fontWeight: '800',
+      lineHeight: 20,
+    },
+    progressEncourage: {
+      flexShrink: 1,
+      marginLeft: 12,
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
+      lineHeight: 17,
+      textAlign: 'right',
+    },
+    progressLatestUp: {
+      color: theme.colors.success,
+    },
+    progressLatestDown: {
+      color: theme.colors.error,
+    },
+    weeksSection: {
+      marginHorizontal: theme.spacing.md,
+      // Misma separación que hay entre la HeroCard y la tarjeta de la gráfica
+      // (HeroCard marginBottom md=16 + progressCard marginTop xs=6 = 22 = lg).
+      marginTop: theme.spacing.lg,
+      marginBottom: theme.spacing.md,
+    },
+    weekBlock: {
+      // Mismo ritmo vertical que Cardio: separación entre semanas = 10, y las
+      // tarjetas de día se separan 12 con su propio marginTop (ver historyLogCard).
+      marginBottom: 10,
+    },
+    weekHeaderButton: {
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      minHeight: 52,
+      borderRadius: theme.borderRadius.sm,
+      backgroundColor: theme.colors.surface,
+      borderLeftWidth: 5,
+      borderColor: theme.colors.primaryLine,
+      overflow: 'hidden',
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      ...theme.shadow.soft,
+    },
+    weekTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    weekTitle: {
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      color: theme.colors.primary,
+      lineHeight: 26,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      // Anton se dibuja pegado al borde superior de su caja, así que hace falta un
+      // pequeño empuje hacia abajo para centrarlo frente al texto/icono de al lado.
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+    },
+    weekImprovementText: {
+      fontSize: 15,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    weekImprovementUp: {
+      color: theme.colors.success,
+    },
+    weekImprovementDown: {
+      color: theme.colors.error,
+    },
+    weekHeaderMeta: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      fontWeight: '700',
+      lineHeight: 16,
+    },
+    weekAchievementButton: {
+      padding: 4,
+      marginRight: 4,
+      borderRadius: theme.borderRadius.sm,
+    },
+    weekAchievementButtonPressed: {
+      opacity: 0.6,
+    },
+    historyLogCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minHeight: 72,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    historyLogCardToday: {
+      borderColor: theme.colors.primaryLine,
+      borderWidth: 2.5,
+      borderLeftWidth: 2.5,
+      borderLeftColor: theme.colors.primaryLine,
+    },
+    historyLogCardPressed: {
+      opacity: 0.8,
+    },
+    historyLogHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+    },
+    historyLogLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    historyLogAccent: {
+      marginLeft: -4,
+      marginRight: 12,
+    },
+    historyLogInfo: {
+      flex: 1,
+      minWidth: 0,
+    },
+    historyLogNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    historyLogDayName: {
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      lineHeight: 22,
+    },
+    historyLogDate: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+      lineHeight: 16,
+      fontWeight: '500',
+    },
+    historyLogBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: theme.borderRadius.pill,
+      fontSize: 15,
+      fontFamily: theme.fonts.display,
+      fontWeight: '800',
+      overflow: 'hidden',
+      lineHeight: 18,
+      textAlign: 'center',
+      color: theme.colors.primaryLight,
+      backgroundColor: theme.colors.primaryMuted,
+    },
+    historyLogBadgeUp: {
+      color: theme.colors.success,
+      backgroundColor: theme.colors.successMuted,
+    },
+    historyLogBadgeDown: {
+      color: theme.colors.error,
+      backgroundColor: theme.colors.errorMuted,
+    },
+    historyLogBadgeNeutral: {
+      color: theme.colors.warning,
+      backgroundColor: theme.colors.warningMuted,
+    },
+    logOptionsButton: {
+      padding: 2,
+      marginRight: -4,
+      borderRadius: theme.borderRadius.sm,
+    },
+    logOptionsButtonPressed: {
+      opacity: 0.6,
+    },
+    modalButtonRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalButton: {
+      flex: 1,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

@@ -33,7 +33,7 @@ import {
   WorkoutLogScreen,
   useWorkout,
 } from '@features/workout';
-import { WhatsNewModal } from '@components';
+import { WhatsNewModal, ThemeRevealOverlay } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
 import { CARDIO_ONLY_DAY } from '@lib/cardio';
 import type { WeightSegment } from '@lib/cardio';
@@ -54,7 +54,7 @@ import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
 import { theme, useThemeVersion } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
-import { t } from '@lib/i18n';
+import { t, useLanguageVersion } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import {
   WorkoutAppData,
@@ -686,6 +686,10 @@ function AppContent() {
           onBack={goHome}
         />
       )}
+
+      {/* Encima de todo (incluidas las barras flotantes): el círculo del cambio
+          de tema en caliente. */}
+      <ThemeRevealOverlay />
     </View>
   );
 }
@@ -697,6 +701,9 @@ export default function App() {
   // el árbol se re-renderiza y cada componente relee sus `styles` vivos (ningún
   // componente está memoizado, así que el re-render cascada llega a todos).
   useThemeVersion();
+  // Igual que el tema: al cambiar el idioma en caliente, re-renderiza todo el
+  // árbol para que los t() inline y las fechas se repinten sin reiniciar.
+  useLanguageVersion();
   const [fontsLoaded] = useFonts({
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });

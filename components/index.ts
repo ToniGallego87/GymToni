@@ -35,6 +35,7 @@ export { ExerciseGifButton } from './ExerciseGifButton';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
 export { WhatsNewModal } from './WhatsNewModal';
+export { ThemeRevealOverlay } from './ThemeRevealOverlay';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';

@@ -39,8 +39,8 @@ export const darkColors = {
   white: '#ffffff',
   background: '#0F1115',
   backgroundElevated: '#13161C',
-  surface: '#171A21',
-  surfaceAlt: '#1C2029',
+  surface: '#1E222C',
+  surfaceAlt: '#272C38',
   border: '#232734',
   text: '#F5F7FA',
   textSecondary: '#98A0AE',
@@ -148,156 +148,157 @@ const lightColors: typeof darkColors = {
 
 function buildTheme(mode: ThemeMode) {
   return {
-  mode: mode,
-  // Estilo de la barra de estado acorde al fondo del tema.
-  statusBarStyle: (mode === 'light' ? 'dark' : 'light') as
-    | 'light'
-    | 'dark',
-  colors: mode === 'light' ? lightColors : darkColors,
+    mode: mode,
+    // Estilo de la barra de estado acorde al fondo del tema.
+    statusBarStyle: (mode === 'light' ? 'dark' : 'light') as 'light' | 'dark',
+    colors: mode === 'light' ? lightColors : darkColors,
 
-  // Fuente display (Anton) para titulares. Cargada en App.tsx vía expo-font.
-  fonts: {
-    display: 'Anton',
-  },
+    // Fuente display (Anton) para titulares. Cargada en App.tsx vía expo-font.
+    fonts: {
+      display: 'Anton',
+    },
 
-  // Degradados de marca (claro → base → oscuro, diagonal). Única fuente para
-  // todos los LinearGradient de acción/estado: no duplicar estos tríos en
-  // pantallas ni componentes. Los oros (`primary`/`amber`) son SUPERFICIE: van
-  // con tinta oscura (`onGold`) encima en ambos temas, así que en día también
-  // son un oro vivo (el bronce oscuro de antes se veía apagado sobre el lienzo
-  // claro). El resto (verde/rojo/naranja) ya contrasta en ambos.
-  gradients: {
-    primary: (mode === 'light'
-      ? ['#FFD858', '#F7C21A', '#E0A50C']
-      : ['#F9D85A', '#F7CC3D', '#E0B226']) as [string, string, string],
-    success: ['#7CD99A', '#52C878', '#3DA866'] as [string, string, string],
-    danger: ['#F59898', '#F06A6A', '#D85151'] as [string, string, string],
-    warning: ['#FFC97A', '#FFB347', '#F2982C'] as [string, string, string],
-    amber: (mode === 'light'
-      ? ['#FFC94F', '#F0A81C', '#C98505']
-      : ['#F9D85A', '#F2B33D', '#E08A26']) as [string, string, string],
-    // Sombreado del "peldaño" de las flechas del carrusel de heros: tinta oscura
-    // translúcida, intensa en el borde exterior y desvanecida a nada hacia el
-    // centro (ver HeroCarousel). En día pesa menos: sobre el oro vivo la misma
-    // tinta que en noche ennegrecía el escalón.
-    heroStep: (mode === 'light'
-      ? [
-          'rgba(16, 19, 24, 0.15)',
-          'rgba(16, 19, 24, 0.12)',
-          'rgba(16, 19, 24, 0.06)',
-          'rgba(16, 19, 24, 0)',
-        ]
-      : [
-          'rgba(16, 19, 24, 0.26)',
-          'rgba(16, 19, 24, 0.22)',
-          'rgba(16, 19, 24, 0.10)',
-          'rgba(16, 19, 24, 0)',
-        ]) as [string, string, string, string],
-    // Brillo superior (sheen) que da volumen a los botones/tarjetas con gradiente.
-    sheen: ['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)'] as [
-      string,
-      string,
-    ],
-    // Sheen de las tarjetas neutras (GradientFill). En noche es un velo mínimo;
-    // en día tiene que ser mucho más blanco para dar volumen sobre superficies
-    // ya claras (un 0.06 blanco sobre blanco es invisible).
-    cardSheen: (mode === 'light'
-      ? ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']
-      : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']) as [string, string],
-  },
+    // Degradados de marca (claro → base → oscuro, diagonal). Única fuente para
+    // todos los LinearGradient de acción/estado: no duplicar estos tríos en
+    // pantallas ni componentes. Los oros (`primary`/`amber`) son SUPERFICIE: van
+    // con tinta oscura (`onGold`) encima en ambos temas, así que en día también
+    // son un oro vivo (el bronce oscuro de antes se veía apagado sobre el lienzo
+    // claro). El resto (verde/rojo/naranja) ya contrasta en ambos.
+    gradients: {
+      primary: (mode === 'light'
+        ? ['#FFD858', '#F7C21A', '#E0A50C']
+        : ['#F9D85A', '#F7CC3D', '#E0B226']) as [string, string, string],
+      success: ['#7CD99A', '#52C878', '#3DA866'] as [string, string, string],
+      danger: ['#F59898', '#F06A6A', '#D85151'] as [string, string, string],
+      warning: ['#FFC97A', '#FFB347', '#F2982C'] as [string, string, string],
+      amber: (mode === 'light'
+        ? ['#FFC94F', '#F0A81C', '#C98505']
+        : ['#F9D85A', '#F2B33D', '#E08A26']) as [string, string, string],
+      // Sombreado del "peldaño" de las flechas del carrusel de heros: tinta oscura
+      // translúcida, intensa en el borde exterior y desvanecida a nada hacia el
+      // centro (ver HeroCarousel). En día pesa menos: sobre el oro vivo la misma
+      // tinta que en noche ennegrecía el escalón.
+      heroStep: (mode === 'light'
+        ? [
+            'rgba(16, 19, 24, 0.15)',
+            'rgba(16, 19, 24, 0.12)',
+            'rgba(16, 19, 24, 0.06)',
+            'rgba(16, 19, 24, 0)',
+          ]
+        : [
+            'rgba(16, 19, 24, 0.26)',
+            'rgba(16, 19, 24, 0.22)',
+            'rgba(16, 19, 24, 0.10)',
+            'rgba(16, 19, 24, 0)',
+          ]) as [string, string, string, string],
+      // Brillo superior (sheen) que da volumen a los botones/tarjetas con gradiente.
+      sheen: ['rgba(255,255,255,0.32)', 'rgba(255,255,255,0)'] as [
+        string,
+        string,
+      ],
+      // Sheen de las tarjetas neutras (GradientFill). En noche es un velo mínimo;
+      // en día tiene que ser mucho más blanco para dar volumen sobre superficies
+      // ya claras (un 0.06 blanco sobre blanco es invisible).
+      cardSheen: (mode === 'light'
+        ? ['rgba(255,255,255,0.55)', 'rgba(255,255,255,0)']
+        : ['rgba(255,255,255,0.06)', 'rgba(255,255,255,0)']) as [
+        string,
+        string,
+      ],
+    },
 
-  typography: {
-    h1: {
-      fontSize: 28,
-      fontWeight: '800' as const,
-      lineHeight: 32,
+    typography: {
+      h1: {
+        fontSize: 28,
+        fontWeight: '800' as const,
+        lineHeight: 32,
+      },
+      h2: {
+        fontSize: 22,
+        fontWeight: '800' as const,
+        lineHeight: 28,
+      },
+      h3: {
+        fontSize: 18,
+        fontWeight: '700' as const,
+        lineHeight: 24,
+      },
+      body: {
+        fontSize: 16,
+        fontWeight: '400' as const,
+        lineHeight: 22,
+      },
+      bodySmall: {
+        fontSize: 13,
+        fontWeight: '400' as const,
+        lineHeight: 18,
+      },
+      label: {
+        fontSize: 14,
+        fontWeight: '700' as const,
+        lineHeight: 18,
+      },
+      caption: {
+        fontSize: 12,
+        fontWeight: '600' as const,
+        lineHeight: 16,
+      },
     },
-    h2: {
-      fontSize: 22,
-      fontWeight: '800' as const,
-      lineHeight: 28,
-    },
-    h3: {
-      fontSize: 18,
-      fontWeight: '700' as const,
-      lineHeight: 24,
-    },
-    body: {
-      fontSize: 16,
-      fontWeight: '400' as const,
-      lineHeight: 22,
-    },
-    bodySmall: {
-      fontSize: 13,
-      fontWeight: '400' as const,
-      lineHeight: 18,
-    },
-    label: {
-      fontSize: 14,
-      fontWeight: '700' as const,
-      lineHeight: 18,
-    },
-    caption: {
-      fontSize: 12,
-      fontWeight: '600' as const,
-      lineHeight: 16,
-    },
-  },
 
-  spacing: {
-    xs: 6,
-    sm: 10,
-    md: 16,
-    lg: 22,
-    xl: 28,
-    xxl: 36,
-  },
+    spacing: {
+      xs: 6,
+      sm: 10,
+      md: 16,
+      lg: 22,
+      xl: 28,
+      xxl: 36,
+    },
 
-  borderRadius: {
-    sm: 10,
-    md: 16,
-    lg: 22,
-    xl: 28,
-    pill: 999,
-  },
+    borderRadius: {
+      sm: 10,
+      md: 16,
+      lg: 22,
+      xl: 28,
+      pill: 999,
+    },
 
-  // En día las sombras negras densas se ven como manchas grises: se sustituyen
-  // por sombras azuladas más suaves y con menos elevation (la sombra de
-  // elevation en Android es negra sí o sí, así que se baja su intensidad).
-  shadow:
-    mode === 'light'
-      ? {
-          card: {
-            shadowColor: '#26314A',
-            shadowOffset: { width: 0, height: 10 },
-            shadowOpacity: 0.14,
-            shadowRadius: 18,
-            elevation: 6,
+    // En día las sombras negras densas se ven como manchas grises: se sustituyen
+    // por sombras azuladas más suaves y con menos elevation (la sombra de
+    // elevation en Android es negra sí o sí, así que se baja su intensidad).
+    shadow:
+      mode === 'light'
+        ? {
+            card: {
+              shadowColor: '#26314A',
+              shadowOffset: { width: 0, height: 10 },
+              shadowOpacity: 0.14,
+              shadowRadius: 18,
+              elevation: 6,
+            },
+            soft: {
+              shadowColor: '#26314A',
+              shadowOffset: { width: 0, height: 6 },
+              shadowOpacity: 0.1,
+              shadowRadius: 12,
+              elevation: 4,
+            },
+          }
+        : {
+            card: {
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 12 },
+              shadowOpacity: 0.22,
+              shadowRadius: 18,
+              elevation: 10,
+            },
+            soft: {
+              shadowColor: '#000000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.16,
+              shadowRadius: 14,
+              elevation: 8,
+            },
           },
-          soft: {
-            shadowColor: '#26314A',
-            shadowOffset: { width: 0, height: 6 },
-            shadowOpacity: 0.1,
-            shadowRadius: 12,
-            elevation: 4,
-          },
-        }
-      : {
-          card: {
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: 0.22,
-            shadowRadius: 18,
-            elevation: 10,
-          },
-          soft: {
-            shadowColor: '#000000',
-            shadowOffset: { width: 0, height: 8 },
-            shadowOpacity: 0.16,
-            shadowRadius: 14,
-            elevation: 8,
-          },
-        },
   };
 }
 
@@ -315,6 +316,13 @@ export function setThemeMode(mode: ThemeMode): void {
   Object.assign(theme, buildTheme(mode));
   setStoredThemeMode(mode);
   notifyThemeChange();
+}
+
+// Color de fondo de un modo concreto SIN cambiar el tema activo. Lo usa la
+// animación de revelado del cambio de tema para pintar el círculo con la piel
+// de destino antes de aplicarla.
+export function getModeBackgroundColor(mode: ThemeMode): string {
+  return buildTheme(mode).colors.background;
 }
 
 // Suscribe el componente a los cambios de tema (re-render en cada cambio).

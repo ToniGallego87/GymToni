@@ -1,9 +1,10 @@
 // Ajustes de apariencia de la app (tema e idioma). Se leen de forma SÍNCRONA
-// al evaluar el bundle para que theme.ts e i18n.ts fijen sus valores antes de
-// que el resto de módulos creen sus StyleSheets y textos; por eso un cambio de
-// tema/idioma se aplica relanzando el bundle (SettingsScreen usa
-// react-native-restart). Sin imports duros de react-native/expo-sqlite: este
-// módulo también se evalúa en jest (node), donde cae a los valores por defecto.
+// al evaluar el bundle para que theme.ts e i18n.ts fijen sus valores iniciales
+// antes de que el resto de módulos creen sus StyleSheets y textos. Tanto el tema
+// como el idioma se cambian luego EN CALIENTE (theme.ts `setThemeMode`, i18n.ts
+// `setLanguage`), sin reiniciar; `restartApp` queda como utilidad de reserva.
+// Sin imports duros de react-native/expo-sqlite: este módulo también se evalúa
+// en jest (node), donde cae a los valores por defecto.
 
 export type ThemeMode = 'dark' | 'light';
 export type Language = 'es' | 'en';

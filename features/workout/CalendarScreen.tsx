@@ -57,31 +57,6 @@ interface CalendarScreenProps {
   onNavigateProfile?: () => void;
 }
 
-const MONTH_NAMES = [
-  t('Enero'),
-  t('Febrero'),
-  t('Marzo'),
-  t('Abril'),
-  t('Mayo'),
-  t('Junio'),
-  t('Julio'),
-  t('Agosto'),
-  t('Septiembre'),
-  t('Octubre'),
-  t('Noviembre'),
-  t('Diciembre'),
-];
-
-const WEEK_DAYS = [
-  t('Lun'),
-  t('Mar'),
-  t('Mié'),
-  t('Jue'),
-  t('Vie'),
-  t('Sáb'),
-  t('Dom'),
-];
-
 export function CalendarScreen({
   onSelectLog,
   onEditCardioOnly,
@@ -92,6 +67,32 @@ export function CalendarScreen({
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  // Meses y días DENTRO del componente: así se recalculan con el idioma activo
+  // (i18n en caliente). A nivel de módulo capturarían el idioma de arranque y no
+  // cambiarían al alternarlo sin reiniciar.
+  const MONTH_NAMES = [
+    t('Enero'),
+    t('Febrero'),
+    t('Marzo'),
+    t('Abril'),
+    t('Mayo'),
+    t('Junio'),
+    t('Julio'),
+    t('Agosto'),
+    t('Septiembre'),
+    t('Octubre'),
+    t('Noviembre'),
+    t('Diciembre'),
+  ];
+  const WEEK_DAYS = [
+    t('Lun'),
+    t('Mar'),
+    t('Mié'),
+    t('Jue'),
+    t('Vie'),
+    t('Sáb'),
+    t('Dom'),
+  ];
   const [monthOffset, setMonthOffset] = useState(0);
   const [mode, setMode] = useState<CalendarMode>('fuerza');
   const cardioAvailable = hasAnyCardio(state.logs);

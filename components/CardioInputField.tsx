@@ -82,6 +82,17 @@ export function CardioInputField({
     setCustomCardioType('');
   };
 
+  // Cerrar la tarjeta (back de Android / gesto de cierre): si en el paso de
+  // datos hay minutos válidos, se confirma el cardio en vez de perderlo; si no,
+  // se descarta. Junto al "hecho" del teclado, quita el botón Guardar.
+  const handleModalDismiss = () => {
+    if (isDetailsStep && cardioMinutes) {
+      handleSaveCardio();
+    } else {
+      closeCardioModal();
+    }
+  };
+
   // Vuelve al primer paso descartando lo tecleado (botón "Atrás").
   const resetToTypeStep = () => {
     setSelectedCardioType(null);
@@ -224,23 +235,18 @@ export function CardioInputField({
       )}
 
       {/* Asistente en tres pasos dentro del mismo modal: elegir disciplina,
-          nombrarla si es "Otro", y sus datos. */}
+          nombrarla si es "Otro", y sus datos. En el paso de datos no hay botón
+          Guardar: el cardio se confirma solo al pulsar "hecho" en el teclado o
+          al cerrar la tarjeta (handleModalDismiss). */}
       <AppModal
         visible={showCardioModal}
-        onRequestClose={closeCardioModal}
+        onRequestClose={handleModalDismiss}
+        onOverlayPress={isDetailsStep ? handleModalDismiss : undefined}
         title={modalTitle}
         icon="run-fast"
         align={isDetailsStep ? 'left' : 'center'}
         footer={
           <>
-            {isDetailsStep && (
-              <Button
-                title={t('Guardar')}
-                onPress={handleSaveCardio}
-                disabled={!cardioMinutes}
-                size="medium"
-              />
-            )}
             {isCustomTypeStep && (
               <Button
                 title={t('Continuar')}
@@ -305,6 +311,9 @@ export function CardioInputField({
                 onChangeText={setCardioMinutes}
                 keyboardType="decimal-pad"
                 maxLength={6}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleSaveCardio}
               />
             </View>
             <View style={styles.inputGroupCardio}>
@@ -317,6 +326,8 @@ export function CardioInputField({
                 onChangeText={setCardioSpeed}
                 keyboardType="decimal-pad"
                 maxLength={5}
+                returnKeyType="done"
+                onSubmitEditing={handleSaveCardio}
               />
             </View>
             {TREADMILL_TYPES.includes(selectedCardioType) && (
@@ -330,160 +341,176 @@ export function CardioInputField({
                   onChangeText={setCardioPendiente}
                   keyboardType="decimal-pad"
                   maxLength={5}
+                  returnKeyType="done"
+                  onSubmitEditing={handleSaveCardio}
                 />
               </View>
             )}
           </View>
+        )}
+
+        {isDetailsStep && (
+          <Text style={styles.saveHint}>
+            {t('Se guarda solo: pulsa ✓ en el teclado o toca fuera.')}
+          </Text>
         )}
       </AppModal>
     </>
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    marginVertical: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primaryLine,
-    ...theme.shadow.soft,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  title: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: theme.colors.text,
-    lineHeight: 22,
-  },
-  icon: {
-    marginRight: 8,
-  },
-  cardioDisplayContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    padding: 14,
-    marginTop: 10,
-    gap: 8,
-  },
-  cardioDisplayText: {
-    flex: 1,
-    fontSize: 14,
-    color: theme.colors.text,
-    fontWeight: '500',
-  },
-  clearButton: {
-    padding: 8,
-    backgroundColor: theme.colors.error + '30',
-    borderRadius: theme.borderRadius.sm,
-  },
-  addCardioButton: {
-    backgroundColor: theme.colors.primaryFill,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  collapsedButton: {
-    backgroundColor: theme.colors.primaryFill,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-    marginVertical: 12,
-  },
-  addCardioText: {
-    color: theme.colors.onGold,
-    fontWeight: '800',
-    fontSize: 15,
-  },
-  buttonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  buttonPressed: {
-    opacity: 0.8,
-  },
-  optionsScroll: {
-    marginTop: 12,
-    maxHeight: 300,
-  },
-  optionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    backgroundColor: theme.colors.primaryMuted,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    marginBottom: 8,
-  },
-  optionButtonPressed: {
-    opacity: 0.8,
-  },
-  optionButtonText: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.white,
-  },
-  customTypeInput: {
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: theme.colors.text,
-    marginBottom: 14,
-  },
-  inputRowCardio: {
-    marginTop: 12,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  inputGroupCardio: {
-    flex: 1,
-  },
-  labelCardio: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-  },
-  inputCardio: {
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-    color: theme.colors.text,
-    minHeight: 40,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      marginVertical: 12,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderLeftWidth: 3,
+      borderLeftColor: theme.colors.primaryLine,
+      ...theme.shadow.soft,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    title: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: theme.colors.text,
+      lineHeight: 22,
+    },
+    icon: {
+      marginRight: 8,
+    },
+    cardioDisplayContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.inputBg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      padding: 14,
+      marginTop: 10,
+      gap: 8,
+    },
+    cardioDisplayText: {
+      flex: 1,
+      fontSize: 14,
+      color: theme.colors.text,
+      fontWeight: '500',
+    },
+    clearButton: {
+      padding: 8,
+      backgroundColor: theme.colors.error + '30',
+      borderRadius: theme.borderRadius.sm,
+    },
+    addCardioButton: {
+      backgroundColor: theme.colors.primaryFill,
+      paddingVertical: 12,
+      paddingHorizontal: 16,
+      borderRadius: theme.borderRadius.sm,
+      alignItems: 'center',
+      marginTop: 10,
+    },
+    collapsedButton: {
+      backgroundColor: theme.colors.primaryFill,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: theme.borderRadius.sm,
+      alignItems: 'center',
+      marginVertical: 12,
+    },
+    addCardioText: {
+      color: theme.colors.onGold,
+      fontWeight: '800',
+      fontSize: 15,
+    },
+    buttonContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    buttonPressed: {
+      opacity: 0.8,
+    },
+    optionsScroll: {
+      marginTop: 12,
+      maxHeight: 300,
+    },
+    optionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.colors.primaryMuted,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 8,
+    },
+    optionButtonPressed: {
+      opacity: 0.8,
+    },
+    optionButtonText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.white,
+    },
+    customTypeInput: {
+      backgroundColor: theme.colors.inputBg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 15,
+      color: theme.colors.text,
+      marginBottom: 14,
+    },
+    inputRowCardio: {
+      marginTop: 12,
+      flexDirection: 'row',
+      gap: 8,
+    },
+    saveHint: {
+      marginTop: 14,
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
+      lineHeight: 17,
+    },
+    inputGroupCardio: {
+      flex: 1,
+    },
+    labelCardio: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      marginBottom: 6,
+      textTransform: 'uppercase',
+    },
+    inputCardio: {
+      backgroundColor: theme.colors.inputBg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 15,
+      color: theme.colors.text,
+      minHeight: 40,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

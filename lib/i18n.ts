@@ -1,16 +1,22 @@
 // i18n minimalista: la CLAVE es el texto en español (idioma fuente de la app)
 // y solo existe diccionario para inglés. Si falta una traducción se muestra el
-// español (nunca rompe). El idioma se lee de forma síncrona al evaluar el
-// módulo (lib/appSettings) para poder usar t() también en constantes de
-// módulo; cambiar de idioma relanza el bundle (SettingsScreen).
+// español (nunca rompe).
+//
+// El idioma se aplica EN CALIENTE (igual que el tema, ver themeStore): el valor
+// inicial se lee de forma síncrona al evaluar el módulo, pero `setLanguage`
+// reasigna los bindings vivos (`language`/`dateLocale`/`decimalSeparator`) y
+// avisa a los suscriptores para re-renderizar el árbol, sin reiniciar el bundle.
+// Por eso NO deben capturarse estos valores en constantes de módulo: hay que
+// leerlos en cada render/llamada (t(), toLocaleDateString(dateLocale), etc.).
 //
 // Placeholders: t('Importados {n} días', { n: 3 }).
-import { getStoredLanguage, Language } from './appSettings';
+import { getStoredLanguage, Language, setStoredLanguage } from './appSettings';
+import { useSyncExternalStore } from 'react';
 
-export const language: Language = getStoredLanguage();
+export let language: Language = getStoredLanguage();
 
 // Locale para toLocaleDateString y similares.
-export const dateLocale = language === 'en' ? 'en-GB' : 'es-ES';
+export let dateLocale = language === 'en' ? 'en-GB' : 'es-ES';
 
 // Separador decimal del idioma: coma en español, punto en inglés.
 //
@@ -19,7 +25,46 @@ export const dateLocale = language === 'en' ? 'en-GB' : 'es-ES';
 // serie en dos, y los regex de parsers.ts/cardio.ts esperan punto). Así que la
 // coma vive solo en los extremos: al pintar (localizeDecimals) y al teclear
 // (canonicalDecimals / parseTypedNumber).
-export const decimalSeparator = language === 'en' ? '.' : ',';
+export let decimalSeparator = language === 'en' ? '.' : ',';
+
+// --- Store de idioma (versión + suscriptores), espejo de themeStore ---
+type LangListener = () => void;
+const langListeners = new Set<LangListener>();
+let langVersion = 0;
+
+function subscribeLanguage(listener: LangListener): () => void {
+  langListeners.add(listener);
+  return () => {
+    langListeners.delete(listener);
+  };
+}
+
+function getLanguageVersion(): number {
+  return langVersion;
+}
+
+// Cambia el idioma en caliente: reasigna los bindings vivos, persiste y avisa a
+// los suscriptores (la raíz se re-renderiza y todo el árbol relee los t()).
+export function setLanguage(next: Language): void {
+  if (next === language) return;
+  language = next;
+  dateLocale = next === 'en' ? 'en-GB' : 'es-ES';
+  decimalSeparator = next === 'en' ? '.' : ',';
+  setStoredLanguage(next);
+  langVersion += 1;
+  for (const listener of Array.from(langListeners)) listener();
+}
+
+// Suscribe la RAÍZ del árbol a los cambios de idioma (re-render en cada cambio,
+// como useThemeVersion). Ningún componente está memoizado, así que la cascada
+// llega a todos y los t() inline se recalculan.
+export function useLanguageVersion(): number {
+  return useSyncExternalStore(
+    subscribeLanguage,
+    getLanguageVersion,
+    getLanguageVersion
+  );
+}
 
 /** Pinta los decimales de un texto ("12.6 km/h" → "12,6 km/h") en el idioma. */
 export function localizeDecimals(text: string): string {
@@ -184,8 +229,9 @@ register({
   Iniciar: 'Start',
   Parar: 'Stop',
   'Tiempo hasta la siguiente serie': 'Time until your next set',
-  'Tocar: +30s | Mantener: elimina temporizador':
-    'Tap: +30s | Hold: cancel the timer',
+  Saltar: 'Skip',
+  'Saltar descanso': 'Skip rest',
+  'Añadir 30 segundos': 'Add 30 seconds',
   'Usar {n}s': 'Use {n}s',
   '¡Ánimo con tu nueva rutina!': 'Good luck with your new routine!',
 
@@ -205,6 +251,8 @@ register({
   Atrás: 'Back',
   'Disciplinas ejecutadas:': 'Disciplines done:',
   'Detalles del cardio': 'Cardio details',
+  'Se guarda solo: pulsa ✓ en el teclado o toca fuera.':
+    'Saves itself: tap ✓ on the keyboard or tap outside.',
   Minutos: 'Minutes',
   'Pendiente %': 'Incline %',
   'Ej: Cinta: 22.5mins, 11.5kmh': 'E.g.: Treadmill: 22.5mins, 11.5kmh',
@@ -349,6 +397,7 @@ register({
   'Toca para editar': 'Tap to edit',
   'Temporizador de descanso': 'Rest timer',
   'Editar Temporizador': 'Edit Timer',
+  'Modificar temporizador': 'Change timer',
   'Duración en segundos:': 'Duration in seconds:',
   'Equivalente:': 'Equivalent:',
   'Editar Ejercicios': 'Edit Exercises',

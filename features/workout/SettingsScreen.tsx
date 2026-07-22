@@ -5,7 +5,6 @@ import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  ConfirmModal,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -17,28 +16,16 @@ import {
 } from '@components';
 import { theme, setThemeMode } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
-import { t, language } from '@lib/i18n';
-import {
-  Language,
-  ThemeMode,
-  restartApp,
-  setStoredLanguage,
-} from '@lib/appSettings';
+import { t, language, setLanguage } from '@lib/i18n';
+import { Language, ThemeMode } from '@lib/appSettings';
 import { CHANGELOG } from '@data/changelog';
 
 interface SettingsScreenProps {
   onBack: () => void;
 }
 
-// Cambio de IDIOMA pendiente de confirmar (el idioma sí reinicia la app). El
-// tema, en cambio, se aplica en caliente al instante (setThemeMode), sin modal.
-type PendingChange = { kind: 'language'; value: Language };
-
 export function SettingsScreen({ onBack }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
-  const [pendingChange, setPendingChange] = useState<PendingChange | null>(
-    null
-  );
   const [showWhatsNew, setShowWhatsNew] = useState(false);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
@@ -48,14 +35,6 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
   const latestChangelog = CHANGELOG[0] ?? null;
-
-  const handleConfirmChange = () => {
-    if (!pendingChange) return;
-    setStoredLanguage(pendingChange.value);
-    setPendingChange(null);
-    // El idioma se lee al evaluar i18n.ts; relanzar el bundle lo reevalúa.
-    restartApp();
-  };
 
   const themeOptions: {
     value: ThemeMode;
@@ -159,12 +138,8 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
                     pressed && styles.pressed,
                   ]}
                   onPress={() => {
-                    if (!active) {
-                      setPendingChange({
-                        kind: 'language',
-                        value: option.value,
-                      });
-                    }
+                    // Cambio de idioma en caliente, al instante (como el tema).
+                    if (!active) setLanguage(option.value);
                   }}
                 >
                   <Text
@@ -179,9 +154,6 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
               );
             })}
           </View>
-          <Text style={styles.sectionHint}>
-            {t('El cambio de idioma reinicia la app.')}
-          </Text>
         </View>
 
         {latestChangelog && (
@@ -223,22 +195,6 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
-
-      <ConfirmModal
-        visible={pendingChange !== null}
-        title={
-          pendingChange?.kind === 'language'
-            ? t('Cambiar idioma')
-            : t('Cambiar tema')
-        }
-        message={t(
-          'La app se reiniciará para aplicar el cambio. Tus datos no se tocan.'
-        )}
-        confirmLabel={t('Aplicar')}
-        confirmVariant="primary"
-        onConfirm={handleConfirmChange}
-        onCancel={() => setPendingChange(null)}
-      />
 
       <WhatsNewModal
         visible={showWhatsNew}
@@ -283,11 +239,6 @@ const makeStyles = () =>
     letterSpacing: 0.4,
     color: theme.colors.text,
     lineHeight: 26,
-  },
-  sectionHint: {
-    fontSize: 12,
-    color: theme.colors.textMuted,
-    lineHeight: 16,
   },
   optionRow: {
     flexDirection: 'row',

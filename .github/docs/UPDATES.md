@@ -1,5 +1,96 @@
 # UPDATES
 
+## Version 0.6.5 - 2026-07-22
+
+### Nuevas funcionalidades
+
+- **Editar el descanso por defecto sin salir del registro**
+  (`features/workout/WorkoutLogScreen.tsx`, `components/GlassTopBar.tsx`): antes el
+  `timerDuration` de la rutina solo se cambiaba entrando a `RoutineDetailScreen`.
+  Ahora hay un botón "Editar" (icono `timer-cog-outline`) en la fila de acciones del
+  propio temporizador de descanso y una opción "Modificar temporizador" en el menú de
+  tres puntos; ambos abren el mismo `AppModal` (segundos → equivalente m:ss) y guardan
+  con `UPDATE_ROUTINE` en la rutina dueña del día. Ajusta el valor de las próximas
+  series, no el descanso en curso (para eso están +30s y Saltar). `GlassTopBar` gana
+  una prop `menuItems` para colgar opciones propias de la pantalla encima del cambio
+  de tema.
+
+- **Cambio de tema rápido con animación de revelado circular** (`components/GlassTopBar.tsx`,
+  `components/ThemeRevealOverlay.tsx`, `lib/themeTransition.ts`, `lib/theme.ts`,
+  `app/App.tsx`): un botón de tres puntos arriba a la derecha despliega una opción
+  con el modo contrario al activo ("Modo claro"/"Modo oscuro"); al pulsarla, un
+  círculo de color sólido (`View` con `transform:scale`, acelerado por GPU a 60fps)
+  nace en la posición pulsada (`measureInWindow`) y recolorea la pantalla:
+  **noche→día** el círculo del color de destino CRECE sobre la vista y al llenarla
+  se aplica el tema (`setThemeMode`) y se desvanece; **día→noche** se aplica el tema
+  ya (la noche queda debajo) y el círculo del color saliente, que cubre todo, se
+  ENCOGE de fuera adentro revelando la noche desde los bordes. El overlay se monta
+  en la raíz (`app/App.tsx`) para cubrir también las barras flotantes y bloquea los
+  toques mientras dura. Usa Reanimated (ya en el repo); un canal mínimo
+  `themeTransition` lleva la petición desde la barra hasta el overlay.
+
+### Cambios
+
+- **Cardio se guarda solo, sin botón "Guardar"** (`components/CardioInputField.tsx`,
+  `components/AppModal.tsx`): en el paso de datos del asistente de cardio (inserción
+  dentro de un día y cardio suelto usan el mismo campo) se quita el botón "Guardar". El
+  registro se confirma al pulsar ✓ ("done") en el teclado desde cualquier campo
+  (minutos con `autoFocus`) o al tocar fuera de la tarjeta si hay minutos válidos; si
+  no, se descarta. `AppModal` gana una prop opcional `onOverlayPress` (por defecto el
+  overlay no captura toques, sin cambios para el resto de modales) para ese
+  "tocar fuera = guardar". Una línea de ayuda explica el gesto. Un toque menos en una
+  acción muy repetida.
+
+- **Menú de tres puntos en TODAS las pantallas** (`components/GlassTopBar.tsx`,
+  `features/workout/HomeScreen.tsx`): el menú de opciones (hoy, cambio de tema)
+  vivía solo en Inicio; ahora lo renderiza `GlassTopBar` por defecto (`showMenu`),
+  con su estado, botón y desplegable propios, así que aparece siempre en el mismo
+  sitio en cualquier vista. HomeScreen deja de montarlo a mano.
+- **Más contraste de superficies y barras glass en modo oscuro** (`lib/theme.ts`,
+  `components/glassTokens.ts`): se suben `surface`/`surfaceAlt` de la paleta noche
+  y los tokens de la top bar y la barra de navegación (`GLASS_TOP_BAR_BG`,
+  `GLASS_TOP_BAR_OVERLAY`, `GLASS_FLOATING_BG`, `GLASS_ACTIVE_ITEM_BG` y sus
+  bordes) para que tarjetas y barras se despeguen del fondo en noche.
+
+- **Idioma sin reiniciar la app** (`lib/i18n.ts`, `features/workout/SettingsScreen.tsx`,
+  `features/workout/CalendarScreen.tsx`, `app/App.tsx`): antes cambiar de idioma
+  relanzaba el bundle; ahora se aplica en caliente, igual que el tema.
+  `language`/`dateLocale`/`decimalSeparator` pasan a bindings vivos que
+  `setLanguage` reasigna, y un store mínimo (espejo de `themeStore`) re-renderiza
+  el árbol vía `useLanguageVersion` en la raíz. Los nombres de mes/día del
+  calendario se movieron dentro del componente (a nivel de módulo capturaban el
+  idioma de arranque); el catálogo de ejercicios ya leía el idioma en render.
+  Configuración deja de mostrar el modal de reinicio y su aviso para el idioma.
+  +1 test en `i18n.test.ts` que verifica que `t()` y los locales cambian sin
+  reiniciar.
+- **El temporizador de descanso se salta y se alarga con botones visibles, no con
+  gestos** (`features/workout/WorkoutLogScreen.tsx`): parar el descanso estaba
+  solo en un long-press (y +30s en un toque), con un texto de ayuda, contra la
+  regla de AGENTS ("si algo se puede hacer, tiene que verse; botón propio con su
+  icono"). Ahora la tarjeta del temporizador tiene dos botones con icono: "+30s"
+  y "Saltar". Nuevas claves i18n.
+- **La tarjeta "Entrenamiento completado" ya no es un toque muerto**
+  (`features/workout/HomeScreen.tsx`): cuando el día de hoy estaba terminado, la
+  hero de Inicio seguía siendo pulsable pero `handleStartPress` salía sin hacer
+  nada (parecía rota). Ahora abre el registro de hoy para revisarlo o editarlo,
+  igual que el toque en su tarjeta del historial.
+- **Rama muerta fuera del modal de Configuración** (`features/workout/SettingsScreen.tsx`):
+  desde que el tema se aplica en caliente (0.6.4), el `ConfirmModal` de reinicio
+  solo se abre para el cambio de idioma, así que su título tenía una rama
+  inalcanzable (`… ? 'Cambiar idioma' : 'Cambiar tema'`). Se simplifica al único
+  caso posible.
+
+### Correcciones
+
+- **Dos tests de `weeks` reconciliados con la fórmula de progreso de 0.6.3**
+  (`lib/__tests__/weeks.test.ts`): `getWeekImprovement` y `buildWeekProgress`
+  esperaban un 10% de mejora para 100→110 kg × 10 reps, el valor de la fórmula
+  antigua (peso a pelo). Desde 0.6.3 la puntuación es Epley sobre la carga
+  virtual (`peso + BODYWEIGHT_VIRTUAL_LOAD = 10`), que da 9,0909%; el cambio
+  actualizó `progress.test.ts` pero dejó estos dos asserts sin migrar, y la
+  suite estaba en rojo (2/148). Ajustados los valores esperados a 9,0909% (no se
+  toca código de la app; el comportamiento ya era el correcto). Suite en verde.
+
 ## Version 0.6.4 - 2026-07-22
 
 ### Cambios

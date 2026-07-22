@@ -1,8 +1,12 @@
 import {
   canonicalDecimals,
+  dateLocale,
   decimalSeparator,
+  language,
   localizeDecimals,
   parseTypedNumber,
+  setLanguage,
+  t,
 } from '../i18n';
 import { formatParsedSet, parseSeriesString } from '../parsers';
 
@@ -38,5 +42,31 @@ describe('decimales en español', () => {
     ]);
     // Y al volver a pintarse, con coma.
     expect(formatParsedSet({ weight: 22.5, reps: 10 })).toBe('22,5x10');
+  });
+});
+
+// Verifica el NÚCLEO del cambio de idioma en caliente: los bindings vivos
+// (t()/decimalSeparator/dateLocale) reflejan el idioma tras setLanguage sin
+// reiniciar. El re-render del árbol (useLanguageVersion) es responsabilidad de
+// React y no se cubre aquí.
+describe('cambio de idioma en caliente (setLanguage)', () => {
+  afterEach(() => setLanguage('es'));
+
+  it('t() y los locales reflejan el idioma sin reiniciar', () => {
+    expect(language).toBe('es');
+    expect(t('Guardar')).toBe('Guardar');
+    expect(decimalSeparator).toBe(',');
+    expect(dateLocale).toBe('es-ES');
+
+    setLanguage('en');
+    expect(language).toBe('en');
+    expect(t('Guardar')).toBe('Save');
+    expect(decimalSeparator).toBe('.');
+    expect(dateLocale).toBe('en-GB');
+
+    setLanguage('es');
+    expect(t('Guardar')).toBe('Guardar');
+    expect(decimalSeparator).toBe(',');
+    expect(dateLocale).toBe('es-ES');
   });
 });

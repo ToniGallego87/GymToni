@@ -8,48 +8,74 @@ tarea y eliminarla al cerrar la versión que la incluya.
 Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** login,
 **no** backend/cloud, **no** Redux, **no** librerías UI externas.
 
-Última revisión completa: 2026-07-17.
+Última revisión completa: 2026-07-22.
 
 ## Mejoras visuales y de UX
 
-Sin pendientes: la última pasada (día ya registrado hoy, día a medias fuera del
-%/gráfica, botón atrás físico, avisos de valor inválido, topes de peso/reps y
-tintes de color sueltos) se cerró y se retiró de aquí.
+- [x] **Subir el contraste de las tarjetas/superficies en modo oscuro** — los
+      elementos que pintan con el color de fondo de la tarjeta diaria
+      (`theme.colors.surface`) apenas se despegan del fondo de pantalla en noche:
+      la tarjeta del día en fuerza/cardio, las celdas del calendario, la opción
+      fuerza/cardio del calendario y las opciones de Perfil.
+      **Por qué:** en oscuro esas superficies se funden con el fondo y cuesta ver
+      dónde empieza cada tarjeta; más contraste mejora legibilidad y el toque.
+      **Archivos:** `lib/theme.ts:42-43` (`surface`/`surfaceAlt` de `darkColors`,
+      raíz del problema), `features/workout/CalendarScreen.tsx:652,724`,
+      `features/workout/ProfileScreen.tsx`, `features/workout/DetailScreen.tsx`.
+      **Esfuerzo:** bajo.
+- [x] **Subir el contraste de la barra de título y la de navegación en modo
+      oscuro** — mismo problema que las tarjetas pero en las barras glass: en
+      noche se despegan poco del fondo.
+      **Por qué:** las barras son el marco permanente de la app; si no se separan
+      del fondo, la jerarquía se pierde y cuesta ubicar los controles.
+      **Archivos:** `components/glassTokens.ts:15-16` (`GLASS_TOP_BAR_BG` /
+      `GLASS_TOP_BAR_OVERLAY`), `:28` (`GLASS_ACTIVE_ITEM_BG` de la barra de
+      navegación), `components/GlassTopBar.tsx`, `components/FloatingPrimaryNav.tsx`.
+      **Esfuerzo:** bajo.
+- [x] **Menú de tres puntos en todas las vistas** — hoy el menú de la top bar
+      (cambio de tema) solo existe en Inicio; llevarlo a un sitio compartido para
+      que aparezca en todas las pantallas.
+      **Por qué:** el usuario espera encontrar las opciones siempre en el mismo
+      lugar; tener el menú solo en Inicio obliga a volver atrás para cambiar de
+      modo o tocar cualquier ajuste global.
+      **Archivos:** `features/workout/HomeScreen.tsx:1391-1451` (menú y botón
+      actuales, a extraer), `components/GlassTopBar.tsx` (destino compartido con
+      `rightElement`).
+      **Esfuerzo:** medio.
+- [x] **Recolorear la vista con la animación de tema, sin taparla** — al cambiar
+      claro/oscuro el círculo de revelado crece pero mantiene la vista visible y
+      la recolorea a la vez, en lugar de cubrirla con un círculo opaco mientras
+      repinta por debajo.
+      **Por qué:** el efecto actual esconde la pantalla durante la transición; que
+      la vista se tiña junto al círculo hace el cambio más fluido y menos brusco.
+      **Archivos:** `components/ThemeRevealOverlay.tsx` (todo el revelado del
+      círculo opaco), `app/App.tsx` (montaje del overlay en la raíz).
+      **Esfuerzo:** alto.
 
 ## Funcionalidades a simplificar
 
-- [x] **Pulsar la tarjeta de hoy en Inicio debería continuar el entreno, no
-      abrir un modal** — hoy abre "¿Qué deseas hacer?" (Continuar / Eliminar /
-      Volver), pero la tarjeta ya tiene un botón `⋯` exactamente para esas
-      opciones. El toque directo puede hacer lo que el 95% de las veces se
-      quiere: abrir el registro.
-      **Por qué:** quita un toque y un modal del flujo más frecuente de la app
-      (retomar la sesión de hoy), y elimina la duplicidad tarjeta/`⋯` que hoy
-      llevan al mismo sitio.
-      **Archivos:** `features/workout/HomeScreen.tsx:1127-1135` (onPress de la
-      tarjeta), `1226-1273` (modal de opciones).
-      **Esfuerzo:** bajo.
-- [x] **Poder importar datos con la base de datos vacía** — al abrir la app por
-      primera vez, sin rutinas, se oculta la navegación inferior, así que no hay
-      forma de llegar a Datos → Importar hasta crear una rutina a mano. Con un
-      JSON listo para importar, esto obliga a un paso absurdo. Debe poder
-      importarse desde el primer arranque.
-      **Por qué:** quien viene de otro móvil o reinstala solo quiere restaurar su
-      backup, y la app se lo impide justo cuando no tiene nada que perder.
-      **Archivos:** `features/workout/HomeScreen.tsx:1289` (oculta
-      `FloatingPrimaryNav` cuando `hasNoRoutines`), `features/workout/DataScreen.tsx:50`
-      (`hasNoData`; la tarjeta de importar ya se muestra, falta el acceso).
-      **Esfuerzo:** bajo.
-- [ ] **Idioma sin reiniciar la app** — el TEMA ya se aplica en caliente desde
-      la 0.6.3 (theming dinámico: `theme` singleton mutado + `themeStore` +
-      `makeStyles()` por componente). Falta el idioma, que sigue relanzando el
-      bundle porque `i18n` resuelve `language`/`dateLocale`/`decimalSeparator` al
-      evaluar el módulo y hay constantes con `t()` capturadas (incluye
-      `data/exerciseCatalog.ts`, cuyos nombres de ejercicio dependen del idioma).
-      **Por qué:** cambiar el idioma tampoco debería cortar la sesión.
-      **Archivos:** `lib/i18n.ts` (bindings vivos + versión de idioma como en
-      `themeStore`), `features/workout/SettingsScreen.tsx`, `data/exerciseCatalog.ts`
-      y los consumidores de `t()` en constantes de módulo. Deuda anotada.
+- [x] **Guardar el cardio automáticamente al insertarlo** — que un registro de
+      cardio se confirme solo al completar los datos, sin pulsar "guardar", tanto
+      en la inserción como ejercicio del día como en el cardio suelto.
+      **Por qué:** es un toque de más en una acción muy repetida; quitar el botón
+      de guardar acelera el registro, que es la prioridad de la app.
+      **Archivos:** `components/CardioInputField.tsx:110-139` (`handleSaveCardio`)
+      y `:239` (botón a eliminar), `features/workout/CardioScreen.tsx` (cardio
+      suelto).
+      **Esfuerzo:** medio.
+- [x] **Editar el descanso por defecto sin abrir la rutina** — poder cambiar el
+      `timerDuration` de la rutina en curso desde donde ya estás: un botón dentro
+      del propio temporizador de descanso y una opción "modificar temporizador" en
+      el menú de tres puntos. Hoy ese ajuste solo se alcanza entrando a
+      RoutineDetailScreen.
+      **Por qué:** el descanso por defecto se suele querer ajustar justo cuando
+      suena y se queda corto o largo; obligar a salir del entreno a editar la
+      rutina rompe el ritmo.
+      **Archivos:** `features/workout/WorkoutLogScreen.tsx:798-840` (fila de
+      acciones del temporizador donde añadir el botón), `features/workout/`
+      `RoutineDetailScreen.tsx:141-169` (modal de edición de `timerDuration` a
+      reutilizar), `features/workout/HomeScreen.tsx:1433-1451` (menú de tres
+      puntos donde añadir la opción).
       **Esfuerzo:** medio.
 
 ## Nuevas funcionalidades
@@ -64,7 +90,7 @@ Candidatas (compatibles con las restricciones):
       **Por qué:** olvidarse de registrar un día pasa, y hoy ese entreno se
       pierde para las semanas, rachas y comparativas; corregir la fecha a mano es
       imposible.
-      **Archivos:** `features/workout/WorkoutLogScreen.tsx:630`
+      **Archivos:** `features/workout/WorkoutLogScreen.tsx:603-616`
       (`buildWorkoutLog` → `date`), `features/workout/DaySelectorScreen.tsx`,
       `features/workout/DetailScreen.tsx` (editar la fecha de un log ya guardado).
       **Esfuerzo:** medio.
@@ -88,7 +114,7 @@ Candidatas (compatibles con las restricciones):
       **Por qué:** la constancia es el producto; un recordatorio a la hora de
       entrenar es la palanca más barata para sostener la racha.
       **Archivos:** `features/workout/SettingsScreen.tsx`,
-      `features/workout/WorkoutLogScreen.tsx:364-409` (patrón de canal/permisos
+      `features/workout/WorkoutLogScreen.tsx:322-367` (patrón de canal/permisos
       a reutilizar).
       **Esfuerzo:** medio.
 - [ ] **Backup automático local** — exportación silenciosa periódica al

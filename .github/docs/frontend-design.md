@@ -13,8 +13,13 @@ claras y móviles, con todas las vistas coherentes entre sí.
 
 ## Paleta (fuente única: `lib/theme.ts`)
 
-Dos temas (noche por defecto y día) con las MISMAS claves; el modo se resuelve una
-sola vez al evaluar el módulo, así que cambiarlo exige relanzar el bundle.
+Dos temas (noche por defecto y día) con las MISMAS claves. Desde la 0.6.4 el modo
+se aplica **en caliente**: `theme` es un singleton que se muta (`setThemeMode` →
+`Object.assign(theme, buildTheme(mode))`) y `themeStore` (`subscribeTheme`) avisa a
+cada componente para que recalcule sus `styles` vía `makeStyles()`; no hace falta
+relanzar el bundle. El IDIOMA sigue el mismo patrón (`lib/i18n.ts`: `language`/
+`dateLocale`/`decimalSeparator` como bindings vivos + `useLanguageVersion` en la
+raíz), así que también se cambia en caliente.
 **Ningún hex suelto en pantallas/componentes**: los únicos archivos con valores hex
 son `lib/theme.ts` y `components/glassTokens.ts`.
 

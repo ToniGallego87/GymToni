@@ -9,6 +9,20 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.5',
+    items: [
+      'Cambiar de idioma ya no reinicia la app: el cambio es instantáneo, igual que ocurría con el modo claro/oscuro.',
+      'Al cambiar entre modo claro y oscuro verás una animación bonita: un círculo de color nace donde tocas y recorre la pantalla.',
+      'Ahora puedes cambiar el tiempo de descanso por defecto sin salir del entrenamiento: hay un botón junto al temporizador y una opción en el menú de los tres puntos.',
+      'El temporizador de descanso tiene botones claros para "+30s" y "Saltar"; ya no hace falta mantener pulsado ni adivinar el gesto.',
+      'Al registrar cardio ya no tienes que pulsar "Guardar": se guarda solo al confirmar en el teclado o al tocar fuera de la tarjeta.',
+      'El menú de opciones (los tres puntos, arriba a la derecha) aparece ahora en todas las pantallas, siempre en el mismo sitio.',
+      'En modo oscuro las tarjetas y las barras se distinguen mejor del fondo.',
+      'Cuando ya has terminado el entrenamiento de hoy, tocar su tarjeta en Inicio lo abre para revisarlo o editarlo, en vez de no hacer nada.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.4',
     items: [
       'Cambiar entre modo oscuro y claro es ahora instantáneo: la app ya no se reinicia al hacerlo (cambiar de idioma sí la sigue reiniciando).',

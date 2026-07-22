@@ -199,6 +199,10 @@ export function WorkoutLogScreen({
   const [cardioInput, setCardioInput] = useState(initialCardioInput);
   const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
+  // Editar el descanso por defecto de la rutina sin salir del registro (botón
+  // dentro del propio temporizador y opción en el menú de tres puntos).
+  const [showTimerModal, setShowTimerModal] = useState(false);
+  const [timerInput, setTimerInput] = useState('');
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -231,6 +235,34 @@ export function WorkoutLogScreen({
     const routineId = getRoutineIdForDay();
     const routine = state.routines.find((r) => r.id === routineId);
     return routine?.timerDuration || 150;
+  };
+
+  const formatTimerLabel = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const openTimerModal = () => {
+    setTimerInput(getTimerDurationFromRoutine().toString());
+    setShowTimerModal(true);
+  };
+
+  // Guarda el nuevo descanso por defecto en la rutina dueña del día (mismo
+  // UPDATE_ROUTINE que RoutineDetailScreen). No toca el descanso en curso: para
+  // eso están +30s y Saltar; esto ajusta el valor de las próximas series.
+  const handleSaveTimer = () => {
+    const newDuration = parseInt(timerInput, 10);
+    const routineId = getRoutineIdForDay();
+    const routine = state.routines.find((r) => r.id === routineId);
+    if (routine && !isNaN(newDuration) && newDuration > 0) {
+      dispatch({
+        type: 'UPDATE_ROUTINE',
+        payload: { ...routine, timerDuration: newDuration },
+      });
+    }
+    setShowTimerModal(false);
+    setTimerInput('');
   };
 
   const clearTimerNotification = async () => {
@@ -784,20 +816,7 @@ export function WorkoutLogScreen({
               {activeTimerId === exercise.id &&
                 timerSeconds > 0 &&
                 !isTargetCompleted && (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.timerContainer,
-                      pressed && styles.timerContainerPressed,
-                    ]}
-                    onPress={() => {
-                      void extendTimerBy(30);
-                    }}
-                    onLongPress={() => {
-                      void stopTimer();
-                    }}
-                    delayLongPress={1000}
-                    disabled={false}
-                  >
+                  <View style={styles.timerContainer}>
                     <View style={styles.timerLabelRow}>
                       <MaterialCommunityIcons
                         name="timer-sand"
@@ -812,10 +831,68 @@ export function WorkoutLogScreen({
                       {Math.floor(timerSeconds / 60)}:
                       {(timerSeconds % 60).toString().padStart(2, '0')}
                     </Text>
-                    <Text style={styles.timerHint}>
-                      {t('Tocar: +30s | Mantener: elimina temporizador')}
-                    </Text>
-                  </Pressable>
+                    {/* Acciones VISIBLES (antes escondidas en toque/long-press,
+                        contra la regla de AGENTS): añadir 30s o saltar el
+                        descanso, cada una con su botón e icono. */}
+                    <View style={styles.timerActionsRow}>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.timerActionButton,
+                          pressed && styles.timerActionButtonPressed,
+                        ]}
+                        onPress={() => {
+                          void extendTimerBy(30);
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Añadir 30 segundos')}
+                      >
+                        <MaterialCommunityIcons
+                          name="plus"
+                          size={18}
+                          color={theme.colors.onGold}
+                        />
+                        <Text style={styles.timerActionText}>30s</Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.timerActionButton,
+                          pressed && styles.timerActionButtonPressed,
+                        ]}
+                        onPress={() => {
+                          void stopTimer();
+                        }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Saltar descanso')}
+                      >
+                        <MaterialCommunityIcons
+                          name="skip-next"
+                          size={18}
+                          color={theme.colors.onGold}
+                        />
+                        <Text style={styles.timerActionText}>
+                          {t('Saltar')}
+                        </Text>
+                      </Pressable>
+                      <Pressable
+                        style={({ pressed }) => [
+                          styles.timerActionButton,
+                          pressed && styles.timerActionButtonPressed,
+                        ]}
+                        onPress={openTimerModal}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Modificar temporizador')}
+                      >
+                        <MaterialCommunityIcons
+                          name="timer-cog-outline"
+                          size={18}
+                          color={theme.colors.onGold}
+                        />
+                        <Text style={styles.timerActionText}>
+                          {t('Editar')}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
                 )}
             </React.Fragment>
           );
@@ -867,6 +944,17 @@ export function WorkoutLogScreen({
             : `${t('Rellena los ejercicios')} - ${getSubtitleDate()}`
         }
         topInset={insets.top}
+        menuItems={
+          cardioOnly
+            ? undefined
+            : [
+                {
+                  icon: 'timer-cog-outline',
+                  label: t('Modificar temporizador'),
+                  onPress: openTimerModal,
+                },
+              ]
+        }
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -925,101 +1013,182 @@ export function WorkoutLogScreen({
           placeholderTextColor={theme.colors.textSecondary}
         />
       </AppModal>
+
+      {/* Editar el descanso por defecto de la rutina sin salir del registro.
+          Mismo modal que RoutineDetailScreen; ajusta el valor de las próximas
+          series (no el descanso en curso). */}
+      <AppModal
+        visible={showTimerModal}
+        onRequestClose={() => setShowTimerModal(false)}
+        title={t('Editar Temporizador')}
+        icon="timer-sand"
+        align="left"
+        footer={
+          <View style={styles.modalButtons}>
+            <Button
+              title={t('Cancelar')}
+              onPress={() => setShowTimerModal(false)}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
+            />
+            <Button
+              title={t('Guardar')}
+              onPress={handleSaveTimer}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
+          </View>
+        }
+      >
+        <Text style={styles.timerFieldLabel}>{t('Duración en segundos:')}</Text>
+        <TextInput
+          style={styles.timerInputBox}
+          keyboardType="number-pad"
+          placeholder="150"
+          placeholderTextColor={theme.colors.textSecondary}
+          value={timerInput}
+          onChangeText={setTimerInput}
+        />
+        <Text style={styles.timerModalFormat}>
+          {t('Equivalente:')} {formatTimerLabel(parseInt(timerInput, 10) || 0)}
+        </Text>
+      </AppModal>
     </View>
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 0,
-  },
-  buttonContainer: {
-    marginTop: 15,
-  },
-  notesInput: {
-    marginTop: 4,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    padding: 14,
-    fontSize: 16,
-    minHeight: 88,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.inputBg,
-    lineHeight: 22,
-    textAlignVertical: 'top',
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  // Reparto equitativo y sin la sombra fuerte del Button: dentro de la tarjeta
-  // del modal la sombra grande dejaba una mancha oscura debajo.
-  modalButton: {
-    flex: 1,
-    shadowOpacity: 0,
-    elevation: 0,
-  },
-  timerContainer: {
-    marginVertical: 16,
-    marginHorizontal: 20,
-    backgroundColor: theme.colors.primaryFill,
-    borderRadius: theme.borderRadius.lg,
-    padding: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
-  },
-  timerContainerPressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.995 }],
-  },
-  timerText: {
-    fontSize: 48,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-  },
-  timerLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  timerLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: theme.colors.onGold,
-  },
-  timerHint: {
-    fontSize: 13,
-    fontStyle: 'italic',
-    color: theme.colors.onGold,
-    marginTop: 12,
-    opacity: 0.8,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  topBarTitleText: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingTop: 0,
+    },
+    buttonContainer: {
+      marginTop: 15,
+    },
+    notesInput: {
+      marginTop: 4,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.sm,
+      padding: 14,
+      fontSize: 16,
+      minHeight: 88,
+      color: theme.colors.text,
+      backgroundColor: theme.colors.inputBg,
+      lineHeight: 22,
+      textAlignVertical: 'top',
+    },
+    timerFieldLabel: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    timerInputBox: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.sm,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.colors.text,
+      backgroundColor: theme.colors.inputBg,
+    },
+    timerModalFormat: {
+      marginTop: 10,
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
+    },
+    modalButtons: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    // Reparto equitativo y sin la sombra fuerte del Button: dentro de la tarjeta
+    // del modal la sombra grande dejaba una mancha oscura debajo.
+    modalButton: {
+      flex: 1,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    timerContainer: {
+      marginVertical: 16,
+      marginHorizontal: 20,
+      backgroundColor: theme.colors.primaryFill,
+      borderRadius: theme.borderRadius.lg,
+      padding: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.25,
+      shadowRadius: 3.84,
+      elevation: 5,
+    },
+    timerText: {
+      fontSize: 48,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+    },
+    timerLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    timerLabel: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.colors.onGold,
+    },
+    timerActionsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: 10,
+      marginTop: 14,
+    },
+    timerActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 9,
+      paddingHorizontal: 18,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1.5,
+      borderColor: theme.colors.onGold,
+    },
+    timerActionButtonPressed: {
+      opacity: 0.6,
+    },
+    timerActionText: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+    },
+    topBarTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    topBarTitleText: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 24,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {
