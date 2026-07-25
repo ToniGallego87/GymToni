@@ -166,13 +166,6 @@ export function listExercises(logs: WorkoutLog[]): ExerciseSummary[] {
 /** Criterios de orden de la lista de ejercicios. */
 export type ExerciseSort = 'recent' | 'name' | 'sessions' | 'best';
 
-export const EXERCISE_SORTS: ExerciseSort[] = [
-  'recent',
-  'name',
-  'sessions',
-  'best',
-];
-
 /**
  * Ordena los ejercicios sin mutar la lista. Todos los criterios salvo el nombre
  * desempatan por el más reciente: con dos ejercicios de 5 sesiones, el de esta

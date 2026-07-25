@@ -9,6 +9,21 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.6',
+    items: [
+      'Ahora puedes editar o borrar un entrenamiento ya guardado desde su propia pantalla de detalle: usa el menú de los tres puntos, arriba a la derecha.',
+      'El temporizador de descanso aparece ahora dentro de la tarjeta del ejercicio, justo donde estás mirando, y también salta al terminar un ejercicio si aún te quedan otros por hacer.',
+      'Los botones del descanso ("+30s", "Saltar" y "Editar") caben siempre en una sola fila, sin partirse ni descolocarse.',
+      'Al corregir un entrenamiento de otro día ya no salta el descanso ni te avisa de la siguiente serie: eso solo pasa cuando entrenas hoy.',
+      'Un ejercicio ya terminado se ve en verde también cuando está abierto, y puedes añadirle una nota sin tener que plegarlo.',
+      'En modo claro los detalles dorados se ven más luminosos y amarillos, en vez de tirar a marrón: calendario, resumen del perfil, rutina activa y las gráficas.',
+      'El botón "Volver" en modo claro ahora es de cristal translúcido, como el resto de la app, en vez de una pastilla oscura.',
+      'Algunos títulos de las tarjetas ya no aparecen recortados por arriba y se leen completos.',
+      'El botón "Cancelar" de las notas ya no se parte en dos líneas.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.5',
     items: [
       'Cambiar de idioma ya no reinicia la app: el cambio es instantáneo, igual que ocurría con el modo claro/oscuro.',

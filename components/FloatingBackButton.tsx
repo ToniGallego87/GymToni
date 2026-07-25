@@ -26,10 +26,11 @@ export function FloatingBackButton({
   bottom,
   label = `← ${t('Volver')}`,
 }: FloatingBackButtonProps) {
-  // En modo día el botón se pinta como una píldora oscura sólida con texto
-  // blanco (en noche ya era cristal oscuro con texto blanco); así destaca sobre
-  // el fondo claro en vez de fundirse con él. Se lee en render (no a nivel de
-  // módulo) para que el cambio de tema en caliente aplique la variante correcta.
+  // En ambos temas el botón es cristal oscuro TRANSLÚCIDO con texto blanco: el
+  // blur de tinte oscuro sobre el fondo claro deja un ahumado que se lee sin
+  // opacar el contenido de detrás (antes en día era una píldora oscura sólida).
+  // Se lee en render (no a nivel de módulo) para que el cambio de tema en
+  // caliente aplique la variante correcta.
   const isLight = theme.mode === 'light';
   return (
     <Pressable
@@ -80,8 +81,8 @@ const makeStyles = () => StyleSheet.create({
     ...theme.shadow.card,
   },
   floatingBackButtonLight: {
-    backgroundColor: 'rgba(18, 22, 30, 0.94)',
-    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(18, 22, 30, 0.30)',
+    borderColor: 'rgba(255, 255, 255, 0.16)',
   },
   floatingBackBlur: {
     ...StyleSheet.absoluteFillObject,
@@ -92,7 +93,7 @@ const makeStyles = () => StyleSheet.create({
     pointerEvents: 'none',
   },
   floatingBackGlassOverlayLight: {
-    backgroundColor: 'rgba(10, 13, 18, 0.9)',
+    backgroundColor: 'rgba(8, 12, 16, 0.06)',
   },
   backButtonText: {
     color: theme.colors.white,

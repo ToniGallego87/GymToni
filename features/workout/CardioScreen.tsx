@@ -174,7 +174,7 @@ function buildMetricChart(
     const prev = index > 0 ? points[index - 1].value : null;
     const improved = prev == null ? null : point.value >= prev;
     const color = isCurrent
-      ? theme.colors.primaryLine
+      ? theme.colors.primaryFill
       : improved == null
       ? theme.colors.emoji_blue
       : improved
@@ -506,12 +506,7 @@ export function CardioScreen({
                   />
                 </View>
                 {latestMonthValue != null && (
-                  <Text
-                    style={[
-                      styles.progressLatestKcal,
-                      metric.id === 'kcal' && { color: theme.colors.primary },
-                    ]}
-                  >
+                  <Text style={styles.progressLatestKcal}>
                     {metric.fmt(latestMonthValue)} {metric.unit}
                   </Text>
                 )}
@@ -969,6 +964,9 @@ const makeStyles = () => StyleSheet.create({
     letterSpacing: 0.3,
     color: theme.colors.text,
     lineHeight: 22,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
   },
   dailyResults: {
     fontSize: 13,

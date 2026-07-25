@@ -154,7 +154,7 @@ function buildSessionChart(
     const prev = index > 0 ? points[index - 1].value : null;
     const improved = prev == null ? null : point.value >= prev;
     const color = isLatest
-      ? theme.colors.primaryLine
+      ? theme.colors.primaryFill
       : improved == null
       ? theme.colors.emoji_blue
       : improved

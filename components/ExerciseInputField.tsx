@@ -61,6 +61,10 @@ interface ExerciseInputFieldProps {
   previousLog?: ExerciseLog | null;
   improvement?: { isImproved: boolean; percent: number } | null;
   accent?: string;
+  // Temporizador de descanso, renderizado DENTRO de la tarjeta (al pie) mientras
+  // queden series. El padre decide su contenido; aquí solo se enmarca y anima la
+  // altura de la tarjeta al aparecer/desaparecer.
+  restTimer?: React.ReactNode;
 }
 
 export function ExerciseInputField({
@@ -78,6 +82,7 @@ export function ExerciseInputField({
   previousLog,
   improvement,
   accent = theme.colors.primary,
+  restTimer,
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
@@ -184,10 +189,9 @@ export function ExerciseInputField({
     : false;
   const hasAddedSets = addedSets.length > 0;
 
-  // Al completarse (todas las series hechas) la tarjeta se colapsa sola: en ese
-  // estado se tiñe de verde para marcarla como terminada.
-  const isCompletedCollapsed = isMaxSetsReached && !expanded;
-  const cardAccent = isCompletedCollapsed ? theme.colors.success : accent;
+  // Al completarse (todas las series hechas) la tarjeta se tiñe de verde para
+  // marcarla como terminada, esté colapsada o desplegada.
+  const cardAccent = isMaxSetsReached ? theme.colors.success : accent;
 
   const wasMaxReachedRef = useRef(isMaxSetsReached);
   useEffect(() => {
@@ -408,9 +412,9 @@ export function ExerciseInputField({
               <MaterialCommunityIcons
                 name="note-text-outline"
                 size={13}
-                color={accent}
+                color={cardAccent}
               />
-              <Text style={[styles.noteOwnText, { color: accent }]}>
+              <Text style={[styles.noteOwnText, { color: cardAccent }]}>
                 {notes}
               </Text>
             </Pressable>
@@ -655,32 +659,72 @@ export function ExerciseInputField({
                 })}
               </Text>
             </View>
-            <Pressable
-              style={({ pressed }) => [
-                styles.secondaryButton,
-                styles.deleteButton,
-                styles.undoButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={onRemoveLastSet}
-            >
-              <MaterialCommunityIcons
-                name="minus"
-                size={15}
-                color={theme.colors.error}
-              />
-              <Text
-                style={[
-                  styles.secondaryButtonText,
-                  { color: theme.colors.error },
+            {/* Acciones del ejercicio ya completado: deshacer la última serie y
+                editar la nota. La nota debe seguir accesible aquí (antes solo
+                salía su botón mientras el ejercicio estaba en progreso). */}
+            <View style={styles.secondaryRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  styles.deleteButton,
+                  pressed && styles.buttonPressed,
                 ]}
+                onPress={onRemoveLastSet}
               >
-                Borrar
-              </Text>
-            </Pressable>
+                <MaterialCommunityIcons
+                  name="minus"
+                  size={15}
+                  color={theme.colors.error}
+                />
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    { color: theme.colors.error },
+                  ]}
+                >
+                  {t('Borrar')}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.secondaryButton,
+                  styles.notesButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={onNotesPress}
+              >
+                <MaterialCommunityIcons
+                  name="pencil-outline"
+                  size={15}
+                  color={theme.colors.textSecondary}
+                />
+                <Text
+                  style={[
+                    styles.secondaryButtonText,
+                    { color: theme.colors.textSecondary },
+                  ]}
+                >
+                  {t('Nota')}
+                </Text>
+              </Pressable>
+            </View>
           </Animated.View>
         )}
       </View>
+
+      {/* Temporizador de descanso dentro de la tarjeta: aparece al pie y, al
+          montarse/desmontarse, la `LinearTransition` del contenedor estira o
+          encoge la tarjeta para que el descanso quede atado a su ejercicio. */}
+      {restTimer && (
+        <Animated.View
+          entering={fadeIn}
+          exiting={fadeOut}
+          layout={layoutTransition}
+          style={styles.restTimerInside}
+        >
+          {restTimer}
+        </Animated.View>
+      )}
     </Animated.View>
   );
 }
@@ -966,10 +1010,16 @@ const makeStyles = () => StyleSheet.create({
     fontWeight: '700',
     fontSize: 14,
   },
-  undoButton: {
-    flex: 0,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
+
+  // Temporizador de descanso (al pie de la tarjeta). Bloque dorado; el contenido
+  // (label + cuenta atrás + acciones) lo aporta el padre con sus propios estilos.
+  restTimerInside: {
+    marginTop: 12,
+    backgroundColor: theme.colors.primaryFill,
+    borderRadius: theme.borderRadius.md,
+    padding: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 
   // Cronómetro

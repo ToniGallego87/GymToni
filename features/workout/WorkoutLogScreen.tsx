@@ -120,6 +120,11 @@ export function WorkoutLogScreen({
   // Obtener el log existente: si se pasa log, usarlo; sino el último de hoy
   const existingLog = log || getLatestTodayLog();
 
+  // Editando una sesión que NO es de hoy: rellenar o corregir un entreno de otro
+  // día no es entrenar, así que no se lanza la cuenta atrás de descanso (ni su
+  // notificación). Editar el log de hoy sí mantiene el temporizador.
+  const isEditingPastLog = !!log && (log.date ?? getToday()) !== getToday();
+
   // Cargar datos iniciales del log existente si existe
   const initialExerciseSets = selectedDay.exercises.reduce(
     (acc, ex) => {
@@ -471,6 +476,19 @@ export function WorkoutLogScreen({
     }
   };
 
+  // Cuántos ejercicios del día siguen sin alcanzar su objetivo de series (los
+  // sin objetivo no cuentan: nunca se dan por "completos"). Sirve para decidir,
+  // al terminar un ejercicio, si aún tiene sentido descansar —queda otro por
+  // hacer— o ya no —era el último—.
+  const countIncompleteExercises = (
+    sets: Record<string, ParsedSet[]>
+  ): number =>
+    selectedDay.exercises.filter((ex) => {
+      const target = ex.targetSets ?? 0;
+      if (target <= 0) return false;
+      return (sets[ex.id]?.length || 0) < target;
+    }).length;
+
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     const targetSets =
       selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets || 0;
@@ -482,12 +500,23 @@ export function WorkoutLogScreen({
     setExerciseSets(updated);
     autoSaveWorkout(updated);
 
+    // Editando un entreno de otro día: se guarda la serie pero no hay descanso.
+    if (isEditingPastLog) return;
+
     const currentSetsCount = exerciseSets[exerciseId]?.length || 0;
     const willReachTarget =
       targetSets > 0 && currentSetsCount + 1 >= targetSets;
 
     if (willReachTarget) {
-      void stopTimer();
+      // Objetivo alcanzado. Si aún quedan ejercicios por completar en el día, el
+      // descanso sigue teniendo sentido (toca pasar al siguiente): se lanza el
+      // temporizador, que se pinta BAJO la tarjeta —ya completada—. Si era el
+      // último, no hay siguiente serie ni ejercicio: se detiene.
+      if (countIncompleteExercises(updated) > 0) {
+        void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
+      } else {
+        void stopTimer();
+      }
       return;
     }
 
@@ -582,17 +611,27 @@ export function WorkoutLogScreen({
       const currentSets = exerciseSets[exerciseId] || [];
       const setsToAdd = targetSets - currentSets.length;
 
+      let finalSets = exerciseSets;
       if (setsToAdd > 0) {
         const filledSets = [...currentSets];
         for (let i = 0; i < setsToAdd; i++) {
           filledSets.push({ weight: -1, reps: -1 });
         }
-        const updated = { ...exerciseSets, [exerciseId]: filledSets };
-        setExerciseSets(updated);
-        autoSaveWorkout(updated);
+        finalSets = { ...exerciseSets, [exerciseId]: filledSets };
+        setExerciseSets(finalSets);
+        autoSaveWorkout(finalSets);
       }
 
-      void stopTimer();
+      // Editando un entreno de otro día: no hay descanso que lanzar.
+      if (isEditingPastLog) return;
+
+      // Igual que al completar la última serie: si quedan ejercicios por hacer,
+      // el descanso se lanza y se pinta BAJO la tarjeta; si no, se detiene.
+      if (countIncompleteExercises(finalSets) > 0) {
+        void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
+      } else {
+        void stopTimer();
+      }
     }
   };
 
@@ -724,7 +763,7 @@ export function WorkoutLogScreen({
 
   const handleSaveNotes = () => {
     if (showNotesModal) {
-      setExerciseNotes((prev: any) => ({
+      setExerciseNotes((prev) => ({
         ...prev,
         [showNotesModal]: notesText,
       }));
@@ -735,7 +774,7 @@ export function WorkoutLogScreen({
 
   const handleDeleteNotes = () => {
     if (showNotesModal) {
-      setExerciseNotes((prev: any) => {
+      setExerciseNotes((prev) => {
         const next = { ...prev };
         delete next[showNotesModal];
         return next;
@@ -756,6 +795,93 @@ export function WorkoutLogScreen({
     return dateString.split('-').reverse().join('/');
   };
 
+  // Contenido del temporizador de descanso (label + cuenta atrás + acciones).
+  // Se reutiliza en dos sitios: DENTRO de la tarjeta del ejercicio mientras
+  // quedan series (via prop `restTimer` de ExerciseInputField) y FUERA, como
+  // bloque suelto, cuando el ejercicio ya está completo (no hay siguiente serie
+  // que enmarcar).
+  const renderRestTimerContent = () => (
+    <>
+      <View style={styles.timerLabelRow}>
+        <MaterialCommunityIcons
+          name="timer-sand"
+          size={16}
+          color={theme.colors.onGold}
+        />
+        <Text style={styles.timerLabel}>
+          {t('Tiempo hasta la siguiente serie')}
+        </Text>
+      </View>
+      <Text style={styles.timerText}>
+        {Math.floor(timerSeconds / 60)}:
+        {(timerSeconds % 60).toString().padStart(2, '0')}
+      </Text>
+      {/* Acciones VISIBLES (antes escondidas en toque/long-press,
+          contra la regla de AGENTS): añadir 30s o saltar el
+          descanso, cada una con su botón e icono. */}
+      <View style={styles.timerActionsRow}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.timerActionButton,
+            pressed && styles.timerActionButtonPressed,
+          ]}
+          onPress={() => {
+            void extendTimerBy(30);
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('Añadir 30 segundos')}
+        >
+          <MaterialCommunityIcons
+            name="plus"
+            size={18}
+            color={theme.colors.onGold}
+          />
+          <Text style={styles.timerActionText} numberOfLines={1}>
+            30s
+          </Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.timerActionButton,
+            pressed && styles.timerActionButtonPressed,
+          ]}
+          onPress={() => {
+            void stopTimer();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel={t('Saltar descanso')}
+        >
+          <MaterialCommunityIcons
+            name="skip-next"
+            size={18}
+            color={theme.colors.onGold}
+          />
+          <Text style={styles.timerActionText} numberOfLines={1}>
+            {t('Saltar')}
+          </Text>
+        </Pressable>
+        <Pressable
+          style={({ pressed }) => [
+            styles.timerActionButton,
+            pressed && styles.timerActionButtonPressed,
+          ]}
+          onPress={openTimerModal}
+          accessibilityRole="button"
+          accessibilityLabel={t('Modificar temporizador')}
+        >
+          <MaterialCommunityIcons
+            name="timer-cog-outline"
+            size={18}
+            color={theme.colors.onGold}
+          />
+          <Text style={styles.timerActionText} numberOfLines={1}>
+            {t('Editar')}
+          </Text>
+        </Pressable>
+      </View>
+    </>
+  );
+
   return (
     <View style={styles.container}>
       <StatusBar
@@ -775,16 +901,16 @@ export function WorkoutLogScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {selectedDay.exercises.map((exercise: any) => {
+        {selectedDay.exercises.map((exercise) => {
           const previousLog = getPreviousExerciseLog(exercise.id);
           const currentSets = exerciseSets[exercise.id] || [];
           const improvement = buildExerciseImprovement(
             currentSets,
             previousLog
           );
+          const targetSets = exercise.targetSets ?? 0;
           const isTargetCompleted =
-            exercise.targetSets > 0 &&
-            currentSets.length >= exercise.targetSets;
+            targetSets > 0 && currentSets.length >= targetSets;
 
           return (
             <React.Fragment key={exercise.id}>
@@ -812,86 +938,22 @@ export function WorkoutLogScreen({
                 previousLog={previousLog}
                 improvement={improvement}
                 accent={dayAccent}
+                restTimer={
+                  activeTimerId === exercise.id &&
+                  timerSeconds > 0 &&
+                  !isTargetCompleted
+                    ? renderRestTimerContent()
+                    : null
+                }
               />
+              {/* Última serie ya hecha: el descanso sigue tocando, pero no hay
+                  siguiente serie que enmarcar, así que el timer va FUERA de la
+                  tarjeta como bloque suelto. */}
               {activeTimerId === exercise.id &&
                 timerSeconds > 0 &&
-                !isTargetCompleted && (
+                isTargetCompleted && (
                   <View style={styles.timerContainer}>
-                    <View style={styles.timerLabelRow}>
-                      <MaterialCommunityIcons
-                        name="timer-sand"
-                        size={16}
-                        color={theme.colors.onGold}
-                      />
-                      <Text style={styles.timerLabel}>
-                        {t('Tiempo hasta la siguiente serie')}
-                      </Text>
-                    </View>
-                    <Text style={styles.timerText}>
-                      {Math.floor(timerSeconds / 60)}:
-                      {(timerSeconds % 60).toString().padStart(2, '0')}
-                    </Text>
-                    {/* Acciones VISIBLES (antes escondidas en toque/long-press,
-                        contra la regla de AGENTS): añadir 30s o saltar el
-                        descanso, cada una con su botón e icono. */}
-                    <View style={styles.timerActionsRow}>
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.timerActionButton,
-                          pressed && styles.timerActionButtonPressed,
-                        ]}
-                        onPress={() => {
-                          void extendTimerBy(30);
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Añadir 30 segundos')}
-                      >
-                        <MaterialCommunityIcons
-                          name="plus"
-                          size={18}
-                          color={theme.colors.onGold}
-                        />
-                        <Text style={styles.timerActionText}>30s</Text>
-                      </Pressable>
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.timerActionButton,
-                          pressed && styles.timerActionButtonPressed,
-                        ]}
-                        onPress={() => {
-                          void stopTimer();
-                        }}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Saltar descanso')}
-                      >
-                        <MaterialCommunityIcons
-                          name="skip-next"
-                          size={18}
-                          color={theme.colors.onGold}
-                        />
-                        <Text style={styles.timerActionText}>
-                          {t('Saltar')}
-                        </Text>
-                      </Pressable>
-                      <Pressable
-                        style={({ pressed }) => [
-                          styles.timerActionButton,
-                          pressed && styles.timerActionButtonPressed,
-                        ]}
-                        onPress={openTimerModal}
-                        accessibilityRole="button"
-                        accessibilityLabel={t('Modificar temporizador')}
-                      >
-                        <MaterialCommunityIcons
-                          name="timer-cog-outline"
-                          size={18}
-                          color={theme.colors.onGold}
-                        />
-                        <Text style={styles.timerActionText}>
-                          {t('Editar')}
-                        </Text>
-                      </Pressable>
-                    </View>
+                    {renderRestTimerContent()}
                   </View>
                 )}
             </React.Fragment>
@@ -1151,20 +1213,25 @@ const makeStyles = () =>
       fontWeight: '600',
       color: theme.colors.onGold,
     },
+    // Siempre en una sola fila: sin wrap y con los tres botones repartiendo el
+    // ancho por igual (flex: 1), para que quepan de un vistazo tanto dentro de
+    // la tarjeta (más estrecho) como en el bloque suelto.
     timerActionsRow: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
+      flexWrap: 'nowrap',
+      alignSelf: 'stretch',
       justifyContent: 'center',
-      gap: 10,
+      gap: 8,
       marginTop: 14,
     },
     timerActionButton: {
+      flex: 1,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 6,
+      gap: 5,
       paddingVertical: 9,
-      paddingHorizontal: 18,
+      paddingHorizontal: 8,
       borderRadius: theme.borderRadius.pill,
       borderWidth: 1.5,
       borderColor: theme.colors.onGold,

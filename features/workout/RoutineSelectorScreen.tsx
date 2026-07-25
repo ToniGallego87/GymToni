@@ -217,7 +217,7 @@ function RoutineCard({
             <MaterialCommunityIcons
               name="check-bold"
               size={13}
-              color={theme.colors.primaryLight}
+              color={theme.colors.onGold}
             />
             <Text style={styles.routineCardActiveText}>{t('Activa')}</Text>
           </View>
@@ -337,7 +337,7 @@ const makeStyles = () => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: theme.colors.primaryMuted,
+    backgroundColor: theme.colors.primaryFill,
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: theme.borderRadius.pill,
@@ -345,7 +345,7 @@ const makeStyles = () => StyleSheet.create({
   },
   routineCardActiveText: {
     fontSize: 13,
-    color: theme.colors.primaryLight,
+    color: theme.colors.onGold,
     fontWeight: '800',
   },
   routineCardPreparedIndicator: {
@@ -363,30 +363,32 @@ const makeStyles = () => StyleSheet.create({
     color: theme.colors.emoji_blue,
     fontWeight: '800',
   },
+  // Relleno de oro vivo con tinta oscura (como el selector Fuerza/Cardio): el
+  // amarillo brillante solo lee como fondo, no como texto sobre el lienzo claro.
   newRoutineCard: {
-    backgroundColor: theme.colors.surfaceAlt,
+    backgroundColor: theme.colors.primaryFill,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
+    borderColor: theme.colors.primaryFillDark,
     paddingVertical: 18,
     alignItems: 'center',
   },
   newRoutineCardText: {
-    color: theme.colors.primary,
+    color: theme.colors.onGold,
     fontSize: 17,
     fontWeight: '800',
   },
   detailsButton: {
     marginTop: 8,
-    backgroundColor: theme.colors.surfaceAlt,
+    backgroundColor: theme.colors.primaryFill,
     borderRadius: theme.borderRadius.md,
     borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
+    borderColor: theme.colors.primaryFillDark,
     paddingVertical: 14,
     alignItems: 'center',
   },
   detailsButtonText: {
-    color: theme.colors.primary,
+    color: theme.colors.onGold,
     fontSize: 15,
     fontWeight: '800',
     lineHeight: 20,

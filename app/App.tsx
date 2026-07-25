@@ -590,6 +590,19 @@ function AppContent() {
           log={screen.log}
           day={screen.day}
           onBack={() => backFromDetail(screen.origin)}
+          onEdit={() =>
+            setScreen({
+              type: 'workout-log',
+              day: screen.day,
+              log: screen.log,
+              cardioOnly: screen.log.cardioOnly || undefined,
+              origin: screen.origin,
+            })
+          }
+          onDelete={() => {
+            dispatch({ type: 'DELETE_WORKOUT_LOG', payload: screen.log.id });
+            backFromDetail(screen.origin);
+          }}
         />
       )}
 

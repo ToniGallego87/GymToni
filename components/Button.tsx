@@ -58,7 +58,10 @@ export function Button({
       case 'large':
         return { paddingVertical: 14, paddingHorizontal: 24 };
       default:
-        return { paddingVertical: 12, paddingHorizontal: 16 };
+        // Horizontal contenido (12, no 16): en filas de 3 botones dentro de un
+        // modal cada botón se reparte 1/3 del ancho y una etiqueta larga como
+        // "Cancelar" se quedaba sin sitio y saltaba a dos líneas ("Cancela\nr").
+        return { paddingVertical: 12, paddingHorizontal: 12 };
     }
   };
 
@@ -104,6 +107,12 @@ export function Button({
           </>
         )}
         <Text
+          // La etiqueta de un botón es SIEMPRE de una línea: nunca debe partirse
+          // en dos (como el "Cancela / r" de las notas). Si aun así no cupiera,
+          // que la reduzca un poco antes de recortar con puntos suspensivos.
+          numberOfLines={1}
+          adjustsFontSizeToFit
+          minimumFontScale={0.85}
           style={[
             styles.text,
             {

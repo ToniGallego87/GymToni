@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState, useEffect, useRef } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -106,7 +106,7 @@ function buildProgressChart(points: WeekProgressPoint[]): {
     // (no en curso) que quedó incompleta en días.
     const isPrevIncomplete = !isCurrentWeek && !!point.isIncomplete;
     const color = isCurrentWeek
-      ? theme.colors.primaryLine
+      ? theme.colors.primaryFill
       : isPrevIncomplete
       ? theme.colors.emoji_blue
       : point.improvement >= 0
@@ -121,8 +121,8 @@ function buildProgressChart(points: WeekProgressPoint[]): {
         point.improvement
       )}%`,
       color,
-      // La barra en curso es oro de LÍNEA; su etiqueta es texto y necesita la
-      // tinta (ver theme.ts).
+      // La barra en curso es oro de RELLENO vivo; su etiqueta es texto y necesita
+      // la tinta legible (ver theme.ts).
       valueColor: isCurrentWeek ? theme.colors.primary : color,
       highlighted: isCurrentWeek,
     };
@@ -1142,7 +1142,7 @@ export function HomeScreen({
                             <MaterialCommunityIcons
                               name="trophy-variant-outline"
                               size={17}
-                              color={theme.colors.primary}
+                              color={theme.colors.onGold}
                             />
                           </Pressable>
                         )}
@@ -1555,6 +1555,9 @@ const makeStyles = () =>
       padding: 4,
       marginRight: 4,
       borderRadius: theme.borderRadius.sm,
+      // Copa en oro vivo con tinta oscura: el icono dorado sobre el lienzo claro
+      // se leía apagado; como relleno amarillo con icono oscuro sí resalta.
+      backgroundColor: theme.colors.primaryFill,
     },
     weekAchievementButtonPressed: {
       opacity: 0.6,
@@ -1610,6 +1613,9 @@ const makeStyles = () =>
       letterSpacing: 0.3,
       color: theme.colors.text,
       lineHeight: 22,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
     },
     historyLogDate: {
       fontSize: 14,

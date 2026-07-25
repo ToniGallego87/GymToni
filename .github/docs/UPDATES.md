@@ -1,5 +1,124 @@
 # UPDATES
 
+## Version 0.6.6 - 2026-07-25
+
+### Nuevas funcionalidades
+
+- **Editar y eliminar una sesión desde su detalle** (`features/workout/DetailScreen.tsx`,
+  `app/App.tsx`): la vista de detalle de un entreno guardado era solo lectura; para
+  corregir o borrar un día pasado había que volver a Inicio y usar su menú `⋯`. Ahora la
+  barra superior del detalle tiene un menú `⋯` con "Editar" (abre el registro de esa
+  sesión, reutilizando el flujo de edición ya existente; conserva el modo solo-cardio) y
+  "Eliminar" (con `ConfirmModal`; borra la sesión completa y vuelve al origen). `DetailScreen`
+  gana props opcionales `onEdit`/`onDelete`, cableadas en `App.tsx` con el `day`, `log` y
+  `origin` de la pantalla.
+
+### Correcciones
+
+- **El temporizador de descanso ya no salta al editar un entreno de otro día**
+  (`features/workout/WorkoutLogScreen.tsx`): al corregir un log cuya fecha no es la de hoy,
+  añadir o terminar una serie lanzaba igual la cuenta atrás de descanso y programaba su
+  notificación de "siguiente serie", que no tienen sentido rellenando un entreno viejo. Se
+  añade `isEditingPastLog` (`!!log && log.date !== hoy`) y `handleAddSet`/`handleFinishExercise`
+  guardan la serie pero salen antes de tocar el temporizador cuando es true. Editar el log
+  de hoy sigue lanzando el descanso como siempre.
+
+- **El botón "Cancelar" de las notas ya no se parte en dos líneas**
+  (`components/Button.tsx`): en la fila de 3 botones del modal de notas
+  ("Cancelar / Borrar / Guardar") la etiqueta más larga no cabía en su tercio de
+  ancho y saltaba a dos líneas ("Cancela / r"). Ahora la etiqueta de un botón es
+  SIEMPRE de una sola línea (`numberOfLines={1}`, con `adjustsFontSizeToFit` como
+  red de seguridad) y el padding horizontal de `size='medium'` baja de 16 a 12
+  para dejarle sitio. Nuevo test `lib/__tests__/buttonLabels.test.ts` que estima
+  el ancho de cada etiqueta de acción (es/en) y falla si desborda su fila.
+
+### Mejoras visuales
+
+- **La tarjeta de un ejercicio completado se pinta de verde también desplegada**
+  (`components/ExerciseInputField.tsx`): antes solo se teñía de verde al colapsarse
+  (`isCompletedCollapsed`); ahora el acento verde depende solo de tener el objetivo
+  cumplido (`isMaxSetsReached`), esté colapsada o abierta. Además el estado
+  "completado" desplegado ya muestra el botón de **Nota** (junto a Borrar), que antes
+  solo aparecía con el ejercicio en progreso.
+- **El temporizador de descanso aparece al terminar un ejercicio si quedan otros**
+  (`features/workout/WorkoutLogScreen.tsx`): al completar la última serie o pulsar
+  "Terminar", si aún quedan ejercicios por completar ese día, el descanso se lanza y se
+  pinta BAJO la tarjeta (nuevo `countIncompleteExercises`). Si era el último ejercicio,
+  no se lanza. Antes se detenía siempre y no salía temporizador.
+- **Temporizador de descanso dentro de la tarjeta del ejercicio**
+  (`features/workout/WorkoutLogScreen.tsx`, `components/ExerciseInputField.tsx`): el
+  timer de descanso ya no cuelga como bloque hermano suelto debajo de la tarjeta;
+  mientras quedan series se renderiza DENTRO de la tarjeta (nueva prop `restTimer` de
+  `ExerciseInputField`) al pie, y la `LinearTransition` del contenedor estira/encoge la
+  tarjeta al aparecer/desaparecer, dejando el descanso atado a su ejercicio.
+- **El temporizador también aparece tras la última serie**
+  (`features/workout/WorkoutLogScreen.tsx`): con el objetivo de series cumplido
+  (`isTargetCompleted`) el descanso seguía tocando pero el timer no salía. Ahora sí
+  aparece, pero FUERA de la tarjeta como bloque suelto (no hay siguiente serie que
+  enmarcar). El contenido del timer se extrajo a `renderRestTimerContent()`, reutilizado
+  dentro y fuera de la tarjeta.
+- **Botones del temporizador siempre en una sola fila**
+  (`features/workout/WorkoutLogScreen.tsx`): las tres acciones (+30s, Saltar, Editar)
+  usaban `flexWrap: 'wrap'` y se partían en varias filas cuando no cabían. Ahora la fila
+  es `nowrap` y los tres botones reparten el ancho por igual (`flex: 1`, padding y gap
+  ajustados), de modo que caben de un vistazo tanto dentro de la tarjeta como en el
+  bloque suelto.
+- **Acentos dorados del modo claro más amarillos, no marrones** (`lib/theme.ts`):
+  se recolocan los tonos oro del tema claro (`primary` #966100 → #B08800,
+  `primaryLight`, `primaryDark`, `accent` y `primaryMuted` lavado del oro vivo #F7C21A;
+  `primaryLine` #B87A00 → #DBA400 para roles de línea). El día en curso del calendario,
+  el Resumen del perfil, la rutina seleccionada y la barra de la semana en curso dejan
+  de verse marrón apagado y tiran a ámbar amarillo, alineados con el oro vivo del
+  selector Fuerza/Cardio, sin perder legibilidad.
+- **Oro vivo de relleno en insignias y barra/punto en curso**
+  (`features/workout/HomeScreen.tsx`, `RoutineSelectorScreen.tsx`, `CardioScreen.tsx`,
+  `ExerciseProgressScreen.tsx`): la copa de logros de la semana y la insignia "Activa"
+  de la rutina pasan a relleno oro vivo (`primaryFill`) con icono/tinta oscura
+  (`onGold`); la barra de la semana en curso y el último punto de las gráficas de cardio
+  y de progreso por ejercicio usan `primaryFill` en vez de `primaryLine`, para que
+  resalten sobre el lienzo claro.
+- **Botón "Volver" translúcido también en modo claro** (`components/FloatingBackButton.tsx`):
+  en día era una píldora oscura casi opaca (`rgba(18,22,30,0.94)`); ahora es cristal
+  oscuro translúcido en ambos temas (relleno a 0.30 y overlay a 0.06), dejando entrever
+  el fondo como el resto de la interfaz glass.
+- **Títulos de tarjeta con fuente Anton ya no se recortan por arriba**
+  (`features/workout/HomeScreen.tsx`, `CardioScreen.tsx`): el nombre del día en el
+  historial de Fuerza (`historyLogDayName`) y el del ejercicio en Cardio (`dailyName`)
+  reciben la compensación estándar de la display (`includeFontPadding: false`,
+  `textAlignVertical: 'center'`, `translateY` 3/5 px por plataforma) que ya llevan otros
+  títulos, dejando de comerse la parte alta de las mayúsculas.
+
+### Cambios
+
+- **Retirar dependencias no usadas del `package.json`** (`package.json`): se eliminan
+  `@react-navigation/bottom-tabs`, `@react-navigation/native`,
+  `@react-navigation/native-stack` y `react-native-paper`, que no se importaban en ningún
+  archivo fuente y contradecían la arquitectura declarada (navegación por estado, UI 100%
+  custom). `@react-navigation/native` sigue resolviéndose de forma transitiva vía
+  `expo-router` con la misma versión (6.1.18), así que la resolución no cambia.
+  `type-check` en verde.
+- **Limpieza de código muerto y anotaciones `any` (sin efecto en runtime)**
+  (`features/workout/HomeScreen.tsx`, `components/CardioInputField.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`): se elimina el import `useRef` sin usar en
+  `HomeScreen`; se retira la prop `placeholder` de `CardioInputField`, que se declaraba
+  y desestructuraba pero ya no se leía (el campo libre se sustituyó por el asistente por
+  disciplina) y que ningún consumidor pasaba; y se quitan tres anotaciones `: any`
+  innecesarias en `WorkoutLogScreen` (los dos `setExerciseNotes((prev) => …)` ya infieren
+  `Record<string, string>` y el `map` sobre `selectedDay.exercises` ya infiere
+  `WorkoutExercise`). Al tipar bien el `map`, `targetSets` (opcional) se resuelve con
+  `?? 0`, manteniendo idéntico el cálculo de `isTargetCompleted`. `type-check` y los 149
+  tests (12 suites) siguen en verde.
+- **Eliminada la constante muerta `EXERCISE_SORTS`** (`lib/exerciseProgress.ts`): el array
+  con los cuatro criterios de orden no lo usaba nadie (la pantalla de progreso construye su
+  propio `SORT_OPTIONS` con etiquetas y sigue usando el tipo `ExerciseSort` y `sortExercises`).
+  Sin efecto en runtime. `type-check` y los 154 tests (13 suites) en verde.
+- **Retirada la utilidad muerta `restartApp` y la dependencia `react-native-restart`**
+  (`lib/appSettings.ts`, `package.json`): desde que tema e idioma se aplican en caliente,
+  `restartApp` era una "utilidad de reserva" sin ningún consumidor, y `react-native-restart`
+  era su única dependencia. Se borra la función (y su comentario) y se quita la dependencia
+  del manifiesto; `npm install` la retira del árbol y del lock. Al ser dependencia nativa,
+  conviene verificar el build nativo en la próxima APK. `type-check` y los 154 tests en verde.
+
 ## Version 0.6.5 - 2026-07-22
 
 ### Nuevas funcionalidades

@@ -17,7 +17,6 @@ import { Button } from './Button';
 interface CardioInputFieldProps {
   value: string;
   onChangeText: (text: string) => void;
-  placeholder?: string;
   // Color de acento del día (push/pull/pierna). Tiñe el borde izquierdo.
   accent?: string;
 }
@@ -46,7 +45,6 @@ const CARDIO_OPTIONS = [
 export function CardioInputField({
   value,
   onChangeText,
-  placeholder = t('Ej: Cinta: 22.5mins, 11.5kmh'),
   accent = theme.colors.primaryLine,
 }: CardioInputFieldProps) {
   const [cardioEntries, setCardioEntries] = useState<string[]>(() => {

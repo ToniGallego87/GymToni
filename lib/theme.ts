@@ -94,18 +94,26 @@ const lightColors: typeof darkColors = {
   // Antes ambos eran el mismo bronce oscuro con texto blanco: legible, pero el
   // relleno quedaba apagado y sucio sobre el fondo claro. En noche los dos roles
   // siguen coincidiendo en el mismo oro brillante.
-  primary: '#966100',
-  primaryDark: '#7A4F00',
+  // Oro brillante como TINTA (texto destacado e iconos): se subió lo más amarillo
+  // posible manteniéndose legible (~3:1) para acercarlo al oro vivo del selector
+  // Fuerza/Cardio (`primaryFill` #F7C21A). No puede ser TAN claro como ese oro:
+  // como tinta sobre el lienzo claro se desvanecería; el oro vivo solo funciona
+  // ahí porque es RELLENO con tinta oscura encima.
+  primary: '#B08800',
+  primaryDark: '#8A6A00',
   // Ojo: en día "light" significa MÁS contraste sobre el lienzo claro (se usa
   // como tinta), así que es más oscuro que `primary`, no más claro.
-  primaryLight: '#7A5200',
-  primaryMuted: 'rgba(150, 97, 0, 0.14)',
+  primaryLight: '#8F6E00',
+  // Tinte de fondo (chips/badges/celda del día, rutina seleccionada): lavado del
+  // mismo oro vivo del selector (#F7C21A) a baja alfa, para que lea amarillo.
+  primaryMuted: 'rgba(247, 194, 26, 0.22)',
   primaryFill: '#F7C21A',
   primaryFillLight: '#FFD75A',
   primaryFillDark: '#E2A80C',
-  // Ámbar: 3.2:1 sobre el fondo y 3.6:1 sobre las tarjetas. La tinta (`primary`)
-  // aquí se leía marrón; el oro de relleno, en cambio, se perdería (1.6:1).
-  primaryLine: '#B87A00',
+  // Oro de LÍNEA (aro del día en curso, bordes, tinte de GradientFill): rol
+  // decorativo, así que puede ir mucho más brillante/amarillo que la tinta,
+  // cerca del oro vivo del selector.
+  primaryLine: '#DBA400',
   lightGray: '#7C8496',
   veryLightGray: '#3C4352',
   white: '#171B23',
@@ -134,7 +142,7 @@ const lightColors: typeof darkColors = {
   errorLight: '#A82F2F',
   warning: '#B26E0E',
   current: '#3E60B8',
-  accent: '#966100',
+  accent: '#B08800',
   overlay: 'rgba(13, 16, 23, 0.5)',
   emoji_blue: '#3E60B8',
   emoji_orange: '#C26F00',

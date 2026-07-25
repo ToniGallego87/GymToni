@@ -2,7 +2,7 @@
 // al evaluar el bundle para que theme.ts e i18n.ts fijen sus valores iniciales
 // antes de que el resto de módulos creen sus StyleSheets y textos. Tanto el tema
 // como el idioma se cambian luego EN CALIENTE (theme.ts `setThemeMode`, i18n.ts
-// `setLanguage`), sin reiniciar; `restartApp` queda como utilidad de reserva.
+// `setLanguage`), sin reiniciar.
 // Sin imports duros de react-native/expo-sqlite: este módulo también se evalúa
 // en jest (node), donde cae a los valores por defecto.
 
@@ -92,18 +92,4 @@ export function getStoredLanguage(): Language {
 
 export function setStoredLanguage(language: Language): void {
   writeSetting(LANGUAGE_KEY, language);
-}
-
-// Relanza el bundle JS para aplicar tema/idioma. En web recarga la página; en
-// nativo usa react-native-restart (si no estuviera disponible, no hace nada y
-// el cambio se aplicará en el siguiente arranque).
-export function restartApp(): void {
-  try {
-    if (isWeb()) {
-      if (typeof location !== 'undefined') location.reload();
-      return;
-    }
-    const RNRestart = require('react-native-restart').default;
-    RNRestart.restart();
-  } catch {}
 }

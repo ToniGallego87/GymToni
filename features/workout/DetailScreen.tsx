@@ -5,6 +5,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  ConfirmModal,
   DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
@@ -39,6 +40,11 @@ interface DetailScreenProps {
   log: WorkoutLog;
   day: WorkoutDay;
   onBack: () => void;
+  // Abrir el registro para corregir esta sesión (misma acción que "Editar" en
+  // el menú ⋯ de Inicio).
+  onEdit?: () => void;
+  // Eliminar la sesión completa (fuerza y cardio). Se pide confirmación antes.
+  onDelete?: () => void;
 }
 
 function extractIncline(rawInput: string): string | null {
@@ -55,9 +61,37 @@ function extractPaceNumber(pace: string): string {
   return match ? match[1] : pace;
 }
 
-export function DetailScreen({ log, day, onBack }: DetailScreenProps) {
+export function DetailScreen({
+  log,
+  day,
+  onBack,
+  onEdit,
+  onDelete,
+}: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  // Acciones propias del detalle en el menú ⋯: corregir la sesión o borrarla.
+  // Eliminar pasa por un ConfirmModal (acción destructiva).
+  type TopBarItem = NonNullable<
+    React.ComponentProps<typeof GlassTopBar>['menuItems']
+  >[number];
+  const menuItems: TopBarItem[] = [];
+  if (onEdit) {
+    menuItems.push({
+      icon: 'pencil-outline',
+      label: t('Editar'),
+      onPress: onEdit,
+    });
+  }
+  if (onDelete) {
+    menuItems.push({
+      icon: 'delete-outline',
+      label: t('Eliminar'),
+      onPress: () => setShowDeleteModal(true),
+    });
+  }
   const dayAccent = getTrainingAccent({ emoji: day.emoji, name: day.name });
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
@@ -385,9 +419,22 @@ export function DetailScreen({ log, day, onBack }: DetailScreenProps) {
         }
         subtitle={displayedDate}
         topInset={insets.top}
+        menuItems={menuItems.length ? menuItems : undefined}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+
+      <ConfirmModal
+        visible={showDeleteModal}
+        title={t('¿Eliminar entrenamiento?')}
+        message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
+        confirmLabel={t('Eliminar')}
+        onConfirm={() => {
+          setShowDeleteModal(false);
+          onDelete?.();
+        }}
+        onCancel={() => setShowDeleteModal(false)}
+      />
     </View>
   );
 }

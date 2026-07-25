@@ -290,19 +290,24 @@ export function RoutineDetailScreen({
               <MaterialCommunityIcons
                 name="clipboard-text-outline"
                 size={22}
-                color={theme.colors.primary}
+                color={theme.colors.onGold}
               />
             </View>
             <View style={styles.infoTextWrap}>
               <Text style={styles.infoEyebrow}>{t('Rutina')}</Text>
               <Text style={styles.infoName}>{currentRoutine.name}</Text>
             </View>
-            <View style={styles.infoEditChip}>
+            <View
+              style={[
+                styles.infoEditChip,
+                !isClosed && styles.infoEditChipEditable,
+              ]}
+            >
               <MaterialCommunityIcons
                 name={isClosed ? 'lock-outline' : 'pencil'}
                 size={16}
                 color={
-                  isClosed ? theme.colors.textSecondary : theme.colors.primary
+                  isClosed ? theme.colors.textSecondary : theme.colors.onGold
                 }
               />
             </View>
@@ -566,7 +571,7 @@ export function RoutineDetailScreen({
             <MaterialCommunityIcons
               name="plus-circle-outline"
               size={18}
-              color={theme.colors.primary}
+              color={theme.colors.onGold}
             />
             <Text style={styles.addExerciseText}>{t('Añadir ejercicio')}</Text>
           </Pressable>
@@ -728,27 +733,35 @@ const makeStyles = () => StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
+  // Insignia y eyebrow de la rutina en oro vivo con tinta oscura (como el
+  // selector Fuerza/Cardio): el amarillo brillante solo lee como relleno.
   infoBadge: {
     width: 44,
     height: 44,
     borderRadius: theme.borderRadius.md,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
+    backgroundColor: theme.colors.primaryFill,
     borderWidth: 1,
-    borderColor: theme.colors.primary + '55',
+    borderColor: theme.colors.primaryFillDark,
   },
   infoTextWrap: {
     flex: 1,
     minWidth: 0,
   },
   infoEyebrow: {
+    alignSelf: 'flex-start',
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 1,
     textTransform: 'uppercase',
-    color: theme.colors.primary,
-    marginBottom: 2,
+    color: theme.colors.onGold,
+    backgroundColor: theme.colors.primaryFill,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: theme.borderRadius.sm,
+    overflow: 'hidden',
+    marginBottom: 4,
   },
   infoName: {
     fontSize: 22,
@@ -766,6 +779,11 @@ const makeStyles = () => StyleSheet.create({
     backgroundColor: theme.colors.surface,
     borderWidth: 1,
     borderColor: theme.colors.border,
+  },
+  // Editable = oro vivo con tinta oscura; bloqueada se queda neutra (candado).
+  infoEditChipEditable: {
+    backgroundColor: theme.colors.primaryFill,
+    borderColor: theme.colors.primaryFillDark,
   },
   infoDescription: {
     fontSize: 14,
@@ -890,12 +908,11 @@ const makeStyles = () => StyleSheet.create({
     paddingVertical: 12,
     borderRadius: theme.borderRadius.sm,
     borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.primaryFillDark,
+    backgroundColor: theme.colors.primaryFill,
   },
   addExerciseText: {
-    color: theme.colors.primary,
+    color: theme.colors.onGold,
     fontSize: 14,
     fontWeight: '800',
     lineHeight: 18,
