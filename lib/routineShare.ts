@@ -49,11 +49,14 @@ export function stripIconTag(titleLine: string): {
 }
 
 // Línea de ejercicio en el formato que entiende NewRoutineScreen: "Nombre [SxR]".
+// Si el ejercicio tiene un GIF fijado (catalogId), se añade la etiqueta "{#id}"
+// al final para que la asignación viaje con la rutina (texto plano y QR).
 function exerciseToLine(exercise: WorkoutExercise): string {
+  const tag = exercise.catalogId ? ` {#${exercise.catalogId}}` : '';
   if (exercise.targetSets && exercise.targetReps) {
-    return `${exercise.name} [${exercise.targetSets}x${exercise.targetReps}]`;
+    return `${exercise.name} [${exercise.targetSets}x${exercise.targetReps}]${tag}`;
   }
-  return exercise.name;
+  return `${exercise.name}${tag}`;
 }
 
 // Rutina en texto plano, en el mismo formato que entiende "Crear a partir de

@@ -39,6 +39,7 @@ export { ThemeRevealOverlay } from './ThemeRevealOverlay';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';
+export { DatePickerModal } from './DatePickerModal';
 export { GlassTopBar, GLASS_TOP_BAR_BASE_HEIGHT } from './GlassTopBar';
 export {
   FloatingBackButton,

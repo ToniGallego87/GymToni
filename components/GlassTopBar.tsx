@@ -346,8 +346,11 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surfaceAlt,
     },
     themeMenuDivider: {
-      height: StyleSheet.hairlineWidth,
-      backgroundColor: theme.colors.border,
+      // `border` es casi idéntico a `surface` en oscuro (línea invisible): se usa
+      // `textMuted`, un gris medio que contrasta en ambos temas.
+      height: 1,
+      backgroundColor: theme.colors.textMuted,
+      opacity: 0.4,
       marginVertical: 4,
     },
     themeMenuItemText: {

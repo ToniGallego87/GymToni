@@ -33,6 +33,9 @@ const EXERCISE_PLAIN_REGEX =
   /^(.+?)\s*(?:[—–]\s*|\s+)(?:(\d+)\s*[x×]\s*)?(\d+(?:-\d+)?\s*(?:s|seg|sec)?)\s*$/i;
 // Unidad de tiempo al final de las reps ("30s", "20-30 seg").
 const SECONDS_SUFFIX_REGEX = /\s*(s|seg|sec)\s*$/i;
+// Etiqueta de GIF asignado al final de la línea ("Press banca [4x6-8] {#0025}").
+// Fija el ejercicio del catálogo para que su GIF viaje al compartir/importar.
+const CATALOG_TAG_REGEX = /\s*\{#([0-9A-Za-z_-]+)\}\s*$/;
 
 function clampSets(sets: number): number {
   return Math.min(MAX_SETS, Math.max(MIN_SETS, sets));
@@ -46,7 +49,8 @@ export function createEmptyExercise(): ExerciseForm {
 export function makeExercise(
   name: string,
   setsRaw: string,
-  repsRaw: string
+  repsRaw: string,
+  catalogId?: string
 ): ExerciseForm {
   const sets = clampSets(parseInt(setsRaw, 10) || 3);
   let reps = repsRaw.trim();
@@ -63,21 +67,26 @@ export function makeExercise(
     sets,
     reps: reps || '10',
     unit,
+    catalogId,
   };
 }
 
 // Convierte una línea importada en una fila estructurada. Acepta "Nombre [4x6-8]",
-// "Nombre 4x6-8" o solo "Nombre".
+// "Nombre 4x6-8" o solo "Nombre", con una etiqueta opcional de GIF asignado
+// ("… {#0025}") que sobrevive al round-trip de compartir/importar.
 export function parseImportedExercise(line: string): ExerciseForm {
-  const trimmed = line.trim();
+  const tag = line.match(CATALOG_TAG_REGEX);
+  const catalogId = tag?.[1];
+  const trimmed = line.replace(CATALOG_TAG_REGEX, '').trim();
 
   const bracket = trimmed.match(EXERCISE_LINE_REGEX);
-  if (bracket) return makeExercise(bracket[1], bracket[2], bracket[3]);
+  if (bracket)
+    return makeExercise(bracket[1], bracket[2], bracket[3], catalogId);
 
   const plain = trimmed.match(EXERCISE_PLAIN_REGEX);
   if (plain && plain[3]) {
     const name = plain[1].replace(/[—–]\s*$/, '').trim();
-    return makeExercise(name, plain[2] ?? '3', plain[3]);
+    return makeExercise(name, plain[2] ?? '3', plain[3], catalogId);
   }
 
   return {
@@ -86,6 +95,7 @@ export function parseImportedExercise(line: string): ExerciseForm {
     sets: 3,
     reps: '10-12',
     unit: 'reps',
+    catalogId,
   };
 }
 

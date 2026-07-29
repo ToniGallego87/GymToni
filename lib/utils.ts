@@ -33,6 +33,29 @@ export function getToday(): string {
 }
 
 /**
+ * Combina una fecha (YYYY-MM-DD) con la hora de un timestamp de referencia.
+ * Se usa al reasignar un entreno a otro día: cambia el día pero conserva la
+ * hora, para que `createdAt` (con el que se ordenan y agrupan las semanas)
+ * siga el nuevo día manteniendo el orden intradía frente a otras sesiones.
+ */
+export function combineDateWithTime(
+  dateStr: string,
+  baseTimestamp: number
+): number {
+  const base = new Date(baseTimestamp);
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return new Date(
+    year,
+    month - 1,
+    day,
+    base.getHours(),
+    base.getMinutes(),
+    base.getSeconds(),
+    base.getMilliseconds()
+  ).getTime();
+}
+
+/**
  * Devuelve un timestamp comparable para un log.
  * Prioriza createdAt; si falta, deriva de la fecha (YYYY-MM-DD); si no, 0.
  */

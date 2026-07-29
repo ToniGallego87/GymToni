@@ -22,6 +22,7 @@ import {
   categoryLabel,
   equipmentLabel,
   exerciseName,
+  matchesExercise,
   targetLabel,
   thumbUrl,
 } from '@data/exerciseCatalog';
@@ -43,14 +44,13 @@ interface ExercisePickerModalProps {
   reference?: boolean;
   /** Búsqueda inicial (p. ej. el nombre del ejercicio que se consulta). */
   initialQuery?: string;
+  /**
+   * En modo consulta, permite fijar el GIF previsualizado al ejercicio de la
+   * rutina: el visor del GIF muestra un botón **Asignar** que guarda su
+   * `catalogId`.
+   */
+  onAssign?: (catalogId: string) => void;
 }
-
-// Quita acentos y baja a minúsculas para buscar sin importar tildes/idioma.
-const norm = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
 
 // Orden fijo de las zonas para el filtro (claves inglesas del catálogo).
 const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
@@ -66,6 +66,7 @@ export function ExercisePickerModal({
   onSelect,
   reference = false,
   initialQuery = '',
+  onAssign,
 }: ExercisePickerModalProps) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState(initialQuery);
@@ -91,11 +92,10 @@ export function ExercisePickerModal({
   );
 
   const results = useMemo(() => {
-    const q = norm(query.trim());
+    const q = query.trim();
     return EXERCISE_CATALOG.filter((ex) => {
       if (category && ex.category !== category) return false;
-      if (!q) return true;
-      return norm(ex.es).includes(q) || norm(ex.en).includes(q);
+      return matchesExercise(ex, q);
     });
   }, [query, category]);
 
@@ -152,7 +152,10 @@ export function ExercisePickerModal({
             {reference ? t('Ver ejercicio') : t('Catálogo de ejercicios')}
           </Text>
           <Pressable
-            style={({ pressed }) => [styles.closeButton, pressed && styles.pressed]}
+            style={({ pressed }) => [
+              styles.closeButton,
+              pressed && styles.pressed,
+            ]}
             onPress={onRequestClose}
             hitSlop={8}
           >
@@ -222,130 +225,140 @@ export function ExercisePickerModal({
         visible={previewId !== null}
         onRequestClose={() => setPreviewId(null)}
         catalogId={previewId ?? undefined}
+        onAssign={
+          onAssign
+            ? (assignedId) => {
+                onAssign(assignedId);
+                setPreviewId(null);
+                onRequestClose();
+              }
+            : undefined
+        }
       />
     </Modal>
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-    paddingHorizontal: theme.spacing.md,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  headerTitle: {
-    flex: 1,
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  closeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginTop: 14,
-    paddingHorizontal: 12,
-    height: 46,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.inputBg,
-  },
-  searchInput: {
-    flex: 1,
-    minWidth: 0,
-    color: theme.colors.text,
-    fontSize: 15,
-  },
-  filter: {
-    marginTop: 12,
-  },
-  count: {
-    marginTop: 12,
-    marginBottom: 4,
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  list: {
-    gap: 8,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  rowMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 8,
-  },
-  thumb: {
-    width: 48,
-    height: 48,
-    borderRadius: theme.borderRadius.sm,
-    backgroundColor: theme.colors.surface,
-  },
-  rowText: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  rowName: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  rowMeta: {
-    color: theme.colors.textSecondary,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  eyeButton: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  empty: {
-    marginTop: 40,
-    textAlign: 'center',
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+      paddingHorizontal: theme.spacing.md,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    headerTitle: {
+      flex: 1,
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    closeButton: {
+      width: 38,
+      height: 38,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginTop: 14,
+      paddingHorizontal: 12,
+      height: 46,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.inputBg,
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      color: theme.colors.text,
+      fontSize: 15,
+    },
+    filter: {
+      marginTop: 12,
+    },
+    count: {
+      marginTop: 12,
+      marginBottom: 4,
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
+    list: {
+      gap: 8,
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    rowMain: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: 8,
+    },
+    thumb: {
+      width: 48,
+      height: 48,
+      borderRadius: theme.borderRadius.sm,
+      backgroundColor: theme.colors.surface,
+    },
+    rowText: {
+      flex: 1,
+      minWidth: 0,
+      gap: 2,
+    },
+    rowName: {
+      color: theme.colors.text,
+      fontSize: 14,
+      fontWeight: '700',
+      lineHeight: 18,
+    },
+    rowMeta: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 16,
+    },
+    eyeButton: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    empty: {
+      marginTop: 40,
+      textAlign: 'center',
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+    },
+    pressed: {
+      opacity: 0.8,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

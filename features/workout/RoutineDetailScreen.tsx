@@ -215,6 +215,22 @@ export function RoutineDetailScreen({
     );
   };
 
+  // Reordena un ejercicio dentro del día. El id de cada fila viaja intacto (ver
+  // buildWorkoutExercises), así que el historial sigue apuntando a su ejercicio:
+  // los resultados pasados se muestran en la nueva posición, no se recalculan.
+  const moveDraftExercise = (exerciseId: string, direction: -1 | 1) => {
+    setExercisesDraft((previous) => {
+      const index = previous.findIndex((ex) => ex.id === exerciseId);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= previous.length) {
+        return previous;
+      }
+      const next = [...previous];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  };
+
   const handleSaveExercises = () => {
     if (!selectedDayId) return;
 
@@ -534,7 +550,7 @@ export function RoutineDetailScreen({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          {exercisesDraft.map((exercise) => {
+          {exercisesDraft.map((exercise, index) => {
             const expanded =
               editingExerciseId === exercise.id || !exercise.name.trim();
 
@@ -557,6 +573,10 @@ export function RoutineDetailScreen({
                 canRemove={exercisesDraft.length > 1}
                 onEdit={() => setEditingExerciseId(exercise.id)}
                 onRemove={() => removeDraftExercise(exercise.id)}
+                onMoveUp={() => moveDraftExercise(exercise.id, -1)}
+                onMoveDown={() => moveDraftExercise(exercise.id, 1)}
+                canMoveUp={index > 0}
+                canMoveDown={index < exercisesDraft.length - 1}
               />
             );
           })}
@@ -704,296 +724,297 @@ export function RoutineDetailScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    marginTop: 0,
-  },
-  // Cabecera de la rutina: banner con fondo dorado tenue, insignia e "eyebrow".
-  // Deliberadamente distinto de las tarjetas de día (que son transparentes con
-  // borde izquierdo de acento) para que no se lea como un día más.
-  infoBlock: {
-    backgroundColor: theme.colors.primaryMuted,
-    borderRadius: theme.borderRadius.lg,
-    borderWidth: 1,
-    borderColor: theme.colors.primary + '55',
-    padding: theme.spacing.md,
-    marginBottom: 16,
-    gap: 10,
-  },
-  infoTopRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  // Insignia y eyebrow de la rutina en oro vivo con tinta oscura (como el
-  // selector Fuerza/Cardio): el amarillo brillante solo lee como relleno.
-  infoBadge: {
-    width: 44,
-    height: 44,
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.primaryFill,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryFillDark,
-  },
-  infoTextWrap: {
-    flex: 1,
-    minWidth: 0,
-  },
-  infoEyebrow: {
-    alignSelf: 'flex-start',
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    color: theme.colors.onGold,
-    backgroundColor: theme.colors.primaryFill,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: theme.borderRadius.sm,
-    overflow: 'hidden',
-    marginBottom: 4,
-  },
-  infoName: {
-    fontSize: 22,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.text,
-    lineHeight: 27,
-  },
-  infoEditChip: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  // Editable = oro vivo con tinta oscura; bloqueada se queda neutra (candado).
-  infoEditChipEditable: {
-    backgroundColor: theme.colors.primaryFill,
-    borderColor: theme.colors.primaryFillDark,
-  },
-  infoDescription: {
-    fontSize: 14,
-    lineHeight: 19,
-    color: theme.colors.textSecondary,
-  },
-  dayBlock: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderLeftWidth: 4,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    marginBottom: 12,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  dayHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    gap: 8,
-  },
-  dayHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  // El icono del día es su propio botón (se toca el icono para cambiarlo), con
-  // un micro-badge de lápiz que lo delata como editable.
-  dayIconButton: {
-    marginRight: 10,
-    paddingTop: 2,
-  },
-  dayIconEditBadge: {
-    position: 'absolute',
-    right: -4,
-    bottom: -4,
-    width: 15,
-    height: 15,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.primaryFill,
-  },
-  dayName: {
-    fontSize: 20,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.text,
-    flexShrink: 1,
-    lineHeight: 25,
-  },
-  dayBadge: {
-    color: theme.colors.primaryLight,
-    backgroundColor: theme.colors.primaryMuted,
-    borderRadius: theme.borderRadius.pill,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    fontSize: 15,
-    fontWeight: '700',
-    overflow: 'hidden',
-    lineHeight: 16,
-  },
-  exerciseList: {
-    gap: 8,
-  },
-  exerciseRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  exerciseDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginTop: 6,
-  },
-  exerciseText: {
-    flex: 1,
-    fontSize: 16,
-    lineHeight: 18,
-    color: theme.colors.textSecondary,
-  },
-  modalButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalButton: {
-    flex: 1,
-  },
-  fieldLabel: {
-    marginTop: 12,
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-    marginBottom: 8,
-  },
-  fieldInput: {
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 16,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.inputBg,
-  },
-  // Editor de ejercicios: la lista scrollea dentro de la tarjeta del modal.
-  exercisesEditorScroll: {
-    marginTop: 12,
-    maxHeight: 380,
-  },
-  exercisesEditor: {
-    gap: 10,
-  },
-  addExerciseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryFillDark,
-    backgroundColor: theme.colors.primaryFill,
-  },
-  addExerciseText: {
-    color: theme.colors.onGold,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  iconGrid: {
-    marginBottom: theme.spacing.sm,
-  },
-  buttonPressed: {
-    opacity: 0.8,
-  },
-  timerBlock: {
-    // Relleno dorado (lleva tinta onGold): va con el oro de superficie.
-    backgroundColor: theme.colors.primaryFillDark,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginTop: 4,
-    alignItems: 'center',
-    ...theme.shadow.soft,
-  },
-  timerBlockLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-  },
-  timerBlockLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.onGold,
-  },
-  timerBlockValue: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-    marginBottom: 4,
-  },
-  timerBlockHint: {
-    fontSize: 12,
-    color: theme.colors.onGold,
-    opacity: 0.8,
-  },
-  shareBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    marginTop: theme.spacing.md,
-    ...theme.shadow.soft,
-  },
-  shareBlockTextWrap: {
-    flex: 1,
-  },
-  shareBlockLabel: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 20,
-  },
-  shareBlockHint: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  qrCanvas: {
-    alignSelf: 'center',
-    backgroundColor: '#FFFFFF',
-    padding: 16,
-    borderRadius: theme.borderRadius.md,
-    marginTop: theme.spacing.md,
-  },
-  timerModalFormat: {
-    marginTop: 8,
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      marginTop: 0,
+    },
+    // Cabecera de la rutina: banner con fondo dorado tenue, insignia e "eyebrow".
+    // Deliberadamente distinto de las tarjetas de día (que son transparentes con
+    // borde izquierdo de acento) para que no se lea como un día más.
+    infoBlock: {
+      backgroundColor: theme.colors.primaryMuted,
+      borderRadius: theme.borderRadius.lg,
+      borderWidth: 1,
+      borderColor: theme.colors.primary + '55',
+      padding: theme.spacing.md,
+      marginBottom: 16,
+      gap: 10,
+    },
+    infoTopRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    // Insignia y eyebrow de la rutina en oro vivo con tinta oscura (como el
+    // selector Fuerza/Cardio): el amarillo brillante solo lee como relleno.
+    infoBadge: {
+      width: 44,
+      height: 44,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryFillDark,
+    },
+    infoTextWrap: {
+      flex: 1,
+      minWidth: 0,
+    },
+    infoEyebrow: {
+      alignSelf: 'flex-start',
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: theme.colors.onGold,
+      backgroundColor: theme.colors.primaryFill,
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: theme.borderRadius.sm,
+      overflow: 'hidden',
+      marginBottom: 4,
+    },
+    infoName: {
+      fontSize: 22,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      lineHeight: 27,
+    },
+    infoEditChip: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    // Editable = oro vivo con tinta oscura; bloqueada se queda neutra (candado).
+    infoEditChipEditable: {
+      backgroundColor: theme.colors.primaryFill,
+      borderColor: theme.colors.primaryFillDark,
+    },
+    infoDescription: {
+      fontSize: 14,
+      lineHeight: 19,
+      color: theme.colors.textSecondary,
+    },
+    dayBlock: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderLeftWidth: 4,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      marginBottom: 12,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    dayHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+      gap: 8,
+    },
+    dayHeaderLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    // El icono del día es su propio botón (se toca el icono para cambiarlo), con
+    // un micro-badge de lápiz que lo delata como editable.
+    dayIconButton: {
+      marginRight: 10,
+      paddingTop: 2,
+    },
+    dayIconEditBadge: {
+      position: 'absolute',
+      right: -4,
+      bottom: -4,
+      width: 15,
+      height: 15,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+    },
+    dayName: {
+      fontSize: 20,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      flexShrink: 1,
+      lineHeight: 25,
+    },
+    dayBadge: {
+      color: theme.colors.primaryLight,
+      backgroundColor: theme.colors.primaryMuted,
+      borderRadius: theme.borderRadius.pill,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      fontSize: 15,
+      fontWeight: '700',
+      overflow: 'hidden',
+      lineHeight: 16,
+    },
+    exerciseList: {
+      gap: 8,
+    },
+    exerciseRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    exerciseDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginTop: 6,
+    },
+    exerciseText: {
+      flex: 1,
+      fontSize: 16,
+      lineHeight: 18,
+      color: theme.colors.textSecondary,
+    },
+    modalButtonRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalButton: {
+      flex: 1,
+    },
+    fieldLabel: {
+      marginTop: 12,
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+      marginBottom: 8,
+    },
+    fieldInput: {
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      fontSize: 16,
+      color: theme.colors.text,
+      backgroundColor: theme.colors.inputBg,
+    },
+    // Editor de ejercicios: la lista scrollea dentro de la tarjeta del modal.
+    exercisesEditorScroll: {
+      marginTop: 12,
+      maxHeight: 380,
+    },
+    exercisesEditor: {
+      gap: 10,
+    },
+    addExerciseButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryFillDark,
+      backgroundColor: theme.colors.primaryFill,
+    },
+    addExerciseText: {
+      color: theme.colors.onGold,
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    iconGrid: {
+      marginBottom: theme.spacing.sm,
+    },
+    buttonPressed: {
+      opacity: 0.8,
+    },
+    timerBlock: {
+      // Relleno dorado (lleva tinta onGold): va con el oro de superficie.
+      backgroundColor: theme.colors.primaryFillDark,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginTop: 4,
+      alignItems: 'center',
+      ...theme.shadow.soft,
+    },
+    timerBlockLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+    },
+    timerBlockLabel: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.onGold,
+    },
+    timerBlockValue: {
+      fontSize: 32,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+      marginBottom: 4,
+    },
+    timerBlockHint: {
+      fontSize: 12,
+      color: theme.colors.onGold,
+      opacity: 0.8,
+    },
+    shareBlock: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      marginTop: theme.spacing.md,
+      ...theme.shadow.soft,
+    },
+    shareBlockTextWrap: {
+      flex: 1,
+    },
+    shareBlockLabel: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 20,
+    },
+    shareBlockHint: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    qrCanvas: {
+      alignSelf: 'center',
+      backgroundColor: '#FFFFFF',
+      padding: 16,
+      borderRadius: theme.borderRadius.md,
+      marginTop: theme.spacing.md,
+    },
+    timerModalFormat: {
+      marginTop: 8,
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

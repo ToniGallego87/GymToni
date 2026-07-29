@@ -41,6 +41,39 @@ export const thumbUrl = (e: CatalogExercise) =>
 export const exerciseName = (e: CatalogExercise) =>
   language === 'en' ? e.en : e.es;
 
+// --- Búsqueda tolerante (tildes, plural/singular, varias palabras) ---
+// Quita acentos y baja a minúsculas: buscar sin importar tildes ni idioma.
+const searchNorm = (s: string) =>
+  s
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase();
+
+// Reduce una palabra a su raíz quitando el plural español (-es / -s). Así
+// "extensiones" y "extensión" caen en la misma raíz "extension". El prefijo se
+// mantiene por si el usuario aún está tecleando ("exten").
+const stem = (w: string) => {
+  if (w.length > 4 && w.endsWith('es')) return w.slice(0, -2);
+  if (w.length > 3 && w.endsWith('s')) return w.slice(0, -1);
+  return w;
+};
+
+/**
+ * ¿Coincide el ejercicio con la búsqueda? Parte la consulta en palabras y exige
+ * que TODAS aparezcan en el nombre (ES o EN), comparando por raíz para que
+ * plural y singular encuentren lo mismo ("extensiones" ↔ "extensión").
+ */
+export const matchesExercise = (e: CatalogExercise, query: string): boolean => {
+  const tokens = searchNorm(query).split(/\s+/).filter(Boolean);
+  if (!tokens.length) return true;
+  const words = searchNorm(`${e.es} ${e.en}`).split(/\s+/).filter(Boolean);
+  const stems = words.map(stem);
+  return tokens.every((token) => {
+    const ts = stem(token);
+    return stems.some((w) => w.startsWith(ts)) || words.some((w) => w.includes(token));
+  });
+};
+
 // --- Diccionarios de taxonomía (clave inglesa → etiqueta ES/EN) ---
 type Label = { es: string; en: string };
 

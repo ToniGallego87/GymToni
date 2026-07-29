@@ -44,6 +44,7 @@ export interface ExerciseRow {
   exercise_order: number;
   target_reps: string | null;
   target_sets: number | null;
+  catalog_id: string | null;
 }
 
 export interface WorkoutLogRow {
@@ -55,6 +56,7 @@ export interface WorkoutLogRow {
   updated_at: number;
   starts_new_week: number;
   cardio_only: number;
+  is_deload: number;
 }
 
 export interface ExerciseLogRow {
@@ -124,6 +126,7 @@ function exerciseToRow(exercise: WorkoutExercise, dayId: string): ExerciseRow {
     exercise_order: exercise.order,
     target_reps: exercise.targetReps ?? null,
     target_sets: exercise.targetSets ?? null,
+    catalog_id: exercise.catalogId ?? null,
   };
 }
 
@@ -220,6 +223,7 @@ export function logToRows(
       updated_at: log.updatedAt,
       starts_new_week: log.startsNewWeek ? 1 : 0,
       cardio_only: log.cardioOnly ? 1 : 0,
+      is_deload: log.isDeload ? 1 : 0,
     },
     exerciseLogs,
     logSets,
@@ -324,6 +328,7 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       order: row.exercise_order,
       targetReps: row.target_reps ?? undefined,
       targetSets: row.target_sets ?? undefined,
+      catalogId: row.catalog_id ?? undefined,
     };
     const list = exercisesByDay.get(row.workout_days_id) ?? [];
     list.push(exercise);
@@ -412,6 +417,7 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       updatedAt: row.updated_at,
       startsNewWeek: row.starts_new_week ? true : undefined,
       cardioOnly: row.cardio_only ? true : undefined,
+      isDeload: row.is_deload ? true : undefined,
     }));
 
   return { routines, activeRoutineId, selectedRoutineId, logs };

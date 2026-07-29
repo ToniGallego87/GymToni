@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   ConfirmModal,
+  DatePickerModal,
   DayAccentIcon,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
@@ -15,6 +16,7 @@ import {
   GradientFill,
   StretchScrollView,
 } from '@components';
+import { assignmentDuplicatesDayInWeek } from '@lib/weeks';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import {
   cardioSessionFromLog,
@@ -26,7 +28,12 @@ import {
   WeightSegment,
 } from '@lib/cardio';
 import { getCardioWeightHistory } from '@lib/storage';
-import { formatDate, getImprovementDisplay, getLogTimestamp } from '@lib/utils';
+import {
+  combineDateWithTime,
+  formatDate,
+  getImprovementDisplay,
+  getLogTimestamp,
+} from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
@@ -69,8 +76,78 @@ export function DetailScreen({
   onDelete,
 }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
-  const { state } = useWorkout();
+  const { state, dispatch } = useWorkout();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [pendingSplitDate, setPendingSplitDate] = useState<string | null>(null);
+  // La fecha se puede corregir aquí; se guarda en el acto (UPDATE_WORKOUT_LOG).
+  // Estado local para que el subtítulo se refresque sin salir de la pantalla.
+  const [currentDate, setCurrentDate] = useState(log.date);
+
+  const dayNumberForLog = (l: WorkoutLog): number | undefined => {
+    for (const routine of state.routines) {
+      const d = routine.days.find((day) => day.id === l.dayId);
+      if (d) return d.dayNumber;
+    }
+    return undefined;
+  };
+
+  // Guarda la nueva fecha del log, recolocando `createdAt` (con lo que se ordenan
+  // y agrupan las semanas). Avisa antes si la fecha parte una semana existente.
+  const commitDate = (date: string) => {
+    const baseCreatedAt = log.createdAt || Date.now();
+    const createdAt = combineDateWithTime(date, baseCreatedAt);
+    dispatch({
+      type: 'UPDATE_WORKOUT_LOG',
+      payload: { ...log, date, createdAt, updatedAt: Date.now() },
+    });
+    setCurrentDate(date);
+  };
+
+  const applyChosenDate = (date: string) => {
+    setShowDatePicker(false);
+    if (date === currentDate) return;
+
+    const routineLogs = state.logs.filter((l) => l.routineId === log.routineId);
+    const newTimestamp = combineDateWithTime(date, log.createdAt || Date.now());
+    if (
+      assignmentDuplicatesDayInWeek(
+        routineLogs,
+        log,
+        newTimestamp,
+        dayNumberForLog
+      )
+    ) {
+      setPendingSplitDate(date);
+      return;
+    }
+    commitDate(date);
+  };
+
+  // Fija un GIF del catálogo al ejercicio de la rutina a la que pertenece el log
+  // (por routineId + exerciseId): se guarda en la rutina, no en el log.
+  const handleAssignGif = (exerciseId: string, catalogId: string) => {
+    const routine = state.routines.find((r) => r.id === log.routineId);
+    const targetDay = routine?.days.find((d) => d.id === log.dayId);
+    if (!routine || !targetDay) return;
+    const updatedDay = {
+      ...targetDay,
+      exercises: targetDay.exercises.map((ex) =>
+        ex.id === exerciseId ? { ...ex, catalogId } : ex
+      ),
+    };
+    dispatch({
+      type: 'UPDATE_DAY',
+      payload: { routineId: routine.id, dayId: targetDay.id, day: updatedDay },
+    });
+  };
+
+  // catalogId VIVO del ejercicio (refleja una asignación recién hecha).
+  const liveDay = state.routines
+    .flatMap((r) => r.days)
+    .find((d) => d.id === log.dayId);
+  const liveCatalogId = (exerciseId: string): string | undefined =>
+    liveDay?.exercises.find((ex) => ex.id === exerciseId)?.catalogId;
 
   // Acciones propias del detalle en el menú ⋯: corregir la sesión o borrarla.
   // Eliminar pasa por un ConfirmModal (acción destructiva).
@@ -85,6 +162,11 @@ export function DetailScreen({
       onPress: onEdit,
     });
   }
+  menuItems.push({
+    icon: 'calendar-edit',
+    label: t('Cambiar fecha'),
+    onPress: () => setShowDatePicker(true),
+  });
   if (onDelete) {
     menuItems.push({
       icon: 'delete-outline',
@@ -116,8 +198,8 @@ export function DetailScreen({
     ? cardioSessionFromLog(log, weightHistory)
     : null;
 
-  const displayedDate = log.date
-    ? new Date(`${log.date}T00:00:00`)
+  const displayedDate = currentDate
+    ? new Date(`${currentDate}T00:00:00`)
         .toLocaleDateString(dateLocale, {
           weekday: 'long',
           year: 'numeric',
@@ -127,13 +209,19 @@ export function DetailScreen({
         .replace(/^[a-z]/, (c) => c.toUpperCase())
     : formatDate(log.createdAt);
 
-  const previousLog =
-    [...state.logs]
-      .filter(
-        (l) =>
-          l.dayId === log.dayId && getLogTimestamp(l) < getLogTimestamp(log)
-      )
-      .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
+  // La comparación con la sesión anterior salta las semanas de descarga (su marca
+  // viaja en cada log del bloque): un deload no es referencia. Y si ESTE log es de
+  // una semana de descarga, no se compara con nada (queda al margen).
+  const previousLog = log.isDeload
+    ? null
+    : [...state.logs]
+        .filter(
+          (l) =>
+            l.dayId === log.dayId &&
+            !l.isDeload &&
+            getLogTimestamp(l) < getLogTimestamp(log)
+        )
+        .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
 
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
@@ -227,7 +315,10 @@ export function DetailScreen({
             <ExerciseResultDisplay
               key={exercise.id}
               exerciseName={exercise.name}
-              catalogId={exercise.catalogId}
+              catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
+              onAssignGif={(catalogId) =>
+                handleAssignGif(exercise.id, catalogId)
+              }
               targetSets={exercise.targetSets}
               targetReps={exercise.targetReps as string | number | undefined}
               rawInput={selectedExercise?.rawInput || '-'}
@@ -435,91 +526,114 @@ export function DetailScreen({
         }}
         onCancel={() => setShowDeleteModal(false)}
       />
+
+      <DatePickerModal
+        visible={showDatePicker}
+        value={currentDate}
+        onSelect={applyChosenDate}
+        onRequestClose={() => setShowDatePicker(false)}
+      />
+
+      <ConfirmModal
+        visible={pendingSplitDate !== null}
+        title={t('¿Dividir la semana?')}
+        message={t(
+          'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?'
+        )}
+        confirmLabel={t('Continuar')}
+        confirmVariant="primary"
+        onConfirm={() => {
+          if (pendingSplitDate) commitDate(pendingSplitDate);
+          setPendingSplitDate(null);
+        }}
+        onCancel={() => setPendingSplitDate(null)}
+      />
     </View>
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  topBarTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  topBarTitleText: {
-    flexShrink: 1,
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 24,
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.current,
-    marginBottom: theme.spacing.xs,
-    lineHeight: 25,
-  },
-  cardioBox: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginVertical: 8,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  cardioLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 6,
-  },
-  // El margen inferior lo pone la fila: aquí desalinearía el icono.
-  cardioLabelInRow: {
-    marginBottom: 0,
-  },
-  cardioLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.textSecondary,
-    marginBottom: 6,
-    textTransform: 'uppercase',
-    lineHeight: 16,
-  },
-  cardioDetails: {
-    flexDirection: 'row',
-    // Con las kcal ya son cuatro datos: en pantallas estrechas pasan a dos filas.
-    flexWrap: 'wrap',
-    columnGap: 16,
-    rowGap: 8,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  cardioDetail: {
-    fontSize: 13,
-    color: theme.colors.white,
-    fontWeight: '500',
-    lineHeight: 18,
-  },
-  cardioDetailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    topBarTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    topBarTitleText: {
+      flexShrink: 1,
+      fontSize: 20,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 24,
+    },
+    scrollView: {
+      flex: 1,
+    },
+    scrollContent: {
+      paddingHorizontal: 16,
+      paddingVertical: 16,
+    },
+    sectionTitle: {
+      fontSize: 20,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.current,
+      marginBottom: theme.spacing.xs,
+      lineHeight: 25,
+    },
+    cardioBox: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginVertical: 8,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    cardioLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 6,
+    },
+    // El margen inferior lo pone la fila: aquí desalinearía el icono.
+    cardioLabelInRow: {
+      marginBottom: 0,
+    },
+    cardioLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      marginBottom: 6,
+      textTransform: 'uppercase',
+      lineHeight: 16,
+    },
+    cardioDetails: {
+      flexDirection: 'row',
+      // Con las kcal ya son cuatro datos: en pantallas estrechas pasan a dos filas.
+      flexWrap: 'wrap',
+      columnGap: 16,
+      rowGap: 8,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    cardioDetail: {
+      fontSize: 13,
+      color: theme.colors.white,
+      fontWeight: '500',
+      lineHeight: 18,
+    },
+    cardioDetailRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

@@ -68,6 +68,243 @@ export function orderedBlockNumbers(blocks: WeekBlocks): number[] {
     .sort((a, b) => a - b);
 }
 
+/**
+ * ¿Es una semana de descarga (deload)? La marca vive en los logs del bloque
+ * (ver `WorkoutLog.isDeload`): basta con que uno la lleve para tratar la semana
+ * entera como descarga.
+ */
+export function isDeloadBlock(weekLogs: WorkoutLog[]): boolean {
+  return weekLogs.some((log) => log.isDeload);
+}
+
+/**
+ * Bloque de carga (no descarga) inmediatamente anterior a `block`, o `null` si
+ * no hay ninguno. Al comparar, una semana de carga se mide contra la última de
+ * carga, saltándose las de descarga (que quedan al margen de las estadísticas).
+ */
+export function previousLoadBlock(
+  blocks: WeekBlocks,
+  block: number
+): number | null {
+  const earlier = orderedBlockNumbers(blocks)
+    .filter((candidate) => candidate < block)
+    .reverse();
+  for (const candidate of earlier) {
+    if (!isDeloadBlock(blocks[candidate] || [])) return candidate;
+  }
+  return null;
+}
+
+/** Identifica el día de un log para agrupar/mover (undefined si no se conoce). */
+export type DayKeyFn = (log: WorkoutLog) => string | number | undefined;
+
+/** Dirección de un movimiento de día entre semanas. */
+export type WeekMoveDirection = 'prev' | 'next';
+
+export interface WeekMovePlan {
+  /**
+   * Logs cuyo `startsNewWeek` cambia, ya con el nuevo valor aplicado
+   * (`true` para forzar frontera, `undefined` para quitarla). Se persisten con
+   * `UPDATE_WORKOUT_LOG`. Nunca cambia la fecha del log.
+   */
+  changedLogs: WorkoutLog[];
+  /** El destino no existía: el movimiento crea una semana nueva. */
+  createsNewWeek: boolean;
+  /** El origen se queda sin días: esa semana desaparece al recomputar. */
+  removesSourceWeek: boolean;
+}
+
+/**
+ * Asigna a cada log (ordenado por fecha ascendente) el número de bloque al que
+ * pertenece, con las MISMAS reglas que `groupLogsIntoWeekBlocks`. Devuelve el
+ * array ordenado y el bloque de cada posición, base para calcular movimientos.
+ */
+function assignBlocks(
+  logs: WorkoutLog[],
+  getDayKey: DayKeyFn
+): { sorted: WorkoutLog[]; blockOf: number[] } {
+  const sorted = [...logs].sort(
+    (a, b) => getLogTimestamp(a) - getLogTimestamp(b)
+  );
+  const blockOf: number[] = new Array(sorted.length);
+
+  let block = 1;
+  let started = false;
+  let seenDays = new Set<string | number>();
+
+  sorted.forEach((log, i) => {
+    const dayKey = getDayKey(log);
+    const forcesNewWeek = !!log.startsNewWeek;
+    const repeatsDay = dayKey != null && seenDays.has(dayKey);
+    if ((forcesNewWeek || repeatsDay) && started) {
+      block += 1;
+      seenDays = new Set();
+    }
+    blockOf[i] = block;
+    started = true;
+    if (dayKey != null) seenDays.add(dayKey);
+  });
+
+  return { sorted, blockOf };
+}
+
+/**
+ * Calcula el plan para mover un día a la semana contigua, o `null` si el
+ * movimiento no es legal. Las semanas no se guardan: son bloques derivados por
+ * `groupLogsIntoWeekBlocks`, así que mover un día es desplazar la frontera del
+ * bloque poniendo/quitando el flag `startsNewWeek` (por eso solo el primer y el
+ * último día de una semana pueden moverse). Reglas:
+ *
+ *  - `'next'`: solo el ÚLTIMO día (fecha más reciente) de su semana puede ir a
+ *    la siguiente, y solo si esa no tiene ya ese mismo día. Si no hay siguiente,
+ *    se crea una semana nueva.
+ *  - `'prev'`: solo el PRIMER día (fecha más antigua) de su semana puede ir a la
+ *    anterior, y solo si esa no tiene ya ese mismo día. La primera semana no
+ *    tiene anterior.
+ *  - Si el origen se queda sin días, esa semana desaparece (implícito al
+ *    recomputar los bloques).
+ *
+ * `getDayKey` debe ser la MISMA función con la que se agrupan las semanas en la
+ * pantalla que llama (Inicio agrupa por `dayNumber`), para que el chequeo de
+ * "día igual" coincida con lo que ve el usuario.
+ */
+export function planWeekMove(
+  logs: WorkoutLog[],
+  logId: string,
+  direction: WeekMoveDirection,
+  getDayKey: DayKeyFn
+): WeekMovePlan | null {
+  const { sorted, blockOf } = assignBlocks(logs, getDayKey);
+  const idx = sorted.findIndex((log) => log.id === logId);
+  if (idx === -1) return null;
+
+  const moved = sorted[idx];
+  const movedKey = getDayKey(moved);
+  const currentBlock = blockOf[idx];
+
+  const keysOfBlock = (block: number): Set<string | number> => {
+    const keys = new Set<string | number>();
+    sorted.forEach((log, i) => {
+      if (blockOf[i] !== block) return;
+      const key = getDayKey(log);
+      if (key != null) keys.add(key);
+    });
+    return keys;
+  };
+  const setFlag = (log: WorkoutLog): WorkoutLog => ({
+    ...log,
+    startsNewWeek: true,
+  });
+  const clearFlag = (log: WorkoutLog): WorkoutLog => ({
+    ...log,
+    startsNewWeek: undefined,
+  });
+  const blockSize = blockOf.filter((b) => b === currentBlock).length;
+
+  if (direction === 'next') {
+    // Debe ser el último día de su semana (fecha más reciente del bloque).
+    const isLastOfBlock = blockOf.lastIndexOf(currentBlock) === idx;
+    if (!isLastOfBlock) return null;
+
+    const changedLogs: WorkoutLog[] = [];
+    const hasNext = idx + 1 < sorted.length;
+
+    if (!hasNext) {
+      // No hay semana siguiente: mover el único día de la última semana no crea
+      // nada (ya es su propia semana), así que solo tiene sentido si hay más
+      // días detrás que se quedan formando la semana anterior.
+      if (blockSize <= 1) return null;
+      changedLogs.push(setFlag(moved));
+      return { changedLogs, createsNewWeek: true, removesSourceWeek: false };
+    }
+
+    const nextFirst = sorted[idx + 1];
+    // La semana siguiente no puede tener ya ese mismo día.
+    if (movedKey != null && keysOfBlock(blockOf[idx + 1]).has(movedKey)) {
+      return null;
+    }
+    // El día movido pasa a encabezar la semana siguiente; se limpia la frontera
+    // manual del que era su primer día para no dejar el movido solo en un bloque.
+    if (!moved.startsNewWeek) changedLogs.push(setFlag(moved));
+    if (nextFirst.startsNewWeek) changedLogs.push(clearFlag(nextFirst));
+    if (changedLogs.length === 0) return null;
+    return {
+      changedLogs,
+      createsNewWeek: false,
+      removesSourceWeek: blockSize <= 1,
+    };
+  }
+
+  // direction === 'prev'
+  // Debe ser el primer día de su semana (fecha más antigua del bloque)...
+  const isFirstOfBlock = blockOf.indexOf(currentBlock) === idx;
+  if (!isFirstOfBlock) return null;
+  // ...y tiene que existir una semana anterior.
+  if (idx === 0) return null;
+
+  const prevBlock = blockOf[idx - 1];
+  // La semana anterior no puede tener ya ese mismo día.
+  if (movedKey != null && keysOfBlock(prevBlock).has(movedKey)) return null;
+
+  const changedLogs: WorkoutLog[] = [];
+  // El día movido se une a la semana anterior: se quita su frontera.
+  if (moved.startsNewWeek) changedLogs.push(clearFlag(moved));
+  // El siguiente día (si lo hay en esta semana) pasa a encabezarla.
+  const hasSecond =
+    idx + 1 < sorted.length && blockOf[idx + 1] === currentBlock;
+  if (hasSecond && !sorted[idx + 1].startsNewWeek) {
+    changedLogs.push(setFlag(sorted[idx + 1]));
+  }
+  if (changedLogs.length === 0) return null;
+  return {
+    changedLogs,
+    createsNewWeek: false,
+    removesSourceWeek: !hasSecond,
+  };
+}
+
+/**
+ * ¿Reasignar un log a `newTimestamp` lo mete en una semana que YA tiene ese
+ * mismo día? En ese caso el bloque se parte en dos por el punto de inserción
+ * (el día repetido abre semana nueva; ver `groupLogsIntoWeekBlocks`), así que la
+ * pantalla avisa antes con `ConfirmModal`. Se agrupa el resto de logs por su
+ * semana natural y se busca aquel cuyo tramo temporal contiene la nueva fecha:
+ * si ese tramo ya entrenó el mismo día (misma clave), habrá choque.
+ */
+export function assignmentDuplicatesDayInWeek(
+  logs: WorkoutLog[],
+  movedLog: WorkoutLog,
+  newTimestamp: number,
+  getDayKey: DayKeyFn
+): boolean {
+  const movedKey = getDayKey(movedLog);
+  if (movedKey == null) return false;
+
+  const others = logs.filter((log) => log.id !== movedLog.id);
+  const blocks = groupLogsIntoWeekBlocks(others, getDayKey);
+
+  for (const blockNumber of orderedBlockNumbers(blocks)) {
+    const weekLogs = blocks[blockNumber];
+    const times = weekLogs.map(getLogTimestamp);
+    const min = Math.min(...times);
+    const max = Math.max(...times);
+    if (newTimestamp >= min && newTimestamp <= max) {
+      return weekLogs.some((log) => getDayKey(log) === movedKey);
+    }
+  }
+  return false;
+}
+
+/** ¿Se puede mover ese día a la semana contigua en esa dirección? */
+export function canMoveDay(
+  logs: WorkoutLog[],
+  logId: string,
+  direction: WeekMoveDirection,
+  getDayKey: DayKeyFn
+): boolean {
+  return planWeekMove(logs, logId, direction, getDayKey) !== null;
+}
+
 /** Una semana está completa cuando tiene entrenados todos los días de la rutina. */
 export function isWeekCompleted(
   weekLogs: WorkoutLog[],
@@ -242,6 +479,8 @@ export interface WeekProgressPoint {
   isCurrent?: boolean;
   /** La semana no tiene todos los días de la rutina entrenados. */
   isIncomplete?: boolean;
+  /** Semana de descarga: al margen de las estadísticas (barra en blanco, sin %). */
+  isDeload?: boolean;
 }
 
 /**
@@ -273,10 +512,16 @@ export function buildWeekProgress(
   const blockHasDay = (weekLogs: WorkoutLog[], dayId: string) =>
     weekLogs.some((log) => log.dayId === dayId);
 
-  const firstWeekLogs = blocks[ordered[0]] || [];
+  // La base es la primera semana de CARGA: una descarga no sirve de referencia.
+  const firstLoadBlock = ordered.find(
+    (blockNumber) => !isDeloadBlock(blocks[blockNumber] || [])
+  );
+  const firstWeekLogs =
+    firstLoadBlock != null ? blocks[firstLoadBlock] || [] : [];
 
   const points: WeekProgressPoint[] = ordered.map((blockNumber, index) => {
     const weekLogs = blocks[blockNumber] || [];
+    const week = index + 1;
 
     // Con filtro por día, una semana está "incompleta" si NO entrenó ese día;
     // sin filtro, si le faltan días de la rutina.
@@ -284,10 +529,17 @@ export function buildWeekProgress(
       ? !blockHasDay(weekLogs, dayFilter)
       : !isWeekCompleted(weekLogs, activeDays);
 
-    // La primera semana es la base: 0% por definición.
-    if (index === 0) return { week: 1, improvement: 0, isIncomplete };
+    // Semana de descarga: al margen de las estadísticas (barra en blanco, sin %,
+    // no compara ni sirve de base).
+    if (isDeloadBlock(weekLogs)) {
+      return { week, improvement: 0, isIncomplete, isDeload: true };
+    }
 
-    const week = index + 1;
+    // La primera semana de carga es la base: 0% por definición.
+    if (blockNumber === firstLoadBlock) {
+      return { week, improvement: 0, isIncomplete };
+    }
+
     if (!weekLogs.length || !firstWeekLogs.length) {
       return { week, improvement: 0, isIncomplete };
     }

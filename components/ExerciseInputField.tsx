@@ -44,6 +44,8 @@ interface ExerciseInputFieldProps {
   exerciseName: string;
   // Id del catálogo del ejercicio (si viene de ahí), para la lupa de consulta.
   catalogId?: string;
+  // Fija un GIF al ejercicio de la rutina desde el buscador (botón Asignar).
+  onAssignGif?: (catalogId: string) => void;
   target?: {
     sets?: number;
     reps?: string;
@@ -71,6 +73,7 @@ export function ExerciseInputField({
   order,
   exerciseName,
   catalogId,
+  onAssignGif,
   target,
   addedSets,
   onAddSet,
@@ -338,7 +341,11 @@ export function ExerciseInputField({
             {exerciseName}
           </Text>
         </Pressable>
-        <ExerciseGifButton name={exerciseName} catalogId={catalogId} />
+        <ExerciseGifButton
+          name={exerciseName}
+          catalogId={catalogId}
+          onAssign={onAssignGif}
+        />
         <Pressable
           style={[styles.headerRight, { borderColor: cardAccent + '40' }]}
           onPress={toggleExpanded}
@@ -729,338 +736,339 @@ export function ExerciseInputField({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    marginTop: 8,
-    marginBottom: 8,
-    padding: 16,
-    borderLeftWidth: 5,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  topSection: {
-    gap: 10,
-  },
-  bottomSection: {
-    paddingBottom: 4,
-  },
-  bottomSectionCollapsed: {
-    paddingBottom: 0,
-  },
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      marginTop: 8,
+      marginBottom: 8,
+      padding: 16,
+      borderLeftWidth: 5,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    topSection: {
+      gap: 10,
+    },
+    bottomSection: {
+      paddingBottom: 4,
+    },
+    bottomSectionCollapsed: {
+      paddingBottom: 0,
+    },
 
-  // Cabecera
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 12,
-    marginBottom: 16,
-  },
-  headerCollapsedEmpty: {
-    marginBottom: 0,
-  },
-  titleSection: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  orderBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  orderBadgeText: {
-    fontSize: 19,
-    fontFamily: theme.fonts.display,
-    // El fondo del badge es el acento (blanco en noche, tinta oscura en día);
-    // el número usa el color de fondo del tema para contrastar en ambos: oscuro
-    // sobre el badge claro de noche, claro sobre el badge oscuro de día.
-    color: theme.colors.background,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-  headerRight: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  exerciseName: {
-    flex: 1,
-    fontSize: 19,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.text,
-    lineHeight: 23,
-  },
+    // Cabecera
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 16,
+    },
+    headerCollapsedEmpty: {
+      marginBottom: 0,
+    },
+    titleSection: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    orderBadge: {
+      width: 38,
+      height: 38,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    orderBadgeText: {
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      // El fondo del badge es el acento (blanco en noche, tinta oscura en día);
+      // el número usa el color de fondo del tema para contrastar en ambos: oscuro
+      // sobre el badge claro de noche, claro sobre el badge oscuro de día.
+      color: theme.colors.background,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+    },
+    headerRight: {
+      width: 38,
+      height: 38,
+      borderRadius: 19,
+      borderWidth: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    exerciseName: {
+      flex: 1,
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      lineHeight: 23,
+    },
 
-  // Resultados insertados (bloque único, posición fija)
-  resultsBlock: {
-    marginTop: 16,
-    marginBottom: 16,
-  },
-  resultsBlockCollapsed: {
-    marginTop: 12,
-    marginBottom: 4,
-  },
-  seriesRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignItems: 'center',
-    gap: 6,
-  },
-  serieTag: {
-    paddingHorizontal: 13,
-    paddingVertical: 9,
-    borderRadius: 12,
-    minWidth: 56,
-    alignItems: 'center',
-  },
-  serieTagText: {
-    fontWeight: '800',
-    fontSize: 15,
-    letterSpacing: 0.2,
-  },
-  improvementBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: theme.borderRadius.pill,
-    alignSelf: 'center',
-  },
-  improvementBadgeUp: { backgroundColor: theme.colors.success + '22' },
-  improvementBadgeDown: { backgroundColor: theme.colors.error + '22' },
-  improvementBadgeNeutral: { backgroundColor: theme.colors.warning + '22' },
-  improvementText: {
-    fontSize: 15,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-  },
-  improvementUp: { color: theme.colors.success },
-  improvementDown: { color: theme.colors.error },
-  improvementNeutral: { color: theme.colors.warning },
+    // Resultados insertados (bloque único, posición fija)
+    resultsBlock: {
+      marginTop: 16,
+      marginBottom: 16,
+    },
+    resultsBlockCollapsed: {
+      marginTop: 12,
+      marginBottom: 4,
+    },
+    seriesRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'center',
+      gap: 6,
+    },
+    serieTag: {
+      paddingHorizontal: 13,
+      paddingVertical: 9,
+      borderRadius: 12,
+      minWidth: 56,
+      alignItems: 'center',
+    },
+    serieTagText: {
+      fontWeight: '800',
+      fontSize: 15,
+      letterSpacing: 0.2,
+    },
+    improvementBadge: {
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: theme.borderRadius.pill,
+      alignSelf: 'center',
+    },
+    improvementBadgeUp: { backgroundColor: theme.colors.success + '22' },
+    improvementBadgeDown: { backgroundColor: theme.colors.error + '22' },
+    improvementBadgeNeutral: { backgroundColor: theme.colors.warning + '22' },
+    improvementText: {
+      fontSize: 15,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+    },
+    improvementUp: { color: theme.colors.success },
+    improvementDown: { color: theme.colors.error },
+    improvementNeutral: { color: theme.colors.warning },
 
-  // Bloque de contexto (objetivo + anterior)
-  contextBlock: {
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    gap: 5,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  contextItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  contextLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    width: 68,
-  },
-  contextValue: {
-    fontSize: 13,
-    color: theme.colors.text,
-    fontWeight: '600',
-    flex: 1,
-  },
-  previousNoteText: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    fontStyle: 'italic',
-    paddingLeft: 19,
-  },
+    // Bloque de contexto (objetivo + anterior)
+    contextBlock: {
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      gap: 5,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    contextItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    contextLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      width: 68,
+    },
+    contextValue: {
+      fontSize: 13,
+      color: theme.colors.text,
+      fontWeight: '600',
+      flex: 1,
+    },
+    previousNoteText: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
+      paddingLeft: 19,
+    },
 
-  // Nota propia
-  noteOwnBlock: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 6,
-  },
-  noteOwnText: {
-    fontSize: 13,
-    fontStyle: 'italic',
-    flex: 1,
-  },
+    // Nota propia
+    noteOwnBlock: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 6,
+    },
+    noteOwnText: {
+      fontSize: 13,
+      fontStyle: 'italic',
+      flex: 1,
+    },
 
-  // Bloque de inputs
-  inputBlock: {
-    gap: 16,
-  },
-  // Cuando no hay series arriba, el bloque de inputs necesita su propia
-  // separación respecto al contexto (con series la aporta resultsBlock).
-  inputBlockSpaced: {
-    marginTop: 16,
-  },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 12,
-  },
-  inputField: {
-    flex: 1,
-    gap: 7,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    textAlign: 'center',
-  },
-  bigInput: {
-    backgroundColor: theme.colors.background,
-    borderWidth: 1.5,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    minHeight: 66,
-    paddingHorizontal: 12,
-    fontSize: 30,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    color: theme.colors.text,
-    fontWeight: '800',
-  },
-  timesGlyph: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: theme.colors.textMuted,
-    marginBottom: 18,
-  },
+    // Bloque de inputs
+    inputBlock: {
+      gap: 16,
+    },
+    // Cuando no hay series arriba, el bloque de inputs necesita su propia
+    // separación respecto al contexto (con series la aporta resultsBlock).
+    inputBlockSpaced: {
+      marginTop: 16,
+    },
+    inputRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 12,
+    },
+    inputField: {
+      flex: 1,
+      gap: 7,
+    },
+    inputLabel: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.8,
+      textAlign: 'center',
+    },
+    bigInput: {
+      backgroundColor: theme.colors.background,
+      borderWidth: 1.5,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      minHeight: 66,
+      paddingHorizontal: 12,
+      fontSize: 30,
+      textAlign: 'center',
+      textAlignVertical: 'center',
+      color: theme.colors.text,
+      fontWeight: '800',
+    },
+    timesGlyph: {
+      fontSize: 22,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      marginBottom: 18,
+    },
 
-  // Botón principal añadir
-  addButton: {
-    minHeight: 58,
-    borderRadius: theme.borderRadius.md,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    ...theme.shadow.soft,
-  },
-  addButtonPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.99 }],
-  },
-  addButtonText: {
-    color: theme.colors.onGold,
-    fontWeight: '800',
-    fontSize: 17,
-    letterSpacing: 0.3,
-  },
+    // Botón principal añadir
+    addButton: {
+      minHeight: 58,
+      borderRadius: theme.borderRadius.md,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      ...theme.shadow.soft,
+    },
+    addButtonPressed: {
+      opacity: 0.9,
+      transform: [{ scale: 0.99 }],
+    },
+    addButtonText: {
+      color: theme.colors.onGold,
+      fontWeight: '800',
+      fontSize: 17,
+      letterSpacing: 0.3,
+    },
 
-  // Botones secundarios
-  secondaryRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  secondaryButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-  },
-  deleteButton: {
-    borderColor: theme.colors.error + '50',
-    backgroundColor: theme.colors.error + '15',
-  },
-  finishButton: {
-    borderColor: theme.colors.accent + '50',
-    backgroundColor: theme.colors.accent + '15',
-  },
-  notesButton: {
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.inputBg,
-  },
-  secondaryButtonText: {
-    fontWeight: '700',
-    fontSize: 13,
-  },
-  buttonPressed: {
-    opacity: 0.75,
-  },
+    // Botones secundarios
+    secondaryRow: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    secondaryButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      paddingVertical: 10,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+    },
+    deleteButton: {
+      borderColor: theme.colors.error + '50',
+      backgroundColor: theme.colors.error + '15',
+    },
+    finishButton: {
+      borderColor: theme.colors.accent + '50',
+      backgroundColor: theme.colors.accent + '15',
+    },
+    notesButton: {
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.inputBg,
+    },
+    secondaryButtonText: {
+      fontWeight: '700',
+      fontSize: 13,
+    },
+    buttonPressed: {
+      opacity: 0.75,
+    },
 
-  // Completado
-  completedBlock: {
-    gap: 8,
-  },
-  completedRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  completedText: {
-    color: theme.colors.success,
-    fontWeight: '700',
-    fontSize: 14,
-  },
+    // Completado
+    completedBlock: {
+      gap: 8,
+    },
+    completedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    completedText: {
+      color: theme.colors.success,
+      fontWeight: '700',
+      fontSize: 14,
+    },
 
-  // Temporizador de descanso (al pie de la tarjeta). Bloque dorado; el contenido
-  // (label + cuenta atrás + acciones) lo aporta el padre con sus propios estilos.
-  restTimerInside: {
-    marginTop: 12,
-    backgroundColor: theme.colors.primaryFill,
-    borderRadius: theme.borderRadius.md,
-    padding: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+    // Temporizador de descanso (al pie de la tarjeta). Bloque dorado; el contenido
+    // (label + cuenta atrás + acciones) lo aporta el padre con sus propios estilos.
+    restTimerInside: {
+      marginTop: 12,
+      backgroundColor: theme.colors.primaryFill,
+      borderRadius: theme.borderRadius.md,
+      padding: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
 
-  // Cronómetro
-  stopwatchContainer: {
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    padding: 12,
-    alignItems: 'center',
-    gap: 10,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  stopwatchDisplay: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: theme.colors.primary,
-    letterSpacing: 2,
-    fontVariant: ['tabular-nums'],
-  },
-  stopwatchButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center',
-  },
-  stopwatchBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: theme.borderRadius.sm,
-  },
-  stopwatchBtnStart: { backgroundColor: theme.colors.success },
-  stopwatchBtnStop: { backgroundColor: theme.colors.error },
-  stopwatchBtnUse: { backgroundColor: theme.colors.primaryFill },
-  stopwatchButtonText: {
-    color: theme.colors.onGold,
-    fontWeight: '800',
-    fontSize: 14,
-  },
-});
+    // Cronómetro
+    stopwatchContainer: {
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      padding: 12,
+      alignItems: 'center',
+      gap: 10,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    stopwatchDisplay: {
+      fontSize: 32,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      letterSpacing: 2,
+      fontVariant: ['tabular-nums'],
+    },
+    stopwatchButtons: {
+      flexDirection: 'row',
+      gap: 8,
+      alignItems: 'center',
+    },
+    stopwatchBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 16,
+      borderRadius: theme.borderRadius.sm,
+    },
+    stopwatchBtnStart: { backgroundColor: theme.colors.success },
+    stopwatchBtnStop: { backgroundColor: theme.colors.error },
+    stopwatchBtnUse: { backgroundColor: theme.colors.primaryFill },
+    stopwatchButtonText: {
+      color: theme.colors.onGold,
+      fontWeight: '800',
+      fontSize: 14,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

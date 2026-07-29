@@ -1,10 +1,12 @@
 import {
   buildWeekProgress,
+  canMoveDay,
   computeStreak,
   getWeekImprovement,
   groupLogsIntoWeekBlocks,
   isWeekCompleted,
   logsBeforeBlock,
+  planWeekMove,
   workoutsUpToBlock,
 } from '../weeks';
 import { ParsedSet, WorkoutDay, WorkoutLog } from '../../types';
@@ -304,5 +306,136 @@ describe('buildWeekProgress', () => {
       improvement: 0,
       isIncomplete: true,
     });
+  });
+});
+
+describe('planWeekMove / canMoveDay', () => {
+  const key = (log: WorkoutLog) => log.dayId;
+  // Bloques resultantes tras aplicar los cambios de un plan a los logs.
+  const blocksAfter = (logs: WorkoutLog[], changed: WorkoutLog[]) => {
+    const merged = logs.map(
+      (log) => changed.find((c) => c.id === log.id) ?? log
+    );
+    const grouped = groupLogsIntoWeekBlocks(merged, key);
+    return Object.keys(grouped)
+      .map(Number)
+      .sort((a, b) => a - b)
+      .map((b) => grouped[b].map((l) => l.id));
+  };
+
+  it('mueve el último día a la semana siguiente si esa no tiene ese día', () => {
+    // Semana 1: d1,d2,d3 · Semana 2: d1,d2 (sin d3).
+    const logs = [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+      makeLog('c', 3, 2),
+      makeLog('d', 1, 3),
+      makeLog('e', 2, 4),
+    ];
+    const plan = planWeekMove(logs, 'c', 'next', key);
+    expect(plan).not.toBeNull();
+    expect(plan!.createsNewWeek).toBe(false);
+    expect(blocksAfter(logs, plan!.changedLogs)).toEqual([
+      ['a', 'b'],
+      ['c', 'd', 'e'],
+    ]);
+  });
+
+  it('no mueve el último día si la semana siguiente ya tiene ese día', () => {
+    const logs = [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+      makeLog('c', 3, 2),
+      makeLog('d', 1, 3),
+      makeLog('e', 2, 4),
+      makeLog('f', 3, 5),
+    ];
+    expect(canMoveDay(logs, 'c', 'next', key)).toBe(false);
+  });
+
+  it('mover el último día sin semana siguiente crea una semana nueva', () => {
+    const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 3, 2)];
+    const plan = planWeekMove(logs, 'c', 'next', key);
+    expect(plan).not.toBeNull();
+    expect(plan!.createsNewWeek).toBe(true);
+    expect(blocksAfter(logs, plan!.changedLogs)).toEqual([['a', 'b'], ['c']]);
+  });
+
+  it('no mueve adelante el único día de la última semana (sería un no-op)', () => {
+    const logs = [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+      makeLog('c', 1, 2), // semana 2 de un solo día (repite d1)
+    ];
+    expect(canMoveDay(logs, 'c', 'next', key)).toBe(false);
+  });
+
+  it('mover adelante cruzando una frontera manual la reubica en el día movido', () => {
+    // Semana 1: d1 · Semana 2 (forzada): d3,d1.
+    const logs = [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+      makeLog('c', 3, 2, true),
+      makeLog('d', 1, 3),
+    ];
+    const plan = planWeekMove(logs, 'b', 'next', key);
+    expect(plan).not.toBeNull();
+    // 'b' (último de semana 1) se lleva la frontera; 'c' deja de forzarla.
+    expect(blocksAfter(logs, plan!.changedLogs)).toEqual([
+      ['a'],
+      ['b', 'c', 'd'],
+    ]);
+  });
+
+  it('mueve el primer día a la semana anterior si esa no tiene ese día', () => {
+    // Semana 1: d2,d3 · Semana 2 (forzada): d1,d2,d3.
+    const logs = [
+      makeLog('a', 2, 0),
+      makeLog('b', 3, 1),
+      makeLog('c', 1, 2, true),
+      makeLog('d', 2, 3),
+      makeLog('e', 3, 4),
+    ];
+    const plan = planWeekMove(logs, 'c', 'prev', key);
+    expect(plan).not.toBeNull();
+    expect(plan!.removesSourceWeek).toBe(false);
+    expect(blocksAfter(logs, plan!.changedLogs)).toEqual([
+      ['a', 'b', 'c'],
+      ['d', 'e'],
+    ]);
+  });
+
+  it('no mueve el primer día si la semana anterior ya tiene ese día', () => {
+    const logs = [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+      makeLog('c', 1, 2, true),
+      makeLog('d', 2, 3),
+    ];
+    expect(canMoveDay(logs, 'c', 'prev', key)).toBe(false);
+  });
+
+  it('el primer día de la primera semana no puede ir atrás', () => {
+    const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 3, 2)];
+    expect(canMoveDay(logs, 'a', 'prev', key)).toBe(false);
+  });
+
+  it('mover atrás el único día de una semana la elimina', () => {
+    // Semana 1: d1,d2 · Semana 2 (forzada): un solo día d3.
+    const logs = [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+      makeLog('c', 3, 2, true),
+    ];
+    const plan = planWeekMove(logs, 'c', 'prev', key);
+    expect(plan).not.toBeNull();
+    expect(plan!.removesSourceWeek).toBe(true);
+    expect(blocksAfter(logs, plan!.changedLogs)).toEqual([['a', 'b', 'c']]);
+  });
+
+  it('un día intermedio no se puede mover en ninguna dirección', () => {
+    const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 3, 2)];
+    expect(canMoveDay(logs, 'b', 'next', key)).toBe(false);
+    expect(canMoveDay(logs, 'b', 'prev', key)).toBe(false);
   });
 });

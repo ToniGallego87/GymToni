@@ -14,6 +14,12 @@ interface ExerciseGifButtonProps {
   catalogId?: string;
   size?: number;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Permite fijar un GIF al ejercicio de la rutina: aparece un botón **Asignar**
+   * en el visor/buscador que guarda el `catalogId` elegido. Solo tiene sentido
+   * donde el ejercicio pertenece a una rutina editable (registro e historial).
+   */
+  onAssign?: (catalogId: string) => void;
 }
 
 /**
@@ -27,6 +33,7 @@ export function ExerciseGifButton({
   catalogId,
   size = 20,
   style,
+  onAssign,
 }: ExerciseGifButtonProps) {
   const [showGif, setShowGif] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
@@ -66,26 +73,28 @@ export function ExerciseGifButton({
         onRequestClose={() => setShowPicker(false)}
         reference
         initialQuery={name}
+        onAssign={onAssign}
       />
     </>
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  button: {
-    width: 34,
-    height: 34,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    button: {
+      width: 34,
+      height: 34,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    pressed: {
+      opacity: 0.8,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

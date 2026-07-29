@@ -20,6 +20,8 @@ const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
 import {
   AppModal,
+  ConfirmModal,
+  DatePickerModal,
   DayAccentIcon,
   ExerciseInputField,
   InvalidAddReason,
@@ -34,6 +36,7 @@ import {
   Toast,
   StretchScrollView,
 } from '../../components';
+import { assignmentDuplicatesDayInWeek } from '@lib/weeks';
 import { isCardioOnlyLog } from '@lib/cardio';
 import {
   MAX_SET_REPS,
@@ -41,7 +44,7 @@ import {
   parseCardioString,
   parseSeriesString,
 } from '@lib/parsers';
-import { generateId, getToday } from '@lib/utils';
+import { combineDateWithTime, generateId, getToday } from '@lib/utils';
 import {
   WorkoutDay,
   WorkoutLog,
@@ -119,6 +122,14 @@ export function WorkoutLogScreen({
 
   // Obtener el log existente: si se pasa log, usarlo; sino el último de hoy
   const existingLog = log || getLatestTodayLog();
+
+  // Fecha del entreno: se puede registrar un día olvidado o reasignar uno
+  // guardado a otro día. Arranca en la del log editado (o hoy al crear).
+  const originalDate = log?.date ?? existingLog?.date ?? getToday();
+  const [selectedDate, setSelectedDate] = useState(originalDate);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  // Fecha elegida pendiente de confirmar por partir una semana ya existente.
+  const [pendingSplitDate, setPendingSplitDate] = useState<string | null>(null);
 
   // Editando una sesión que NO es de hoy: rellenar o corregir un entreno de otro
   // día no es entrenar, así que no se lanza la cuenta atrás de descanso (ni su
@@ -671,14 +682,23 @@ export function WorkoutLogScreen({
       return { ...hostStrengthLog, cardio: cardioLog, updatedAt: Date.now() };
     }
 
+    // Al reasignar la fecha hay que mover también `createdAt`: es con lo que se
+    // ordenan y agrupan las semanas (getLogTimestamp lo prioriza). Se conserva
+    // la hora del log y se cambia solo el día; si la fecha no cambia, intacto.
+    const baseCreatedAt = log?.createdAt || Date.now();
+    const createdAt =
+      selectedDate === originalDate
+        ? baseCreatedAt
+        : combineDateWithTime(selectedDate, baseCreatedAt);
+
     return {
       id: log?.id || generateId(),
       routineId: getRoutineIdForDay(),
       dayId: selectedDay.id,
-      date: log?.date || getToday(),
+      date: selectedDate,
       exercises: exerciseLogs,
       cardio: cardioLog,
-      createdAt: log?.createdAt || Date.now(),
+      createdAt,
       updatedAt: Date.now(),
       // Al editar se conserva el valor previo del log; al crear se toma la
       // elección hecha en "Elige la sesión".
@@ -711,13 +731,18 @@ export function WorkoutLogScreen({
       return;
     }
 
-    const today = getToday();
-    const existingLogOfToday = state.logs.find(
-      (l) => l.dayId === selectedDay.id && l.date === today
-    );
-
-    if (existingLogOfToday) {
-      dispatch({ type: 'DELETE_WORKOUT_LOG', payload: existingLogOfToday.id });
+    // Un registro nuevo con fecha de hoy sustituye al de hoy del mismo día (no
+    // duplicar). Si se está registrando un día pasado, no se toca el de hoy.
+    if (selectedDate === getToday()) {
+      const existingLogOfToday = state.logs.find(
+        (l) => l.dayId === selectedDay.id && l.date === selectedDate
+      );
+      if (existingLogOfToday) {
+        dispatch({
+          type: 'DELETE_WORKOUT_LOG',
+          payload: existingLogOfToday.id,
+        });
+      }
     }
 
     dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
@@ -785,15 +810,80 @@ export function WorkoutLogScreen({
   };
 
   // Fecha mostrada en el subtítulo, en formato dd/mm/aaaa.
-  const getSubtitleDate = (): string => {
-    const dateString =
-      log?.date ||
-      existingLog?.date ||
-      new Date(existingLog?.createdAt || Date.now())
-        .toISOString()
-        .split('T')[0];
-    return dateString.split('-').reverse().join('/');
+  const getSubtitleDate = (): string =>
+    selectedDate.split('-').reverse().join('/');
+
+  // Clave de día (dayNumber) para agrupar semanas, igual que Inicio.
+  const dayNumberForLog = (l: WorkoutLog): number | undefined => {
+    for (const routine of state.routines) {
+      const d = routine.days.find((day) => day.id === l.dayId);
+      if (d) return d.dayNumber;
+    }
+    return undefined;
   };
+
+  // Aplica la fecha elegida. Si cae en una semana que ya tiene este mismo día,
+  // asignarla parte esa semana en dos (ver lib/weeks): se avisa antes.
+  const applyChosenDate = (date: string) => {
+    setShowDatePicker(false);
+    if (date === selectedDate) return;
+
+    const routineId = getRoutineIdForDay();
+    const routineLogs = state.logs.filter((l) => l.routineId === routineId);
+    const movedLog: WorkoutLog = {
+      ...(log || existingLog || ({ id: 'new-log' } as WorkoutLog)),
+      dayId: selectedDay.id,
+    };
+    const newTimestamp = combineDateWithTime(
+      date,
+      log?.createdAt || Date.now()
+    );
+
+    if (
+      assignmentDuplicatesDayInWeek(
+        routineLogs,
+        movedLog,
+        newTimestamp,
+        dayNumberForLog
+      )
+    ) {
+      setPendingSplitDate(date);
+      return;
+    }
+    setSelectedDate(date);
+  };
+
+  // Fija un GIF del catálogo al ejercicio de la rutina (botón "Asignar" del
+  // buscador). Se guarda en la rutina, no en el log, para que el play quede
+  // directo la próxima vez y viaje al compartir.
+  const handleAssignGif = (exerciseId: string, catalogId: string) => {
+    const routineId = getRoutineIdForDay();
+    const routine = state.routines.find((r) => r.id === routineId);
+    const day = routine?.days.find((d) => d.id === selectedDay.id);
+    if (!routine || !day) return;
+    const updatedDay = {
+      ...day,
+      exercises: day.exercises.map((ex) =>
+        ex.id === exerciseId ? { ...ex, catalogId } : ex
+      ),
+    };
+    dispatch({
+      type: 'UPDATE_DAY',
+      payload: { routineId, dayId: day.id, day: updatedDay },
+    });
+    setToast({
+      message: t('GIF asignado al ejercicio'),
+      type: 'success',
+      duration: 2000,
+    });
+  };
+
+  // catalogId VIVO del ejercicio (refleja una asignación recién hecha sin salir).
+  const liveDay = state.routines
+    .flatMap((r) => r.days)
+    .find((d) => d.id === selectedDay.id);
+  const liveCatalogId = (exerciseId: string): string | undefined =>
+    liveDay?.exercises.find((ex) => ex.id === exerciseId)?.catalogId;
 
   // Contenido del temporizador de descanso (label + cuenta atrás + acciones).
   // Se reutiliza en dos sitios: DENTRO de la tarjeta del ejercicio mientras
@@ -917,7 +1007,10 @@ export function WorkoutLogScreen({
               <ExerciseInputField
                 order={exercise.order}
                 exerciseName={exercise.name}
-                catalogId={exercise.catalogId}
+                catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
+                onAssignGif={(catalogId) =>
+                  handleAssignGif(exercise.id, catalogId)
+                }
                 target={{
                   sets: exercise.targetSets,
                   reps: exercise.targetReps,
@@ -1008,8 +1101,19 @@ export function WorkoutLogScreen({
         topInset={insets.top}
         menuItems={
           cardioOnly
-            ? undefined
+            ? [
+                {
+                  icon: 'calendar-edit',
+                  label: t('Cambiar fecha'),
+                  onPress: () => setShowDatePicker(true),
+                },
+              ]
             : [
+                {
+                  icon: 'calendar-edit',
+                  label: t('Cambiar fecha'),
+                  onPress: () => setShowDatePicker(true),
+                },
                 {
                   icon: 'timer-cog-outline',
                   label: t('Modificar temporizador'),
@@ -1017,6 +1121,28 @@ export function WorkoutLogScreen({
                 },
               ]
         }
+      />
+
+      <DatePickerModal
+        visible={showDatePicker}
+        value={selectedDate}
+        onSelect={applyChosenDate}
+        onRequestClose={() => setShowDatePicker(false)}
+      />
+
+      <ConfirmModal
+        visible={pendingSplitDate !== null}
+        title={t('¿Dividir la semana?')}
+        message={t(
+          'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?'
+        )}
+        confirmLabel={t('Continuar')}
+        confirmVariant="primary"
+        onConfirm={() => {
+          if (pendingSplitDate) setSelectedDate(pendingSplitDate);
+          setPendingSplitDate(null);
+        }}
+        onCancel={() => setPendingSplitDate(null)}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />

@@ -1,12 +1,6 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import {
@@ -27,6 +21,12 @@ interface GifViewerModalProps {
   catalogId?: string;
   /** Nombre a mostrar si el ejercicio no está en el catálogo. */
   fallbackName?: string;
+  /**
+   * Si se indica, muestra un botón **Asignar** que fija este GIF al ejercicio de
+   * la rutina (guarda su `catalogId`). Se usa al consultar un ejercicio tecleado
+   * a mano para dejarle el play directo la próxima vez.
+   */
+  onAssign?: (catalogId: string) => void;
 }
 
 /**
@@ -40,12 +40,15 @@ export function GifViewerModal({
   onRequestClose,
   catalogId,
   fallbackName,
+  onAssign,
 }: GifViewerModalProps) {
   const exercise = getCatalogExercise(catalogId);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
-  const title = exercise ? exerciseName(exercise) : fallbackName ?? t('Ejercicio');
+  const title = exercise
+    ? exerciseName(exercise)
+    : fallbackName ?? t('Ejercicio');
 
   return (
     <AppModal
@@ -54,12 +57,34 @@ export function GifViewerModal({
       title={title}
       icon="play-box-outline"
       footer={
-        <Button
-          title={t('Cerrar')}
-          onPress={onRequestClose}
-          variant="secondary"
-          size="medium"
-        />
+        onAssign && exercise ? (
+          <View style={styles.footerRow}>
+            <Button
+              title={t('Cerrar')}
+              onPress={onRequestClose}
+              variant="secondary"
+              size="medium"
+              style={styles.footerButton}
+            />
+            <Button
+              title={t('Asignar')}
+              onPress={() => {
+                onAssign(exercise.id);
+                onRequestClose();
+              }}
+              variant="primary"
+              size="medium"
+              style={styles.footerButton}
+            />
+          </View>
+        ) : (
+          <Button
+            title={t('Cerrar')}
+            onPress={onRequestClose}
+            variant="secondary"
+            size="medium"
+          />
+        )
       }
     >
       {exercise ? (
@@ -90,7 +115,8 @@ export function GifViewerModal({
             )}
           </View>
           <Text style={styles.meta}>
-            {targetLabel(exercise.target)} · {equipmentLabel(exercise.equipment)}
+            {targetLabel(exercise.target)} ·{' '}
+            {equipmentLabel(exercise.equipment)}
           </Text>
           <Text style={styles.attribution}>{ATTRIBUTION}</Text>
         </>
@@ -103,48 +129,56 @@ export function GifViewerModal({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  stage: {
-    marginTop: 12,
-    aspectRatio: 1,
-    width: '100%',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  gif: {
-    width: '100%',
-    height: '100%',
-  },
-  spinner: {
-    position: 'absolute',
-  },
-  meta: {
-    marginTop: 12,
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-  },
-  attribution: {
-    marginTop: 6,
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    opacity: 0.8,
-  },
-  errorText: {
-    marginTop: 16,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    footerRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    footerButton: {
+      flex: 1,
+    },
+    stage: {
+      marginTop: 12,
+      aspectRatio: 1,
+      width: '100%',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    gif: {
+      width: '100%',
+      height: '100%',
+    },
+    spinner: {
+      position: 'absolute',
+    },
+    meta: {
+      marginTop: 12,
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+    },
+    attribution: {
+      marginTop: 6,
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      opacity: 0.8,
+    },
+    errorText: {
+      marginTop: 16,
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

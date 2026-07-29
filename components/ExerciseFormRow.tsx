@@ -50,171 +50,173 @@ export function ExerciseFormRow({
 
   return (
     <>
-    <View style={styles.exerciseRow}>
-      <View style={styles.exerciseNameRow}>
-        <TextInput
-          style={styles.exerciseNameInput}
-          placeholder={t('Ej: Press banca')}
-          placeholderTextColor={theme.colors.textSecondary}
-          value={exercise.name}
-          // Escribir a mano rompe el vínculo con el catálogo (ya no es ese GIF).
-          onChangeText={(value) =>
-            onChange({ name: value, catalogId: undefined })
-          }
-        />
-        <Pressable
-          style={({ pressed }) => [
-            styles.iconButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => setShowPicker(true)}
-          hitSlop={8}
-          accessibilityLabel={t('Buscar en el catálogo')}
-        >
-          <MaterialCommunityIcons
-            name="magnify"
-            size={18}
-            color={theme.colors.primary}
+      <View style={styles.exerciseRow}>
+        <View style={styles.exerciseNameRow}>
+          <TextInput
+            style={styles.exerciseNameInput}
+            placeholder={t('Ej: Press banca')}
+            placeholderTextColor={theme.colors.textSecondary}
+            value={exercise.name}
+            // Escribir a mano rompe el vínculo con el catálogo (ya no es ese GIF).
+            onChangeText={(value) =>
+              onChange({ name: value, catalogId: undefined })
+            }
           />
-        </Pressable>
-        {!!exercise.catalogId && (
           <Pressable
             style={({ pressed }) => [
               styles.iconButton,
               pressed && styles.buttonPressed,
             ]}
-            onPress={() => setShowGif(true)}
+            onPress={() => setShowPicker(true)}
             hitSlop={8}
-            accessibilityLabel={t('Ver GIF')}
+            accessibilityLabel={t('Buscar en el catálogo')}
           >
             <MaterialCommunityIcons
-              name="play-box-outline"
+              name="magnify"
               size={18}
               color={theme.colors.primary}
             />
           </Pressable>
-        )}
-        {hasName && (
+          {!!exercise.catalogId && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.iconButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => setShowGif(true)}
+              hitSlop={8}
+              accessibilityLabel={t('Ver GIF')}
+            >
+              <MaterialCommunityIcons
+                name="play-box-outline"
+                size={18}
+                color={theme.colors.primary}
+              />
+            </Pressable>
+          )}
+          {hasName && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.collapseButton,
+                { borderColor: accent },
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onCollapse}
+              hitSlop={8}
+            >
+              <MaterialCommunityIcons name="check" size={18} color={accent} />
+            </Pressable>
+          )}
           <Pressable
             style={({ pressed }) => [
-              styles.collapseButton,
-              { borderColor: accent },
+              styles.removeExerciseButton,
+              !canRemove && styles.controlDisabled,
               pressed && styles.buttonPressed,
             ]}
-            onPress={onCollapse}
+            onPress={onRemove}
+            disabled={!canRemove}
             hitSlop={8}
           >
-            <MaterialCommunityIcons name="check" size={18} color={accent} />
+            <MaterialCommunityIcons
+              name="close"
+              size={18}
+              color={
+                canRemove ? theme.colors.error : theme.colors.textSecondary
+              }
+            />
           </Pressable>
-        )}
-        <Pressable
-          style={({ pressed }) => [
-            styles.removeExerciseButton,
-            !canRemove && styles.controlDisabled,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={onRemove}
-          disabled={!canRemove}
-          hitSlop={8}
-        >
-          <MaterialCommunityIcons
-            name="close"
-            size={18}
-            color={canRemove ? theme.colors.error : theme.colors.textSecondary}
-          />
-        </Pressable>
-      </View>
-
-      <View style={styles.exerciseControlsRow}>
-        <View style={styles.controlBlock}>
-          <Text style={styles.controlLabel}>{t('Series')}</Text>
-          <View style={styles.stepper}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.stepperButton,
-                exercise.sets <= MIN_SETS && styles.controlDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => adjustSets(-1)}
-              disabled={exercise.sets <= MIN_SETS}
-              hitSlop={6}
-            >
-              <MaterialCommunityIcons
-                name="minus"
-                size={18}
-                color={theme.colors.text}
-              />
-            </Pressable>
-            <Text style={styles.stepperValue}>{exercise.sets}</Text>
-            <Pressable
-              style={({ pressed }) => [
-                styles.stepperButton,
-                exercise.sets >= MAX_SETS && styles.controlDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => adjustSets(1)}
-              disabled={exercise.sets >= MAX_SETS}
-              hitSlop={6}
-            >
-              <MaterialCommunityIcons
-                name="plus"
-                size={18}
-                color={theme.colors.text}
-              />
-            </Pressable>
-          </View>
         </View>
 
-        <View style={[styles.controlBlock, styles.controlBlockGrow]}>
-          <Text style={styles.controlLabel}>
-            {exercise.unit === 'seg' ? t('Segundos') : t('Repeticiones')}
-          </Text>
-          <View style={styles.repsRow}>
-            <TextInput
-              style={styles.repsInput}
-              placeholder={
-                exercise.unit === 'seg' ? t('Ej: 30-45') : t('Ej: 10-12')
-              }
-              placeholderTextColor={theme.colors.textSecondary}
-              value={exercise.reps}
-              onChangeText={(value) => onChange({ reps: value })}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
-            />
-            <View style={styles.unitToggle}>
-              {(['reps', 'seg'] as RepUnit[]).map((unit) => {
-                const active = exercise.unit === unit;
-                return (
-                  <Pressable
-                    key={unit}
-                    style={[
-                      styles.unitOption,
-                      active && [
-                        styles.unitOptionActive,
-                        { borderColor: accent },
-                      ],
-                    ]}
-                    onPress={() => onChange({ unit })}
-                  >
-                    <Text
+        <View style={styles.exerciseControlsRow}>
+          <View style={styles.controlBlock}>
+            <Text style={styles.controlLabel}>{t('Series')}</Text>
+            <View style={styles.stepper}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.stepperButton,
+                  exercise.sets <= MIN_SETS && styles.controlDisabled,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => adjustSets(-1)}
+                disabled={exercise.sets <= MIN_SETS}
+                hitSlop={6}
+              >
+                <MaterialCommunityIcons
+                  name="minus"
+                  size={18}
+                  color={theme.colors.text}
+                />
+              </Pressable>
+              <Text style={styles.stepperValue}>{exercise.sets}</Text>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.stepperButton,
+                  exercise.sets >= MAX_SETS && styles.controlDisabled,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => adjustSets(1)}
+                disabled={exercise.sets >= MAX_SETS}
+                hitSlop={6}
+              >
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={18}
+                  color={theme.colors.text}
+                />
+              </Pressable>
+            </View>
+          </View>
+
+          <View style={[styles.controlBlock, styles.controlBlockGrow]}>
+            <Text style={styles.controlLabel}>
+              {exercise.unit === 'seg' ? t('Segundos') : t('Repeticiones')}
+            </Text>
+            <View style={styles.repsRow}>
+              <TextInput
+                style={styles.repsInput}
+                placeholder={
+                  exercise.unit === 'seg' ? t('Ej: 30-45') : t('Ej: 10-12')
+                }
+                placeholderTextColor={theme.colors.textSecondary}
+                value={exercise.reps}
+                onChangeText={(value) => onChange({ reps: value })}
+                keyboardType="numbers-and-punctuation"
+                maxLength={10}
+              />
+              <View style={styles.unitToggle}>
+                {(['reps', 'seg'] as RepUnit[]).map((unit) => {
+                  const active = exercise.unit === unit;
+                  return (
+                    <Pressable
+                      key={unit}
                       style={[
-                        styles.unitOptionText,
+                        styles.unitOption,
                         active && [
-                          styles.unitOptionTextActive,
-                          { color: accent },
+                          styles.unitOptionActive,
+                          { borderColor: accent },
                         ],
                       ]}
+                      onPress={() => onChange({ unit })}
                     >
-                      {unit === 'reps' ? t('reps') : t('seg')}
-                    </Text>
-                  </Pressable>
-                );
-              })}
+                      <Text
+                        style={[
+                          styles.unitOptionText,
+                          active && [
+                            styles.unitOptionTextActive,
+                            { color: accent },
+                          ],
+                        ]}
+                      >
+                        {unit === 'reps' ? t('reps') : t('seg')}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
             </View>
           </View>
         </View>
       </View>
-    </View>
 
       <ExercisePickerModal
         visible={showPicker}
@@ -239,6 +241,12 @@ interface ExerciseSummaryRowProps {
   canRemove: boolean;
   onEdit: () => void;
   onRemove: () => void;
+  // Reordenar el ejercicio dentro del día. Si no se pasan, no salen las flechas
+  // (p. ej. al crear una rutina, donde el orden es el de tecleo).
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 /** Fila colapsada: el ejercicio ya definido, como una sola línea de texto. */
@@ -247,67 +255,114 @@ export function ExerciseSummaryRow({
   canRemove,
   onEdit,
   onRemove,
+  onMoveUp,
+  onMoveDown,
+  canMoveUp = false,
+  canMoveDown = false,
 }: ExerciseSummaryRowProps) {
   const [showGif, setShowGif] = useState(false);
+  const showReorder = !!onMoveUp || !!onMoveDown;
 
   return (
     <>
-    <View style={styles.summaryRow}>
-      <Pressable
-        style={({ pressed }) => [
-          styles.summaryMain,
-          pressed && styles.buttonPressed,
-        ]}
-        onPress={onEdit}
-        hitSlop={6}
-      >
-        <Text style={styles.summaryText} numberOfLines={1}>
-          {exercise.name.trim()}
-        </Text>
-        <View style={styles.summaryDivider} />
-        <Text style={styles.summarySets}>
-          {exercise.sets}x{buildTargetReps(exercise)}
-        </Text>
-        <MaterialCommunityIcons
-          name="pencil"
-          size={16}
-          color={theme.colors.textSecondary}
-        />
-      </Pressable>
-      {!!exercise.catalogId && (
+      <View style={styles.summaryRow}>
+        {showReorder && (
+          <View style={styles.reorderColumn}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.reorderButton,
+                !canMoveUp && styles.controlDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onMoveUp}
+              disabled={!canMoveUp}
+              hitSlop={6}
+              accessibilityLabel={t('Subir ejercicio')}
+            >
+              <MaterialCommunityIcons
+                name="chevron-up"
+                size={18}
+                color={
+                  canMoveUp ? theme.colors.text : theme.colors.textSecondary
+                }
+              />
+            </Pressable>
+            <Pressable
+              style={({ pressed }) => [
+                styles.reorderButton,
+                !canMoveDown && styles.controlDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onMoveDown}
+              disabled={!canMoveDown}
+              hitSlop={6}
+              accessibilityLabel={t('Bajar ejercicio')}
+            >
+              <MaterialCommunityIcons
+                name="chevron-down"
+                size={18}
+                color={
+                  canMoveDown ? theme.colors.text : theme.colors.textSecondary
+                }
+              />
+            </Pressable>
+          </View>
+        )}
         <Pressable
           style={({ pressed }) => [
-            styles.iconButton,
+            styles.summaryMain,
             pressed && styles.buttonPressed,
           ]}
-          onPress={() => setShowGif(true)}
-          hitSlop={8}
-          accessibilityLabel={t('Ver GIF')}
+          onPress={onEdit}
+          hitSlop={6}
         >
+          <Text style={styles.summaryText} numberOfLines={1}>
+            {exercise.name.trim()}
+          </Text>
+          <View style={styles.summaryDivider} />
+          <Text style={styles.summarySets}>
+            {exercise.sets}x{buildTargetReps(exercise)}
+          </Text>
           <MaterialCommunityIcons
-            name="play-box-outline"
-            size={18}
-            color={theme.colors.primary}
+            name="pencil"
+            size={16}
+            color={theme.colors.textSecondary}
           />
         </Pressable>
-      )}
-      <Pressable
-        style={({ pressed }) => [
-          styles.removeExerciseButton,
-          !canRemove && styles.controlDisabled,
-          pressed && styles.buttonPressed,
-        ]}
-        onPress={onRemove}
-        disabled={!canRemove}
-        hitSlop={8}
-      >
-        <MaterialCommunityIcons
-          name="close"
-          size={18}
-          color={canRemove ? theme.colors.error : theme.colors.textSecondary}
-        />
-      </Pressable>
-    </View>
+        {!!exercise.catalogId && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.iconButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => setShowGif(true)}
+            hitSlop={8}
+            accessibilityLabel={t('Ver GIF')}
+          >
+            <MaterialCommunityIcons
+              name="play-box-outline"
+              size={18}
+              color={theme.colors.primary}
+            />
+          </Pressable>
+        )}
+        <Pressable
+          style={({ pressed }) => [
+            styles.removeExerciseButton,
+            !canRemove && styles.controlDisabled,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={onRemove}
+          disabled={!canRemove}
+          hitSlop={8}
+        >
+          <MaterialCommunityIcons
+            name="close"
+            size={18}
+            color={canRemove ? theme.colors.error : theme.colors.textSecondary}
+          />
+        </Pressable>
+      </View>
 
       <GifViewerModal
         visible={showGif}
@@ -319,194 +374,205 @@ export function ExerciseSummaryRow({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  exerciseRow: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 12,
-    gap: 12,
-  },
-  exerciseNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  exerciseNameInput: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  removeExerciseButton: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  collapseButton: {
-    width: 38,
-    height: 38,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  iconButton: {
-    width: 34,
-    height: 38,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surface,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    height: 44,
-  },
-  summaryText: {
-    flex: 1,
-    minWidth: 0,
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  summaryDivider: {
-    width: 1,
-    alignSelf: 'stretch',
-    marginVertical: 6,
-    backgroundColor: theme.colors.border,
-  },
-  summarySets: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  exerciseControlsRow: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-  },
-  controlBlock: {
-    gap: 6,
-  },
-  controlBlockGrow: {
-    flex: 1,
-    minWidth: 0,
-  },
-  controlLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  stepper: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  stepperButton: {
-    width: 32,
-    height: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepperValue: {
-    minWidth: 24,
-    textAlign: 'center',
-    fontSize: 18,
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  repsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  repsInput: {
-    flex: 1,
-    minWidth: 0,
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    height: 44,
-    color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  unitToggle: {
-    flexDirection: 'row',
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-  },
-  unitOption: {
-    paddingHorizontal: 12,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderBottomWidth: 2,
-    borderColor: 'transparent',
-  },
-  unitOptionActive: {
-    backgroundColor: theme.colors.surface,
-  },
-  unitOptionText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  unitOptionTextActive: {
-    color: theme.colors.primary,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  controlDisabled: {
-    opacity: 0.4,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    exerciseRow: {
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: 12,
+      gap: 12,
+    },
+    exerciseNameRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    exerciseNameInput: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: theme.colors.text,
+      fontSize: 15,
+      lineHeight: 20,
+    },
+    removeExerciseButton: {
+      width: 38,
+      height: 38,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    collapseButton: {
+      width: 38,
+      height: 38,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    iconButton: {
+      width: 34,
+      height: 38,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    // Flechas de reordenado apiladas a la izquierda de la fila resumen.
+    reorderColumn: {
+      justifyContent: 'center',
+    },
+    reorderButton: {
+      width: 30,
+      height: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    summaryMain: {
+      flex: 1,
+      minWidth: 0,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 12,
+      height: 44,
+    },
+    summaryText: {
+      flex: 1,
+      minWidth: 0,
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '700',
+      lineHeight: 20,
+    },
+    summaryDivider: {
+      width: 1,
+      alignSelf: 'stretch',
+      marginVertical: 6,
+      backgroundColor: theme.colors.border,
+    },
+    summarySets: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      fontWeight: '700',
+      lineHeight: 20,
+    },
+    exerciseControlsRow: {
+      flexDirection: 'row',
+      gap: 12,
+      alignItems: 'flex-start',
+    },
+    controlBlock: {
+      gap: 6,
+    },
+    controlBlockGrow: {
+      flex: 1,
+      minWidth: 0,
+    },
+    controlLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.3,
+    },
+    stepper: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    stepperButton: {
+      width: 32,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepperValue: {
+      minWidth: 24,
+      textAlign: 'center',
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    repsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    repsInput: {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 12,
+      height: 44,
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: '600',
+      textAlign: 'center',
+    },
+    unitToggle: {
+      flexDirection: 'row',
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+    },
+    unitOption: {
+      paddingHorizontal: 12,
+      height: 42,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderBottomWidth: 2,
+      borderColor: 'transparent',
+    },
+    unitOptionActive: {
+      backgroundColor: theme.colors.surface,
+    },
+    unitOptionText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    unitOptionTextActive: {
+      color: theme.colors.primary,
+    },
+    buttonPressed: {
+      opacity: 0.85,
+    },
+    controlDisabled: {
+      opacity: 0.4,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

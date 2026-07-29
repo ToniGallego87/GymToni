@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.7',
+    items: [
+      'Ahora puedes cambiar la fecha de un entrenamiento: usa "Cambiar fecha" en el menú de los tres puntos y elige el día en un calendario, con atajos para Hoy y Ayer.',
+      'Puedes mover un día de entreno a la semana anterior, a la siguiente o a una nueva desde el menú de los tres puntos de cada día en Inicio.',
+      'Ahora puedes marcar una semana como semana de descarga: queda aparte de tus estadísticas y no cuenta para comparar tu progreso.',
+      'Puedes reordenar los ejercicios de una rutina con las flechas arriba y abajo, sin perder el historial de cada ejercicio.',
+      'Puedes fijar un GIF a un ejercicio de tu rutina: la próxima vez, el botón de play abre directamente ese vídeo al registrar o al revisar tu historial.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.6',
     items: [
       'Ahora puedes editar o borrar un entrenamiento ya guardado desde su propia pantalla de detalle: usa el menú de los tres puntos, arriba a la derecha.',

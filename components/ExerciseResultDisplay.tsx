@@ -25,6 +25,8 @@ interface ExerciseResultDisplayProps {
   isDetail?: boolean;
   // Color de acento del día. Tiñe el degradado de fondo en detalle.
   accent?: string;
+  // Fija un GIF al ejercicio de la rutina desde el buscador (botón Asignar).
+  onAssignGif?: (catalogId: string) => void;
 }
 
 type ComparisonStatus = 'up' | 'same' | 'down' | 'missing';
@@ -68,6 +70,7 @@ export function ExerciseResultDisplay({
   targetReps,
   isDetail = false,
   accent = theme.colors.current,
+  onAssignGif,
 }: ExerciseResultDisplayProps) {
   // En render para leer los colores del tema VIVO (cambio de tema en caliente).
   const STATUS_COLOR: Record<ComparisonStatus, string> = {
@@ -110,7 +113,12 @@ export function ExerciseResultDisplay({
         <Text style={styles.exerciseName} numberOfLines={2}>
           {exerciseName}
         </Text>
-        <ExerciseGifButton name={exerciseName} catalogId={catalogId} size={18} />
+        <ExerciseGifButton
+          name={exerciseName}
+          catalogId={catalogId}
+          size={18}
+          onAssign={onAssignGif}
+        />
         {!!improvementText && (
           <Text
             style={[
@@ -163,124 +171,125 @@ export function ExerciseResultDisplay({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    marginVertical: 5,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      marginVertical: 5,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
 
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginBottom: 8,
-  },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 8,
+    },
 
-  // Misma fuente que el título de cada ejercicio en la vista de inserción
-  // (ExerciseInputField): display (Anton).
-  exerciseName: {
-    flex: 1,
-    fontSize: 19,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.text,
-    lineHeight: 23,
-  },
+    // Misma fuente que el título de cada ejercicio en la vista de inserción
+    // (ExerciseInputField): display (Anton).
+    exerciseName: {
+      flex: 1,
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      lineHeight: 23,
+    },
 
-  improvementText: {
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
+    improvementText: {
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
 
-  columnHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
+    columnHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 2,
+    },
 
-  columnLabel: {
-    flex: 1,
-    fontSize: 10,
-    color: theme.colors.textMuted,
-    textTransform: 'uppercase',
-    fontWeight: '700',
-    letterSpacing: 0.8,
-    lineHeight: 14,
-  },
+    columnLabel: {
+      flex: 1,
+      fontSize: 10,
+      color: theme.colors.textMuted,
+      textTransform: 'uppercase',
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      lineHeight: 14,
+    },
 
-  columnLeft: {
-    textAlign: 'left',
-  },
+    columnLeft: {
+      textAlign: 'left',
+    },
 
-  columnRight: {
-    textAlign: 'right',
-  },
+    columnRight: {
+      textAlign: 'right',
+    },
 
-  // Objetivo del ejercicio (series×reps), centrado entre las dos columnas.
-  targetLabel: {
-    minWidth: 44,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textMuted,
-    lineHeight: 14,
-  },
+    // Objetivo del ejercicio (series×reps), centrado entre las dos columnas.
+    targetLabel: {
+      minWidth: 44,
+      textAlign: 'center',
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.colors.textMuted,
+      lineHeight: 14,
+    },
 
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 5,
-  },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 5,
+    },
 
-  rowDivider: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.border,
-  },
+    rowDivider: {
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
+    },
 
-  setValue: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '600',
-    fontVariant: ['tabular-nums'],
-    lineHeight: 20,
-  },
+    setValue: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '600',
+      fontVariant: ['tabular-nums'],
+      lineHeight: 20,
+    },
 
-  currentValue: {
-    color: theme.colors.text,
-  },
+    currentValue: {
+      color: theme.colors.text,
+    },
 
-  previousValue: {
-    textAlign: 'right',
-    color: theme.colors.textSecondary,
-  },
+    previousValue: {
+      textAlign: 'right',
+      color: theme.colors.textSecondary,
+    },
 
-  statusGlyph: {
-    minWidth: 44,
-    textAlign: 'center',
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
+    statusGlyph: {
+      minWidth: 44,
+      textAlign: 'center',
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
 
-  notes: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: theme.colors.border,
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    fontStyle: 'italic',
-    lineHeight: 17,
-  },
-});
+    notes: {
+      marginTop: 8,
+      paddingTop: 8,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: theme.colors.border,
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
+      lineHeight: 17,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

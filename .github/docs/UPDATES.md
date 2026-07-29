@@ -1,5 +1,72 @@
 # UPDATES
 
+## Version 0.6.7 - 2026-07-29
+
+### Nuevas funcionalidades
+
+- **Registrar y editar la fecha de un entreno** (`components/DatePickerModal.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`, `features/workout/DetailScreen.tsx`,
+  `lib/utils.ts`, `lib/weeks.ts`): el log siempre nacía con `getToday()` y no se
+  podía reasignar. Nuevo selector de fecha propio (calendario mensual, sin
+  librería externa, con atajos Hoy/Ayer y tope en hoy) accesible desde el menú
+  `⋯` del registro ("Cambiar fecha") y del detalle. Al reasignar se mueve también
+  `createdAt` (con lo que se ordenan/agrupan las semanas) conservando la hora
+  (`combineDateWithTime`). Si la fecha cae en una semana que ya tiene ese mismo
+  día, se avisa con `ConfirmModal` de que partirá la semana
+  (`assignmentDuplicatesDayInWeek`, por `dayNumber`).
+- **Reordenar los ejercicios de una rutina** (`components/ExerciseFormRow.tsx`,
+  `features/workout/RoutineDetailScreen.tsx`): las filas resumen del editor de
+  ejercicios llevan flechas ▲▼ para cambiar la posición. El id de cada ejercicio
+  viaja intacto (`buildWorkoutExercises` solo renumera el `order`), así que el
+  historial sigue apuntando a su ejercicio: los resultados pasados se muestran en
+  la nueva posición, no se recalculan (Detalle y registro resuelven por
+  `exerciseId`).
+- **Asignar un GIF fijo a un ejercicio de la rutina** (`components/GifViewerModal.tsx`,
+  `components/ExercisePickerModal.tsx`, `components/ExerciseGifButton.tsx`,
+  `components/ExerciseInputField.tsx`, `components/ExerciseResultDisplay.tsx`,
+  `lib/exerciseForm.ts`, `lib/routineShare.ts`, `lib/db/*`): para un ejercicio sin
+  GIF, el buscador muestra ahora un botón "Asignar" en el visor del GIF que fija
+  su `catalogId` en la rutina (registro e historial); la próxima vez el play abre
+  directo. El `catalogId` pasa a persistirse en SQLite (columna nueva
+  `exercises.catalog_id`, migración a esquema v3) y viaja al compartir por texto
+  plano y QR con una etiqueta `{#id}` al final de la línea (round-trip en
+  `exerciseToLine`/`parseImportedExercise`).
+- **Marcar una semana como semana de descarga (deload)** (`lib/weeks.ts`,
+  `features/workout/HomeScreen.tsx`, `features/workout/DetailScreen.tsx`,
+  `types/index.ts`, `lib/db/*`): botón propio en la cabecera de cada semana de
+  Inicio. Una semana de descarga queda al margen de las estadísticas: barra en
+  blanco sin porcentaje en la gráfica, "Descarga" en azul en el hueco del delta, y
+  no sirve de base ni de comparación (la siguiente semana de carga se mide contra
+  la última de carga, `previousLoadBlock`; el detalle de un día de descarga no
+  compara con nada). Flag nuevo `WorkoutLog.isDeload` en los logs del bloque,
+  persistido en SQLite (`workout_logs.is_deload`).
+- **Mover un día de fuerza de una semana a otra** (`lib/weeks.ts`,
+  `features/workout/HomeScreen.tsx`): el menú `⋯` de cada día del historial de
+  Inicio ofrece ahora "Mover a la semana anterior/siguiente/nueva" cuando el
+  movimiento es legal. Las semanas no se guardan (son bloques derivados por
+  `groupLogsIntoWeekBlocks`), así que mover un día = desplazar la frontera del
+  bloque poniendo/quitando `startsNewWeek`; solo el primer/último día de una
+  semana pueden moverse. Reglas: el último día va a la siguiente si esa no tiene
+  ya ese día (si no hay siguiente, se crea una nueva); el primero va a la anterior
+  si esa no lo tiene; si la semana de origen se queda vacía, desaparece. Lógica
+  pura nueva `planWeekMove`/`canMoveDay` en `lib/weeks.ts` (con set+clear de flags
+  según la frontera sea automática o manual, y chequeo de "día igual" por
+  `dayNumber`), cubierta por 11 tests en `lib/__tests__/weeks.test.ts`. Persiste
+  con `UPDATE_WORKOUT_LOG`; no cambia la fecha de ningún log.
+
+### Cambios
+
+- **Subir target/compile SDK a 36 (Android 16)** (`android/build.gradle`):
+  `compileSdkVersion` y `targetSdkVersion` pasan de 35 a 36. Google Play exige
+  API 36 para publicar actualizaciones a partir del 31-08-2026; con 35 la app
+  seguía disponible pero no se podía subir ninguna versión nueva. El warning de
+  compileSdk 36 ya estaba suprimido en `gradle.properties`. Build de release
+  (`assembleRelease` + `bundleRelease`) verificado en limpio contra compileSdk/
+  targetSdk 36: compila sin errores nuevos, sin avisos de páginas de 16 KB en
+  librerías nativas, y sin problemas de edge-to-edge (ya resuelto en
+  `MainActivity.kt`) ni de notificaciones. APK y AAB generados con `versionCode`
+  21 y la versión 0.6.7 correctamente embebida en `app.config`.
+
 ## Version 0.6.6 - 2026-07-25
 
 ### Nuevas funcionalidades

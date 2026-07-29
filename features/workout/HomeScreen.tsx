@@ -36,10 +36,14 @@ import {
   computeStreak,
   getWeekImprovement,
   groupLogsIntoWeekBlocks,
+  isDeloadBlock,
   isWeekCompleted,
   logsBeforeBlock,
   orderedBlockNumbers,
+  planWeekMove,
+  previousLoadBlock,
   workoutsUpToBlock,
+  WeekMovePlan,
   WeekProgressPoint,
 } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
@@ -102,6 +106,18 @@ function buildProgressChart(points: WeekProgressPoint[]): {
 
   const bars = weeks.map((point) => {
     const isCurrentWeek = !!point.isCurrent;
+    // Semana de descarga: barra en blanco y sin porcentaje (queda al margen).
+    if (point.isDeload) {
+      return {
+        key: `week-${point.week}`,
+        value: 0,
+        label: `S${point.week}`,
+        valueLabel: '',
+        color: theme.colors.white,
+        valueColor: theme.colors.emoji_blue,
+        highlighted: false,
+      };
+    }
     // Amarillo solo para la semana en curso; azul para una semana anterior
     // (no en curso) que quedó incompleta en días.
     const isPrevIncomplete = !isCurrentWeek && !!point.isIncomplete;
@@ -781,6 +797,49 @@ export function HomeScreen({
     isLogFromToday(optionsLog) &&
     todayWorkoutStatus === 'in-progress';
 
+  // Mover un día a la semana contigua. Las semanas son bloques derivados (ver
+  // lib/weeks.ts): mover = desplazar la frontera poniendo/quitando `startsNewWeek`,
+  // que se persiste con UPDATE_WORKOUT_LOG. Se usa la MISMA clave (`dayNumber`) con
+  // la que se agrupan las semanas arriba, para que el chequeo de "día igual" cuadre.
+  const moveDayKey = (log: WorkoutLog) => getDay(log.dayId)?.dayNumber;
+  const optionsMovePrev = optionsLog
+    ? planWeekMove(displayedRoutineLogs, optionsLog.id, 'prev', moveDayKey)
+    : null;
+  const optionsMoveNext = optionsLog
+    ? planWeekMove(displayedRoutineLogs, optionsLog.id, 'next', moveDayKey)
+    : null;
+
+  const handleMoveWeek = (plan: WeekMovePlan | null) => {
+    if (!plan) return;
+    const stamp = Date.now();
+    plan.changedLogs.forEach((log) => {
+      dispatch({
+        type: 'UPDATE_WORKOUT_LOG',
+        payload: { ...log, updatedAt: stamp },
+      });
+    });
+    closeLogOptions();
+  };
+
+  // Marca/desmarca una semana como descarga (deload). La marca vive en cada log
+  // del bloque (semanas derivadas, no guardadas): al margen de las estadísticas.
+  const toggleWeekDeload = (block: number) => {
+    const weekLogs = groupedByBlock[block] || [];
+    if (weekLogs.length === 0) return;
+    const nextIsDeload = !isDeloadBlock(weekLogs);
+    const stamp = Date.now();
+    weekLogs.forEach((log) => {
+      dispatch({
+        type: 'UPDATE_WORKOUT_LOG',
+        payload: {
+          ...log,
+          isDeload: nextIsDeload || undefined,
+          updatedAt: stamp,
+        },
+      });
+    });
+  };
+
   const logToDelete = state.logs.find(
     (l: WorkoutLog) => l.id === logToDeleteId
   );
@@ -1041,13 +1100,21 @@ export function HomeScreen({
                   isDisplayedRoutineActive && !weekCompleted
                     ? expandedWeekBlocks[block] ?? block === currentWeekBlock
                     : expandedWeekBlocks[block] ?? false;
-                // La primera semana no tiene anterior con la que compararse.
+                // Semana de descarga: al margen de las estadísticas. En la
+                // cabecera, donde va el %, aparece "Descarga" en azul.
+                const isDeloadWeek = isDeloadBlock(groupedByBlock[block] || []);
+                // La comparación salta las descargas: una semana de carga se
+                // mide contra la última de carga, no contra un deload.
+                const prevLoad = previousLoadBlock(
+                  completionGroupedByBlock,
+                  block
+                );
                 const weekImprovement =
-                  block === 1
+                  isDeloadWeek || prevLoad == null
                     ? null
                     : getWeekImprovement(
                         completionGroupedByBlock[block] || [],
-                        completionGroupedByBlock[block - 1] || [],
+                        completionGroupedByBlock[prevLoad] || [],
                         activeDays
                       );
                 const isCurrentWeek =
@@ -1097,7 +1164,12 @@ export function HomeScreen({
                         >
                           {t('Semana')} {block}
                         </Text>
-                        {!!weekImprovement && (
+                        {isDeloadWeek && (
+                          <Text style={styles.deloadLabel}>
+                            {t('Descarga')}
+                          </Text>
+                        )}
+                        {!isDeloadWeek && !!weekImprovement && (
                           <View style={styles.deltaRow}>
                             <TrendIcon
                               kind={weekImprovement.isImproved ? 'up' : 'down'}
@@ -1123,6 +1195,33 @@ export function HomeScreen({
                         )}
                       </View>
                       <View style={styles.weekMetaRow}>
+                        {/* Marcar la semana como descarga (deload): botón propio
+                            y visible (nada de gestos ocultos). Activo = azul. */}
+                        <Pressable
+                          style={({ pressed }: { pressed: boolean }) => [
+                            styles.weekDeloadButton,
+                            isDeloadWeek && styles.weekDeloadButtonActive,
+                            pressed && styles.weekAchievementButtonPressed,
+                          ]}
+                          onPress={() => toggleWeekDeload(block)}
+                          hitSlop={8}
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            isDeloadWeek
+                              ? t('Quitar semana de descarga')
+                              : t('Marcar como semana de descarga')
+                          }
+                        >
+                          <MaterialCommunityIcons
+                            name="sleep"
+                            size={16}
+                            color={
+                              isDeloadWeek
+                                ? theme.colors.onGold
+                                : theme.colors.emoji_blue
+                            }
+                          />
+                        </Pressable>
                         {/* Los logros de una semana pasada se abrían con un
                             long-press de 3s en la cabecera: nada lo insinuaba.
                             Ahora es un botón. */}
@@ -1316,6 +1415,28 @@ export function HomeScreen({
                 style={styles.modalButton}
               />
             </View>
+            {/* Mover el día a la semana contigua: solo aparece en el primer/último
+                día de una semana y cuando el movimiento es legal (ver planWeekMove). */}
+            {!!optionsMovePrev && (
+              <Button
+                title={t('Mover a la semana anterior')}
+                onPress={() => handleMoveWeek(optionsMovePrev)}
+                variant="secondary"
+                size="medium"
+              />
+            )}
+            {!!optionsMoveNext && (
+              <Button
+                title={
+                  optionsMoveNext.createsNewWeek
+                    ? t('Mover a una semana nueva')
+                    : t('Mover a la semana siguiente')
+                }
+                onPress={() => handleMoveWeek(optionsMoveNext)}
+                variant="secondary"
+                size="medium"
+              />
+            )}
             <Button
               title={t('Volver')}
               onPress={closeLogOptions}
@@ -1538,6 +1659,29 @@ const makeStyles = () =>
       fontSize: 15,
       fontWeight: '800',
       lineHeight: 18,
+    },
+    // "Descarga" en azul en el hueco del %, para una semana de deload.
+    deloadLabel: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.emoji_blue,
+      backgroundColor: theme.colors.emoji_blueMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: theme.borderRadius.pill,
+      overflow: 'hidden',
+      lineHeight: 18,
+    },
+    weekDeloadButton: {
+      padding: 4,
+      marginRight: 4,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.emoji_blue,
+    },
+    weekDeloadButtonActive: {
+      backgroundColor: theme.colors.emoji_blue,
+      borderColor: theme.colors.emoji_blue,
     },
     weekImprovementUp: {
       color: theme.colors.success,

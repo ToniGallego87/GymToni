@@ -70,6 +70,11 @@ export interface WorkoutLog {
   // Sesión "solo cardio": no cuenta como entrenamiento de fuerza (no aparece
   // en Inicio ni en las semanas), pero sí en la vista de Cardio.
   cardioOnly?: boolean;
+  // Semana de descarga (deload): la semana a la que pertenece este log baja las
+  // cargas a propósito. Las semanas se derivan (no se guardan), así que la marca
+  // vive en el/los log(s) del bloque. A efectos de estadística la semana queda
+  // al margen: barra en blanco en la gráfica y no sirve de base al comparar.
+  isDeload?: boolean;
 }
 
 export interface WorkoutAppData {

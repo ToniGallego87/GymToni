@@ -97,6 +97,16 @@ function getDb(): Promise<SQLiteDatabase> {
             'ALTER TABLE workout_logs ADD COLUMN cardio_only INTEGER NOT NULL DEFAULT 0'
           );
         } catch {}
+        try {
+          await db.execAsync(
+            'ALTER TABLE workout_logs ADD COLUMN is_deload INTEGER NOT NULL DEFAULT 0'
+          );
+        } catch {}
+        try {
+          await db.execAsync(
+            'ALTER TABLE exercises ADD COLUMN catalog_id TEXT'
+          );
+        } catch {}
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -112,7 +122,7 @@ function insertExercise(
   row: ExerciseRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets, catalog_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.workout_days_id,
@@ -120,6 +130,7 @@ function insertExercise(
       row.exercise_order,
       row.target_reps,
       row.target_sets,
+      row.catalog_id,
     ]
   );
 }
@@ -129,7 +140,7 @@ function insertWorkoutLog(
   row: WorkoutLogRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only, is_deload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.routines_id,
@@ -139,6 +150,7 @@ function insertWorkoutLog(
       row.updated_at,
       row.starts_new_week,
       row.cardio_only,
+      row.is_deload,
     ]
   );
 }
@@ -295,7 +307,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     );
     await bulkInsert(
       txn,
-      'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets, catalog_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
       rows.exercises,
       (row) => [
         row.id,
@@ -304,11 +316,12 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.exercise_order,
         row.target_reps,
         row.target_sets,
+        row.catalog_id,
       ]
     );
     await bulkInsert(
       txn,
-      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only, is_deload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       rows.workoutLogs,
       (row) => [
         row.id,
@@ -319,6 +332,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.updated_at,
         row.starts_new_week,
         row.cardio_only,
+        row.is_deload,
       ]
     );
     await bulkInsert(
