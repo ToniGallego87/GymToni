@@ -222,8 +222,28 @@ export function NewRoutineScreen({
     ]);
   };
 
-  const handleRemoveDay = () => {
-    setDays((previous) => previous.slice(0, -1));
+  const handleRemoveDay = (dayId: string) => {
+    setDays((previous) =>
+      previous.length <= 1
+        ? previous
+        : previous.filter((day) => day.id !== dayId)
+    );
+  };
+
+  // Reordena un día dentro de la rutina. El número visible ("Día N") se deriva
+  // del índice al construir la rutina (ver buildRoutineDays), así que basta con
+  // mover la entrada de sitio.
+  const handleMoveDay = (dayId: string, direction: -1 | 1) => {
+    setDays((previous) => {
+      const index = previous.findIndex((day) => day.id === dayId);
+      const target = index + direction;
+      if (index === -1 || target < 0 || target >= previous.length) {
+        return previous;
+      }
+      const next = [...previous];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
   };
 
   const buildRoutineDays = (): WorkoutDay[] => {
@@ -306,6 +326,55 @@ export function NewRoutineScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Vías de partida alternativas al formulario manual: se ofrecen ARRIBA
+            (antes colgaban debajo del CTA "Crear rutina", como si fueran un paso
+            posterior). Quien ya tiene la rutina en otro sitio la trae de una. */}
+        <View style={styles.importGroup}>
+          <Text style={styles.importGroupLabel}>
+            {t('¿Ya tienes la rutina en otro sitio?')}
+          </Text>
+          {onScanRoutineQR && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.qrButton,
+                pressed && styles.qrButtonPressed,
+              ]}
+              onPress={onScanRoutineQR}
+            >
+              <MaterialCommunityIcons
+                name="qrcode-scan"
+                size={18}
+                color={theme.colors.primary}
+              />
+              <Text style={styles.qrButtonText}>
+                {t('Crear a partir de QR')}
+              </Text>
+            </Pressable>
+          )}
+          <Pressable
+            style={({ pressed }) => [
+              styles.qrButton,
+              pressed && styles.qrButtonPressed,
+            ]}
+            onPress={() => setShowImport(true)}
+          >
+            <MaterialCommunityIcons
+              name="text-box-plus-outline"
+              size={18}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.qrButtonText}>
+              {t('Crear a partir de texto plano')}
+            </Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.manualDivider}>
+          <View style={styles.manualDividerLine} />
+          <Text style={styles.manualDividerText}>{t('o créala a mano')}</Text>
+          <View style={styles.manualDividerLine} />
+        </View>
+
         <View
           style={[styles.dayCard, { borderLeftColor: theme.colors.accentLine }]}
         >
@@ -346,6 +415,9 @@ export function NewRoutineScreen({
             >
               <GradientFill accent={accent} />
 
+              {/* Línea 1: título del día + selector de icono, cada uno con su
+                  espacio. Reordenar/borrar va en su propia fila debajo, para no
+                  amontonar cuatro clusters de controles en una sola línea. */}
               <View style={styles.dayHeaderRow}>
                 <Text style={styles.dayTitleDisplay}>
                   {t('Día')} {index + 1}
@@ -386,6 +458,73 @@ export function NewRoutineScreen({
                       </Text>
                     </>
                   )}
+                </Pressable>
+              </View>
+
+              <View style={styles.dayReorderRow}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.dayReorderButton,
+                    index === 0 && styles.dayReorderButtonDisabled,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => handleMoveDay(day.id, -1)}
+                  disabled={index === 0}
+                  hitSlop={6}
+                  accessibilityLabel={t('Subir día')}
+                >
+                  <MaterialCommunityIcons
+                    name="chevron-up"
+                    size={18}
+                    color={
+                      index === 0
+                        ? theme.colors.textSecondary
+                        : theme.colors.text
+                    }
+                  />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.dayReorderButton,
+                    index === days.length - 1 &&
+                      styles.dayReorderButtonDisabled,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => handleMoveDay(day.id, 1)}
+                  disabled={index === days.length - 1}
+                  hitSlop={6}
+                  accessibilityLabel={t('Bajar día')}
+                >
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={18}
+                    color={
+                      index === days.length - 1
+                        ? theme.colors.textSecondary
+                        : theme.colors.text
+                    }
+                  />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.dayReorderButton,
+                    !canRemoveDay && styles.dayReorderButtonDisabled,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => handleRemoveDay(day.id)}
+                  disabled={!canRemoveDay}
+                  hitSlop={6}
+                  accessibilityLabel={t('Quitar día')}
+                >
+                  <MaterialCommunityIcons
+                    name="trash-can-outline"
+                    size={17}
+                    color={
+                      canRemoveDay
+                        ? theme.colors.error
+                        : theme.colors.textSecondary
+                    }
+                  />
                 </Pressable>
               </View>
 
@@ -472,28 +611,6 @@ export function NewRoutineScreen({
               {t('Añadir día')}
             </Text>
           </Pressable>
-
-          <Pressable
-            style={[styles.dayChip, !canRemoveDay && styles.dayChipDisabled]}
-            onPress={handleRemoveDay}
-            disabled={!canRemoveDay}
-          >
-            <MaterialCommunityIcons
-              name="minus-thick"
-              size={16}
-              color={
-                canRemoveDay ? theme.colors.primary : theme.colors.textSecondary
-              }
-            />
-            <Text
-              style={[
-                styles.dayChipText,
-                !canRemoveDay && styles.dayChipTextDisabled,
-              ]}
-            >
-              {t('Quitar día')}
-            </Text>
-          </Pressable>
         </View>
 
         <GradientCtaButton
@@ -502,40 +619,6 @@ export function NewRoutineScreen({
           onPress={handleCreate}
           style={styles.createButton}
         />
-
-        {onScanRoutineQR && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.qrButton,
-              pressed && styles.qrButtonPressed,
-            ]}
-            onPress={onScanRoutineQR}
-          >
-            <MaterialCommunityIcons
-              name="qrcode-scan"
-              size={18}
-              color={theme.colors.primary}
-            />
-            <Text style={styles.qrButtonText}>{t('Crear a partir de QR')}</Text>
-          </Pressable>
-        )}
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.qrButton,
-            pressed && styles.qrButtonPressed,
-          ]}
-          onPress={() => setShowImport(true)}
-        >
-          <MaterialCommunityIcons
-            name="text-box-plus-outline"
-            size={18}
-            color={theme.colors.primary}
-          />
-          <Text style={styles.qrButtonText}>
-            {t('Crear a partir de texto plano')}
-          </Text>
-        </Pressable>
       </StretchScrollView>
 
       <GlassTopBar
@@ -625,189 +708,235 @@ export function NewRoutineScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    marginTop: 0,
-    gap: 12,
-  },
-  dayCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderTopColor: theme.colors.border,
-    borderRightColor: theme.colors.border,
-    borderBottomColor: theme.colors.border,
-    borderLeftWidth: 4,
-    borderLeftColor: theme.colors.primaryLine,
-    padding: theme.spacing.md,
-    gap: 10,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  dayHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  dayTitleDisplay: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.text,
-    lineHeight: 26,
-  },
-  dayIconPick: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.inputBg,
-  },
-  dayIconPickEmpty: {
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.primary + '1A',
-  },
-  dayIconPickText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  label: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    textTransform: 'uppercase',
-    lineHeight: 18,
-  },
-  inputRow: {
-    flexDirection: 'row',
-  },
-  input: {
-    flex: 1,
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  addExerciseButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  addExerciseText: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontWeight: '800',
-    lineHeight: 18,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-  rowButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  dayChip: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.pill,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.surface,
-  },
-  dayChipDisabled: {
-    borderColor: theme.colors.border,
-    opacity: 0.5,
-  },
-  dayChipText: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: theme.colors.primary,
-    lineHeight: 18,
-  },
-  dayChipTextDisabled: {
-    color: theme.colors.textSecondary,
-  },
-  createButton: {
-    marginTop: 4,
-  },
-  qrButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 4,
-    paddingVertical: 14,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  qrButtonPressed: {
-    opacity: 0.9,
-  },
-  qrButtonText: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  modalTextarea: {
-    marginTop: 12,
-    minHeight: 180,
-    maxHeight: 320,
-    backgroundColor: theme.colors.inputBg,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: 12,
-    color: theme.colors.text,
-    fontSize: 14,
-    lineHeight: 20,
-  },
-  modalButtons: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalButton: {
-    flex: 1,
-    minWidth: 0,
-  },
-  iconGrid: {
-    marginTop: 12,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      marginTop: 0,
+      gap: 12,
+    },
+    dayCard: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderTopColor: theme.colors.border,
+      borderRightColor: theme.colors.border,
+      borderBottomColor: theme.colors.border,
+      borderLeftWidth: 4,
+      borderLeftColor: theme.colors.primaryLine,
+      padding: theme.spacing.md,
+      gap: 10,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    dayHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
+    },
+    dayReorderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      gap: 4,
+    },
+    dayReorderButton: {
+      width: 32,
+      height: 32,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    dayReorderButtonDisabled: {
+      opacity: 0.4,
+    },
+    dayTitleDisplay: {
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      color: theme.colors.text,
+      lineHeight: 30,
+    },
+    dayIconPick: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.inputBg,
+    },
+    dayIconPickEmpty: {
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.primary + '1A',
+    },
+    dayIconPickText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    label: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      lineHeight: 18,
+    },
+    inputRow: {
+      flexDirection: 'row',
+    },
+    input: {
+      flex: 1,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      color: theme.colors.text,
+      fontSize: 15,
+      lineHeight: 20,
+    },
+    addExerciseButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    addExerciseText: {
+      color: theme.colors.primary,
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    buttonPressed: {
+      opacity: 0.85,
+    },
+    rowButtons: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    dayChip: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surface,
+    },
+    dayChipDisabled: {
+      borderColor: theme.colors.border,
+      opacity: 0.5,
+    },
+    dayChipText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      lineHeight: 18,
+    },
+    dayChipTextDisabled: {
+      color: theme.colors.textSecondary,
+    },
+    createButton: {
+      marginTop: 4,
+    },
+    importGroup: {
+      gap: 8,
+    },
+    importGroupLabel: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      lineHeight: 18,
+    },
+    manualDivider: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginVertical: 2,
+    },
+    manualDividerLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+    manualDividerText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    qrButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 4,
+      paddingVertical: 14,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderStyle: 'dashed',
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    qrButtonPressed: {
+      opacity: 0.9,
+    },
+    qrButtonText: {
+      color: theme.colors.primary,
+      fontSize: 15,
+      fontWeight: '700',
+      lineHeight: 20,
+    },
+    modalTextarea: {
+      marginTop: 12,
+      minHeight: 180,
+      maxHeight: 320,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: 12,
+      color: theme.colors.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    modalButtons: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalButton: {
+      flex: 1,
+      minWidth: 0,
+    },
+    iconGrid: {
+      marginTop: 12,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

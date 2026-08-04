@@ -1,6 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ParsedSet } from '../types';
 import { parseSeriesString, formatParsedSet } from '@lib/parsers';
 import { getSetPerformanceScore } from '@lib/progress';
@@ -27,6 +28,8 @@ interface ExerciseResultDisplayProps {
   accent?: string;
   // Fija un GIF al ejercicio de la rutina desde el buscador (botón Asignar).
   onAssignGif?: (catalogId: string) => void;
+  // Abre la evolución de este ejercicio (gráfica de progreso) preseleccionado.
+  onOpenProgress?: () => void;
 }
 
 type ComparisonStatus = 'up' | 'same' | 'down' | 'missing';
@@ -71,6 +74,7 @@ export function ExerciseResultDisplay({
   isDetail = false,
   accent = theme.colors.current,
   onAssignGif,
+  onOpenProgress,
 }: ExerciseResultDisplayProps) {
   // En render para leer los colores del tema VIVO (cambio de tema en caliente).
   const STATUS_COLOR: Record<ComparisonStatus, string> = {
@@ -86,10 +90,14 @@ export function ExerciseResultDisplay({
       ? parseSeriesString(rawInput)
       : [];
 
-  const maxRows = Math.max(
-    effectiveParsedSets.length,
-    previousSets?.length ?? 0
-  );
+  // Sin sesión anterior con la que comparar, la mitad de la tarjeta serían
+  // placeholders ("—" y glifos "·"): se colapsa a una sola columna ("lo que
+  // hiciste"). El % de mejora ya llega vacío en ese caso (lo decide Detail).
+  const hasPrevious = !!(previousSets && previousSets.length > 0);
+
+  const maxRows = hasPrevious
+    ? Math.max(effectiveParsedSets.length, previousSets?.length ?? 0)
+    : effectiveParsedSets.length;
 
   const rows = Array.from({ length: maxRows }).map((_, i) => {
     const current = effectiveParsedSets[i];
@@ -119,6 +127,24 @@ export function ExerciseResultDisplay({
           size={18}
           onAssign={onAssignGif}
         />
+        {!!onOpenProgress && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.progressButton,
+              pressed && styles.progressButtonPressed,
+            ]}
+            onPress={onOpenProgress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('Ver evolución')}
+          >
+            <MaterialCommunityIcons
+              name="chart-line"
+              size={18}
+              color={theme.colors.textSecondary}
+            />
+          </Pressable>
+        )}
         {!!improvementText && (
           <Text
             style={[
@@ -137,17 +163,29 @@ export function ExerciseResultDisplay({
         )}
       </View>
 
-      {/* Etiquetas de columna; el objetivo (4×10) ocupa el hueco central. */}
+      {/* Etiquetas de columna; el objetivo (4×10) ocupa el hueco central. Sin
+          sesión anterior, el objetivo se alinea a la derecha y no hay columna
+          "Anterior". */}
       <View style={styles.columnHeader}>
         <Text style={[styles.columnLabel, styles.columnLeft]}>
           {t('Actual')}
         </Text>
-        <Text style={styles.targetLabel}>
-          {hasTarget ? `${targetSets || '-'}×${targetReps || '-'}` : ''}
-        </Text>
-        <Text style={[styles.columnLabel, styles.columnRight]}>
-          {t('Anterior')}
-        </Text>
+        {hasPrevious ? (
+          <>
+            <Text style={styles.targetLabel}>
+              {hasTarget ? `${targetSets || '-'}×${targetReps || '-'}` : ''}
+            </Text>
+            <Text style={[styles.columnLabel, styles.columnRight]}>
+              {t('Anterior')}
+            </Text>
+          </>
+        ) : (
+          hasTarget && (
+            <Text style={[styles.columnLabel, styles.columnRight]}>
+              {`${targetSets || '-'}×${targetReps || '-'}`}
+            </Text>
+          )
+        )}
       </View>
 
       {rows.map((row, index) => (
@@ -155,14 +193,21 @@ export function ExerciseResultDisplay({
           <Text style={[styles.setValue, styles.currentValue]}>
             {row.currentText}
           </Text>
-          <Text
-            style={[styles.statusGlyph, { color: STATUS_COLOR[row.status] }]}
-          >
-            {STATUS_GLYPH[row.status]}
-          </Text>
-          <Text style={[styles.setValue, styles.previousValue]}>
-            {row.previousText}
-          </Text>
+          {hasPrevious && (
+            <>
+              <Text
+                style={[
+                  styles.statusGlyph,
+                  { color: STATUS_COLOR[row.status] },
+                ]}
+              >
+                {STATUS_GLYPH[row.status]}
+              </Text>
+              <Text style={[styles.setValue, styles.previousValue]}>
+                {row.previousText}
+              </Text>
+            </>
+          )}
         </View>
       ))}
 
@@ -200,7 +245,23 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
-      lineHeight: 23,
+      lineHeight: 27,
+    },
+
+    // Botón de evolución del ejercicio: mismo tamaño/forma que el de GIF pero
+    // con acento neutro (es acción secundaria de consulta, no la primaria dorada).
+    progressButton: {
+      width: 34,
+      height: 34,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    progressButtonPressed: {
+      opacity: 0.8,
     },
 
     improvementText: {
@@ -217,12 +278,12 @@ const makeStyles = () =>
 
     columnLabel: {
       flex: 1,
-      fontSize: 10,
+      fontSize: 12,
       color: theme.colors.textMuted,
       textTransform: 'uppercase',
       fontWeight: '700',
       letterSpacing: 0.8,
-      lineHeight: 14,
+      lineHeight: 15,
     },
 
     columnLeft: {
@@ -237,10 +298,10 @@ const makeStyles = () =>
     targetLabel: {
       minWidth: 44,
       textAlign: 'center',
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.colors.textMuted,
-      lineHeight: 14,
+      lineHeight: 15,
     },
 
     row: {
@@ -256,10 +317,10 @@ const makeStyles = () =>
 
     setValue: {
       flex: 1,
-      fontSize: 15,
-      fontWeight: '600',
+      fontSize: 18,
+      fontWeight: '700',
       fontVariant: ['tabular-nums'],
-      lineHeight: 20,
+      lineHeight: 23,
     },
 
     currentValue: {
@@ -274,9 +335,9 @@ const makeStyles = () =>
     statusGlyph: {
       minWidth: 44,
       textAlign: 'center',
-      fontSize: 14,
+      fontSize: 18,
       fontWeight: '800',
-      lineHeight: 18,
+      lineHeight: 23,
     },
 
     notes: {

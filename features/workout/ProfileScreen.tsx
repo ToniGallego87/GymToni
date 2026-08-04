@@ -184,111 +184,112 @@ export function ProfileScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    gap: 12,
-  },
-  summaryCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    marginBottom: 8,
-    gap: 12,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  summaryTitle: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.text,
-    lineHeight: 26,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryValue: {
-    fontSize: 32,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.primary,
-    lineHeight: 38,
-  },
-  summaryLabel: {
-    marginTop: 4,
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    lineHeight: 17,
-    textAlign: 'center',
-  },
-  summaryDivider: {
-    width: 1,
-    height: 42,
-    backgroundColor: theme.colors.border,
-  },
-  menuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    ...theme.shadow.soft,
-  },
-  menuRowPressed: {
-    opacity: 0.8,
-  },
-  menuIconWrap: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.borderRadius.sm,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  menuTextWrap: {
-    flex: 1,
-  },
-  menuLabel: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 22,
-  },
-  menuHint: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  versionText: {
-    marginTop: 8,
-    textAlign: 'center',
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      gap: 12,
+    },
+    summaryCard: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      marginBottom: 8,
+      gap: 12,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    summaryTitle: {
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.text,
+      lineHeight: 30,
+    },
+    summaryRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    summaryItem: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    summaryValue: {
+      fontSize: 32,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      color: theme.colors.primary,
+      lineHeight: 45,
+    },
+    summaryLabel: {
+      marginTop: 4,
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      lineHeight: 17,
+      textAlign: 'center',
+    },
+    summaryDivider: {
+      width: 1,
+      height: 42,
+      backgroundColor: theme.colors.border,
+    },
+    menuRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      ...theme.shadow.soft,
+    },
+    menuRowPressed: {
+      opacity: 0.8,
+    },
+    menuIconWrap: {
+      width: 40,
+      height: 40,
+      borderRadius: theme.borderRadius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    menuTextWrap: {
+      flex: 1,
+    },
+    menuLabel: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 22,
+    },
+    menuHint: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    versionText: {
+      marginTop: 8,
+      textAlign: 'center',
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

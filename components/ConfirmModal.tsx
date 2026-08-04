@@ -94,41 +94,42 @@ export function ConfirmModal({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 16,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: theme.colors.primaryLine,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  checkboxChecked: {
-    backgroundColor: theme.colors.primaryFill,
-  },
-  checkLabel: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-    lineHeight: 19,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  button: {
-    flex: 1,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    checkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 16,
+    },
+    checkbox: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 2,
+      borderColor: theme.colors.primaryLine,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'transparent',
+    },
+    checkboxChecked: {
+      backgroundColor: theme.colors.primaryFill,
+    },
+    checkLabel: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+      lineHeight: 19,
+    },
+    buttonRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    button: {
+      flex: 1,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

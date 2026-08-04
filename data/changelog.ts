@@ -9,6 +9,25 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.8',
+    items: [
+      'Ahora puedes marcar una semana como semana de descarga: la app te prepara sesiones más suaves (menos series y menos peso) y esa semana queda aparte de tus estadísticas.',
+      'La app guarda sola una copia de seguridad de tu historial en el móvil, una vez al día. Puedes activarla, desactivarla o hacer una copia al momento desde la pantalla de Datos.',
+      'Ya no pierdes el cardio ni las notas si sales del entrenamiento con "Volver": ahora se guardan solos según los vas escribiendo.',
+      'Puedes ordenar los días de tu rutina con flechas y borrar cualquier día, no solo el último. Al reordenar, cada ejercicio conserva su historial.',
+      'El cardio se ve mucho mejor al registrar: cada disciplina aparece con su icono y sus datos bien presentados ("30 min, 10 km/h, 5%"), igual que cuando consultas un entrenamiento.',
+      'Al elegir la sesión, tocar un día siempre empieza a entrenar; para empezar una semana nueva tienes ahora un botón claro debajo.',
+      'El botón "Terminar" de un ejercicio ahora se llama "Saltar resto", para que quede claro que da por saltadas las series que te faltan.',
+      'Al revisar un entrenamiento, los números de cada serie (peso y repeticiones) se ven más grandes y claros.',
+      'Las semanas de descarga se reconocen de un vistazo: llevan una etiqueta azul y sus días aparecen con el borde azul en el calendario.',
+      'En el calendario, el interruptor Fuerza/Cardio está ahora justo debajo del mes, a la vista, sin tener que bajar.',
+      'La rutina se abre primero para consultarla; con un botón "Editar" cambias los días y los ejercicios cuando quieras.',
+      'La pantalla de Inicio y la de Cardio funcionan y se ven igual: cargas el historial de 5 en 5 y la racha usa su propio icono de fuego.',
+      'Compartir una rutina con muchos ejercicios ya no da error: si el código QR no cabe, te ofrece copiarla como texto.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.7',
     items: [
       'Ahora puedes cambiar la fecha de un entrenamiento: usa "Cambiar fecha" en el menú de los tres puntos y elige el día en un calendario, con atajos para Hoy y Ayer.',

@@ -36,30 +36,31 @@ export function WhatsNewModal({ visible, entry, onClose }: WhatsNewModalProps) {
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  list: {
-    marginTop: 12,
-    // La lista de novedades crece con cada versión: scrollea dentro de la
-    // tarjeta en vez de desbordar la pantalla.
-    maxHeight: Dimensions.get('window').height * 0.45,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    marginBottom: 10,
-  },
-  bullet: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    lineHeight: 21,
-    marginRight: 8,
-  },
-  itemText: {
-    flex: 1,
-    color: theme.colors.text,
-    fontSize: 15,
-    lineHeight: 21,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    list: {
+      marginTop: 12,
+      // La lista de novedades crece con cada versión: scrollea dentro de la
+      // tarjeta en vez de desbordar la pantalla.
+      maxHeight: Dimensions.get('window').height * 0.45,
+    },
+    itemRow: {
+      flexDirection: 'row',
+      marginBottom: 10,
+    },
+    bullet: {
+      color: theme.colors.primary,
+      fontSize: 15,
+      lineHeight: 21,
+      marginRight: 8,
+    },
+    itemText: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 15,
+      lineHeight: 21,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

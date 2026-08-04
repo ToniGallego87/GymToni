@@ -74,39 +74,40 @@ export function GradientCtaButton({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  wrapper: {
-    borderRadius: theme.borderRadius.lg,
-    ...theme.shadow.card,
-  },
-  gradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderRadius: theme.borderRadius.lg,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    overflow: 'hidden',
-  },
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  text: {
-    color: theme.colors.onGold,
-    fontFamily: theme.fonts.display,
-    fontSize: 22,
-    letterSpacing: 0.5,
-    // Anton pega los glifos al borde superior de su caja de línea; con
-    // includeFontPadding y lineHeight holgado se reserva sitio y no se corta.
-    lineHeight: 30,
-    includeFontPadding: true,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrapper: {
+      borderRadius: theme.borderRadius.lg,
+      ...theme.shadow.card,
+    },
+    gradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      borderRadius: theme.borderRadius.lg,
+      paddingVertical: 18,
+      paddingHorizontal: 24,
+      overflow: 'hidden',
+    },
+    sheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+    text: {
+      color: theme.colors.onGold,
+      fontFamily: theme.fonts.display,
+      fontSize: 22,
+      letterSpacing: 0.5,
+      // Anton pega los glifos al borde superior de su caja de línea; con
+      // includeFontPadding y lineHeight holgado se reserva sitio y no se corta.
+      lineHeight: 30,
+      includeFontPadding: true,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

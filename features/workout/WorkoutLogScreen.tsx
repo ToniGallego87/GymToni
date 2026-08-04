@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -36,7 +36,12 @@ import {
   Toast,
   StretchScrollView,
 } from '../../components';
-import { assignmentDuplicatesDayInWeek } from '@lib/weeks';
+import {
+  assignmentDuplicatesDayInWeek,
+  groupLogsIntoWeekBlocks,
+  isDeloadBlock,
+  orderedBlockNumbers,
+} from '@lib/weeks';
 import { isCardioOnlyLog } from '@lib/cardio';
 import {
   MAX_SET_REPS,
@@ -44,7 +49,13 @@ import {
   parseCardioString,
   parseSeriesString,
 } from '@lib/parsers';
-import { combineDateWithTime, generateId, getToday } from '@lib/utils';
+import {
+  combineDateWithTime,
+  findDayInRoutines,
+  generateId,
+  getLogTimestamp,
+  getToday,
+} from '@lib/utils';
 import {
   WorkoutDay,
   WorkoutLog,
@@ -53,7 +64,7 @@ import {
   ParsedSet,
   WorkoutRoutine,
 } from '../../types';
-import { theme, getTrainingAccent } from '@lib/theme';
+import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
 import { t } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
@@ -213,6 +224,73 @@ export function WorkoutLogScreen({
   const [exerciseNotes, setExerciseNotes] =
     useState<Record<string, string>>(initialNotes);
   const [cardioInput, setCardioInput] = useState(initialCardioInput);
+
+  // ¿Semana de descarga? La marca vive en cada log del bloque (semana). Se decide
+  // por el bloque al que se une esta sesión:
+  //  - Continuar una semana ya marcada como descarga la hereda automáticamente.
+  //  - Iniciar una semana nueva (primer día) permite marcarla desde el menú ⋯.
+  const deloadWeekInfo = (() => {
+    const routineId =
+      state.routines.find((r) => r.days.some((d) => d.id === selectedDay.id))
+        ?.id ||
+      state.activeRoutineId ||
+      '';
+    const editingId = log?.id ?? existingLog?.id;
+    // Se excluye el log de ESTA sesión (por id o por día+fecha, ya que el
+    // autoguardado lo crea con un id nuevo cada vez): decidimos si esta sesión
+    // abre semana nueva frente al resto, sin contarse a sí misma.
+    const others = state.logs.filter(
+      (l) =>
+        l.routineId === routineId &&
+        !isCardioOnlyLog(l) &&
+        l.id !== editingId &&
+        !(l.dayId === selectedDay.id && l.date === selectedDate)
+    );
+    const blocks = groupLogsIntoWeekBlocks(
+      others,
+      (l) => findDayInRoutines(state.routines, l.dayId)?.dayNumber
+    );
+    const ordered = orderedBlockNumbers(blocks);
+    const lastBlock = ordered.length
+      ? blocks[ordered[ordered.length - 1]]
+      : [];
+    const lastDays = new Set(lastBlock.map((l) => l.dayId));
+    // Continúa la semana en curso si no se fuerza una nueva, la semana tiene días
+    // y este día aún no se ha entrenado en ella (si no, abre semana nueva).
+    const continuesCurrentWeek =
+      !startsNewWeek && lastDays.size > 0 && !lastDays.has(selectedDay.id);
+    // Marcar descarga solo tiene sentido en la semana en curso (la más reciente),
+    // no al editar semanas antiguas: si esta sesión es anterior a la última semana
+    // ya registrada, no es la actual y no debe ofrecer marcar/quitar descarga.
+    const sessionTs = log
+      ? getLogTimestamp(log)
+      : existingLog
+        ? getLogTimestamp(existingLog)
+        : new Date(`${selectedDate}T23:59:59`).getTime();
+    const lastBlockTs = lastBlock.length
+      ? Math.max(...lastBlock.map((l) => getLogTimestamp(l)))
+      : 0;
+    const isLatestWeek = lastBlock.length === 0 || sessionTs >= lastBlockTs;
+    return {
+      isFirstDayOfNewWeek: !continuesCurrentWeek,
+      weekAlreadyDeload: continuesCurrentWeek && isDeloadBlock(lastBlock),
+      isLatestWeek,
+    };
+  })();
+
+  // Sesión de descarga: al editar se conserva el valor del log; al continuar una
+  // semana ya de descarga se hereda; al iniciar semana nueva arranca en falso
+  // (se marca desde el menú ⋯).
+  const [isDeloadSession, setIsDeloadSession] = useState<boolean>(
+    () =>
+      log?.isDeload ?? existingLog?.isDeload ?? deloadWeekInfo.weekAlreadyDeload
+  );
+  // Marcar o quitar descarga siempre pide confirmación (afecta a objetivos de
+  // series y peso propuesto, y al marcar con datos metidos los borra).
+  const [pendingDeload, setPendingDeload] = useState<'mark' | 'unmark' | null>(
+    null
+  );
+
   const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
   const [notesText, setNotesText] = useState('');
   // Editar el descanso por defecto de la rutina sin salir del registro (botón
@@ -487,6 +565,14 @@ export function WorkoutLogScreen({
     }
   };
 
+  // Objetivo de series efectivo. En descarga se recorta una serie (3→2, 2→1),
+  // nunca por debajo de una; sin descarga es el objetivo tal cual.
+  const effectiveTargetSets = (targetSets?: number): number => {
+    const base = targetSets ?? 0;
+    if (!isDeloadSession || base <= 0) return base;
+    return Math.max(1, base - 1);
+  };
+
   // Cuántos ejercicios del día siguen sin alcanzar su objetivo de series (los
   // sin objetivo no cuentan: nunca se dan por "completos"). Sirve para decidir,
   // al terminar un ejercicio, si aún tiene sentido descansar —queda otro por
@@ -495,14 +581,15 @@ export function WorkoutLogScreen({
     sets: Record<string, ParsedSet[]>
   ): number =>
     selectedDay.exercises.filter((ex) => {
-      const target = ex.targetSets ?? 0;
+      const target = effectiveTargetSets(ex.targetSets);
       if (target <= 0) return false;
       return (sets[ex.id]?.length || 0) < target;
     }).length;
 
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
-    const targetSets =
-      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets || 0;
+    const targetSets = effectiveTargetSets(
+      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets
+    );
 
     const updated = {
       ...exerciseSets,
@@ -615,8 +702,9 @@ export function WorkoutLogScreen({
   };
 
   const handleFinishExercise = (exerciseId: string) => {
-    const targetSets =
-      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets || 0;
+    const targetSets = effectiveTargetSets(
+      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets
+    );
     if (targetSets > 0) {
       // Rellenar con guiones cada serie que falte para alcanzar el objetivo
       const currentSets = exerciseSets[exerciseId] || [];
@@ -647,8 +735,12 @@ export function WorkoutLogScreen({
   };
 
   // Construye el WorkoutLog a partir de las series indicadas (reutilizado por
-  // el auto-guardado y por el guardado manual).
-  const buildWorkoutLog = (sets: Record<string, ParsedSet[]>): WorkoutLog => {
+  // el auto-guardado y por el guardado manual). `isDeload` se puede forzar al
+  // alternar el modo descarga (el estado aún no se ha propagado en ese tick).
+  const buildWorkoutLog = (
+    sets: Record<string, ParsedSet[]>,
+    isDeloadValue: boolean = isDeloadSession
+  ): WorkoutLog => {
     const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
       const exSets = sets[ex.id] || [];
       const rawInput = exSets
@@ -704,6 +796,9 @@ export function WorkoutLogScreen({
       // elección hecha en "Elige la sesión".
       startsNewWeek: log?.startsNewWeek ?? startsNewWeek ?? undefined,
       cardioOnly: log?.cardioOnly ?? (cardioOnly || undefined),
+      // Semana de descarga: se marca este día para que el bloque entero cuente
+      // como descarga (ver isDeloadBlock).
+      isDeload: isDeloadValue || undefined,
     };
   };
 
@@ -748,13 +843,63 @@ export function WorkoutLogScreen({
     dispatch({ type: 'ADD_WORKOUT_LOG', payload: workoutLog });
   };
 
-  const autoSaveWorkout = (sets: Record<string, ParsedSet[]>) => {
+  const autoSaveWorkout = (
+    sets: Record<string, ParsedSet[]>,
+    isDeloadValue: boolean = isDeloadSession
+  ) => {
     try {
-      persistWorkoutLog(buildWorkoutLog(sets));
+      persistWorkoutLog(buildWorkoutLog(sets, isDeloadValue));
     } catch (error) {
       console.error('Error auto-saving workout:', error);
     }
   };
+
+  // Hay series ya insertadas en esta sesión (lo que se borraría al pasar a
+  // descarga, porque cambian los objetivos de series y el peso propuesto).
+  const hasInsertedData = Object.values(exerciseSets).some(
+    (arr) => arr.length > 0
+  );
+
+  // Alterna el modo descarga. Al activarlo con datos ya metidos se limpian (los
+  // pide el flujo de descarga: menos series y peso más ligero). Al quitarlo se
+  // conserva lo insertado.
+  const applyDeload = (next: boolean, clearData: boolean) => {
+    const sets = clearData
+      ? selectedDay.exercises.reduce(
+          (acc, ex) => ({ ...acc, [ex.id]: [] }),
+          {} as Record<string, ParsedSet[]>
+        )
+      : exerciseSets;
+    if (clearData) setExerciseSets(sets);
+    setIsDeloadSession(next);
+    // Persistir solo si ya existe un log (creado por el autoguardado o editado):
+    // en una sesión nueva y vacía basta con el estado, se guardará al añadir.
+    if (log || existingLog || hasInsertedData) {
+      autoSaveWorkout(sets, next);
+    }
+  };
+
+  const handleToggleDeload = () => {
+    setPendingDeload(isDeloadSession ? 'unmark' : 'mark');
+  };
+
+  // Las series se autoguardan al añadirlas/borrarlas, pero el cardio y las notas
+  // no persisten al teclearse: sin esto, salir con "Volver" tras escribir un
+  // cardio o una nota los perdería. Se vuelca el estado en cuanto cambian (si ya
+  // hay algo que guardar), de modo que salir por cualquier vía es seguro.
+  const cardioNotesMountedRef = useRef(false);
+  useEffect(() => {
+    if (!cardioNotesMountedRef.current) {
+      cardioNotesMountedRef.current = true;
+      return;
+    }
+    if (log || existingLog || hasInsertedData || cardioInput.trim()) {
+      autoSaveWorkout(exerciseSets);
+    }
+    // Solo depende de cardio y notas a propósito: las series ya persisten por su
+    // cuenta y añadir exerciseSets aquí duplicaría el guardado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cardioInput, exerciseNotes]);
 
   const handleSaveWorkout = () => {
     // En modo solo cardio no hay ejercicios: exige al menos el cardio.
@@ -814,13 +959,8 @@ export function WorkoutLogScreen({
     selectedDate.split('-').reverse().join('/');
 
   // Clave de día (dayNumber) para agrupar semanas, igual que Inicio.
-  const dayNumberForLog = (l: WorkoutLog): number | undefined => {
-    for (const routine of state.routines) {
-      const d = routine.days.find((day) => day.id === l.dayId);
-      if (d) return d.dayNumber;
-    }
-    return undefined;
-  };
+  const dayNumberForLog = (l: WorkoutLog): number | undefined =>
+    findDayInRoutines(state.routines, l.dayId)?.dayNumber;
 
   // Aplica la fecha elegida. Si cae en una semana que ya tiene este mismo día,
   // asignarla parte esa semana en dos (ver lib/weeks): se avisa antes.
@@ -884,6 +1024,16 @@ export function WorkoutLogScreen({
     .find((d) => d.id === selectedDay.id);
   const liveCatalogId = (exerciseId: string): string | undefined =>
     liveDay?.exercises.find((ex) => ex.id === exerciseId)?.catalogId;
+
+  // Ejercicio "en curso": el primero del día que aún no ha alcanzado su objetivo
+  // de series. Es el que la tarjeta abre sola (los demás quedan colapsados como
+  // resumen) para no obligar a desplegar cada ejercicio antes de registrar. Al
+  // completarse uno, el siguiente incompleto pasa a ser el en curso y se abre.
+  const currentExerciseId = selectedDay.exercises.find((ex) => {
+    const target = effectiveTargetSets(ex.targetSets);
+    const sets = exerciseSets[ex.id] || [];
+    return !(target > 0 && sets.length >= target);
+  })?.id;
 
   // Contenido del temporizador de descanso (label + cuenta atrás + acciones).
   // Se reutiliza en dos sitios: DENTRO de la tarjeta del ejercicio mientras
@@ -950,24 +1100,6 @@ export function WorkoutLogScreen({
             {t('Saltar')}
           </Text>
         </Pressable>
-        <Pressable
-          style={({ pressed }) => [
-            styles.timerActionButton,
-            pressed && styles.timerActionButtonPressed,
-          ]}
-          onPress={openTimerModal}
-          accessibilityRole="button"
-          accessibilityLabel={t('Modificar temporizador')}
-        >
-          <MaterialCommunityIcons
-            name="timer-cog-outline"
-            size={18}
-            color={theme.colors.onGold}
-          />
-          <Text style={styles.timerActionText} numberOfLines={1}>
-            {t('Editar')}
-          </Text>
-        </Pressable>
       </View>
     </>
   );
@@ -998,7 +1130,7 @@ export function WorkoutLogScreen({
             currentSets,
             previousLog
           );
-          const targetSets = exercise.targetSets ?? 0;
+          const targetSets = effectiveTargetSets(exercise.targetSets);
           const isTargetCompleted =
             targetSets > 0 && currentSets.length >= targetSets;
 
@@ -1012,9 +1144,10 @@ export function WorkoutLogScreen({
                   handleAssignGif(exercise.id, catalogId)
                 }
                 target={{
-                  sets: exercise.targetSets,
+                  sets: effectiveTargetSets(exercise.targetSets),
                   reps: exercise.targetReps,
                 }}
+                deload={isDeloadSession}
                 addedSets={currentSets}
                 onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
                 onInvalidAdd={(reason) =>
@@ -1029,7 +1162,7 @@ export function WorkoutLogScreen({
                 onNotesPress={() => handleExerciseNotesPress(exercise.id)}
                 notes={exerciseNotes[exercise.id]}
                 previousLog={previousLog}
-                improvement={improvement}
+                improvement={isDeloadSession ? null : improvement}
                 accent={dayAccent}
                 restTimer={
                   activeTimerId === exercise.id &&
@@ -1038,6 +1171,7 @@ export function WorkoutLogScreen({
                     ? renderRestTimerContent()
                     : null
                 }
+                isCurrent={exercise.id === currentExerciseId}
               />
               {/* Última serie ya hecha: el descanso sigue tocando, pero no hay
                   siguiente serie que enmarcar, así que el timer va FUERA de la
@@ -1059,25 +1193,31 @@ export function WorkoutLogScreen({
           accent={dayAccent}
         />
 
-        <View style={styles.buttonContainer}>
-          <GradientCtaButton
-            icon="content-save-check"
-            title={t('Guardar')}
-            onPress={handleSaveWorkout}
-          />
-        </View>
+        {/* El entreno de fuerza se autoguarda entero —series, cardio y notas—,
+            así que "Volver" ya cierra sin perder nada y no hace falta un botón
+            aparte. En solo-cardio SÍ se conserva "Hecho": es su única acción
+            propia, validar que hay cardio antes de salir (handleSaveWorkout). */}
+        {cardioOnly && (
+          <View style={styles.buttonContainer}>
+            <GradientCtaButton
+              icon="check-bold"
+              title={t('Hecho')}
+              onPress={handleSaveWorkout}
+            />
+          </View>
+        )}
       </StretchScrollView>
 
       {/* En solo cardio la pantalla se titula como la tarjeta de disciplinas
           (icono 'run' + "Cardio") y el subtítulo es solo la fecha: no hay
           ejercicios que rellenar, así que no hay nada más que decir. */}
       <GlassTopBar
-        title={cardioOnly ? t('Cardio') : selectedDay.name}
+        title={cardioOnly ? t('Cardio') : getDisplayDayName(selectedDay.name)}
         titleElement={
           <View style={styles.topBarTitleRow}>
             {cardioOnly ? (
               <MaterialCommunityIcons
-                name="run"
+                name="run-fast"
                 size={24}
                 color={theme.colors.white}
               />
@@ -1089,36 +1229,46 @@ export function WorkoutLogScreen({
               />
             )}
             <Text style={styles.topBarTitleText}>
-              {cardioOnly ? t('Cardio') : selectedDay.name}
+              {cardioOnly ? t('Cardio') : getDisplayDayName(selectedDay.name)}
             </Text>
           </View>
         }
         subtitle={
-          cardioOnly
-            ? getSubtitleDate()
-            : `${t('Rellena los ejercicios')} - ${getSubtitleDate()}`
+          isDeloadSession
+            ? `${getSubtitleDate()} · ${t('Descarga')}`
+            : getSubtitleDate()
         }
+        onSubtitlePress={() => setShowDatePicker(true)}
         topInset={insets.top}
         menuItems={
+          // "Cambiar fecha" no va en el ⋯: el subtítulo de la barra ya es un
+          // enlace visible (icono calendar-edit) que abre el mismo DatePicker,
+          // igual que en el Detalle. Una acción, una vía.
           cardioOnly
-            ? [
-                {
-                  icon: 'calendar-edit',
-                  label: t('Cambiar fecha'),
-                  onPress: () => setShowDatePicker(true),
-                },
-              ]
+            ? undefined
             : [
-                {
-                  icon: 'calendar-edit',
-                  label: t('Cambiar fecha'),
-                  onPress: () => setShowDatePicker(true),
-                },
                 {
                   icon: 'timer-cog-outline',
                   label: t('Modificar temporizador'),
                   onPress: openTimerModal,
                 },
+                // Marcar como descarga solo tiene sentido al iniciar una semana
+                // nueva (su primer día) y solo en la semana en curso: las semanas
+                // antiguas no se marcan. Los días siguientes la heredan solos.
+                ...(deloadWeekInfo.isFirstDayOfNewWeek &&
+                deloadWeekInfo.isLatestWeek
+                  ? [
+                      {
+                        icon: isDeloadSession
+                          ? ('sleep-off' as const)
+                          : ('sleep' as const),
+                        label: isDeloadSession
+                          ? t('Quitar semana de descarga')
+                          : t('Marcar semana de descarga'),
+                        onPress: handleToggleDeload,
+                      },
+                    ]
+                  : []),
               ]
         }
       />
@@ -1143,6 +1293,39 @@ export function WorkoutLogScreen({
           setPendingSplitDate(null);
         }}
         onCancel={() => setPendingSplitDate(null)}
+      />
+
+      <ConfirmModal
+        visible={pendingDeload !== null}
+        title={
+          pendingDeload === 'unmark'
+            ? t('¿Quitar semana de descarga?')
+            : t('¿Marcar semana de descarga?')
+        }
+        message={
+          pendingDeload === 'unmark'
+            ? t(
+                'La semana volverá a contar como carga normal (objetivos de series y peso completos). ¿Continuar?'
+              )
+            : hasInsertedData
+              ? t(
+                  'Se borrarán los datos ya insertados de esta sesión para prepararla como descarga (menos series y peso más ligero). ¿Continuar?'
+                )
+              : t(
+                  'La semana se preparará como descarga: menos series y peso más ligero. ¿Continuar?'
+                )
+        }
+        confirmLabel={t('Continuar')}
+        confirmVariant="primary"
+        onConfirm={() => {
+          if (pendingDeload === 'unmark') {
+            applyDeload(false, false);
+          } else {
+            applyDeload(true, hasInsertedData);
+          }
+          setPendingDeload(null);
+        }}
+        onCancel={() => setPendingDeload(null)}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -1318,11 +1501,7 @@ const makeStyles = () =>
       padding: 15,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 2 },
-      shadowOpacity: 0.25,
-      shadowRadius: 3.84,
-      elevation: 5,
+      ...theme.shadow.card,
     },
     timerText: {
       fontSize: 48,

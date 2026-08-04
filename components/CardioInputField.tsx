@@ -7,10 +7,17 @@ import {
   StyleSheet,
   Pressable,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
-import { canonicalDecimals, localizeDecimals, t } from '@lib/i18n';
+import { canonicalDecimals, t } from '@lib/i18n';
+import {
+  disciplineIconName,
+  parseCardioEntry,
+  hasIncline,
+  formatEntryResults,
+} from '@lib/cardio';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
 
@@ -34,13 +41,22 @@ type CardioType =
 const TREADMILL_TYPES: CardioType[] = ['treadmill', 'treadmill-walk'];
 
 const CARDIO_OPTIONS = [
-  { id: 'treadmill', label: t('Correr en cinta'), icon: 'run-fast' },
-  { id: 'treadmill-walk', label: t('Andar en cinta'), icon: 'walk' },
-  { id: 'outdoor-run', label: t('Correr en exterior'), icon: 'run' },
-  { id: 'stationary-bike', label: t('Bici estática'), icon: 'bicycle' },
-  { id: 'elliptical', label: t('Elíptica'), icon: 'human-handsup' },
-  { id: 'other', label: t('Otro'), icon: 'dots-horizontal-circle-outline' },
+  { id: 'treadmill', label: t('Correr en cinta') },
+  { id: 'treadmill-walk', label: t('Andar en cinta') },
+  { id: 'outdoor-run', label: t('Correr en exterior') },
+  { id: 'stationary-bike', label: t('Bici estática') },
+  { id: 'elliptical', label: t('Elíptica') },
+  { id: 'other', label: t('Otro') },
 ];
+
+// Icono de una opción del picker. Fuente única: disciplineIconName (la misma que
+// la lista de disciplinas ya registradas y la vista de consulta), para que la
+// misma disciplina no tenga dos iconos distintos. "Otro" no es una disciplina
+// concreta, así que conserva su icono de affordance.
+const optionIconName = (option: { id: string; label: string }): string =>
+  option.id === 'other'
+    ? 'dots-horizontal-circle-outline'
+    : disciplineIconName(option.label);
 
 export function CardioInputField({
   value,
@@ -171,9 +187,11 @@ export function CardioInputField({
             <MaterialCommunityIcons
               name="run-fast"
               size={18}
-              color={theme.colors.onGold}
+              color={theme.colors.primary}
             />
-            <Text style={styles.addCardioText}>{t('Añadir cardio')}</Text>
+            <Text style={styles.collapsedButtonText}>
+              {t('Añadir cardio')}
+            </Text>
           </View>
         </Pressable>
       ) : (
@@ -181,35 +199,57 @@ export function CardioInputField({
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <MaterialCommunityIcons
-                name="run"
+                name="run-fast"
                 size={20}
                 color={theme.colors.text}
                 style={styles.icon}
               />
-              <Text style={styles.title}>{t('Disciplinas ejecutadas:')}</Text>
+              <Text style={styles.title}>{t('Cardio')}</Text>
             </View>
           </View>
 
-          {cardioEntries.map((entry, index) => (
-            <View key={index} style={styles.cardioDisplayContainer}>
-              <Text style={styles.cardioDisplayText}>
-                {localizeDecimals(entry)}
-              </Text>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.clearButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => handleDeleteEntry(index)}
-              >
+          {/* Cada entrada se pinta como en la vista de consulta: icono real de la
+              disciplina (cuesta incluida), nombre y resultados formateados
+              (mismos helpers de lib/cardio), en vez del texto crudo guardado. */}
+          {cardioEntries.map((entry, index) => {
+            const parsed = parseCardioEntry(entry);
+            return (
+              <View key={index} style={styles.cardioEntryRow}>
                 <MaterialCommunityIcons
-                  name="close"
-                  size={16}
-                  color={theme.colors.error}
+                  name={
+                    disciplineIconName(
+                      parsed.type,
+                      hasIncline(parsed.pendiente)
+                    ) as any
+                  }
+                  size={26}
+                  color={theme.colors.white}
                 />
-              </Pressable>
-            </View>
-          ))}
+                <View style={styles.cardioEntryInfo}>
+                  <Text style={styles.cardioEntryName} numberOfLines={1}>
+                    {parsed.type}
+                  </Text>
+                  <Text style={styles.cardioEntryResults} numberOfLines={1}>
+                    {formatEntryResults(parsed)}
+                  </Text>
+                </View>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.clearButton,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => handleDeleteEntry(index)}
+                  hitSlop={8}
+                >
+                  <MaterialCommunityIcons
+                    name="close"
+                    size={16}
+                    color={theme.colors.error}
+                  />
+                </Pressable>
+              </View>
+            );
+          })}
           <Pressable
             style={({ pressed }) => [
               styles.addCardioButton,
@@ -277,7 +317,7 @@ export function CardioInputField({
                 onPress={() => handleSelectCardioType(option.id)}
               >
                 <MaterialCommunityIcons
-                  name={option.icon as any}
+                  name={optionIconName(option) as any}
                   size={20}
                   color={theme.colors.white}
                 />
@@ -388,23 +428,37 @@ const makeStyles = () =>
     icon: {
       marginRight: 8,
     },
-    cardioDisplayContainer: {
+    // Fila de una disciplina ya registrada: icono + nombre/resultados + borrar.
+    // Mismo lenguaje visual que las filas de la vista de consulta; separadas por
+    // una línea fina para leerlas como lista bajo la cabecera.
+    cardioEntryRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      backgroundColor: theme.colors.inputBg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.md,
-      padding: 14,
-      marginTop: 10,
-      gap: 8,
+      gap: 12,
+      paddingTop: 12,
+      marginTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
     },
-    cardioDisplayText: {
+    cardioEntryInfo: {
       flex: 1,
-      fontSize: 14,
+    },
+    cardioEntryName: {
+      fontSize: 17,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
       color: theme.colors.text,
+      lineHeight: 24,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 2 : 4 }],
+    },
+    cardioEntryResults: {
+      fontSize: 13,
       fontWeight: '500',
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+      lineHeight: 16,
     },
     clearButton: {
       padding: 8,
@@ -419,13 +473,23 @@ const makeStyles = () =>
       alignItems: 'center',
       marginTop: 10,
     },
+    // Estilo secundario/outline (no relleno dorado): "Añadir cardio" es la
+    // entrada a una sección secundaria y no debe competir en peso con el CTA
+    // dorado "Hecho" del pie. El dorado queda como único protagonista.
     collapsedButton: {
-      backgroundColor: theme.colors.primaryFill,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1.5,
+      borderColor: theme.colors.primaryLine,
       paddingVertical: 14,
       paddingHorizontal: 16,
       borderRadius: theme.borderRadius.sm,
       alignItems: 'center',
       marginVertical: 12,
+    },
+    collapsedButtonText: {
+      color: theme.colors.primary,
+      fontWeight: '800',
+      fontSize: 15,
     },
     addCardioText: {
       color: theme.colors.onGold,

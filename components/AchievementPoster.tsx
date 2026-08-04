@@ -12,7 +12,7 @@ import Svg, {
   Image as SvgImage,
 } from 'react-native-svg';
 import { WeekAchievements, SlotColor } from '@lib/achievements';
-import { darkColors } from '@lib/theme';
+import { darkColors, posterColors } from '@lib/theme';
 import { t } from '@lib/i18n';
 
 // Lienzo vertical 9:16, ideal para historias/stories de redes.
@@ -26,8 +26,8 @@ export const POSTER_HEIGHT = 1920;
 const GOLD = darkColors.primaryFill;
 const GOLD_SOFT = darkColors.primaryFillLight;
 const GREEN = darkColors.success;
-const PANEL_BORDER = '#2A2F3A';
-const TRACK = '#262B36';
+const PANEL_BORDER = posterColors.panelBorder;
+const TRACK = posterColors.track;
 const TEXT = darkColors.text;
 const MUTED = darkColors.textSecondary;
 
@@ -303,8 +303,8 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
       >
         <Defs>
           <LinearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor="#13161C" />
-            <Stop offset="1" stopColor="#0B0D11" />
+            <Stop offset="0" stopColor={posterColors.bgTop} />
+            <Stop offset="1" stopColor={posterColors.bgBottom} />
           </LinearGradient>
           <LinearGradient id="goldText" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor={GOLD_SOFT} />

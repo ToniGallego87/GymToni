@@ -43,15 +43,16 @@ export function GradientFill({ accent }: GradientFillProps) {
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    sheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

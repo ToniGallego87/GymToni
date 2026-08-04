@@ -13,7 +13,6 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { animateLayout } from '@lib/layoutAnimation';
@@ -39,6 +38,7 @@ import {
   BarChart,
   BarChartPoint,
   Button,
+  Collapsible,
   FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -51,6 +51,7 @@ import {
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
+  TrendDelta,
 } from '../../components';
 import { WorkoutDay, WorkoutLog } from '../../types';
 
@@ -412,71 +413,66 @@ export function CardioScreen({
         {/* Hero con tres estados (carrusel con flechas): estadísticas de la
             semana, peso corporal (editable, con su evolución) e "Insertar nuevo
             cardio" (día de solo cardio, sin fuerza).
-            Mismo aspecto que la HeroCard de Fuerza. El contenedor con margen
-            negativo cancela el padding horizontal del scroll para que la tarjeta
-            tenga el mismo ancho que la hero de Fuerza (que ya lleva su propio
-            margen). */}
-        <View style={styles.heroBleed}>
-          <HeroCarousel
-            slides={[
-              <HeroStatsCard
-                key="stats"
-                isEmpty={!hasCardio}
-                emptyText={t(
-                  'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
-                )}
-                kicker={t('Hoy')}
-                mainIcon="fire"
-                mainValue={String(Math.round(today?.totalKcal ?? 0))}
-                mainUnit="kcal"
-                subline={
-                  today
-                    ? `${today.disciplines.length} ${
-                        today.disciplines.length === 1
-                          ? t('disciplina')
-                          : t('disciplinas')
-                      } · ${Math.round(today.totalMinutes)} min · ${fmtNum(
-                        today.totalKm
-                      )} km`
-                    : t('Aún sin cardio hoy')
-                }
-                stats={[
-                  {
-                    value: sameDayLastWeek
-                      ? String(Math.round(sameDayLastWeek.totalKcal))
-                      : '—',
-                    label: t('hace 7 días'),
-                  },
-                  {
-                    value:
-                      avgDayKcal != null ? String(Math.round(avgDayKcal)) : '—',
-                    label: t('media diaria'),
-                  },
-                  {
-                    value:
-                      bestDayKcal != null
-                        ? String(Math.round(bestDayKcal))
-                        : '—',
-                    label: t('mejor día'),
-                  },
-                ]}
-              />,
-              <HeroWeightCard
-                key="weight"
-                weight={currentWeight}
-                history={weightHistory.map((s) => s.weight)}
-                onPress={openWeightModal}
-              />,
-              <HeroCard
-                key="insert"
-                variant="start"
-                icon="run-fast"
-                title={t('Insertar cardio')}
-                onPress={() => onInsertCardioOnly?.()}
-              />,
-            ]}
-          />
-        </View>
+            Mismo aspecto que la HeroCard de Fuerza: el scroll no lleva padding
+            horizontal y la tarjeta se posiciona con el margen propio de la
+            HeroCard (misma estrategia de márgenes que Inicio, sin heroBleed). */}
+        <HeroCarousel
+          slides={[
+            <HeroStatsCard
+              key="stats"
+              isEmpty={!hasCardio}
+              emptyText={t(
+                'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
+              )}
+              kicker={t('Hoy')}
+              mainIcon="fire"
+              mainValue={String(Math.round(today?.totalKcal ?? 0))}
+              mainUnit="kcal"
+              subline={
+                today
+                  ? `${today.disciplines.length} ${
+                      today.disciplines.length === 1
+                        ? t('disciplina')
+                        : t('disciplinas')
+                    } · ${Math.round(today.totalMinutes)} min · ${fmtNum(
+                      today.totalKm
+                    )} km`
+                  : t('Aún sin cardio hoy')
+              }
+              stats={[
+                {
+                  value: sameDayLastWeek
+                    ? String(Math.round(sameDayLastWeek.totalKcal))
+                    : '—',
+                  label: t('hace 7 días'),
+                },
+                {
+                  value:
+                    avgDayKcal != null ? String(Math.round(avgDayKcal)) : '—',
+                  label: t('media diaria'),
+                },
+                {
+                  value:
+                    bestDayKcal != null ? String(Math.round(bestDayKcal)) : '—',
+                  label: t('mejor día'),
+                },
+              ]}
+            />,
+            <HeroWeightCard
+              key="weight"
+              weight={currentWeight}
+              history={weightHistory.map((s) => s.weight)}
+              onPress={openWeightModal}
+            />,
+            <HeroCard
+              key="insert"
+              variant="start"
+              icon="run-fast"
+              title={t('Insertar cardio')}
+              onPress={() => onInsertCardioOnly?.()}
+            />,
+          ]}
+        />
 
         {kcalMonths.length >= 2 && (
           <View style={[styles.progressCard, { borderColor: progressAccent }]}>
@@ -560,7 +556,8 @@ export function CardioScreen({
               <Pressable
                 style={[styles.weekHeader, { borderColor: accent }]}
                 onPress={() => {
-                  animateLayout();
+                  // Sin animateLayout: la altura la anima <Collapsible/> (mismo
+                  // motor que Inicio); un LayoutAnimation encima competiría.
                   setExpandedWeeks((prev) => ({
                     ...prev,
                     [week.weekKey]: !isExpanded,
@@ -578,31 +575,11 @@ export function CardioScreen({
                   {/* Arriba a la derecha: diferencia de kcal vs semana anterior.
                       La semana en curso no la muestra (aún está acumulando). */}
                   {week.kcalDelta != null && !week.isCurrent && (
-                    <View style={styles.deltaRow}>
-                      <MaterialCommunityIcons
-                        name={
-                          week.kcalDelta >= 0
-                            ? 'arrow-up-bold'
-                            : 'arrow-down-bold'
-                        }
-                        size={15}
-                        color={
-                          week.kcalDelta >= 0
-                            ? theme.colors.success
-                            : theme.colors.error
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.weekDelta,
-                          week.kcalDelta >= 0
-                            ? styles.progressLatestUp
-                            : styles.progressLatestDown,
-                        ]}
-                      >
-                        {Math.round(Math.abs(week.kcalDelta))} kcal
-                      </Text>
-                    </View>
+                    <TrendDelta
+                      value={week.kcalDelta}
+                      suffix=" kcal"
+                      decimals={0}
+                    />
                   )}
                 </View>
                 <View style={styles.weekMetaRow}>
@@ -619,96 +596,93 @@ export function CardioScreen({
               </Pressable>
 
               {/* Una tarjeta por DÍA: fecha y kcal del día arriba, y dentro el
-                  listado de disciplinas que se hicieron ese día. */}
-              {isExpanded && (
-                <View style={styles.weekDays}>
-                  {week.days
-                    .slice()
-                    .reverse()
-                    .map((day, dIdx) => {
-                      const d = new Date(`${day.date}T00:00:00`);
-                      const weekday = d.toLocaleDateString(dateLocale, {
-                        weekday: 'long',
-                      });
-                      const weekdayCap =
-                        weekday.charAt(0).toUpperCase() + weekday.slice(1);
-                      const dateStr = d.toLocaleDateString(dateLocale);
-                      const isToday = day.date === todayKey;
-                      return (
-                        <Animated.View
-                          key={day.date}
-                          entering={FadeInDown.duration(200).delay(dIdx * 40)}
-                        >
-                          {/* "Hoy" se marca con el aro dorado y el GradientFill,
+                  listado de disciplinas que se hicieron ese día. La altura la
+                  anima <Collapsible/>, el mismo motor que las semanas de Inicio
+                  (antes: FadeInDown escalonado por día + animateLayout). */}
+              <Collapsible open={isExpanded}>
+                {week.days
+                  .slice()
+                  .reverse()
+                  .map((day) => {
+                    const d = new Date(`${day.date}T00:00:00`);
+                    const weekday = d.toLocaleDateString(dateLocale, {
+                      weekday: 'long',
+                    });
+                    const weekdayCap =
+                      weekday.charAt(0).toUpperCase() + weekday.slice(1);
+                    const dateStr = d.toLocaleDateString(dateLocale);
+                    const isToday = day.date === todayKey;
+                    return (
+                      <View key={day.date}>
+                        {/* "Hoy" se marca con el aro dorado y el GradientFill,
                               como en Inicio; el texto va en sus colores de
                               siempre (fecha y resultados en gris). */}
-                          <Pressable
-                            onPress={() => handleDayPress(day)}
-                            style={({ pressed }) => [
-                              styles.dailyCard,
-                              isToday && styles.dailyCardToday,
-                              pressed && { opacity: 0.7 },
-                            ]}
-                          >
-                            {isToday && (
-                              <GradientFill accent={theme.colors.primaryLine} />
-                            )}
-                            <View style={styles.dailyHeader}>
-                              <Text style={styles.dailyDate} numberOfLines={1}>
-                                <Text style={styles.dailyWeekday}>
-                                  {weekdayCap}{' '}
-                                </Text>
-                                <Text style={styles.dailyDateBold}>
-                                  {dateStr}
-                                </Text>
+                        <Pressable
+                          onPress={() => handleDayPress(day)}
+                          style={({ pressed }) => [
+                            styles.dailyCard,
+                            isToday && styles.dailyCardToday,
+                            pressed && { opacity: 0.7 },
+                          ]}
+                        >
+                          {isToday && (
+                            <GradientFill accent={theme.colors.primaryLine} />
+                          )}
+                          <View style={styles.dailyHeader}>
+                            <Text style={styles.dailyDate} numberOfLines={1}>
+                              <Text style={styles.dailyWeekday}>
+                                {weekdayCap}{' '}
                               </Text>
-                              <Text style={styles.dailyBadge}>
-                                {Math.round(day.totalKcal)} kcal
+                              <Text style={styles.dailyDateBold}>
+                                {dateStr}
                               </Text>
-                            </View>
+                            </Text>
+                            <Text style={styles.dailyBadge}>
+                              {Math.round(day.totalKcal)} kcal
+                            </Text>
+                          </View>
 
-                            {day.disciplines.map((entry, eIdx) => (
-                              <View
-                                key={`${day.date}-${eIdx}`}
-                                style={styles.disciplineRow}
-                              >
-                                <MaterialCommunityIcons
-                                  name={disciplineIcon(
-                                    entry.type,
-                                    hasIncline(entry.maxPendiente)
-                                  )}
-                                  size={28}
-                                  color={theme.colors.white}
-                                />
-                                <View style={styles.dailyInfo}>
-                                  <Text
-                                    style={styles.dailyName}
-                                    numberOfLines={1}
-                                  >
-                                    {entry.type}
-                                  </Text>
-                                  <Text
-                                    style={styles.dailyResults}
-                                    numberOfLines={1}
-                                  >
-                                    {formatMergedResults(entry)}
-                                  </Text>
-                                </View>
-                                {/* Las kcal por disciplina solo aportan si hay
-                                    más de una: si no, repiten las del día. */}
-                                {day.disciplines.length > 1 && (
-                                  <Text style={styles.disciplineKcal}>
-                                    {Math.round(entry.kcal)} kcal
-                                  </Text>
+                          {day.disciplines.map((entry, eIdx) => (
+                            <View
+                              key={`${day.date}-${eIdx}`}
+                              style={styles.disciplineRow}
+                            >
+                              <MaterialCommunityIcons
+                                name={disciplineIcon(
+                                  entry.type,
+                                  hasIncline(entry.maxPendiente)
                                 )}
+                                size={28}
+                                color={theme.colors.white}
+                              />
+                              <View style={styles.dailyInfo}>
+                                <Text
+                                  style={styles.dailyName}
+                                  numberOfLines={1}
+                                >
+                                  {entry.type}
+                                </Text>
+                                <Text
+                                  style={styles.dailyResults}
+                                  numberOfLines={1}
+                                >
+                                  {formatMergedResults(entry)}
+                                </Text>
                               </View>
-                            ))}
-                          </Pressable>
-                        </Animated.View>
-                      );
-                    })}
-                </View>
-              )}
+                              {/* Las kcal por disciplina solo aportan si hay
+                                    más de una: si no, repiten las del día. */}
+                              {day.disciplines.length > 1 && (
+                                <Text style={styles.disciplineKcal}>
+                                  {Math.round(entry.kcal)} kcal
+                                </Text>
+                              )}
+                            </View>
+                          ))}
+                        </Pressable>
+                      </View>
+                    );
+                  })}
+              </Collapsible>
             </View>
           );
         })}
@@ -793,262 +767,245 @@ export function CardioScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    paddingHorizontal: theme.spacing.md,
-  },
-  // Cancela el padding horizontal del scroll: la hero queda al mismo ancho que
-  // la de Fuerza (que solo lleva el margen propio de la tarjeta).
-  heroBleed: {
-    marginHorizontal: -theme.spacing.md,
-  },
-  progressCard: {
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 2,
-    paddingVertical: 16,
-    paddingHorizontal: 16,
-    marginTop: theme.spacing.xs,
-    marginBottom: theme.spacing.lg,
-    overflow: 'hidden',
-    backgroundColor: theme.colors.surface,
-    ...theme.shadow.card,
-  },
-  // Centra la gráfica y su selector (ambos de ancho fijo `chartWidth`) dentro
-  // del `progressCard`, que no puede centrar por su cabecera de ancho completo.
-  chartArea: {
-    alignItems: 'center',
-  },
-  progressToggle: {
-    width: '100%',
-  },
-  progressHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  progressTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  progressTitle: {
-    fontSize: 20,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.text,
-    lineHeight: 24,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-  },
-  deltaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  progressLatestKcal: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: theme.colors.white,
-  },
-  progressLatestUp: {
-    color: theme.colors.success,
-  },
-  progressLatestDown: {
-    color: theme.colors.error,
-  },
-  weekBlock: {
-    marginBottom: 10,
-  },
-  // Hueco bajo la última tarjeta del día, para separarla de la semana siguiente.
-  // Es el mismo ritmo que Inicio, donde lo pone el SHADOW_BLEED_BOTTOM del
-  // Collapsible que envuelve los días (aquí no hay acordeón, va en el estilo).
-  weekDays: {
-    paddingBottom: 10,
-  },
-  weekHeader: {
-    borderRadius: theme.borderRadius.sm,
-    borderLeftWidth: 5,
-    paddingVertical: 14,
-    paddingHorizontal: 14,
-    minHeight: 52,
-    overflow: 'hidden',
-    backgroundColor: theme.colors.surface,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    ...theme.shadow.soft,
-  },
-  weekTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flexShrink: 1,
-  },
-  weekTitle: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    lineHeight: 26,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-  },
-  weekDelta: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  weekMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 2,
-  },
-  weekMeta: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  // Tarjeta diaria con el mismo formato/tamaño que las de Inicio (Fuerza).
-  dailyCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    padding: theme.spacing.md,
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    minHeight: 72,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  // Mismo "hoy" que la tarjeta de Inicio: aro dorado + GradientFill. NO pisar
-  // aquí el backgroundColor con un tinte translúcido: la tarjeta lleva
-  // elevation (shadow.soft) y Android, sin fondo opaco, pinta el relleno como
-  // un rectángulo con esquinas vivas dentro del redondeo.
-  dailyCardToday: {
-    borderColor: theme.colors.primaryLine,
-    borderWidth: 2.5,
-  },
-  // Cabecera de la tarjeta del día: fecha a la izquierda, kcal del día a la
-  // derecha. Debajo va una fila por disciplina.
-  dailyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: 10,
-  },
-  disciplineRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginTop: 10,
-  },
-  disciplineKcal: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.textSecondary,
-  },
-  dailyInfo: {
-    flex: 1,
-  },
-  dailyName: {
-    fontSize: 19,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.text,
-    lineHeight: 22,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-  },
-  dailyResults: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: theme.colors.textSecondary,
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  dailyDate: {
-    fontSize: 14,
-    lineHeight: 16,
-  },
-  dailyWeekday: {
-    fontWeight: '500',
-    color: theme.colors.textSecondary,
-  },
-  dailyDateBold: {
-    fontWeight: '800',
-    color: theme.colors.text,
-  },
-  dailyBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 2,
-    borderRadius: theme.borderRadius.pill,
-    fontSize: 15,
-    fontFamily: theme.fonts.display,
-    fontWeight: '800',
-    lineHeight: 18,
-    color: theme.colors.text,
-    backgroundColor: theme.colors.surfaceAlt,
-    overflow: 'hidden',
-  },
-  showMoreButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 12,
-    marginTop: 2,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  showMoreText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-  },
-  modalButtonRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  modalButton: {
-    flex: 1,
-  },
-  weightInputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    marginTop: 16,
-  },
-  weightInput: {
-    backgroundColor: theme.colors.inputBg,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    textAlign: 'center',
-    minWidth: 120,
-  },
-  weightUnit: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    scrollContent: {
+      flexGrow: 1,
+    },
+    progressCard: {
+      // Margen propio por tarjeta (misma estrategia que Inicio): el scroll no
+      // lleva padding horizontal, cada superficie pone su marginHorizontal.
+      marginHorizontal: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 2,
+      paddingVertical: 16,
+      paddingHorizontal: 16,
+      marginTop: theme.spacing.xs,
+      marginBottom: theme.spacing.lg,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.surface,
+      ...theme.shadow.card,
+    },
+    // Centra la gráfica y su selector (ambos de ancho fijo `chartWidth`) dentro
+    // del `progressCard`, que no puede centrar por su cabecera de ancho completo.
+    chartArea: {
+      alignItems: 'center',
+    },
+    progressToggle: {
+      width: '100%',
+    },
+    progressHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    progressTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    progressTitle: {
+      fontSize: 20,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      color: theme.colors.text,
+      lineHeight: 28,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+    },
+    progressLatestKcal: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: theme.colors.white,
+    },
+    weekBlock: {
+      // Margen propio (misma estrategia que Inicio). El hueco inferior bajo el
+      // último día lo pone el SHADOW_BLEED_BOTTOM del <Collapsible/> que los
+      // envuelve, igual que en Inicio.
+      marginHorizontal: theme.spacing.md,
+      marginBottom: 10,
+    },
+    weekHeader: {
+      borderRadius: theme.borderRadius.sm,
+      borderLeftWidth: 5,
+      paddingVertical: 14,
+      paddingHorizontal: 14,
+      minHeight: 52,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.surface,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      ...theme.shadow.soft,
+    },
+    weekTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flexShrink: 1,
+    },
+    weekTitle: {
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      lineHeight: 30,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+    },
+    weekMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+    },
+    weekMeta: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    // Tarjeta diaria con el mismo formato/tamaño que las de Inicio (Fuerza).
+    dailyCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginTop: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      minHeight: 72,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    // Mismo "hoy" que la tarjeta de Inicio: aro dorado + GradientFill. NO pisar
+    // aquí el backgroundColor con un tinte translúcido: la tarjeta lleva
+    // elevation (shadow.soft) y Android, sin fondo opaco, pinta el relleno como
+    // un rectángulo con esquinas vivas dentro del redondeo.
+    dailyCardToday: {
+      borderColor: theme.colors.primaryLine,
+      borderWidth: 2.5,
+    },
+    // Cabecera de la tarjeta del día: fecha a la izquierda, kcal del día a la
+    // derecha. Debajo va una fila por disciplina.
+    dailyHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+    },
+    disciplineRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginTop: 10,
+    },
+    disciplineKcal: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+    },
+    dailyInfo: {
+      flex: 1,
+    },
+    dailyName: {
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      lineHeight: 27,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+    },
+    dailyResults: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+      marginTop: 2,
+      lineHeight: 16,
+    },
+    dailyDate: {
+      fontSize: 14,
+      lineHeight: 16,
+    },
+    dailyWeekday: {
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+    },
+    dailyDateBold: {
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    dailyBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 2,
+      borderRadius: theme.borderRadius.pill,
+      fontSize: 15,
+      fontFamily: theme.fonts.display,
+      fontWeight: '800',
+      lineHeight: 21,
+      color: theme.colors.text,
+      backgroundColor: theme.colors.surfaceAlt,
+      overflow: 'hidden',
+    },
+    showMoreButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 12,
+      marginTop: 2,
+      marginHorizontal: theme.spacing.md,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    showMoreText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    modalButtonRow: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalButton: {
+      flex: 1,
+    },
+    weightInputRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      marginTop: 16,
+    },
+    weightInput: {
+      backgroundColor: theme.colors.inputBg,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      fontSize: 20,
+      fontWeight: '800',
+      color: theme.colors.text,
+      textAlign: 'center',
+      minWidth: 120,
+    },
+    weightUnit: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

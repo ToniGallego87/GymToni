@@ -41,6 +41,9 @@ import {
 
 interface ExerciseProgressScreenProps {
   onBack: () => void;
+  // Si se abre desde el detalle de un día, arranca ya en ese ejercicio y el
+  // botón "Volver" regresa directo (sin pasar por la lista).
+  initialExerciseKey?: string;
 }
 
 // Sesiones que caben en la gráfica sin que las barras se conviertan en rayas.
@@ -188,17 +191,31 @@ function buildSessionChart(
  */
 export function ExerciseProgressScreen({
   onBack,
+  initialExerciseKey,
 }: ExerciseProgressScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const { width: windowWidth } = useWindowDimensions();
 
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(
+    initialExerciseKey ?? null
+  );
   const [metricId, setMetricId] = useState(CHART_METRICS[0].id);
   const [sort, setSort] = useState<ExerciseSort>('recent');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const exercises = useMemo(() => listExercises(state.logs), [state.logs]);
+  // Las semanas de descarga quedan fuera de la evolución y los récords: se
+  // entrenan con menos series y peso a propósito, así que no reflejan progreso ni
+  // deben ensuciar las mejores marcas.
+  const evolutionLogs = useMemo(
+    () => state.logs.filter((log) => !log.isDeload),
+    [state.logs]
+  );
+
+  const exercises = useMemo(
+    () => listExercises(evolutionLogs),
+    [evolutionLogs]
+  );
   const sorted = useMemo(
     () => sortExercises(exercises, sort),
     [exercises, sort]
@@ -210,8 +227,9 @@ export function ExerciseProgressScreen({
   const selected = exercises.find((exercise) => exercise.key === selectedKey);
 
   const sessions = useMemo(
-    () => (selectedKey ? buildExerciseSessions(state.logs, selectedKey) : []),
-    [selectedKey, state.logs]
+    () =>
+      selectedKey ? buildExerciseSessions(evolutionLogs, selectedKey) : [],
+    [selectedKey, evolutionLogs]
   );
   const records = useMemo(() => getExerciseRecords(sessions), [sessions]);
 
@@ -231,9 +249,11 @@ export function ExerciseProgressScreen({
   );
 
   // Volver: primero deshace la selección (de la ficha a la lista) y solo desde
-  // la lista sale de la pantalla.
+  // la lista sale de la pantalla. Si se llegó enfocado desde el detalle de un
+  // día, "Volver" regresa directo a ese detalle (no tiene sentido caer en la
+  // lista de ejercicios que el usuario nunca pidió).
   const handleBack = () => {
-    if (selected) {
+    if (selected && !initialExerciseKey) {
       animateLayout();
       setSelectedKey(null);
     } else {
@@ -485,162 +505,163 @@ function RecordsCard({ records }: { records: ExerciseRecords }) {
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    gap: 12,
-  },
-  pressed: {
-    opacity: 0.8,
-  },
-  // El raíl nace con hueco arriba para separarse de la gráfica; aquí encabeza
-  // la lista y el scroll ya trae su propio padding.
-  sortFilter: {
-    marginTop: 0,
-  },
-  emptyCard: {
-    alignItems: 'center',
-    gap: 10,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.lg,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  emptyText: {
-    fontSize: 15,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  exerciseRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  exerciseTextWrap: {
-    flex: 1,
-  },
-  exerciseName: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 22,
-  },
-  exerciseHint: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  exerciseBest: {
-    alignItems: 'flex-end',
-  },
-  exerciseBestValue: {
-    fontSize: 19,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.primary,
-    lineHeight: 24,
-  },
-  exerciseBestLabel: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: theme.colors.textMuted,
-    lineHeight: 13,
-  },
-  chartCard: {
-    alignItems: 'center',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  cardTitleRow: {
-    flexDirection: 'row',
-    // Arriba, no centrado: el nombre del ejercicio puede ocupar dos líneas y el
-    // icono tiene que quedarse a la altura de la primera.
-    alignItems: 'flex-start',
-    alignSelf: 'stretch',
-    gap: 8,
-  },
-  // Centra el icono (18) en la primera línea del título (lineHeight 26).
-  cardTitleIcon: {
-    marginTop: 4,
-  },
-  cardTitle: {
-    flex: 1,
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.text,
-    lineHeight: 26,
-  },
-  cardHint: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  chartEmpty: {
-    marginTop: 16,
-    fontSize: 14,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 19,
-  },
-  recordsCard: {
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    gap: 10,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  recordRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  recordTextWrap: {
-    flex: 1,
-  },
-  recordLabel: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 20,
-  },
-  recordDate: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  recordValue: {
-    fontSize: 17,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.3,
-    color: theme.colors.primary,
-    lineHeight: 22,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      gap: 12,
+    },
+    pressed: {
+      opacity: 0.8,
+    },
+    // El raíl nace con hueco arriba para separarse de la gráfica; aquí encabeza
+    // la lista y el scroll ya trae su propio padding.
+    sortFilter: {
+      marginTop: 0,
+    },
+    emptyCard: {
+      alignItems: 'center',
+      gap: 10,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.lg,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    emptyText: {
+      fontSize: 15,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    exerciseRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    exerciseTextWrap: {
+      flex: 1,
+    },
+    exerciseName: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 22,
+    },
+    exerciseHint: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    exerciseBest: {
+      alignItems: 'flex-end',
+    },
+    exerciseBestValue: {
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.primary,
+      lineHeight: 27,
+    },
+    exerciseBestLabel: {
+      fontSize: 10,
+      fontWeight: '800',
+      color: theme.colors.textMuted,
+      lineHeight: 13,
+    },
+    chartCard: {
+      alignItems: 'center',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    cardTitleRow: {
+      flexDirection: 'row',
+      // Arriba, no centrado: el nombre del ejercicio puede ocupar dos líneas y el
+      // icono tiene que quedarse a la altura de la primera.
+      alignItems: 'flex-start',
+      alignSelf: 'stretch',
+      gap: 8,
+    },
+    // Centra el icono (18) en la primera línea del título (lineHeight 26).
+    cardTitleIcon: {
+      marginTop: 4,
+    },
+    cardTitle: {
+      flex: 1,
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.text,
+      lineHeight: 30,
+    },
+    cardHint: {
+      alignSelf: 'flex-start',
+      marginTop: 2,
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    chartEmpty: {
+      marginTop: 16,
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 19,
+    },
+    recordsCard: {
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      gap: 10,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    recordRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    recordTextWrap: {
+      flex: 1,
+    },
+    recordLabel: {
+      fontSize: 15,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 20,
+    },
+    recordDate: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    recordValue: {
+      fontSize: 17,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.primary,
+      lineHeight: 24,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

@@ -8,10 +8,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { getModeBackgroundColor, setThemeMode, theme } from '@lib/theme';
-import {
-  subscribeThemeReveal,
-  ThemeRevealRequest,
-} from '@lib/themeTransition';
+import { subscribeThemeReveal, ThemeRevealRequest } from '@lib/themeTransition';
 
 // Overlay del cambio de tema. Un círculo de color sólido (View con transform:
 // scale, acelerado por GPU → 60fps) recolorea la pantalla al pasar:

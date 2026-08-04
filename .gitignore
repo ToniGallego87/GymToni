@@ -42,3 +42,6 @@ modules/*/android/build/
 # Logs de build local
 gradle-release.log
 gradle-bundle.log
+gradle-release-deload.log
+android/buildclean.log
+*.log

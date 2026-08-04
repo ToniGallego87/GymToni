@@ -97,26 +97,27 @@ export function Collapsible({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  measurer: {
-    position: 'absolute',
-    // Mismo ancho que la copia visible (que usa marginHorizontal negativo):
-    // se estira más allá de los bordes del padre en lugar de anclarse a 0/0,
-    // para que el contenido envuelva igual y la medida sea fiel.
-    left: -SHADOW_BLEED,
-    right: -SHADOW_BLEED,
-    top: 0,
-    opacity: 0,
-  },
-  clip: {
-    overflow: 'hidden',
-    marginHorizontal: -SHADOW_BLEED,
-  },
-  inner: {
-    paddingHorizontal: SHADOW_BLEED,
-    paddingBottom: SHADOW_BLEED_BOTTOM,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    measurer: {
+      position: 'absolute',
+      // Mismo ancho que la copia visible (que usa marginHorizontal negativo):
+      // se estira más allá de los bordes del padre en lugar de anclarse a 0/0,
+      // para que el contenido envuelva igual y la medida sea fiel.
+      left: -SHADOW_BLEED,
+      right: -SHADOW_BLEED,
+      top: 0,
+      opacity: 0,
+    },
+    clip: {
+      overflow: 'hidden',
+      marginHorizontal: -SHADOW_BLEED,
+    },
+    inner: {
+      paddingHorizontal: SHADOW_BLEED,
+      paddingBottom: SHADOW_BLEED_BOTTOM,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

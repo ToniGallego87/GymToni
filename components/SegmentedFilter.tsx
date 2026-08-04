@@ -135,64 +135,65 @@ export function SegmentedFilter<T extends string | undefined>({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  wrap: {
-    marginTop: 18,
-  },
-  track: {
-    padding: 4,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  // El nombre de la opción activa, fuera del raíl: dentro del chip cambiaría el
-  // ancho de los iconos a cada pulsación.
-  activeLabel: {
-    marginTop: 8,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    color: theme.colors.text,
-    textAlign: 'center',
-  },
-  content: {
-    // Row explícito: el contenedor del ScrollView horizontal ya lo es, pero el
-    // raíl de solo iconos es un View normal.
-    flexDirection: 'row',
-    gap: 4,
-    // Con pocas opciones el raíl no se llena: se centran en vez de quedar
-    // pegadas a la izquierda con un hueco muerto al lado.
-    flexGrow: 1,
-    justifyContent: 'center',
-  },
-  chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 5,
-    paddingVertical: 9,
-    paddingHorizontal: 9,
-    borderRadius: theme.borderRadius.sm,
-  },
-  // A partes iguales: llenan el raíl y no se mueven al cambiar de opción.
-  chipIconOnly: {
-    flex: 1,
-    paddingVertical: 11,
-    paddingHorizontal: 0,
-  },
-  chipActive: {
-    backgroundColor: theme.colors.primaryFill,
-  },
-  chipPressed: {
-    opacity: 0.75,
-  },
-  chipText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.1,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrap: {
+      marginTop: 18,
+    },
+    track: {
+      padding: 4,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    // El nombre de la opción activa, fuera del raíl: dentro del chip cambiaría el
+    // ancho de los iconos a cada pulsación.
+    activeLabel: {
+      marginTop: 8,
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+      color: theme.colors.text,
+      textAlign: 'center',
+    },
+    content: {
+      // Row explícito: el contenedor del ScrollView horizontal ya lo es, pero el
+      // raíl de solo iconos es un View normal.
+      flexDirection: 'row',
+      gap: 4,
+      // Con pocas opciones el raíl no se llena: se centran en vez de quedar
+      // pegadas a la izquierda con un hueco muerto al lado.
+      flexGrow: 1,
+      justifyContent: 'center',
+    },
+    chip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+      paddingVertical: 9,
+      paddingHorizontal: 9,
+      borderRadius: theme.borderRadius.sm,
+    },
+    // A partes iguales: llenan el raíl y no se mueven al cambiar de opción.
+    chipIconOnly: {
+      flex: 1,
+      paddingVertical: 11,
+      paddingHorizontal: 0,
+    },
+    chipActive: {
+      backgroundColor: theme.colors.primaryFill,
+    },
+    chipPressed: {
+      opacity: 0.75,
+    },
+    chipText: {
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 0.1,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

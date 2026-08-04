@@ -1,9 +1,9 @@
 // Configuración de tema GymBro. El modo (oscuro/claro) se aplica EN CALIENTE,
 // sin relanzar el bundle: `theme` es un singleton que se MUTA en su sitio al
-// cambiar de tema (setThemeMode) y los componentes se suscriben con
-// `useThemedStyles`, que recalcula sus StyleSheet y fuerza el re-render leyendo
-// la nueva paleta. El idioma (i18n) sí sigue reiniciando la app.
-import { useMemo } from 'react';
+// cambiar de tema (setThemeMode). La raíz de la app se suscribe con
+// `useThemeVersion` y re-renderiza todo el árbol; las fábricas de estilos de
+// módulo (`makeStyles` + `subscribeTheme`) recalculan su StyleSheet leyendo la
+// nueva paleta. El idioma (i18n) se cambia igual, también en caliente.
 import { useSyncExternalStore } from 'react';
 import {
   getStoredThemeMode,
@@ -78,6 +78,11 @@ export const darkColors = {
   successMuted: 'rgba(82, 200, 120, 0.12)',
   errorMuted: 'rgba(240, 106, 106, 0.12)',
   warningMuted: 'rgba(255, 179, 71, 0.12)',
+  // Lienzo y tinta del QR: FIJOS (no se invierten con el tema). Un QR solo se
+  // escanea con módulos oscuros sobre fondo claro, así que aquí el negro/blanco
+  // son intencionales en ambas pieles y por eso llevan nombre de token.
+  qrLight: '#FFFFFF',
+  qrDark: '#000000',
 };
 
 // Modo día: mismas CLAVES con roles invertidos donde toca. `white` funciona
@@ -152,6 +157,9 @@ const lightColors: typeof darkColors = {
   successMuted: 'rgba(31, 138, 73, 0.12)',
   errorMuted: 'rgba(201, 59, 59, 0.12)',
   warningMuted: 'rgba(178, 110, 14, 0.12)',
+  // Fijos en ambos temas (ver darkColors): un QR siempre negro sobre blanco.
+  qrLight: '#FFFFFF',
+  qrDark: '#000000',
 };
 
 function buildTheme(mode: ThemeMode) {
@@ -310,6 +318,17 @@ function buildTheme(mode: ThemeMode) {
   };
 }
 
+// Paleta FIJA del póster de logros (AchievementPoster). El póster se exporta a
+// stories/redes y se pinta SIEMPRE sobre lienzo oscuro, así que estos tonos no
+// se invierten con el tema; llevan nombre de token para que el invariante "solo
+// theme.ts/glassTokens.ts tienen hex" se sostenga.
+export const posterColors = {
+  bgTop: '#13161C',
+  bgBottom: '#0B0D11',
+  panelBorder: '#2A2F3A',
+  track: '#262B36',
+};
+
 export type Theme = ReturnType<typeof buildTheme>;
 
 // Singleton VIVO del tema. Se MUTA en su sitio en setThemeMode (Object.assign)
@@ -336,15 +355,6 @@ export function getModeBackgroundColor(mode: ThemeMode): string {
 // Suscribe el componente a los cambios de tema (re-render en cada cambio).
 export function useThemeVersion(): number {
   return useSyncExternalStore(subscribeTheme, getThemeVersion, getThemeVersion);
-}
-
-// Crea (y memoiza por versión de tema) los estilos del componente a partir de
-// una fábrica que lee el `theme` vivo. Sustituye al patrón de módulo
-// `const styles = StyleSheet.create({...})`, que capturaba la paleta una vez.
-export function useThemedStyles<T>(factory: () => T): T {
-  const version = useThemeVersion();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  return useMemo(factory, [version]);
 }
 
 type DayAccentTarget =

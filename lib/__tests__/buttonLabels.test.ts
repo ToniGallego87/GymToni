@@ -36,7 +36,7 @@ function availableTextWidth(buttonCount: number): number {
 // conservador para no dar falsos positivos con etiquetas legítimas y aun así
 // cazar las claramente largas.
 function charFactor(ch: string): number {
-  if (' .,:iIlj|!\'’'.includes(ch)) return 0.32;
+  if (" .,:iIlj|!'’".includes(ch)) return 0.32;
   if ('mwMW'.includes(ch)) return 0.9;
   if (ch >= 'A' && ch <= 'Z') return 0.68;
   return 0.56;

@@ -121,118 +121,119 @@ export function HeroStatsCard({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  hero: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
-    paddingHorizontal: 20,
-    paddingTop: 14,
-    // Más padding abajo que arriba: el contenido va centrado, así que este hueco
-    // extra lo sube en bloque y deja respirar la fila de datos frente a los
-    // puntitos del carrusel (que van a 10px del borde inferior de la tarjeta).
-    paddingBottom: 24,
-    minHeight: 172,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    ...theme.shadow.card,
-  },
-  heroSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  heroKicker: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.75,
-    marginBottom: 2,
-  },
-  heroMainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  heroMainValue: {
-    fontFamily: theme.fonts.display,
-    fontSize: 34,
-    // Anton a 34px pide 51px de línea (ascendente 40 + descendente 11), más de
-    // los que hay: la línea base queda a lineHeight - descendente = 32.8 y los
-    // dígitos (altura de mayúscula 29.2) ocupan de 3.6 a 32.8. Con 40 la base
-    // subía a 28.8 y Android recortaba el número por arriba; 44 le da hueco.
-    lineHeight: 44,
-    includeFontPadding: false,
-    // Los dígitos quedan centrados en 18.2 y la caja en 22 (el hueco del
-    // descendente, que las cifras no usan, tira de ellas hacia arriba): sin esto
-    // el número se ve alto frente al icono y la unidad, que sí van centrados.
-    transform: [{ translateY: 4 }],
-    color: theme.colors.onGold,
-  },
-  heroMainUnit: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    alignSelf: 'flex-end',
-    marginBottom: 4,
-  },
-  heroSubline: {
-    marginTop: 2,
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.85,
-  },
-  heroEmptyText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    lineHeight: 20,
-    textAlign: 'center',
-  },
-  heroStatsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 19, 24, 0.16)',
-    // Encogida a los lados: es el contenido más ancho de la tarjeta y sus
-    // columnas exteriores llegaban a meterse bajo las flechas del carrusel.
-    marginHorizontal: HERO_ARROW_INSET,
-  },
-  heroStat: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  heroStatDivider: {
-    width: 1,
-    height: 32,
-    backgroundColor: 'rgba(16, 19, 24, 0.16)',
-  },
-  heroStatValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-  },
-  heroStatLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    hero: {
+      marginHorizontal: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      borderRadius: theme.borderRadius.lg,
+      paddingHorizontal: 20,
+      paddingTop: 14,
+      // Más padding abajo que arriba: el contenido va centrado, así que este hueco
+      // extra lo sube en bloque y deja respirar la fila de datos frente a los
+      // puntitos del carrusel (que van a 10px del borde inferior de la tarjeta).
+      paddingBottom: 24,
+      minHeight: 172,
+      justifyContent: 'center',
+      overflow: 'hidden',
+      ...theme.shadow.card,
+    },
+    heroSheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+    heroKicker: {
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      textAlign: 'center',
+      color: theme.colors.onGold,
+      opacity: 0.75,
+      marginBottom: 2,
+    },
+    heroMainRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    heroMainValue: {
+      fontFamily: theme.fonts.display,
+      fontSize: 34,
+      // Anton a 34px pide 51px de línea (ascendente 40 + descendente 11), más de
+      // los que hay: la línea base queda a lineHeight - descendente = 32.8 y los
+      // dígitos (altura de mayúscula 29.2) ocupan de 3.6 a 32.8. Con 40 la base
+      // subía a 28.8 y Android recortaba el número por arriba; 44 le da hueco.
+      lineHeight: 44,
+      includeFontPadding: false,
+      // Los dígitos quedan centrados en 18.2 y la caja en 22 (el hueco del
+      // descendente, que las cifras no usan, tira de ellas hacia arriba): sin esto
+      // el número se ve alto frente al icono y la unidad, que sí van centrados.
+      transform: [{ translateY: 4 }],
+      color: theme.colors.onGold,
+    },
+    heroMainUnit: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+      opacity: 0.8,
+      alignSelf: 'flex-end',
+      marginBottom: 4,
+    },
+    heroSubline: {
+      marginTop: 2,
+      fontSize: 13,
+      fontWeight: '700',
+      textAlign: 'center',
+      color: theme.colors.onGold,
+      opacity: 0.85,
+    },
+    heroEmptyText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.onGold,
+      opacity: 0.8,
+      lineHeight: 20,
+      textAlign: 'center',
+    },
+    heroStatsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 4,
+      paddingTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(16, 19, 24, 0.16)',
+      // Encogida a los lados: es el contenido más ancho de la tarjeta y sus
+      // columnas exteriores llegaban a meterse bajo las flechas del carrusel.
+      marginHorizontal: HERO_ARROW_INSET,
+    },
+    heroStat: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    heroStatDivider: {
+      width: 1,
+      height: 32,
+      backgroundColor: 'rgba(16, 19, 24, 0.16)',
+    },
+    heroStatValue: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+    },
+    heroStatLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.onGold,
+      opacity: 0.8,
+      marginTop: 2,
+      textAlign: 'center',
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

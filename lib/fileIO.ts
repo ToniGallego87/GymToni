@@ -100,3 +100,68 @@ export async function downloadJsonFile(
     `${t('Backup guardado en:')}\n${fileUri}`
   );
 }
+
+// --- Backup local silencioso (sin diálogo de compartir) ---
+// A diferencia de `downloadJsonFile`, escribe el fichero en una carpeta
+// PERSISTENTE del dispositivo (documentDirectory) sin abrir el selector de
+// compartir: lo usa el backup automático. En web no hay documentDirectory, así
+// que no hace nada (el backup automático se salta la plataforma web).
+
+/** ¿Puede escribirse un backup silencioso en esta plataforma? */
+export function canWriteLocalBackup(): boolean {
+  return Platform.OS !== 'web' && !!FileSystem.documentDirectory;
+}
+
+function backupDir(subdir: string): string {
+  return `${FileSystem.documentDirectory}${subdir}/`;
+}
+
+/** Escribe el JSON en `subdir/fileName` y devuelve su URI. */
+export async function writeLocalBackup(
+  subdir: string,
+  fileName: string,
+  json: string
+): Promise<string> {
+  if (!canWriteLocalBackup()) {
+    throw new Error(t('No se encontró una carpeta disponible para exportar'));
+  }
+  const dir = backupDir(subdir);
+  await FileSystem.makeDirectoryAsync(dir, { intermediates: true }).catch(
+    () => {}
+  );
+  const fileUri = `${dir}${fileName}`;
+  await FileSystem.writeAsStringAsync(fileUri, json, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+  return fileUri;
+}
+
+/** Lista los ficheros de backup existentes (nombres, sin ruta), ordenados. */
+export async function listLocalBackups(subdir: string): Promise<string[]> {
+  if (!canWriteLocalBackup()) return [];
+  const dir = backupDir(subdir);
+  try {
+    const names = await FileSystem.readDirectoryAsync(dir);
+    return names.filter((name) => name.endsWith('.json')).sort();
+  } catch {
+    return [];
+  }
+}
+
+/** Deja solo los `keep` backups más recientes (por nombre, que lleva fecha). */
+export async function pruneLocalBackups(
+  subdir: string,
+  keep: number
+): Promise<void> {
+  const names = await listLocalBackups(subdir);
+  if (names.length <= keep) return;
+  const dir = backupDir(subdir);
+  const toDelete = names.slice(0, names.length - keep);
+  await Promise.all(
+    toDelete.map((name) =>
+      FileSystem.deleteAsync(`${dir}${name}`, { idempotent: true }).catch(
+        () => {}
+      )
+    )
+  );
+}

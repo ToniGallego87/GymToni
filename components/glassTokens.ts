@@ -1,13 +1,18 @@
 // Tokens del sistema glass. Dependen del modo del tema (día/noche). Ahora el
 // tema cambia EN CALIENTE (lib/theme.ts): estos tokens son bindings `let` vivos
 // que se recalculan al cambiar de tema (subscribeTheme) leyendo `theme.mode`.
-// Los consumidores los leen en render y se re-renderizan vía useThemedStyles,
-// por lo que recogen el valor nuevo sin reiniciar la app.
+// Los consumidores los leen en render y se re-renderizan cuando la raíz aplica
+// el cambio de tema (useThemeVersion), recogiendo el valor nuevo sin reiniciar.
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 
 export const GLASS_BLUR_INTENSITY = 82;
 export const GLASS_TOP_BAR_BLUR_INTENSITY = 32;
+
+// Tinta sobre el cristal flotante (botón Volver, barra). El cristal es oscuro
+// TRANSLÚCIDO en ambos temas, así que su texto es SIEMPRE claro: token fijo, no
+// se invierte con el tema (en día `theme.colors.white` sería oscuro y no leería).
+export const GLASS_FLOATING_TEXT = '#F5F7FA';
 
 // Tinte del BlurView acorde al tema.
 export let GLASS_TINT: 'light' | 'dark' = 'dark';

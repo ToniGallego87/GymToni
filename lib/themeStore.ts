@@ -1,8 +1,8 @@
 // Store mínimo de suscripción al modo de tema (día/noche), independiente de
 // `theme.ts` y `glassTokens.ts` para no crear ciclos de import. Al cambiar el
 // tema se muta el singleton `theme` en su sitio (lib/theme.ts) y se llama a
-// `notifyThemeChange()`: los `let` vivos de glassTokens se recalculan y los
-// componentes suscritos (useThemedStyles) se re-renderizan y releen la paleta.
+// `notifyThemeChange()`: los `let` vivos de glassTokens se recalculan y la raíz
+// (`useThemeVersion`) re-renderiza el árbol, que relee la paleta.
 type Listener = () => void;
 
 const listeners = new Set<Listener>();

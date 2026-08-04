@@ -139,79 +139,80 @@ export function HeroCard({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  wrapper: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
-    ...theme.shadow.card,
-  },
-  gradient: {
-    borderRadius: theme.borderRadius.lg,
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    minHeight: 172,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  content: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconWrap: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(16, 19, 24, 0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  icon: {
-    fontSize: 44,
-    color: theme.colors.onGold,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  title: {
-    color: theme.colors.onGold,
-    fontFamily: theme.fonts.display,
-    fontSize: 26,
-    lineHeight: 36,
-    // Anton pega el glifo al borde superior de su caja; includeFontPadding:false
-    // + translateY lo centra frente al icono de al lado (mismo patrón que
-    // heroComparePct en CardioScreen).
-    includeFontPadding: false,
-    transform: [{ translateY: 4 }],
-    letterSpacing: 0.5,
-    textAlign: 'center',
-  },
-  subtitle: {
-    marginTop: 8,
-    color: theme.colors.onGold,
-    fontFamily: theme.fonts.display,
-    fontSize: 17,
-    lineHeight: 24,
-    includeFontPadding: true,
-    letterSpacing: 0.6,
-    textAlign: 'center',
-    opacity: 0.85,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrapper: {
+      marginHorizontal: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      borderRadius: theme.borderRadius.lg,
+      ...theme.shadow.card,
+    },
+    gradient: {
+      borderRadius: theme.borderRadius.lg,
+      paddingVertical: 14,
+      paddingHorizontal: 24,
+      minHeight: 172,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    sheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+    content: {
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    iconWrap: {
+      width: 68,
+      height: 68,
+      borderRadius: 34,
+      backgroundColor: 'rgba(16, 19, 24, 0.16)',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 10,
+    },
+    icon: {
+      fontSize: 44,
+      color: theme.colors.onGold,
+      textAlign: 'center',
+      textAlignVertical: 'center',
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    title: {
+      color: theme.colors.onGold,
+      fontFamily: theme.fonts.display,
+      fontSize: 26,
+      lineHeight: 36,
+      // Anton pega el glifo al borde superior de su caja; includeFontPadding:false
+      // + translateY lo centra frente al icono de al lado (mismo patrón que
+      // heroComparePct en CardioScreen).
+      includeFontPadding: false,
+      transform: [{ translateY: 4 }],
+      letterSpacing: 0.5,
+      textAlign: 'center',
+    },
+    subtitle: {
+      marginTop: 8,
+      color: theme.colors.onGold,
+      fontFamily: theme.fonts.display,
+      fontSize: 17,
+      lineHeight: 24,
+      includeFontPadding: true,
+      letterSpacing: 0.6,
+      textAlign: 'center',
+      opacity: 0.85,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

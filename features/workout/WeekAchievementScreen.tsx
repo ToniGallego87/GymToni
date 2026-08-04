@@ -404,54 +404,55 @@ export function WeekAchievementScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    alignItems: 'center',
-    gap: 20,
-  },
-  posterFrame: {
-    borderRadius: theme.borderRadius.lg,
-    overflow: 'hidden',
-    ...theme.shadow.card,
-  },
-  shareWrapper: {
-    alignSelf: 'stretch',
-    borderRadius: theme.borderRadius.lg,
-    ...theme.shadow.card,
-  },
-  shareGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    borderRadius: theme.borderRadius.lg,
-    paddingVertical: 18,
-    paddingHorizontal: 24,
-    overflow: 'hidden',
-  },
-  shareSheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  shareText: {
-    color: theme.colors.onGold,
-    fontFamily: theme.fonts.display,
-    fontSize: 22,
-    letterSpacing: 0.5,
-    lineHeight: 26,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      alignItems: 'center',
+      gap: 20,
+    },
+    posterFrame: {
+      borderRadius: theme.borderRadius.lg,
+      overflow: 'hidden',
+      ...theme.shadow.card,
+    },
+    shareWrapper: {
+      alignSelf: 'stretch',
+      borderRadius: theme.borderRadius.lg,
+      ...theme.shadow.card,
+    },
+    shareGradient: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      borderRadius: theme.borderRadius.lg,
+      paddingVertical: 18,
+      paddingHorizontal: 24,
+      overflow: 'hidden',
+    },
+    shareSheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+    shareText: {
+      color: theme.colors.onGold,
+      fontFamily: theme.fonts.display,
+      fontSize: 22,
+      letterSpacing: 0.5,
+      lineHeight: 31,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

@@ -28,7 +28,11 @@ import {
   getWorkoutStrengthScore,
   ImprovementResult,
 } from '@lib/progress';
-import { getImprovementDisplay, getLogTimestamp } from '@lib/utils';
+import {
+  findDayInRoutines,
+  getImprovementDisplay,
+  getLogTimestamp,
+} from '@lib/utils';
 import { CARDIO_ONLY_DAY_ID, hasAnyCardio } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import {
@@ -44,6 +48,7 @@ import {
   previousLoadBlock,
   workoutsUpToBlock,
   WeekMovePlan,
+  WeekMoveDirection,
   WeekProgressPoint,
 } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
@@ -63,7 +68,7 @@ import {
   HeroStat,
   HeroVariant,
   GradientFill,
-  AnimatedCounter,
+  TrendDelta,
   BarChart,
   BarChartPoint,
   resolveDayIcon,
@@ -161,26 +166,10 @@ function buildProgressChart(points: WeekProgressPoint[]): {
 // tapaban los días); por eso solo animamos opacidad/transform, que es fiable.
 // El contenedor se mantiene montado siempre (solo se alternan los hijos) para
 // que la animación de salida `exiting` se reproduzca con un padre estable.
-type TrendKind = 'up' | 'down' | 'neutral';
 
-// Icono de tendencia coherente (sustituye las flechas Unicode ↑↓=).
-function TrendIcon({
-  kind,
-  size,
-  color,
-}: {
-  kind: TrendKind;
-  size: number;
-  color: string;
-}) {
-  const name =
-    kind === 'up'
-      ? 'arrow-up-bold'
-      : kind === 'down'
-      ? 'arrow-down-bold'
-      : 'equal';
-  return <MaterialCommunityIcons name={name} size={size} color={color} />;
-}
+// Semanas que se muestran de inicio y cuántas añade "Cargar más" (misma
+// paginación que Cardio, para no montar todo el histórico en rutinas largas).
+const WEEKS_PAGE = 5;
 
 export function HomeScreen({
   onSelectDay,
@@ -205,6 +194,9 @@ export function HomeScreen({
   const [expandedWeekBlocks, setExpandedWeekBlocks] = useState<
     Record<number, boolean>
   >({});
+  // Paginación del historial de semanas: se muestran las 5 más recientes y
+  // "Cargar más" añade 5 (como Cardio). Se reinicia al cambiar de rutina.
+  const [visibleWeekCount, setVisibleWeekCount] = useState(WEEKS_PAGE);
   const [logToDeleteId, setLogToDeleteId] = useState<string | undefined>(
     undefined
   );
@@ -217,6 +209,19 @@ export function HomeScreen({
   const [selectedLogDayForOptions, setSelectedLogDayForOptions] = useState<
     WorkoutDay | undefined
   >(undefined);
+  // Movimiento de día pendiente de confirmar: solo se rellena cuando el
+  // movimiento toca una semana ya completada o hace desaparecer una (ver
+  // requestMoveWeek). Los movimientos sobre semanas incompletas se aplican
+  // directos, sin pasar por aquí.
+  const [pendingMove, setPendingMove] = useState<{
+    plan: WeekMovePlan;
+    removesWeek: boolean;
+  } | null>(null);
+  // Marcar/quitar descarga en una semana pide confirmación (cambia estadísticas).
+  const [pendingWeekDeload, setPendingWeekDeload] = useState<{
+    block: number;
+    isDeload: boolean;
+  } | null>(null);
   const { width: windowWidth } = useWindowDimensions();
 
   // La rutina que se muestra en Inicio es la SELECCIONADA (persistida en el
@@ -235,6 +240,7 @@ export function HomeScreen({
   // (los IDs de día pertenecen a otra rutina y dejarían de existir).
   useEffect(() => {
     setChartDayFilter(undefined);
+    setVisibleWeekCount(WEEKS_PAGE);
   }, [displayedRoutineId]);
 
   // Detectar si la rutina visualizada es la activa
@@ -342,20 +348,6 @@ export function HomeScreen({
   } = getFloatingPrimaryNavMetrics(insets.bottom);
   const appVersion = Constants.expoConfig?.version ?? '';
 
-  const formatImprovementDisplay = (imp: {
-    isImproved: boolean;
-    percent: number;
-  }) => {
-    const { symbol, display, kind } = getImprovementDisplay(imp);
-    const styleKey =
-      kind === 'up'
-        ? 'weekImprovementUp'
-        : kind === 'down'
-        ? 'weekImprovementDown'
-        : 'weekImprovementNeutral';
-    return { symbol, styleKey, display, kind };
-  };
-
   const handleStartPress = () => {
     if (hasNoRoutines) {
       onCreateRoutine?.();
@@ -405,13 +397,8 @@ export function HomeScreen({
     }
   };
 
-  const getDay = (dayId: string): WorkoutDay | undefined => {
-    for (const routine of state.routines) {
-      const day = routine.days.find((d: WorkoutDay) => d.id === dayId);
-      if (day) return day;
-    }
-    return undefined;
-  };
+  const getDay = (dayId: string): WorkoutDay | undefined =>
+    findDayInRoutines(state.routines, dayId);
 
   const getPreviousFilledLogForSameDay = (currentLog: WorkoutLog) => {
     const currentTs = getLogTimestamp(currentLog);
@@ -809,8 +796,7 @@ export function HomeScreen({
     ? planWeekMove(displayedRoutineLogs, optionsLog.id, 'next', moveDayKey)
     : null;
 
-  const handleMoveWeek = (plan: WeekMovePlan | null) => {
-    if (!plan) return;
+  const applyMoveWeek = (plan: WeekMovePlan) => {
     const stamp = Date.now();
     plan.changedLogs.forEach((log) => {
       dispatch({
@@ -819,6 +805,40 @@ export function HomeScreen({
       });
     });
     closeLogOptions();
+  };
+
+  // Bloque (semana) al que pertenece un log en el agrupado que se pinta.
+  const blockOfLog = (logId: string): number | undefined =>
+    blocks.find((b: number) =>
+      (groupedByBlock[b] || []).some((l: WorkoutLog) => l.id === logId)
+    );
+
+  const isBlockCompleted = (block: number | undefined): boolean =>
+    block != null &&
+    isWeekCompleted(completionGroupedByBlock[block] || [], activeDays);
+
+  // Mover un día recalcula en silencio racha, progreso y logros. Si el
+  // movimiento hace desaparecer una semana o toca una ya completada (origen o
+  // destino), se pide confirmación; en semanas incompletas se aplica directo.
+  const requestMoveWeek = (
+    plan: WeekMovePlan | null,
+    direction: WeekMoveDirection
+  ) => {
+    if (!plan || !optionsLog) return;
+    const sourceBlock = blockOfLog(optionsLog.id);
+    const destBlock =
+      sourceBlock == null
+        ? undefined
+        : direction === 'prev'
+        ? sourceBlock - 1
+        : sourceBlock + 1;
+    const touchesCompletedWeek =
+      isBlockCompleted(sourceBlock) || isBlockCompleted(destBlock);
+    if (plan.removesSourceWeek || touchesCompletedWeek) {
+      setPendingMove({ plan, removesWeek: plan.removesSourceWeek });
+      return;
+    }
+    applyMoveWeek(plan);
   };
 
   // Marca/desmarca una semana como descarga (deload). La marca vive en cada log
@@ -960,7 +980,11 @@ export function HomeScreen({
 
         {isDisplayedRoutineActive && streak.weeks >= 2 && (
           <View style={styles.streakChip}>
-            <Text style={styles.streakEmoji}>🔥</Text>
+            <MaterialCommunityIcons
+              name="fire"
+              size={16}
+              color={theme.colors.emoji_orange}
+            />
             <Text style={styles.streakText}>
               {t('{n} semanas seguidas', { n: streak.weeks })}
             </Text>
@@ -1024,28 +1048,10 @@ export function HomeScreen({
                         {t('¡Ánimo con tu nueva rutina!')}
                       </Text>
                     ) : latestPoint ? (
-                      <View style={styles.deltaRow}>
-                        <TrendIcon
-                          kind={latestPoint.improvement >= 0 ? 'up' : 'down'}
-                          size={16}
-                          color={
-                            latestPoint.improvement >= 0
-                              ? theme.colors.success
-                              : theme.colors.error
-                          }
-                        />
-                        <AnimatedCounter
-                          value={Math.abs(latestPoint.improvement)}
-                          decimals={1}
-                          suffix="%"
-                          style={[
-                            styles.progressLatest,
-                            latestPoint.improvement >= 0
-                              ? styles.progressLatestUp
-                              : styles.progressLatestDown,
-                          ]}
-                        />
-                      </View>
+                      <TrendDelta
+                        value={latestPoint.improvement}
+                        iconSize={16}
+                      />
                     ) : (
                       <Text
                         style={[styles.progressLatest, styles.progressLatestUp]}
@@ -1087,7 +1093,7 @@ export function HomeScreen({
           // scrollean con la vista principal, como en Cardio.
           <View style={styles.weeksSection}>
             <View>
-              {blocks.map((block: number) => {
+              {blocks.slice(0, visibleWeekCount).map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
                 const weekCompleted = isWeekCompleted(
                   completionGroupedByBlock[block] || [],
@@ -1170,58 +1176,49 @@ export function HomeScreen({
                           </Text>
                         )}
                         {!isDeloadWeek && !!weekImprovement && (
-                          <View style={styles.deltaRow}>
-                            <TrendIcon
-                              kind={weekImprovement.isImproved ? 'up' : 'down'}
-                              size={15}
-                              color={
-                                weekImprovement.isImproved
-                                  ? theme.colors.success
-                                  : theme.colors.error
-                              }
-                            />
-                            <AnimatedCounter
-                              value={weekImprovement.percent}
-                              decimals={1}
-                              suffix="%"
-                              style={[
-                                styles.weekImprovementText,
-                                weekImprovement.isImproved
-                                  ? styles.weekImprovementUp
-                                  : styles.weekImprovementDown,
-                              ]}
-                            />
-                          </View>
+                          <TrendDelta
+                            value={weekImprovement.percent}
+                            improved={weekImprovement.isImproved}
+                          />
                         )}
                       </View>
                       <View style={styles.weekMetaRow}>
                         {/* Marcar la semana como descarga (deload): botón propio
-                            y visible (nada de gestos ocultos). Activo = azul. */}
-                        <Pressable
-                          style={({ pressed }: { pressed: boolean }) => [
-                            styles.weekDeloadButton,
-                            isDeloadWeek && styles.weekDeloadButtonActive,
-                            pressed && styles.weekAchievementButtonPressed,
-                          ]}
-                          onPress={() => toggleWeekDeload(block)}
-                          hitSlop={8}
-                          accessibilityRole="button"
-                          accessibilityLabel={
-                            isDeloadWeek
-                              ? t('Quitar semana de descarga')
-                              : t('Marcar como semana de descarga')
-                          }
-                        >
-                          <MaterialCommunityIcons
-                            name="sleep"
-                            size={16}
-                            color={
-                              isDeloadWeek
-                                ? theme.colors.onGold
-                                : theme.colors.emoji_blue
+                            y visible (nada de gestos ocultos). Activo = azul.
+                            Solo en la semana en curso: las antiguas no se marcan.
+                            Al pulsar pide confirmación (cambia estadísticas). */}
+                        {isCurrentWeek && (
+                          <Pressable
+                            style={({ pressed }: { pressed: boolean }) => [
+                              styles.weekDeloadButton,
+                              isDeloadWeek && styles.weekDeloadButtonActive,
+                              pressed && styles.weekAchievementButtonPressed,
+                            ]}
+                            onPress={() =>
+                              setPendingWeekDeload({
+                                block,
+                                isDeload: isDeloadWeek,
+                              })
                             }
-                          />
-                        </Pressable>
+                            hitSlop={8}
+                            accessibilityRole="button"
+                            accessibilityLabel={
+                              isDeloadWeek
+                                ? t('Quitar semana de descarga')
+                                : t('Marcar como semana de descarga')
+                            }
+                          >
+                            <MaterialCommunityIcons
+                              name="sleep"
+                              size={16}
+                              color={
+                                isDeloadWeek
+                                  ? theme.colors.onGold
+                                  : theme.colors.emoji_blue
+                              }
+                            />
+                          </Pressable>
+                        )}
                         {/* Los logros de una semana pasada se abrían con un
                             long-press de 3s en la cabecera: nada lo insinuaba.
                             Ahora es un botón. */}
@@ -1246,7 +1243,12 @@ export function HomeScreen({
                           </Pressable>
                         )}
                         <Text style={styles.weekHeaderMeta}>
-                          {weekLogs.length === 1
+                          {isCurrentWeek && activeDays.length > 0
+                            ? t('{n} de {total} días', {
+                                n: weekLogs.length,
+                                total: activeDays.length,
+                              })
+                            : weekLogs.length === 1
                             ? t('1 día')
                             : t('{n} días', { n: weekLogs.length })}
                         </Text>
@@ -1263,7 +1265,7 @@ export function HomeScreen({
                         const day = getDay(log.dayId);
                         const improvement = getLogImprovement(log);
                         const improvementFmt = improvement
-                          ? formatImprovementDisplay(improvement)
+                          ? getImprovementDisplay(improvement)
                           : null;
                         const isToday = isLogFromToday(log);
                         if (!day) return null;
@@ -1319,49 +1321,58 @@ export function HomeScreen({
                                 <Text
                                   style={[
                                     styles.historyLogBadge,
-                                    improvementFmt &&
-                                      (improvementFmt.kind === 'up'
-                                        ? styles.historyLogBadgeUp
-                                        : improvementFmt.kind === 'down'
-                                        ? styles.historyLogBadgeDown
-                                        : styles.historyLogBadgeNeutral),
+                                    // Día de descarga: sin porcentaje, un guión
+                                    // en azul (como el guión amarillo de la
+                                    // primera semana, pero de descarga).
+                                    isDeloadWeek
+                                      ? styles.historyLogBadgeDeload
+                                      : improvementFmt &&
+                                        (improvementFmt.kind === 'up'
+                                          ? styles.historyLogBadgeUp
+                                          : improvementFmt.kind === 'down'
+                                          ? styles.historyLogBadgeDown
+                                          : styles.historyLogBadgeNeutral),
                                   ]}
                                 >
-                                  {improvementFmt
-                                    ? `${
+                                  {isDeloadWeek || !improvementFmt
+                                    ? '—'
+                                    : `${
                                         improvementFmt.kind === 'up'
                                           ? '+'
                                           : improvementFmt.kind === 'down'
                                           ? '-'
                                           : ''
-                                      }${improvementFmt.display}%`
-                                    : '—'}
+                                      }${improvementFmt.display}%`}
                                 </Text>
-                                {/* Editar/eliminar estaba solo tras un
-                                    long-press de 1s, sin nada que lo indicara. */}
-                                <Pressable
-                                  style={({
-                                    pressed,
-                                  }: {
-                                    pressed: boolean;
-                                  }) => [
-                                    styles.logOptionsButton,
-                                    pressed && styles.logOptionsButtonPressed,
-                                  ]}
-                                  onPress={() => {
-                                    setLogWithOptionsId(log.id);
-                                    setSelectedLogDayForOptions(day);
-                                  }}
-                                  hitSlop={8}
-                                  accessibilityRole="button"
-                                  accessibilityLabel={t('Más opciones')}
-                                >
-                                  <MaterialCommunityIcons
-                                    name="dots-horizontal"
-                                    size={20}
-                                    color={theme.colors.textSecondary}
-                                  />
-                                </Pressable>
+                                {/* Solo el día de HOY lleva el ⋯ aquí (Continuar/
+                                    Eliminar/Mover): un toque en un día pasado ya
+                                    abre el Detalle, que es la única superficie de
+                                    acciones del log (editar, fecha, mover, borrar). */}
+                                {isToday && (
+                                  <Pressable
+                                    style={({
+                                      pressed,
+                                    }: {
+                                      pressed: boolean;
+                                    }) => [
+                                      styles.logOptionsButton,
+                                      pressed && styles.logOptionsButtonPressed,
+                                    ]}
+                                    onPress={() => {
+                                      setLogWithOptionsId(log.id);
+                                      setSelectedLogDayForOptions(day);
+                                    }}
+                                    hitSlop={8}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Más opciones')}
+                                  >
+                                    <MaterialCommunityIcons
+                                      name="dots-horizontal"
+                                      size={20}
+                                      color={theme.colors.textSecondary}
+                                    />
+                                  </Pressable>
+                                )}
                               </View>
                             </Pressable>
                           </View>
@@ -1372,6 +1383,24 @@ export function HomeScreen({
                 );
               })}
             </View>
+
+            {blocks.length > visibleWeekCount && (
+              <TouchableOpacity
+                style={styles.showMoreButton}
+                activeOpacity={0.8}
+                onPress={() => {
+                  animateLayout();
+                  setVisibleWeekCount((c) => c + WEEKS_PAGE);
+                }}
+              >
+                <MaterialCommunityIcons
+                  name="reload"
+                  size={16}
+                  color={theme.colors.text}
+                />
+                <Text style={styles.showMoreText}>{t('Cargar más')}</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
       </StretchScrollView>
@@ -1420,7 +1449,7 @@ export function HomeScreen({
             {!!optionsMovePrev && (
               <Button
                 title={t('Mover a la semana anterior')}
-                onPress={() => handleMoveWeek(optionsMovePrev)}
+                onPress={() => requestMoveWeek(optionsMovePrev, 'prev')}
                 variant="secondary"
                 size="medium"
               />
@@ -1432,7 +1461,7 @@ export function HomeScreen({
                     ? t('Mover a una semana nueva')
                     : t('Mover a la semana siguiente')
                 }
-                onPress={() => handleMoveWeek(optionsMoveNext)}
+                onPress={() => requestMoveWeek(optionsMoveNext, 'next')}
                 variant="secondary"
                 size="medium"
               />
@@ -1445,6 +1474,54 @@ export function HomeScreen({
             />
           </>
         }
+      />
+
+      <ConfirmModal
+        visible={!!pendingMove}
+        icon="calendar-sync"
+        title={t('¿Mover el día?')}
+        message={
+          pendingMove?.removesWeek
+            ? t(
+                'Este movimiento vacía una semana y recalcula racha, progreso y logros. ¿Continuar?'
+              )
+            : t(
+                'Este movimiento reorganiza una semana ya completada y recalcula racha, progreso y logros. ¿Continuar?'
+              )
+        }
+        confirmLabel={t('Mover')}
+        confirmVariant="primary"
+        onConfirm={() => {
+          if (pendingMove) applyMoveWeek(pendingMove.plan);
+          setPendingMove(null);
+        }}
+        onCancel={() => setPendingMove(null)}
+      />
+
+      <ConfirmModal
+        visible={!!pendingWeekDeload}
+        icon="sleep"
+        title={
+          pendingWeekDeload?.isDeload
+            ? t('¿Quitar semana de descarga?')
+            : t('¿Marcar semana de descarga?')
+        }
+        message={
+          pendingWeekDeload?.isDeload
+            ? t(
+                'La semana volverá a contar como carga normal en racha, progreso y récords. ¿Continuar?'
+              )
+            : t(
+                'La semana quedará al margen de las estadísticas: no compara ni cuenta para récords. ¿Continuar?'
+              )
+        }
+        confirmLabel={t('Continuar')}
+        confirmVariant="primary"
+        onConfirm={() => {
+          if (pendingWeekDeload) toggleWeekDeload(pendingWeekDeload.block);
+          setPendingWeekDeload(null);
+        }}
+        onCancel={() => setPendingWeekDeload(null)}
       />
 
       <ConfirmModal
@@ -1539,10 +1616,6 @@ const makeStyles = () =>
       borderWidth: 1,
       borderColor: theme.colors.emoji_orangeMutedBorder,
     },
-    streakEmoji: {
-      fontSize: 15,
-      lineHeight: 18,
-    },
     streakText: {
       color: theme.colors.emoji_orange,
       fontSize: 14,
@@ -1563,11 +1636,6 @@ const makeStyles = () =>
       flexShrink: 1,
       minWidth: 0,
     },
-    deltaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 2,
-    },
     weekMetaRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1586,7 +1654,7 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       letterSpacing: 0.5,
       color: theme.colors.text,
-      lineHeight: 24,
+      lineHeight: 28,
       includeFontPadding: false,
       textAlignVertical: 'center',
       flexShrink: 1,
@@ -1648,17 +1716,12 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       letterSpacing: 0.5,
       color: theme.colors.primary,
-      lineHeight: 26,
+      lineHeight: 30,
       includeFontPadding: false,
       textAlignVertical: 'center',
       // Anton se dibuja pegado al borde superior de su caja, así que hace falta un
       // pequeño empuje hacia abajo para centrarlo frente al texto/icono de al lado.
       transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-    },
-    weekImprovementText: {
-      fontSize: 15,
-      fontWeight: '800',
-      lineHeight: 18,
     },
     // "Descarga" en azul en el hueco del %, para una semana de deload.
     deloadLabel: {
@@ -1682,12 +1745,6 @@ const makeStyles = () =>
     weekDeloadButtonActive: {
       backgroundColor: theme.colors.emoji_blue,
       borderColor: theme.colors.emoji_blue,
-    },
-    weekImprovementUp: {
-      color: theme.colors.success,
-    },
-    weekImprovementDown: {
-      color: theme.colors.error,
     },
     weekHeaderMeta: {
       fontSize: 14,
@@ -1756,7 +1813,7 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
-      lineHeight: 22,
+      lineHeight: 27,
       includeFontPadding: false,
       textAlignVertical: 'center',
       transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
@@ -1776,7 +1833,7 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       fontWeight: '800',
       overflow: 'hidden',
-      lineHeight: 18,
+      lineHeight: 21,
       textAlign: 'center',
       color: theme.colors.primaryLight,
       backgroundColor: theme.colors.primaryMuted,
@@ -1793,6 +1850,10 @@ const makeStyles = () =>
       color: theme.colors.warning,
       backgroundColor: theme.colors.warningMuted,
     },
+    historyLogBadgeDeload: {
+      color: theme.colors.emoji_blue,
+      backgroundColor: theme.colors.emoji_blueMuted,
+    },
     logOptionsButton: {
       padding: 2,
       marginRight: -4,
@@ -1800,6 +1861,25 @@ const makeStyles = () =>
     },
     logOptionsButtonPressed: {
       opacity: 0.6,
+    },
+    // "Cargar más" del historial de semanas: mismo botón que en Cardio. El
+    // margen horizontal lo da `weeksSection`, así que aquí no hace falta.
+    showMoreButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 12,
+      marginTop: 2,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    showMoreText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
     },
     modalButtonRow: {
       flexDirection: 'row',

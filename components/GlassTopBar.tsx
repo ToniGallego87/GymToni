@@ -36,6 +36,12 @@ interface GlassTopBarProps {
   icon?: string;
   titleElement?: React.ReactNode;
   subtitle?: string;
+  /**
+   * Si se pasa, el subtítulo se vuelve pulsable (con un icono de lápiz-calendario
+   * que lo delata como tocable) y ejecuta esto al pulsarlo. Se usa en el registro
+   * para editar la fecha directamente desde el subtítulo.
+   */
+  onSubtitlePress?: () => void;
   topInset: number;
   rightElement?: React.ReactNode;
   /**
@@ -65,6 +71,7 @@ export function GlassTopBar({
   icon,
   titleElement,
   subtitle,
+  onSubtitlePress,
   topInset,
   rightElement,
   showMenu = true,
@@ -162,14 +169,38 @@ export function GlassTopBar({
                   {title}
                 </Text>
               )}
-              {!!subtitle && (
-                <Text
-                  style={styles.subtitle}
-                  numberOfLines={subtitleNumberOfLines}
-                >
-                  {subtitle}
-                </Text>
-              )}
+              {!!subtitle &&
+                (onSubtitlePress ? (
+                  <Pressable
+                    onPress={onSubtitlePress}
+                    hitSlop={6}
+                    style={({ pressed }) => [
+                      styles.subtitleButton,
+                      pressed && styles.subtitlePressed,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityLabel={subtitle}
+                  >
+                    <Text
+                      style={styles.subtitleLink}
+                      numberOfLines={subtitleNumberOfLines}
+                    >
+                      {subtitle}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name="calendar-edit"
+                      size={14}
+                      color={theme.colors.primary}
+                    />
+                  </Pressable>
+                ) : (
+                  <Text
+                    style={styles.subtitle}
+                    numberOfLines={subtitleNumberOfLines}
+                  >
+                    {subtitle}
+                  </Text>
+                ))}
             </View>
             {rightElement}
             {showMenu && (
@@ -308,6 +339,24 @@ const makeStyles = () =>
       fontSize: 14,
       color: theme.colors.textSecondary,
       fontStyle: 'italic',
+      lineHeight: 19,
+    },
+    subtitleButton: {
+      marginTop: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      alignSelf: 'flex-start',
+    },
+    subtitlePressed: {
+      opacity: 0.6,
+    },
+    // Pulsable: tinta dorada (rol de acción) en vez del gris del subtítulo, para
+    // que se lea como algo que se puede tocar.
+    subtitleLink: {
+      fontSize: 14,
+      color: theme.colors.primary,
+      fontWeight: '700',
       lineHeight: 19,
     },
     topBarMenuButton: {

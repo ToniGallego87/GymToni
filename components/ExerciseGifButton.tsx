@@ -38,8 +38,14 @@ export function ExerciseGifButton({
   const [showGif, setShowGif] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
 
+  // Con GIF asignado el botón reproduce (play); sin él abre el buscador para
+  // localizar y asignar uno. Como la acción es distinta, el icono también: play
+  // solo cuando de verdad va a reproducir, lupa cuando va a buscar. Así el toque
+  // es predecible en vez de significar dos cosas con el mismo icono.
+  const hasGif = !!catalogId;
+
   const handlePress = () => {
-    if (catalogId) setShowGif(true);
+    if (hasGif) setShowGif(true);
     else setShowPicker(true);
   };
 
@@ -53,10 +59,10 @@ export function ExerciseGifButton({
         ]}
         onPress={handlePress}
         hitSlop={8}
-        accessibilityLabel={t('Ver GIF')}
+        accessibilityLabel={hasGif ? t('Ver GIF') : t('Buscar GIF')}
       >
         <MaterialCommunityIcons
-          name="play-box-outline"
+          name={hasGif ? 'play-box-outline' : 'movie-search-outline'}
           size={size}
           color={theme.colors.primary}
         />

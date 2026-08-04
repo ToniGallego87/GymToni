@@ -295,16 +295,6 @@ export function assignmentDuplicatesDayInWeek(
   return false;
 }
 
-/** ¿Se puede mover ese día a la semana contigua en esa dirección? */
-export function canMoveDay(
-  logs: WorkoutLog[],
-  logId: string,
-  direction: WeekMoveDirection,
-  getDayKey: DayKeyFn
-): boolean {
-  return planWeekMove(logs, logId, direction, getDayKey) !== null;
-}
-
 /** Una semana está completa cuando tiene entrenados todos los días de la rutina. */
 export function isWeekCompleted(
   weekLogs: WorkoutLog[],

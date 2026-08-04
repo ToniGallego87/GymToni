@@ -114,6 +114,16 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
   pulsar) de "Guardar" del registro y "Crear rutina". No recrearlo a mano.
 - **`GymIconGrid`** — rejilla del selector de icono de día (modales de Nueva
   rutina y detalle de rutina).
+- **`AppModal`** — carpintería común de TODA superficie modal: overlay
+  `colors.overlay`, tarjeta surface centrada (max 340), título con icono, cuerpo
+  y pie de `Button`. `ConfirmModal` es su especialización. Nunca montar un
+  `Modal` + overlay a mano.
+  - _Excepción documentada:_ **`ExercisePickerModal`** monta su propio `Modal` a
+    pantalla completa a propósito. Es un buscador del catálogo (input de
+    búsqueda + `SegmentedFilter` + `FlatList` virtualizada de cientos de
+    ejercicios): no cabe en la tarjeta centrada de 340 de `AppModal`, que está
+    pensada para diálogos y formularios cortos. Un picker de lista larga a
+    pantalla completa es el patrón correcto; no cuenta como divergencia.
 - **`ConfirmModal`** — TODA confirmación (eliminar, importar, limpiar).
   Overlay `colors.overlay`, tarjeta surface centrada (max 340), título 18/800
   centrado con icono, botones `Button`. No montar `Modal` a mano para un confirm.

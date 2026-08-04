@@ -59,36 +59,37 @@ export function GymIconGrid({ activeIcon, onSelect, style }: GymIconGridProps) {
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  iconGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-  },
-  iconButton: {
-    width: '30%',
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.inputBg,
-    alignItems: 'center',
-    gap: 6,
-  },
-  iconButtonActive: {
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.primary + '1A',
-  },
-  iconButtonLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  buttonPressed: {
-    opacity: 0.85,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    iconGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: theme.spacing.sm,
+      justifyContent: 'center',
+    },
+    iconButton: {
+      width: '30%',
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.inputBg,
+      alignItems: 'center',
+      gap: 6,
+    },
+    iconButtonActive: {
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.primary + '1A',
+    },
+    iconButtonLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+    },
+    buttonPressed: {
+      opacity: 0.85,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

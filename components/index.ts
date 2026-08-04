@@ -10,7 +10,8 @@ export {
   POSTER_HEIGHT,
 } from './AchievementPoster';
 export { GradientFill } from './GradientFill';
-export { AnimatedCounter } from './AnimatedCounter';
+// AnimatedCounter no se re-exporta: solo lo consume TrendDelta por ruta relativa.
+export { TrendDelta } from './TrendDelta';
 export { BarChart } from './BarChart';
 export type { BarChartPoint } from './BarChart';
 export { DayAccentIcon } from './DayAccentIcon';
@@ -29,9 +30,8 @@ export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export type { InvalidAddReason } from './ExerciseInputField';
 export { ExerciseFormRow, ExerciseSummaryRow } from './ExerciseFormRow';
-export { ExercisePickerModal } from './ExercisePickerModal';
-export { GifViewerModal } from './GifViewerModal';
-export { ExerciseGifButton } from './ExerciseGifButton';
+// ExercisePickerModal / GifViewerModal / ExerciseGifButton no se re-exportan:
+// son piezas internas que solo consumen otros componentes por ruta relativa.
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
 export { WhatsNewModal } from './WhatsNewModal';
@@ -52,3 +52,5 @@ export { StretchScrollView } from './StretchScrollView';
 export { Collapsible } from './Collapsible';
 export { SegmentedFilter } from './SegmentedFilter';
 export type { SegmentedOption } from './SegmentedFilter';
+export { OptionToggle } from './OptionToggle';
+export type { OptionToggleOption } from './OptionToggle';

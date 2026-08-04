@@ -129,32 +129,33 @@ export function Button({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  button: {
-    borderRadius: theme.borderRadius.md,
-    ...theme.shadow.card,
-  },
-  inner: {
-    borderRadius: theme.borderRadius.md,
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  text: {
-    fontWeight: '800',
-  },
-  pressed: {
-    opacity: 0.92,
-    transform: [{ scale: 0.99 }],
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    button: {
+      borderRadius: theme.borderRadius.md,
+      ...theme.shadow.card,
+    },
+    inner: {
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    sheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+    text: {
+      fontWeight: '800',
+    },
+    pressed: {
+      opacity: 0.92,
+      transform: [{ scale: 0.99 }],
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

@@ -8,6 +8,7 @@ import {
   GLASS_BLUR_INTENSITY,
   GLASS_FLOATING_BG,
   GLASS_FLOATING_BORDER,
+  GLASS_FLOATING_TEXT,
 } from './glassTokens';
 
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
@@ -67,45 +68,46 @@ export function FloatingBackButton({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  floatingBackButton: {
-    position: 'absolute',
-    zIndex: 30,
-    borderRadius: 22,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: GLASS_FLOATING_BG,
-    borderWidth: 1,
-    borderColor: GLASS_FLOATING_BORDER,
-    overflow: 'hidden',
-    ...theme.shadow.card,
-  },
-  floatingBackButtonLight: {
-    backgroundColor: 'rgba(18, 22, 30, 0.30)',
-    borderColor: 'rgba(255, 255, 255, 0.16)',
-  },
-  floatingBackBlur: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  floatingBackGlassOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(8, 12, 16, 0.05)',
-    pointerEvents: 'none',
-  },
-  floatingBackGlassOverlayLight: {
-    backgroundColor: 'rgba(8, 12, 16, 0.06)',
-  },
-  backButtonText: {
-    color: theme.colors.white,
-    fontWeight: '800',
-    fontSize: 16,
-    lineHeight: 20,
-    letterSpacing: 0.2,
-  },
-  backButtonTextLight: {
-    color: '#F5F7FA',
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    floatingBackButton: {
+      position: 'absolute',
+      zIndex: 30,
+      borderRadius: 22,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: GLASS_FLOATING_BG,
+      borderWidth: 1,
+      borderColor: GLASS_FLOATING_BORDER,
+      overflow: 'hidden',
+      ...theme.shadow.card,
+    },
+    floatingBackButtonLight: {
+      backgroundColor: 'rgba(18, 22, 30, 0.30)',
+      borderColor: 'rgba(255, 255, 255, 0.16)',
+    },
+    floatingBackBlur: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    floatingBackGlassOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(8, 12, 16, 0.05)',
+      pointerEvents: 'none',
+    },
+    floatingBackGlassOverlayLight: {
+      backgroundColor: 'rgba(8, 12, 16, 0.06)',
+    },
+    backButtonText: {
+      color: theme.colors.white,
+      fontWeight: '800',
+      fontSize: 16,
+      lineHeight: 20,
+      letterSpacing: 0.2,
+    },
+    backButtonTextLight: {
+      color: GLASS_FLOATING_TEXT,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

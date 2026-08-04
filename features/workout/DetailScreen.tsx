@@ -16,10 +16,19 @@ import {
   GradientFill,
   StretchScrollView,
 } from '@components';
-import { assignmentDuplicatesDayInWeek } from '@lib/weeks';
+import {
+  assignmentDuplicatesDayInWeek,
+  groupLogsIntoWeekBlocks,
+  isWeekCompleted,
+  orderedBlockNumbers,
+  planWeekMove,
+  WeekMoveDirection,
+  WeekMovePlan,
+} from '@lib/weeks';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import {
   cardioSessionFromLog,
+  CARDIO_ONLY_DAY_ID,
   disciplineIconName,
   estimateEntryKcal,
   fmtNum,
@@ -27,10 +36,13 @@ import {
   weightForTimestamp,
   WeightSegment,
 } from '@lib/cardio';
+import { exerciseKey } from '@lib/exerciseProgress';
 import { getCardioWeightHistory } from '@lib/storage';
 import {
   combineDateWithTime,
+  findDayInRoutines,
   formatDate,
+  getImprovementColor,
   getImprovementDisplay,
   getLogTimestamp,
 } from '@lib/utils';
@@ -41,6 +53,7 @@ import { t, dateLocale } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   getExerciseStrengthScore,
+  getWorkoutStrengthScore,
 } from '@lib/progress';
 
 interface DetailScreenProps {
@@ -52,6 +65,8 @@ interface DetailScreenProps {
   onEdit?: () => void;
   // Eliminar la sesión completa (fuerza y cardio). Se pide confirmación antes.
   onDelete?: () => void;
+  // Abrir la evolución de un ejercicio (gráfica) preseleccionado por su clave.
+  onOpenExerciseProgress?: (exerciseKey: string) => void;
 }
 
 function extractIncline(rawInput: string): string | null {
@@ -74,23 +89,24 @@ export function DetailScreen({
   onBack,
   onEdit,
   onDelete,
+  onOpenExerciseProgress,
 }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteCardioToo, setDeleteCardioToo] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pendingSplitDate, setPendingSplitDate] = useState<string | null>(null);
+  const [pendingMove, setPendingMove] = useState<{
+    plan: WeekMovePlan;
+    removesWeek: boolean;
+  } | null>(null);
   // La fecha se puede corregir aquí; se guarda en el acto (UPDATE_WORKOUT_LOG).
   // Estado local para que el subtítulo se refresque sin salir de la pantalla.
   const [currentDate, setCurrentDate] = useState(log.date);
 
-  const dayNumberForLog = (l: WorkoutLog): number | undefined => {
-    for (const routine of state.routines) {
-      const d = routine.days.find((day) => day.id === l.dayId);
-      if (d) return d.dayNumber;
-    }
-    return undefined;
-  };
+  const dayNumberForLog = (l: WorkoutLog): number | undefined =>
+    findDayInRoutines(state.routines, l.dayId)?.dayNumber;
 
   // Guarda la nueva fecha del log, recolocando `createdAt` (con lo que se ordenan
   // y agrupan las semanas). Avisa antes si la fecha parte una semana existente.
@@ -149,6 +165,56 @@ export function DetailScreen({
   const liveCatalogId = (exerciseId: string): string | undefined =>
     liveDay?.exercises.find((ex) => ex.id === exerciseId)?.catalogId;
 
+  // Mover el día a la semana contigua. El detalle es la única superficie de
+  // acciones de un log pasado (Inicio ya no lo ofrece), así que aquí vive también
+  // "mover semana": misma lógica derivada de bloques que usaba Inicio (lib/weeks).
+  const routine = state.routines.find((r) => r.id === log.routineId);
+  const routineLogs = state.logs.filter((l) => l.routineId === log.routineId);
+  const moveDayKey = (l: WorkoutLog) => dayNumberForLog(l);
+  const movePrevPlan = planWeekMove(routineLogs, log.id, 'prev', moveDayKey);
+  const moveNextPlan = planWeekMove(routineLogs, log.id, 'next', moveDayKey);
+
+  const applyMoveWeek = (plan: WeekMovePlan) => {
+    const stamp = Date.now();
+    plan.changedLogs.forEach((l) =>
+      dispatch({
+        type: 'UPDATE_WORKOUT_LOG',
+        payload: { ...l, updatedAt: stamp },
+      })
+    );
+  };
+
+  // Confirmar solo si el movimiento vacía una semana o toca una ya completada
+  // (origen o destino): recalcula racha, progreso y logros. En incompletas, directo.
+  const requestMoveWeek = (
+    plan: WeekMovePlan,
+    direction: WeekMoveDirection
+  ) => {
+    const moveBlocks = groupLogsIntoWeekBlocks(routineLogs, moveDayKey);
+    const ordered = orderedBlockNumbers(moveBlocks);
+    const activeDays = routine?.days ?? [];
+    const sourceBlock = ordered.find((b) =>
+      (moveBlocks[b] || []).some((l) => l.id === log.id)
+    );
+    const destBlock =
+      sourceBlock == null
+        ? undefined
+        : direction === 'prev'
+        ? sourceBlock - 1
+        : sourceBlock + 1;
+    const blockCompleted = (b: number | undefined) =>
+      b != null && isWeekCompleted(moveBlocks[b] || [], activeDays);
+    if (
+      plan.removesSourceWeek ||
+      blockCompleted(sourceBlock) ||
+      blockCompleted(destBlock)
+    ) {
+      setPendingMove({ plan, removesWeek: plan.removesSourceWeek });
+      return;
+    }
+    applyMoveWeek(plan);
+  };
+
   // Acciones propias del detalle en el menú ⋯: corregir la sesión o borrarla.
   // Eliminar pasa por un ConfirmModal (acción destructiva).
   type TopBarItem = NonNullable<
@@ -162,11 +228,25 @@ export function DetailScreen({
       onPress: onEdit,
     });
   }
-  menuItems.push({
-    icon: 'calendar-edit',
-    label: t('Cambiar fecha'),
-    onPress: () => setShowDatePicker(true),
-  });
+  // "Cambiar fecha" no va aquí: el subtítulo de la barra ya es un enlace visible
+  // (texto dorado + icono calendar-edit) que abre el mismo DatePicker. Un item en
+  // el ⋯ sería una segunda vía para lo mismo.
+  if (movePrevPlan) {
+    menuItems.push({
+      icon: 'calendar-arrow-left',
+      label: t('Mover a la semana anterior'),
+      onPress: () => requestMoveWeek(movePrevPlan, 'prev'),
+    });
+  }
+  if (moveNextPlan) {
+    menuItems.push({
+      icon: 'calendar-arrow-right',
+      label: moveNextPlan.createsNewWeek
+        ? t('Mover a una semana nueva')
+        : t('Mover a la semana siguiente'),
+      onPress: () => requestMoveWeek(moveNextPlan, 'next'),
+    });
+  }
   if (onDelete) {
     menuItems.push({
       icon: 'delete-outline',
@@ -223,6 +303,28 @@ export function DetailScreen({
         )
         .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))[0] || null;
 
+  // Resumen de la sesión para la cabecera: nº de ejercicios registrados, mejora
+  // global respecto a la sesión anterior (mismo % que Inicio muestra en el badge
+  // del log) y totales de cardio. Da la respuesta "¿cómo fue?" de un vistazo sin
+  // escanear todas las tarjetas.
+  const exerciseCount = log.exercises?.length ?? 0;
+  const sessionImprovement = previousLog
+    ? buildImprovementFromStrengthScores(
+        getWorkoutStrengthScore(log),
+        getWorkoutStrengthScore(previousLog)
+      )
+    : null;
+  // Duración estimada: hueco entre el primer y el último ejercicio insertados
+  // (cada ExerciseLog guarda su timestamp = created_at). Mide cuándo se
+  // registró, no el tiempo real bajo la barra: si todo se mete al acabar, sale 0.
+  const workoutMinutes = (() => {
+    const stamps = (log.exercises ?? [])
+      .map((e) => e.timestamp)
+      .filter((ts): ts is number => typeof ts === 'number' && ts > 0);
+    if (stamps.length < 2) return 0;
+    return Math.round((Math.max(...stamps) - Math.min(...stamps)) / 60000);
+  })();
+
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
     exerciseId: string,
@@ -253,14 +355,12 @@ export function DetailScreen({
     percent: number;
   }) => {
     const { symbol, display, kind } = getImprovementDisplay(imp);
-    const color =
-      kind === 'up'
-        ? theme.colors.success
-        : kind === 'down'
-        ? theme.colors.error
-        : theme.colors.warning;
-    return { symbol, color, display };
+    return { symbol, color: getImprovementColor(kind), display };
   };
+
+  // Solo tiene sentido "conservar el cardio" al borrar si hay fuerza que quitar
+  // y además cardio que salvar (si no, el borrado es un borrado normal).
+  const canKeepCardio = exerciseCount > 0 && !!log.cardio?.rawInput?.trim();
 
   return (
     <View style={styles.container}>
@@ -281,6 +381,49 @@ export function DetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {log.isDeload && (
+          // Este día pertenece a una semana de descarga: se avisa para que se lea
+          // en contexto (menos series y peso a propósito, al margen del progreso).
+          <View style={styles.deloadBanner}>
+            <MaterialCommunityIcons
+              name="sleep"
+              size={16}
+              color={theme.colors.emoji_blue}
+            />
+            <Text style={styles.deloadBannerText}>
+              {t('Semana de descarga')}
+            </Text>
+          </View>
+        )}
+
+        {exerciseCount > 0 && (
+          <View style={styles.summaryCard}>
+            <GradientFill accent={dayAccent} />
+            <View style={styles.summaryItem}>
+              <Text style={styles.summaryValue}>{exerciseCount}</Text>
+              <Text style={styles.summaryLabel}>{t('Ejercicios')}</Text>
+            </View>
+            {sessionImprovement &&
+              (() => {
+                const fmt = formatImprovementDisplay(sessionImprovement);
+                return (
+                  <View style={styles.summaryItem}>
+                    <Text style={[styles.summaryValue, { color: fmt.color }]}>
+                      {fmt.symbol} {fmt.display}%
+                    </Text>
+                    <Text style={styles.summaryLabel}>{t('Progreso')}</Text>
+                  </View>
+                );
+              })()}
+            {workoutMinutes > 0 && (
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryValue}>{workoutMinutes}</Text>
+                <Text style={styles.summaryLabel}>min</Text>
+              </View>
+            )}
+          </View>
+        )}
+
         {day.exercises.map((exercise, exerciseIndex) => {
           const currentExercise = getExerciseFromLog(
             log,
@@ -318,6 +461,11 @@ export function DetailScreen({
               catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
               onAssignGif={(catalogId) =>
                 handleAssignGif(exercise.id, catalogId)
+              }
+              onOpenProgress={
+                onOpenExerciseProgress
+                  ? () => onOpenExerciseProgress(exerciseKey(exercise.name))
+                  : undefined
               }
               targetSets={exercise.targetSets}
               targetReps={exercise.targetReps as string | number | undefined}
@@ -392,53 +540,39 @@ export function DetailScreen({
                         {entry.type.toUpperCase()}
                       </Text>
                     </View>
-                    <View style={styles.cardioDetails}>
+                    <View style={styles.cardioStatsRow}>
                       {entry.minutes != null && (
-                        <View style={styles.cardioDetailRow}>
-                          <MaterialCommunityIcons
-                            name="timer-sand"
-                            size={14}
-                            color={theme.colors.textSecondary}
-                          />
-                          <Text style={styles.cardioDetail}>
-                            {fmtNum(entry.minutes)} min
+                        <View style={styles.cardioStat}>
+                          <Text style={styles.cardioStatValue}>
+                            {fmtNum(entry.minutes)}
                           </Text>
+                          <Text style={styles.cardioStatUnit}>min</Text>
                         </View>
                       )}
                       {entry.speed != null && (
-                        <View style={styles.cardioDetailRow}>
-                          <MaterialCommunityIcons
-                            name="map-marker-path"
-                            size={14}
-                            color={theme.colors.textSecondary}
-                          />
-                          <Text style={styles.cardioDetail}>
-                            {fmtNum(entry.speed)} km/h
+                        <View style={styles.cardioStat}>
+                          <Text style={styles.cardioStatValue}>
+                            {fmtNum(entry.speed)}
                           </Text>
+                          <Text style={styles.cardioStatUnit}>km/h</Text>
                         </View>
                       )}
                       {entry.pendiente != null && (
-                        <View style={styles.cardioDetailRow}>
-                          <MaterialCommunityIcons
-                            name="chart-line"
-                            size={14}
-                            color={theme.colors.textSecondary}
-                          />
-                          <Text style={styles.cardioDetail}>
-                            {fmtNum(entry.pendiente)}%
+                        <View style={styles.cardioStat}>
+                          <Text style={styles.cardioStatValue}>
+                            {fmtNum(entry.pendiente)}
+                          </Text>
+                          <Text style={styles.cardioStatUnit}>
+                            {t('Pendiente %')}
                           </Text>
                         </View>
                       )}
                       {kcal > 0 && (
-                        <View style={styles.cardioDetailRow}>
-                          <MaterialCommunityIcons
-                            name="fire"
-                            size={14}
-                            color={theme.colors.textSecondary}
-                          />
-                          <Text style={styles.cardioDetail}>
-                            {Math.round(kcal)} kcal
+                        <View style={styles.cardioStat}>
+                          <Text style={styles.cardioStatValue}>
+                            {Math.round(kcal)}
                           </Text>
+                          <Text style={styles.cardioStatUnit}>kcal</Text>
                         </View>
                       )}
                     </View>
@@ -453,41 +587,31 @@ export function DetailScreen({
                 <Text style={styles.cardioLabel}>
                   {log.cardio.type?.toUpperCase()}
                 </Text>
-                <View style={styles.cardioDetails}>
+                <View style={styles.cardioStatsRow}>
                   {log.cardio.duration && (
-                    <View style={styles.cardioDetailRow}>
-                      <MaterialCommunityIcons
-                        name="timer-sand"
-                        size={14}
-                        color={theme.colors.textSecondary}
-                      />
-                      <Text style={styles.cardioDetail}>
-                        {log.cardio.duration} min
+                    <View style={styles.cardioStat}>
+                      <Text style={styles.cardioStatValue}>
+                        {log.cardio.duration}
                       </Text>
+                      <Text style={styles.cardioStatUnit}>min</Text>
                     </View>
                   )}
                   {log.cardio.pace && (
-                    <View style={styles.cardioDetailRow}>
-                      <MaterialCommunityIcons
-                        name="map-marker-path"
-                        size={14}
-                        color={theme.colors.textSecondary}
-                      />
-                      <Text style={styles.cardioDetail}>
-                        {extractPaceNumber(log.cardio.pace)} km/h
+                    <View style={styles.cardioStat}>
+                      <Text style={styles.cardioStatValue}>
+                        {extractPaceNumber(log.cardio.pace)}
                       </Text>
+                      <Text style={styles.cardioStatUnit}>km/h</Text>
                     </View>
                   )}
                   {log.cardio.rawInput &&
                     extractIncline(log.cardio.rawInput) && (
-                      <View style={styles.cardioDetailRow}>
-                        <MaterialCommunityIcons
-                          name="chart-line"
-                          size={14}
-                          color={theme.colors.textSecondary}
-                        />
-                        <Text style={styles.cardioDetail}>
-                          {extractIncline(log.cardio.rawInput)}
+                      <View style={styles.cardioStat}>
+                        <Text style={styles.cardioStatValue}>
+                          {extractIncline(log.cardio.rawInput)?.replace('%', '')}
+                        </Text>
+                        <Text style={styles.cardioStatUnit}>
+                          {t('Pendiente %')}
                         </Text>
                       </View>
                     )}
@@ -509,6 +633,7 @@ export function DetailScreen({
           </View>
         }
         subtitle={displayedDate}
+        onSubtitlePress={() => setShowDatePicker(true)}
         topInset={insets.top}
         menuItems={menuItems.length ? menuItems : undefined}
       />
@@ -520,11 +645,36 @@ export function DetailScreen({
         title={t('¿Eliminar entrenamiento?')}
         message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
         confirmLabel={t('Eliminar')}
+        checkLabel={canKeepCardio ? t('Borrar también el cardio') : undefined}
+        checked={deleteCardioToo}
+        onToggleCheck={() => setDeleteCardioToo((prev) => !prev)}
         onConfirm={() => {
           setShowDeleteModal(false);
-          onDelete?.();
+          if (canKeepCardio && !deleteCardioToo) {
+            // Sin marcar el check, el cardio sobrevive: el log se queda sin la
+            // fuerza y pasa a ser una sesión de "Solo cardio" de ese mismo día.
+            dispatch({
+              type: 'UPDATE_WORKOUT_LOG',
+              payload: {
+                ...log,
+                dayId: CARDIO_ONLY_DAY_ID,
+                exercises: [],
+                cardioOnly: true,
+                startsNewWeek: undefined,
+                updatedAt: Date.now(),
+              },
+            });
+            setDeleteCardioToo(false);
+            onBack();
+          } else {
+            setDeleteCardioToo(false);
+            onDelete?.();
+          }
         }}
-        onCancel={() => setShowDeleteModal(false)}
+        onCancel={() => {
+          setShowDeleteModal(false);
+          setDeleteCardioToo(false);
+        }}
       />
 
       <DatePickerModal
@@ -547,6 +697,28 @@ export function DetailScreen({
           setPendingSplitDate(null);
         }}
         onCancel={() => setPendingSplitDate(null)}
+      />
+
+      <ConfirmModal
+        visible={pendingMove !== null}
+        icon="calendar-sync"
+        title={t('¿Mover el día?')}
+        message={
+          pendingMove?.removesWeek
+            ? t(
+                'Este movimiento vacía una semana y recalcula racha, progreso y logros. ¿Continuar?'
+              )
+            : t(
+                'Este movimiento reorganiza una semana ya completada y recalcula racha, progreso y logros. ¿Continuar?'
+              )
+        }
+        confirmLabel={t('Mover')}
+        confirmVariant="primary"
+        onConfirm={() => {
+          if (pendingMove) applyMoveWeek(pendingMove.plan);
+          setPendingMove(null);
+        }}
+        onCancel={() => setPendingMove(null)}
       />
     </View>
   );
@@ -577,13 +749,70 @@ const makeStyles = () =>
       paddingHorizontal: 16,
       paddingVertical: 16,
     },
+    // Aviso de semana de descarga: mismo azul que el resto de la app (listado de
+    // semanas y calendario) para señalar el deload de un vistazo.
+    deloadBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'flex-start',
+      gap: 6,
+      backgroundColor: theme.colors.emoji_blueMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: theme.borderRadius.pill,
+      marginBottom: 10,
+    },
+    deloadBannerText: {
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.3,
+      color: theme.colors.emoji_blue,
+      lineHeight: 16,
+    },
+    // Tira-resumen de la sesión: responde "¿cómo fue?" de un vistazo.
+    summaryCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-around',
+      flexWrap: 'wrap',
+      rowGap: 8,
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingVertical: theme.spacing.md,
+      paddingHorizontal: theme.spacing.sm,
+      marginBottom: 10,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    summaryItem: {
+      alignItems: 'center',
+      paddingHorizontal: theme.spacing.sm,
+    },
+    summaryValue: {
+      fontSize: 22,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.text,
+      lineHeight: 31,
+    },
+    summaryLabel: {
+      marginTop: 2,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      color: theme.colors.textMuted,
+      lineHeight: 15,
+    },
     sectionTitle: {
       fontSize: 20,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.4,
       color: theme.colors.current,
       marginBottom: theme.spacing.xs,
-      lineHeight: 25,
+      lineHeight: 28,
     },
     cardioBox: {
       backgroundColor: 'transparent',
@@ -613,25 +842,34 @@ const makeStyles = () =>
       textTransform: 'uppercase',
       lineHeight: 16,
     },
-    cardioDetails: {
+    // Cuadrícula valor+unidad: mismo peso de dato que la tira-resumen de fuerza
+    // (número display grande + unidad pequeña en versalitas). Con las kcal son
+    // cuatro celdas: en pantallas estrechas rompen a dos filas.
+    cardioStatsRow: {
       flexDirection: 'row',
-      // Con las kcal ya son cuatro datos: en pantallas estrechas pasan a dos filas.
       flexWrap: 'wrap',
-      columnGap: 16,
-      rowGap: 8,
-      alignItems: 'center',
-      marginTop: 8,
+      columnGap: theme.spacing.lg,
+      rowGap: theme.spacing.sm,
+      marginTop: 10,
     },
-    cardioDetail: {
-      fontSize: 13,
-      color: theme.colors.white,
-      fontWeight: '500',
-      lineHeight: 18,
+    cardioStat: {
+      alignItems: 'flex-start',
     },
-    cardioDetailRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
+    cardioStatValue: {
+      fontSize: 22,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.text,
+      lineHeight: 30,
+    },
+    cardioStatUnit: {
+      marginTop: 2,
+      fontSize: 12,
+      fontWeight: '700',
+      letterSpacing: 0.8,
+      textTransform: 'uppercase',
+      color: theme.colors.textMuted,
+      lineHeight: 15,
     },
   });
 

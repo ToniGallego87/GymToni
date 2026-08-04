@@ -2,20 +2,14 @@ import { subscribeTheme } from '@lib/themeStore';
 import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  TextInput,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppModal,
   Button,
+  ConfirmModal,
   DayAccentIcon,
   ExerciseFormRow,
   ExerciseSummaryRow,
@@ -56,18 +50,26 @@ export function RoutineDetailScreen({
 }: RoutineDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
+  // Modo lectura por defecto: la pantalla es de CONSULTA. El andamiaje de
+  // edición (reordenar, borrar, cambiar icono, editar ejercicios) solo aparece
+  // al pulsar "Editar" en la barra. Nada se esconde tras gestos: entrar en
+  // edición es un botón visible y en edición todas las acciones se ven.
+  const [isEditing, setIsEditing] = useState(false);
   const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
+  const [dayToDeleteId, setDayToDeleteId] = useState<string | null>(null);
   const [showEmojiModal, setShowEmojiModal] = useState(false);
-  const [showEditExercisesModal, setShowEditExercisesModal] = useState(false);
-  // Borrador del editor de ejercicios: filas estructuradas (mismo modelo que
-  // "Nueva rutina"), no un textarea que hubiera que volver a parsear.
+  // Día cuyos ejercicios se están editando INLINE (mismo modelo que "Nueva
+  // rutina": filas estructuradas en la propia tarjeta, no un modal aparte).
+  const [editingExercisesDayId, setEditingExercisesDayId] = useState<
+    string | null
+  >(null);
   const [exercisesDraft, setExercisesDraft] = useState<ExerciseForm[]>([]);
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
-  const [showQrModal, setShowQrModal] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [descriptionInput, setDescriptionInput] = useState('');
@@ -91,6 +93,21 @@ export function RoutineDetailScreen({
   const isClosed =
     state.logs.some((log) => log.routineId === currentRoutine.id) &&
     currentRoutine.id !== state.activeRoutineId;
+
+  const closeExercisesEditor = () => {
+    setEditingExercisesDayId(null);
+    setExercisesDraft([]);
+    setEditingExerciseId(null);
+  };
+
+  // Al salir de edición, cerrar cualquier editor de ejercicios abierto (su
+  // borrador se descarta: para conservar cambios está el botón "Guardar").
+  const toggleEditing = () => {
+    setIsEditing((prev) => {
+      if (prev) closeExercisesEditor();
+      return !prev;
+    });
+  };
 
   const handleOpenInfoModal = () => {
     if (isClosed) return;
@@ -126,6 +143,13 @@ export function RoutineDetailScreen({
     [currentRoutine]
   );
 
+  // Una rutina grande (muchos días/ejercicios) genera un enlace que no cabe en
+  // un QR: `react-native-qrcode-svg` LANZA al renderizar (rompía la pantalla).
+  // Con ecl "L" (máxima capacidad) el límite práctico ronda los 2900 chars; por
+  // encima se ofrece solo el texto plano, que no tiene tope.
+  const QR_MAX_CHARS = 2900;
+  const qrTooBig = shareLink.length > QR_MAX_CHARS;
+
   const handleCopyPlainText = async () => {
     try {
       await Clipboard.setStringAsync(shareText);
@@ -149,6 +173,7 @@ export function RoutineDetailScreen({
   };
 
   const handleOpenTimerModal = () => {
+    if (!isEditing) return;
     setTimerInput(getTimerDurationSeconds().toString());
     setShowTimerModal(true);
   };
@@ -179,15 +204,7 @@ export function RoutineDetailScreen({
 
     setExercisesDraft(day.exercises.map(exerciseFormFromExercise));
     setEditingExerciseId(null);
-    setSelectedDayId(dayId);
-    setShowEditExercisesModal(true);
-  };
-
-  const closeExercisesModal = () => {
-    setShowEditExercisesModal(false);
-    setSelectedDayId(null);
-    setExercisesDraft([]);
-    setEditingExerciseId(null);
+    setEditingExercisesDayId(dayId);
   };
 
   const updateDraftExercise = (
@@ -232,9 +249,11 @@ export function RoutineDetailScreen({
   };
 
   const handleSaveExercises = () => {
-    if (!selectedDayId) return;
+    if (!editingExercisesDayId) return;
 
-    const day = currentRoutine.days.find((d) => d.id === selectedDayId);
+    const day = currentRoutine.days.find(
+      (d) => d.id === editingExercisesDayId
+    );
     if (!day) return;
 
     // Los ids de las filas son los de los ejercicios originales (ver
@@ -250,12 +269,12 @@ export function RoutineDetailScreen({
       type: 'UPDATE_DAY',
       payload: {
         routineId: currentRoutine.id,
-        dayId: selectedDayId,
+        dayId: editingExercisesDayId,
         day: { ...day, exercises },
       },
     });
 
-    closeExercisesModal();
+    closeExercisesEditor();
   };
 
   const handleSelectEmoji = (emoji: string) => {
@@ -277,6 +296,55 @@ export function RoutineDetailScreen({
     setSelectedDayId(null);
   };
 
+  // Renumera los días tras reordenar o borrar: `dayNumber` y el prefijo "Día N"
+  // del nombre embeben el número (ver getDisplayDayName). El id de cada día no
+  // cambia, así que los logs (que apuntan por `dayId`) siguen a su día.
+  const renumberDays = (days: typeof currentRoutine.days) =>
+    days.map((day, index) => {
+      const title = getDisplayDayName(day.name);
+      const number = index + 1;
+      return {
+        ...day,
+        dayNumber: number,
+        name: title
+          ? `${t('Día')} ${number} - ${title}`
+          : `${t('Día')} ${number}`,
+      };
+    });
+
+  const handleMoveDay = (dayId: string, direction: -1 | 1) => {
+    const index = currentRoutine.days.findIndex((d) => d.id === dayId);
+    const target = index + direction;
+    if (index === -1 || target < 0 || target >= currentRoutine.days.length) {
+      return;
+    }
+    const next = [...currentRoutine.days];
+    [next[index], next[target]] = [next[target], next[index]];
+    dispatch({
+      type: 'UPDATE_ROUTINE',
+      payload: { ...currentRoutine, days: renumberDays(next) },
+    });
+  };
+
+  const dayToDelete = currentRoutine.days.find((d) => d.id === dayToDeleteId);
+  // ¿El día por borrar tiene entrenamientos? Su historial quedaría huérfano (los
+  // logs apuntan por `dayId`), así que se avisa en la confirmación.
+  const dayToDeleteHasLogs =
+    !!dayToDeleteId && state.logs.some((log) => log.dayId === dayToDeleteId);
+
+  const handleDeleteDay = () => {
+    if (!dayToDeleteId || currentRoutine.days.length <= 1) {
+      setDayToDeleteId(null);
+      return;
+    }
+    const next = currentRoutine.days.filter((d) => d.id !== dayToDeleteId);
+    dispatch({
+      type: 'UPDATE_ROUTINE',
+      payload: { ...currentRoutine, days: renumberDays(next) },
+    });
+    setDayToDeleteId(null);
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar
@@ -296,10 +364,12 @@ export function RoutineDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
+        {/* Cabecera de la rutina. Solo es pulsable (editar nombre/descripción)
+            en modo edición; en lectura es un banner de identidad. */}
         <Pressable
           style={styles.infoBlock}
           onPress={handleOpenInfoModal}
-          disabled={isClosed}
+          disabled={!isEditing || isClosed}
         >
           <View style={styles.infoTopRow}>
             <View style={styles.infoBadge}>
@@ -313,20 +383,22 @@ export function RoutineDetailScreen({
               <Text style={styles.infoEyebrow}>{t('Rutina')}</Text>
               <Text style={styles.infoName}>{currentRoutine.name}</Text>
             </View>
-            <View
-              style={[
-                styles.infoEditChip,
-                !isClosed && styles.infoEditChipEditable,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name={isClosed ? 'lock-outline' : 'pencil'}
-                size={16}
-                color={
-                  isClosed ? theme.colors.textSecondary : theme.colors.onGold
-                }
-              />
-            </View>
+            {isEditing && (
+              <View
+                style={[
+                  styles.infoEditChip,
+                  !isClosed && styles.infoEditChipEditable,
+                ]}
+              >
+                <MaterialCommunityIcons
+                  name={isClosed ? 'lock-outline' : 'pencil'}
+                  size={16}
+                  color={
+                    isClosed ? theme.colors.textSecondary : theme.colors.onGold
+                  }
+                />
+              </View>
+            )}
           </View>
           {!!currentRoutine.description && (
             <Text style={styles.infoDescription}>
@@ -335,46 +407,57 @@ export function RoutineDetailScreen({
           )}
         </Pressable>
 
-        {currentRoutine.days.map((day) => {
+        {currentRoutine.days.map((day, index) => {
           const accent = getTrainingAccent(day);
+          const isFirst = index === 0;
+          const isLast = index === currentRoutine.days.length - 1;
+          const canDeleteDay = currentRoutine.days.length > 1;
+          const isEditingThisDay = editingExercisesDayId === day.id;
 
           return (
-            // Pulsar la tarjeta edita sus ejercicios (la acción principal, y la
-            // misma regla que el bloque de información de arriba: se pulsa y se
-            // abre su editor). Cambiar el icono es su propio botón: se toca el
-            // icono. Antes ambas cosas eran gestos a ciegas (pulsar abría el
-            // selector de icono; mantener 1s, el editor).
-            <Pressable
+            <View
               key={day.id}
               style={[styles.dayBlock, { borderColor: accent }]}
-              onPress={() => handleEditExercises(day.id)}
             >
               <GradientFill accent={accent} />
               <View style={styles.dayHeader}>
                 <View style={styles.dayHeaderLeft}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.dayIconButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => handleSelectDay(day.id)}
-                    hitSlop={6}
-                    accessibilityRole="button"
-                    accessibilityLabel={t('Selecciona un icono')}
-                  >
-                    <DayAccentIcon
-                      emoji={day.emoji}
-                      name={day.name}
-                      size={32}
-                    />
-                    <View style={styles.dayIconEditBadge}>
-                      <MaterialCommunityIcons
-                        name="pencil"
-                        size={9}
-                        color={theme.colors.onGold}
+                  {/* En edición el icono es su propio botón (se toca para
+                      cambiarlo, con micro-badge de lápiz). En lectura es solo
+                      la marca del día. */}
+                  {isEditing ? (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.dayIconButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => handleSelectDay(day.id)}
+                      hitSlop={6}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('Selecciona un icono')}
+                    >
+                      <DayAccentIcon
+                        emoji={day.emoji}
+                        name={day.name}
+                        size={32}
+                      />
+                      <View style={styles.dayIconEditBadge}>
+                        <MaterialCommunityIcons
+                          name="pencil"
+                          size={9}
+                          color={theme.colors.onGold}
+                        />
+                      </View>
+                    </Pressable>
+                  ) : (
+                    <View style={styles.dayIconButton}>
+                      <DayAccentIcon
+                        emoji={day.emoji}
+                        name={day.name}
+                        size={32}
                       />
                     </View>
-                  </Pressable>
+                  )}
                   <Text style={styles.dayName}>
                     {getDisplayDayName(day.name)}
                   </Text>
@@ -382,99 +465,241 @@ export function RoutineDetailScreen({
                 <Text style={styles.dayBadge}>
                   {t('Día')} {day.dayNumber}
                 </Text>
-                <View style={styles.infoEditChip}>
-                  <MaterialCommunityIcons
-                    name="pencil"
-                    size={16}
-                    color={theme.colors.primary}
-                  />
-                </View>
               </View>
 
-              <View style={styles.exerciseList}>
-                {day.exercises.map((exercise) => (
-                  <View key={exercise.id} style={styles.exerciseRow}>
-                    <View
-                      style={[styles.exerciseDot, { backgroundColor: accent }]}
+              {/* Controles de reordenar/borrar el día: solo en edición, con su
+                  propio botón visible cada uno. */}
+              {isEditing && (
+                <View style={styles.dayControlsRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayControlButton,
+                      isFirst && styles.dayControlButtonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => handleMoveDay(day.id, -1)}
+                    disabled={isFirst}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Subir día')}
+                  >
+                    <MaterialCommunityIcons
+                      name="chevron-up"
+                      size={20}
+                      color={
+                        isFirst ? theme.colors.textSecondary : theme.colors.text
+                      }
                     />
-                    <Text style={styles.exerciseText}>
-                      {exercise.name} — {exercise.targetSets || '-'}x
-                      {exercise.targetReps || '-'}
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayControlButton,
+                      isLast && styles.dayControlButtonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => handleMoveDay(day.id, 1)}
+                    disabled={isLast}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Bajar día')}
+                  >
+                    <MaterialCommunityIcons
+                      name="chevron-down"
+                      size={20}
+                      color={
+                        isLast ? theme.colors.textSecondary : theme.colors.text
+                      }
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayControlButton,
+                      !canDeleteDay && styles.dayControlButtonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => setDayToDeleteId(day.id)}
+                    disabled={!canDeleteDay}
+                    hitSlop={6}
+                    accessibilityRole="button"
+                    accessibilityLabel={t('Quitar día')}
+                  >
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={18}
+                      color={
+                        canDeleteDay
+                          ? theme.colors.error
+                          : theme.colors.textSecondary
+                      }
+                    />
+                  </Pressable>
+                </View>
+              )}
+
+              {isEditingThisDay ? (
+                // Editor de ejercicios INLINE: mismas filas que "Nueva rutina",
+                // sin modal ni scroll dentro de scroll.
+                <View style={styles.exercisesEditor}>
+                  {exercisesDraft.map((exercise, exIndex) => {
+                    const expanded =
+                      editingExerciseId === exercise.id ||
+                      !exercise.name.trim();
+
+                    return expanded ? (
+                      <ExerciseFormRow
+                        key={exercise.id}
+                        exercise={exercise}
+                        accent={theme.colors.primaryLine}
+                        canRemove={exercisesDraft.length > 1}
+                        onChange={(changes) =>
+                          updateDraftExercise(exercise.id, changes)
+                        }
+                        onRemove={() => removeDraftExercise(exercise.id)}
+                        onCollapse={() => setEditingExerciseId(null)}
+                      />
+                    ) : (
+                      <ExerciseSummaryRow
+                        key={exercise.id}
+                        exercise={exercise}
+                        canRemove={exercisesDraft.length > 1}
+                        onEdit={() => setEditingExerciseId(exercise.id)}
+                        onRemove={() => removeDraftExercise(exercise.id)}
+                        onMoveUp={() => moveDraftExercise(exercise.id, -1)}
+                        onMoveDown={() => moveDraftExercise(exercise.id, 1)}
+                        canMoveUp={exIndex > 0}
+                        canMoveDown={exIndex < exercisesDraft.length - 1}
+                      />
+                    );
+                  })}
+
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.addExerciseButton,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={addDraftExercise}
+                  >
+                    <MaterialCommunityIcons
+                      name="plus-circle-outline"
+                      size={18}
+                      color={theme.colors.onGold}
+                    />
+                    <Text style={styles.addExerciseText}>
+                      {t('Añadir ejercicio')}
                     </Text>
+                  </Pressable>
+
+                  <View style={styles.modalButtonRow}>
+                    <Button
+                      title={t('Cancelar')}
+                      onPress={closeExercisesEditor}
+                      variant="secondary"
+                      size="medium"
+                      style={styles.modalButton}
+                    />
+                    <Button
+                      title={t('Guardar')}
+                      onPress={handleSaveExercises}
+                      variant="primary"
+                      size="medium"
+                      style={styles.modalButton}
+                    />
                   </View>
-                ))}
-              </View>
-            </Pressable>
+                </View>
+              ) : (
+                <>
+                  <View style={styles.exerciseList}>
+                    {day.exercises.map((exercise) => (
+                      <View key={exercise.id} style={styles.exerciseRow}>
+                        <View
+                          style={[
+                            styles.exerciseDot,
+                            { backgroundColor: accent },
+                          ]}
+                        />
+                        <Text style={styles.exerciseText}>
+                          {exercise.name} — {exercise.targetSets || '-'}x
+                          {exercise.targetReps || '-'}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {isEditing && (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.editExercisesButton,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={() => handleEditExercises(day.id)}
+                    >
+                      <MaterialCommunityIcons
+                        name="pencil"
+                        size={16}
+                        color={theme.colors.primary}
+                      />
+                      <Text style={styles.editExercisesText}>
+                        {t('Editar ejercicios')}
+                      </Text>
+                    </Pressable>
+                  )}
+                </>
+              )}
+            </View>
           );
         })}
 
-        <Pressable style={styles.timerBlock} onPress={handleOpenTimerModal}>
-          <View style={styles.timerBlockLabelRow}>
-            <MaterialCommunityIcons
-              name="timer-sand"
-              size={16}
-              color={theme.colors.onGold}
-            />
-            <Text style={styles.timerBlockLabel}>
-              {t('Temporizador de descanso')}
-            </Text>
-          </View>
-          <Text style={styles.timerBlockValue}>
-            {formatTime(getTimerDurationSeconds())}
-          </Text>
-          <Text style={styles.timerBlockHint}>{t('Toca para editar')}</Text>
-        </Pressable>
-
+        {/* Temporizador de descanso: un ajuste, no un héroe. Compacto y
+            editable solo en modo edición. */}
         <Pressable
-          style={({ pressed }) => [
-            styles.shareBlock,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => setShowQrModal(true)}
+          style={styles.settingRow}
+          onPress={handleOpenTimerModal}
+          disabled={!isEditing}
         >
           <MaterialCommunityIcons
-            name="qrcode"
+            name="timer-sand"
             size={20}
             color={theme.colors.text}
           />
-          <View style={styles.shareBlockTextWrap}>
-            <Text style={styles.shareBlockLabel}>{t('Compartir por QR')}</Text>
-            <Text style={styles.shareBlockHint}>
-              {t('Otro móvil escanea y carga la rutina')}
+          <View style={styles.settingRowTextWrap}>
+            <Text style={styles.settingRowLabel}>
+              {t('Temporizador de descanso')}
+            </Text>
+            <Text style={styles.settingRowHint}>
+              {formatTime(getTimerDurationSeconds())}
+            </Text>
+          </View>
+          {isEditing && (
+            <MaterialCommunityIcons
+              name="pencil"
+              size={18}
+              color={theme.colors.textSecondary}
+            />
+          )}
+        </Pressable>
+
+        {/* Una sola acción de compartir: la hoja de dentro ofrece QR y texto. */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.settingRow,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => setShowShareModal(true)}
+        >
+          <MaterialCommunityIcons
+            name="share-variant"
+            size={20}
+            color={theme.colors.text}
+          />
+          <View style={styles.settingRowTextWrap}>
+            <Text style={styles.settingRowLabel}>{t('Compartir rutina')}</Text>
+            <Text style={styles.settingRowHint}>
+              {t('Por QR o copiando el texto')}
             </Text>
           </View>
           <MaterialCommunityIcons
             name="chevron-right"
             size={22}
-            color={theme.colors.textSecondary}
-          />
-        </Pressable>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.shareBlock,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={handleCopyPlainText}
-        >
-          <MaterialCommunityIcons
-            name="clipboard-text-outline"
-            size={20}
-            color={theme.colors.text}
-          />
-          <View style={styles.shareBlockTextWrap}>
-            <Text style={styles.shareBlockLabel}>
-              {t('Compartir en texto plano')}
-            </Text>
-            <Text style={styles.shareBlockHint}>
-              {t(
-                'Copia la rutina para pegarla en «Crear a partir de texto plano»'
-              )}
-            </Text>
-          </View>
-          <MaterialCommunityIcons
-            name="content-copy"
-            size={20}
             color={theme.colors.textSecondary}
           />
         </Pressable>
@@ -485,6 +710,33 @@ export function RoutineDetailScreen({
         icon="file-document-edit-outline"
         subtitle={currentRoutine.name}
         topInset={insets.top}
+        rightElement={
+          <Pressable
+            style={({ pressed }) => [
+              styles.editToggle,
+              isEditing && styles.editToggleActive,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={toggleEditing}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={isEditing ? t('Hecho') : t('Editar')}
+          >
+            <MaterialCommunityIcons
+              name={isEditing ? 'check' : 'pencil'}
+              size={16}
+              color={isEditing ? theme.colors.onGold : theme.colors.primary}
+            />
+            <Text
+              style={[
+                styles.editToggleText,
+                isEditing && styles.editToggleTextActive,
+              ]}
+            >
+              {isEditing ? t('Hecho') : t('Editar')}
+            </Text>
+          </Pressable>
+        }
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -515,87 +767,6 @@ export function RoutineDetailScreen({
           })()}
           onSelect={handleSelectEmoji}
         />
-      </AppModal>
-
-      <AppModal
-        visible={showEditExercisesModal}
-        onRequestClose={closeExercisesModal}
-        title={t('Editar Ejercicios')}
-        icon="pencil"
-        align="left"
-        footer={
-          <View style={styles.modalButtonRow}>
-            <Button
-              title={t('Volver')}
-              onPress={closeExercisesModal}
-              variant="secondary"
-              size="medium"
-              style={styles.modalButton}
-            />
-            <Button
-              title={t('Guardar')}
-              onPress={handleSaveExercises}
-              variant="primary"
-              size="medium"
-              style={styles.modalButton}
-            />
-          </View>
-        }
-      >
-        {/* La lista puede ser larga: scrollea dentro de la tarjeta en vez de
-            desbordarla. */}
-        <ScrollView
-          style={styles.exercisesEditorScroll}
-          contentContainerStyle={styles.exercisesEditor}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {exercisesDraft.map((exercise, index) => {
-            const expanded =
-              editingExerciseId === exercise.id || !exercise.name.trim();
-
-            return expanded ? (
-              <ExerciseFormRow
-                key={exercise.id}
-                exercise={exercise}
-                accent={theme.colors.primaryLine}
-                canRemove={exercisesDraft.length > 1}
-                onChange={(changes) =>
-                  updateDraftExercise(exercise.id, changes)
-                }
-                onRemove={() => removeDraftExercise(exercise.id)}
-                onCollapse={() => setEditingExerciseId(null)}
-              />
-            ) : (
-              <ExerciseSummaryRow
-                key={exercise.id}
-                exercise={exercise}
-                canRemove={exercisesDraft.length > 1}
-                onEdit={() => setEditingExerciseId(exercise.id)}
-                onRemove={() => removeDraftExercise(exercise.id)}
-                onMoveUp={() => moveDraftExercise(exercise.id, -1)}
-                onMoveDown={() => moveDraftExercise(exercise.id, 1)}
-                canMoveUp={index > 0}
-                canMoveDown={index < exercisesDraft.length - 1}
-              />
-            );
-          })}
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.addExerciseButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={addDraftExercise}
-          >
-            <MaterialCommunityIcons
-              name="plus-circle-outline"
-              size={18}
-              color={theme.colors.onGold}
-            />
-            <Text style={styles.addExerciseText}>{t('Añadir ejercicio')}</Text>
-          </Pressable>
-        </ScrollView>
       </AppModal>
 
       <AppModal
@@ -684,34 +855,74 @@ export function RoutineDetailScreen({
       </AppModal>
 
       <AppModal
-        visible={showQrModal}
-        onRequestClose={() => setShowQrModal(false)}
+        visible={showShareModal}
+        onRequestClose={() => setShowShareModal(false)}
         title={t('Compartir rutina')}
-        icon="qrcode"
-        message={t(
-          'Escanea este código con la cámara de otro móvil para cargar «{name}».',
-          {
-            name: getDisplayDayName(currentRoutine.name) || currentRoutine.name,
-          }
-        )}
+        icon="share-variant"
+        message={
+          qrTooBig
+            ? t(
+                'Esta rutina es demasiado grande para un código QR. Cópiala como texto para pegarla en «Crear a partir de texto plano».'
+              )
+            : t(
+                'Escanea el QR con la cámara de otro móvil o copia la rutina como texto para pegarla en «Crear a partir de texto plano».'
+              )
+        }
         footer={
-          <Button
-            title={t('Cerrar')}
-            onPress={() => setShowQrModal(false)}
-            variant="secondary"
-            size="medium"
-          />
+          <View style={styles.shareModalFooter}>
+            <Button
+              title={t('Copiar en texto plano')}
+              onPress={handleCopyPlainText}
+              variant="primary"
+              size="medium"
+            />
+            <Button
+              title={t('Cerrar')}
+              onPress={() => setShowShareModal(false)}
+              variant="secondary"
+              size="medium"
+            />
+          </View>
         }
       >
-        <View style={styles.qrCanvas}>
-          <QRCode
-            value={shareLink}
-            size={232}
-            backgroundColor="#FFFFFF"
-            color="#000000"
-          />
-        </View>
+        {qrTooBig ? (
+          <View style={styles.qrTooBig}>
+            <MaterialCommunityIcons
+              name="qrcode-remove"
+              size={40}
+              color={theme.colors.textSecondary}
+            />
+          </View>
+        ) : (
+          <View style={styles.qrCanvas}>
+            <QRCode
+              value={shareLink}
+              size={232}
+              ecl="L"
+              backgroundColor={theme.colors.qrLight}
+              color={theme.colors.qrDark}
+            />
+          </View>
+        )}
       </AppModal>
+
+      <ConfirmModal
+        visible={!!dayToDeleteId}
+        icon="trash-can-outline"
+        title={t('¿Eliminar el día?')}
+        message={
+          dayToDeleteHasLogs
+            ? t(
+                'Este día tiene entrenamientos registrados; su historial dejará de verse.'
+              )
+            : t('Se elimina «{name}» de la rutina y los días se renumeran.', {
+                name: dayToDelete ? getDisplayDayName(dayToDelete.name) : '',
+              })
+        }
+        confirmLabel={t('Eliminar')}
+        onConfirm={handleDeleteDay}
+        onCancel={() => setDayToDeleteId(null)}
+      />
 
       {toast && (
         <Toast
@@ -736,6 +947,32 @@ const makeStyles = () =>
     content: {
       paddingHorizontal: theme.spacing.md,
       marginTop: 0,
+    },
+    // Toggle lectura/edición en la barra superior. Editable = oro vivo con
+    // tinta oscura (activo); lectura = superficie con borde y tinta dorada.
+    editToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 12,
+      height: 34,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+    },
+    editToggleActive: {
+      backgroundColor: theme.colors.primaryFill,
+      borderColor: theme.colors.primaryFillDark,
+    },
+    editToggleText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      lineHeight: 16,
+    },
+    editToggleTextActive: {
+      color: theme.colors.onGold,
     },
     // Cabecera de la rutina: banner con fondo dorado tenue, insignia e "eyebrow".
     // Deliberadamente distinto de las tarjetas de día (que son transparentes con
@@ -789,7 +1026,7 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
-      lineHeight: 27,
+      lineHeight: 31,
     },
     infoEditChip: {
       width: 34,
@@ -810,6 +1047,26 @@ const makeStyles = () =>
       fontSize: 14,
       lineHeight: 19,
       color: theme.colors.textSecondary,
+    },
+    dayControlsRow: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 10,
+    },
+    dayControlButton: {
+      width: 34,
+      height: 34,
+      borderRadius: theme.borderRadius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    dayControlButtonDisabled: {
+      opacity: 0.4,
     },
     dayBlock: {
       backgroundColor: 'transparent',
@@ -856,7 +1113,7 @@ const makeStyles = () =>
       letterSpacing: 0.3,
       color: theme.colors.text,
       flexShrink: 1,
-      lineHeight: 25,
+      lineHeight: 28,
     },
     dayBadge: {
       color: theme.colors.primaryLight,
@@ -889,6 +1146,25 @@ const makeStyles = () =>
       lineHeight: 18,
       color: theme.colors.textSecondary,
     },
+    // Botón de entrar al editor inline de ejercicios de un día (solo edición).
+    editExercisesButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 12,
+      paddingVertical: 10,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    editExercisesText: {
+      color: theme.colors.primary,
+      fontSize: 14,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
     modalButtonRow: {
       flexDirection: 'row',
       gap: 10,
@@ -913,13 +1189,10 @@ const makeStyles = () =>
       color: theme.colors.text,
       backgroundColor: theme.colors.inputBg,
     },
-    // Editor de ejercicios: la lista scrollea dentro de la tarjeta del modal.
-    exercisesEditorScroll: {
-      marginTop: 12,
-      maxHeight: 380,
-    },
+    // Editor de ejercicios inline dentro de la tarjeta del día.
     exercisesEditor: {
       gap: 10,
+      marginTop: 4,
     },
     addExerciseButton: {
       flexDirection: 'row',
@@ -944,38 +1217,8 @@ const makeStyles = () =>
     buttonPressed: {
       opacity: 0.8,
     },
-    timerBlock: {
-      // Relleno dorado (lleva tinta onGold): va con el oro de superficie.
-      backgroundColor: theme.colors.primaryFillDark,
-      borderRadius: theme.borderRadius.md,
-      padding: theme.spacing.md,
-      marginTop: 4,
-      alignItems: 'center',
-      ...theme.shadow.soft,
-    },
-    timerBlockLabelRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      marginBottom: 8,
-    },
-    timerBlockLabel: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.colors.onGold,
-    },
-    timerBlockValue: {
-      fontSize: 32,
-      fontWeight: '800',
-      color: theme.colors.onGold,
-      marginBottom: 4,
-    },
-    timerBlockHint: {
-      fontSize: 12,
-      color: theme.colors.onGold,
-      opacity: 0.8,
-    },
-    shareBlock: {
+    // Fila de ajuste (temporizador, compartir): superficie con borde, discreta.
+    settingRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
@@ -987,26 +1230,35 @@ const makeStyles = () =>
       marginTop: theme.spacing.md,
       ...theme.shadow.soft,
     },
-    shareBlockTextWrap: {
+    settingRowTextWrap: {
       flex: 1,
     },
-    shareBlockLabel: {
+    settingRowLabel: {
       fontSize: 16,
       fontWeight: '800',
       color: theme.colors.text,
       lineHeight: 20,
     },
-    shareBlockHint: {
-      fontSize: 12,
+    settingRowHint: {
+      fontSize: 13,
       color: theme.colors.textSecondary,
-      lineHeight: 16,
+      lineHeight: 17,
+    },
+    shareModalFooter: {
+      gap: 10,
     },
     qrCanvas: {
       alignSelf: 'center',
-      backgroundColor: '#FFFFFF',
+      backgroundColor: theme.colors.qrLight,
       padding: 16,
       borderRadius: theme.borderRadius.md,
       marginTop: theme.spacing.md,
+    },
+    qrTooBig: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: theme.spacing.lg,
+      marginTop: theme.spacing.sm,
     },
     timerModalFormat: {
       marginTop: 8,

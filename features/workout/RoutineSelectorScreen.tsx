@@ -273,127 +273,128 @@ function RoutineCard({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-  },
-  routineCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    padding: 18,
-    marginBottom: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  routineCardViewed: {
-    borderColor: theme.colors.primaryLine,
-    borderWidth: 3,
-  },
-  routineCardContent: {
-    flex: 1,
-  },
-  routineCardRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  routineCardIconButton: {
-    padding: 4,
-    borderRadius: theme.borderRadius.sm,
-  },
-  routineCardIconButtonPressed: {
-    opacity: 0.6,
-  },
-  routineCardName: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.text,
-    marginBottom: 4,
-    lineHeight: 26,
-  },
-  routineCardDesc: {
-    fontSize: 15,
-    color: theme.colors.textSecondary,
-    marginBottom: 4,
-  },
-  routineCardDays: {
-    fontSize: 14,
-    color: theme.colors.lightGray,
-  },
-  routineCardActiveIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.primaryFill,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.pill,
-    overflow: 'hidden',
-  },
-  routineCardActiveText: {
-    fontSize: 13,
-    color: theme.colors.onGold,
-    fontWeight: '800',
-  },
-  routineCardPreparedIndicator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: theme.colors.emoji_blueMuted,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.pill,
-    overflow: 'hidden',
-  },
-  routineCardPreparedText: {
-    fontSize: 13,
-    color: theme.colors.emoji_blue,
-    fontWeight: '800',
-  },
-  // Relleno de oro vivo con tinta oscura (como el selector Fuerza/Cardio): el
-  // amarillo brillante solo lee como fondo, no como texto sobre el lienzo claro.
-  newRoutineCard: {
-    backgroundColor: theme.colors.primaryFill,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryFillDark,
-    paddingVertical: 18,
-    alignItems: 'center',
-  },
-  newRoutineCardText: {
-    color: theme.colors.onGold,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  detailsButton: {
-    marginTop: 8,
-    backgroundColor: theme.colors.primaryFill,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryFillDark,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  detailsButtonText: {
-    color: theme.colors.onGold,
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+    },
+    routineCard: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      padding: 18,
+      marginBottom: 12,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    routineCardViewed: {
+      borderColor: theme.colors.primaryLine,
+      borderWidth: 3,
+    },
+    routineCardContent: {
+      flex: 1,
+    },
+    routineCardRight: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    routineCardIconButton: {
+      padding: 4,
+      borderRadius: theme.borderRadius.sm,
+    },
+    routineCardIconButtonPressed: {
+      opacity: 0.6,
+    },
+    routineCardName: {
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.text,
+      marginBottom: 4,
+      lineHeight: 30,
+    },
+    routineCardDesc: {
+      fontSize: 15,
+      color: theme.colors.textSecondary,
+      marginBottom: 4,
+    },
+    routineCardDays: {
+      fontSize: 14,
+      color: theme.colors.lightGray,
+    },
+    routineCardActiveIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: theme.colors.primaryFill,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: theme.borderRadius.pill,
+      overflow: 'hidden',
+    },
+    routineCardActiveText: {
+      fontSize: 13,
+      color: theme.colors.onGold,
+      fontWeight: '800',
+    },
+    routineCardPreparedIndicator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      backgroundColor: theme.colors.emoji_blueMuted,
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: theme.borderRadius.pill,
+      overflow: 'hidden',
+    },
+    routineCardPreparedText: {
+      fontSize: 13,
+      color: theme.colors.emoji_blue,
+      fontWeight: '800',
+    },
+    // Relleno de oro vivo con tinta oscura (como el selector Fuerza/Cardio): el
+    // amarillo brillante solo lee como fondo, no como texto sobre el lienzo claro.
+    newRoutineCard: {
+      backgroundColor: theme.colors.primaryFill,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryFillDark,
+      paddingVertical: 18,
+      alignItems: 'center',
+    },
+    newRoutineCardText: {
+      color: theme.colors.onGold,
+      fontSize: 17,
+      fontWeight: '800',
+    },
+    detailsButton: {
+      marginTop: 8,
+      backgroundColor: theme.colors.primaryFill,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryFillDark,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    detailsButtonText: {
+      color: theme.colors.onGold,
+      fontSize: 15,
+      fontWeight: '800',
+      lineHeight: 20,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

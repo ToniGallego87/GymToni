@@ -586,6 +586,18 @@ export function mergeSessionEntries(
   return order.map((k) => map.get(k)!);
 }
 
+/**
+ * Resultados de una entrada de cardio suelta (la que se registra), en el mismo
+ * formato que formatMergedResults pero para un solo esfuerzo: "30 min, 10 km/h,
+ * 5%". La pendiente solo se pinta si hay cuesta real (>0), igual que el icono.
+ */
+export function formatEntryResults(e: CardioEntry): string {
+  const parts: string[] = [`${fmtNum(e.minutes ?? 0)} min`];
+  if (e.speed != null) parts.push(`${fmtNum(e.speed)} km/h`);
+  if (hasIncline(e.pendiente)) parts.push(`${fmtNum(e.pendiente as number)}%`);
+  return parts.join(', ');
+}
+
 /** Solo los resultados de una disciplina: "44 min, 12-12.6 km/h, 2%". */
 export function formatMergedResults(m: MergedCardioEntry): string {
   const parts: string[] = [`${fmtNum(m.totalMinutes)} min`];

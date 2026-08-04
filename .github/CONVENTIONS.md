@@ -42,7 +42,11 @@
 
 ### Estilos
 
-- `StyleSheet.create()` al final del archivo
+- Estilos al final del archivo con el patrón de tema en caliente: una fábrica
+  `makeStyles()` que llama a `StyleSheet.create()` leyendo el `theme` vivo, más
+  `let styles = makeStyles(); subscribeTheme(() => { styles = makeStyles(); })`
+  para recalcularlos al cambiar de tema/idioma sin reiniciar (ver
+  `.github/docs/frontend-design.md`)
 - Tokens glass compartidos desde `components/glassTokens.ts`
 - Colores SIEMPRE desde `theme.colors`; nada de hex sueltos en pantallas/componentes
   (los únicos hex viven en `lib/theme.ts` y `components/glassTokens.ts`)

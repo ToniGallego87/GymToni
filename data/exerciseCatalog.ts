@@ -44,10 +44,7 @@ export const exerciseName = (e: CatalogExercise) =>
 // --- Búsqueda tolerante (tildes, plural/singular, varias palabras) ---
 // Quita acentos y baja a minúsculas: buscar sin importar tildes ni idioma.
 const searchNorm = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase();
+  s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 // Reduce una palabra a su raíz quitando el plural español (-es / -s). Así
 // "extensiones" y "extensión" caen en la misma raíz "extension". El prefijo se
@@ -70,7 +67,10 @@ export const matchesExercise = (e: CatalogExercise, query: string): boolean => {
   const stems = words.map(stem);
   return tokens.every((token) => {
     const ts = stem(token);
-    return stems.some((w) => w.startsWith(ts)) || words.some((w) => w.includes(token));
+    return (
+      stems.some((w) => w.startsWith(ts)) ||
+      words.some((w) => w.includes(token))
+    );
   });
 };
 

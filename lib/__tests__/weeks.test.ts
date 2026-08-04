@@ -1,6 +1,5 @@
 import {
   buildWeekProgress,
-  canMoveDay,
   computeStreak,
   getWeekImprovement,
   groupLogsIntoWeekBlocks,
@@ -309,7 +308,7 @@ describe('buildWeekProgress', () => {
   });
 });
 
-describe('planWeekMove / canMoveDay', () => {
+describe('planWeekMove', () => {
   const key = (log: WorkoutLog) => log.dayId;
   // Bloques resultantes tras aplicar los cambios de un plan a los logs.
   const blocksAfter = (logs: WorkoutLog[], changed: WorkoutLog[]) => {
@@ -350,7 +349,7 @@ describe('planWeekMove / canMoveDay', () => {
       makeLog('e', 2, 4),
       makeLog('f', 3, 5),
     ];
-    expect(canMoveDay(logs, 'c', 'next', key)).toBe(false);
+    expect(planWeekMove(logs, 'c', 'next', key)).toBeNull();
   });
 
   it('mover el último día sin semana siguiente crea una semana nueva', () => {
@@ -367,7 +366,7 @@ describe('planWeekMove / canMoveDay', () => {
       makeLog('b', 2, 1),
       makeLog('c', 1, 2), // semana 2 de un solo día (repite d1)
     ];
-    expect(canMoveDay(logs, 'c', 'next', key)).toBe(false);
+    expect(planWeekMove(logs, 'c', 'next', key)).toBeNull();
   });
 
   it('mover adelante cruzando una frontera manual la reubica en el día movido', () => {
@@ -412,12 +411,12 @@ describe('planWeekMove / canMoveDay', () => {
       makeLog('c', 1, 2, true),
       makeLog('d', 2, 3),
     ];
-    expect(canMoveDay(logs, 'c', 'prev', key)).toBe(false);
+    expect(planWeekMove(logs, 'c', 'prev', key)).toBeNull();
   });
 
   it('el primer día de la primera semana no puede ir atrás', () => {
     const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 3, 2)];
-    expect(canMoveDay(logs, 'a', 'prev', key)).toBe(false);
+    expect(planWeekMove(logs, 'a', 'prev', key)).toBeNull();
   });
 
   it('mover atrás el único día de una semana la elimina', () => {
@@ -435,7 +434,7 @@ describe('planWeekMove / canMoveDay', () => {
 
   it('un día intermedio no se puede mover en ninguna dirección', () => {
     const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 3, 2)];
-    expect(canMoveDay(logs, 'b', 'next', key)).toBe(false);
-    expect(canMoveDay(logs, 'b', 'prev', key)).toBe(false);
+    expect(planWeekMove(logs, 'b', 'next', key)).toBeNull();
+    expect(planWeekMove(logs, 'b', 'prev', key)).toBeNull();
   });
 });

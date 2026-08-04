@@ -70,61 +70,63 @@ export function FloatingGlassBar({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    position: 'absolute',
-    zIndex: 30,
-    borderRadius: 24,
-    backgroundColor: GLASS_FLOATING_BG,
-    borderWidth: 1,
-    borderColor: GLASS_FLOATING_BORDER,
-    overflow: 'hidden',
-    justifyContent: 'center',
-    // En día la sombra negra intensa se veía como una mancha gris bajo la
-    // barra; se suaviza y azula igual que theme.shadow.
-    shadowColor: theme.mode === 'light' ? '#26314A' : '#000000',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: theme.mode === 'light' ? 0.12 : 0.16,
-    shadowRadius: 28,
-    elevation: theme.mode === 'light' ? 8 : 14,
-  },
-  blur: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: GLASS_FLOATING_OVERLAY,
-    pointerEvents: 'none',
-  },
-  topHighlight: {
-    position: 'absolute',
-    left: 14,
-    right: 14,
-    top: 0,
-    height: 1,
-    backgroundColor: GLASS_FLOATING_HIGHLIGHT,
-    opacity: 0.9,
-    pointerEvents: 'none',
-  },
-  innerStroke: {
-    position: 'absolute',
-    left: 1,
-    right: 1,
-    top: 1,
-    bottom: 1,
-    borderRadius: 23,
-    borderWidth: 1,
-    borderColor: GLASS_FLOATING_INNER_STROKE,
-    pointerEvents: 'none',
-  },
-  content: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      position: 'absolute',
+      zIndex: 30,
+      borderRadius: 24,
+      backgroundColor: GLASS_FLOATING_BG,
+      borderWidth: 1,
+      borderColor: GLASS_FLOATING_BORDER,
+      overflow: 'hidden',
+      justifyContent: 'center',
+      // En día la sombra negra intensa se veía como una mancha gris bajo la
+      // barra; se suaviza y azula igual que theme.shadow (mismo color de tinta,
+      // tomado del token para no duplicar el hex por tema).
+      shadowColor: theme.shadow.card.shadowColor,
+      shadowOffset: { width: 0, height: 14 },
+      shadowOpacity: theme.mode === 'light' ? 0.12 : 0.16,
+      shadowRadius: 28,
+      elevation: theme.mode === 'light' ? 8 : 14,
+    },
+    blur: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    overlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: GLASS_FLOATING_OVERLAY,
+      pointerEvents: 'none',
+    },
+    topHighlight: {
+      position: 'absolute',
+      left: 14,
+      right: 14,
+      top: 0,
+      height: 1,
+      backgroundColor: GLASS_FLOATING_HIGHLIGHT,
+      opacity: 0.9,
+      pointerEvents: 'none',
+    },
+    innerStroke: {
+      position: 'absolute',
+      left: 1,
+      right: 1,
+      top: 1,
+      bottom: 1,
+      borderRadius: 23,
+      borderWidth: 1,
+      borderColor: GLASS_FLOATING_INNER_STROKE,
+      pointerEvents: 'none',
+    },
+    content: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

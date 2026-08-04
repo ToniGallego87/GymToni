@@ -79,9 +79,7 @@ describe('combineDateWithTime', () => {
 describe('isDeloadBlock', () => {
   it('marca el bloque si algún log lleva isDeload', () => {
     expect(isDeloadBlock([makeLog('a', 1, 0)])).toBe(false);
-    expect(
-      isDeloadBlock([makeLog('a', 1, 0, { isDeload: true })])
-    ).toBe(true);
+    expect(isDeloadBlock([makeLog('a', 1, 0, { isDeload: true })])).toBe(true);
   });
 });
 
@@ -134,9 +132,9 @@ describe('assignmentDuplicatesDayInWeek', () => {
         .slice(0, 10),
       moved.createdAt
     );
-    expect(
-      assignmentDuplicatesDayInWeek(logs, moved, ts, dayNumberOf)
-    ).toBe(true);
+    expect(assignmentDuplicatesDayInWeek(logs, moved, ts, dayNumberOf)).toBe(
+      true
+    );
   });
 
   it('no avisa si la fecha cae en un hueco entre semanas', () => {
@@ -148,9 +146,9 @@ describe('assignmentDuplicatesDayInWeek', () => {
         .slice(0, 10),
       moved.createdAt
     );
-    expect(
-      assignmentDuplicatesDayInWeek(logs, moved, ts, dayNumberOf)
-    ).toBe(false);
+    expect(assignmentDuplicatesDayInWeek(logs, moved, ts, dayNumberOf)).toBe(
+      false
+    );
   });
 });
 

@@ -11,6 +11,7 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  OptionToggle,
   StretchScrollView,
   WhatsNewModal,
 } from '@components';
@@ -79,41 +80,12 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
             />
             <Text style={styles.sectionTitle}>{t('Tema')}</Text>
           </View>
-          <View style={styles.optionRow}>
-            {themeOptions.map((option) => {
-              const active = theme.mode === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  style={({ pressed }) => [
-                    styles.option,
-                    active && styles.optionActive,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => {
-                    // Cambio de tema en caliente: se aplica al instante.
-                    if (!active) setThemeMode(option.value);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={option.icon}
-                    size={22}
-                    color={
-                      active ? theme.colors.primary : theme.colors.textSecondary
-                    }
-                  />
-                  <Text
-                    style={[
-                      styles.optionLabel,
-                      active && styles.optionLabelActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {/* Cambio de tema en caliente: se aplica al instante. */}
+          <OptionToggle
+            options={themeOptions}
+            value={theme.mode}
+            onChange={setThemeMode}
+          />
         </View>
 
         <View style={styles.sectionCard}>
@@ -126,34 +98,12 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
             />
             <Text style={styles.sectionTitle}>{t('Idioma')}</Text>
           </View>
-          <View style={styles.optionRow}>
-            {languageOptions.map((option) => {
-              const active = language === option.value;
-              return (
-                <Pressable
-                  key={option.value}
-                  style={({ pressed }) => [
-                    styles.option,
-                    active && styles.optionActive,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => {
-                    // Cambio de idioma en caliente, al instante (como el tema).
-                    if (!active) setLanguage(option.value);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.optionLabel,
-                      active && styles.optionLabelActive,
-                    ]}
-                  >
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          {/* Cambio de idioma en caliente, al instante (como el tema). */}
+          <OptionToggle
+            options={languageOptions}
+            value={language}
+            onChange={setLanguage}
+          />
         </View>
 
         {latestChangelog && (
@@ -207,101 +157,73 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
 
 const makeStyles = () =>
   StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    gap: 16,
-  },
-  sectionCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    gap: 12,
-    overflow: 'hidden',
-    ...theme.shadow.soft,
-  },
-  sectionTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  sectionTitle: {
-    fontSize: 21,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.4,
-    color: theme.colors.text,
-    lineHeight: 26,
-  },
-  optionRow: {
-    flexDirection: 'row',
-    gap: 10,
-  },
-  option: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 14,
-    borderRadius: theme.borderRadius.sm,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  optionActive: {
-    borderColor: theme.colors.primaryLine,
-    backgroundColor: theme.colors.primaryMuted,
-  },
-  optionLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-  },
-  optionLabelActive: {
-    color: theme.colors.primary,
-  },
-  pressed: {
-    opacity: 0.85,
-  },
-  linkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    ...theme.shadow.soft,
-  },
-  linkTextWrap: {
-    flex: 1,
-  },
-  linkLabel: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 20,
-  },
-  linkHint: {
-    fontSize: 12,
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  versionText: {
-    marginTop: 4,
-    textAlign: 'center',
-    fontSize: 12,
-    color: theme.colors.textMuted,
-  },
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      gap: 16,
+    },
+    sectionCard: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      gap: 12,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    sectionTitleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    sectionTitle: {
+      fontSize: 21,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
+      color: theme.colors.text,
+      lineHeight: 30,
+    },
+    pressed: {
+      opacity: 0.85,
+    },
+    linkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      ...theme.shadow.soft,
+    },
+    linkTextWrap: {
+      flex: 1,
+    },
+    linkLabel: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 20,
+    },
+    linkHint: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    versionText: {
+      marginTop: 4,
+      textAlign: 'center',
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
   });
 
 let styles = makeStyles();

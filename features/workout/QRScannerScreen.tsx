@@ -117,120 +117,121 @@ export function QRScannerScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  container: {
-    flexGrow: 1,
-    paddingHorizontal: 20,
-    gap: 24,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  closeBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.surfaceAlt,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeBtnText: {
-    color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  headerTitle: {
-    color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-  },
-  instructionCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: 16,
-    padding: 24,
-    alignItems: 'center',
-    gap: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  instructionIcon: {
-    fontSize: 48,
-  },
-  instructionTitle: {
-    color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  instructionText: {
-    color: theme.colors.textSecondary,
-    fontSize: 14,
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-  separator: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  separatorLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  separatorText: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-  },
-  pasteSection: {
-    gap: 12,
-  },
-  pasteLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-  },
-  input: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    color: theme.colors.text,
-    fontSize: 13,
-    fontFamily: 'monospace',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  errorText: {
-    color: theme.colors.error,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  importBtn: {
-    backgroundColor: theme.colors.primaryFill,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  importBtnDisabled: {
-    opacity: 0.45,
-  },
-  importBtnText: {
-    color: theme.colors.onGold,
-    fontSize: 16,
-    fontWeight: '700',
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    root: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    container: {
+      flexGrow: 1,
+      paddingHorizontal: 20,
+      gap: 24,
+    },
+    header: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    closeBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: theme.colors.surfaceAlt,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    closeBtnText: {
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    headerTitle: {
+      color: theme.colors.text,
+      fontSize: 18,
+      fontWeight: '700',
+    },
+    instructionCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: 16,
+      padding: 24,
+      alignItems: 'center',
+      gap: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    instructionIcon: {
+      fontSize: 48,
+    },
+    instructionTitle: {
+      color: theme.colors.text,
+      fontSize: 16,
+      fontWeight: '700',
+      textAlign: 'center',
+    },
+    instructionText: {
+      color: theme.colors.textSecondary,
+      fontSize: 14,
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+    separator: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    separatorLine: {
+      flex: 1,
+      height: 1,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    separatorText: {
+      color: theme.colors.textMuted,
+      fontSize: 13,
+    },
+    pasteSection: {
+      gap: 12,
+    },
+    pasteLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+    },
+    input: {
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      color: theme.colors.text,
+      fontSize: 13,
+      fontFamily: 'monospace',
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    errorText: {
+      color: theme.colors.error,
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    importBtn: {
+      backgroundColor: theme.colors.primaryFill,
+      borderRadius: theme.borderRadius.md,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    importBtnDisabled: {
+      opacity: 0.45,
+    },
+    importBtnText: {
+      color: theme.colors.onGold,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

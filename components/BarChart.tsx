@@ -155,67 +155,68 @@ export function BarChart({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  wrapper: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: '100%',
-    overflow: 'hidden',
-  },
-  chart: {
-    height: HEIGHT,
-    position: 'relative',
-  },
-  gridLine: {
-    position: 'absolute',
-    height: 1,
-    backgroundColor: theme.colors.border,
-    opacity: 0.8,
-  },
-  axisLine: {
-    position: 'absolute',
-    height: 1,
-    backgroundColor: theme.colors.veryLightGray,
-    opacity: 0.65,
-  },
-  bar: {
-    position: 'absolute',
-    borderRadius: 6,
-  },
-  valueLabel: {
-    position: 'absolute',
-    width: 44,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-  },
-  xLabel: {
-    position: 'absolute',
-    width: 44,
-    textAlign: 'center',
-    fontSize: 12,
-    fontWeight: '700',
-    color: theme.colors.textSecondary,
-    lineHeight: 16,
-  },
-  xLabelHighlighted: {
-    color: theme.colors.primary,
-    fontWeight: '800',
-  },
-  yLabel: {
-    position: 'absolute',
-    left: 0,
-    width: 38,
-    textAlign: 'right',
-    fontSize: 11,
-    color: theme.colors.textSecondary,
-    paddingRight: 6,
-    lineHeight: 16,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrapper: {
+      marginTop: 12,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      width: '100%',
+      overflow: 'hidden',
+    },
+    chart: {
+      height: HEIGHT,
+      position: 'relative',
+    },
+    gridLine: {
+      position: 'absolute',
+      height: 1,
+      backgroundColor: theme.colors.border,
+      opacity: 0.8,
+    },
+    axisLine: {
+      position: 'absolute',
+      height: 1,
+      backgroundColor: theme.colors.veryLightGray,
+      opacity: 0.65,
+    },
+    bar: {
+      position: 'absolute',
+      borderRadius: 6,
+    },
+    valueLabel: {
+      position: 'absolute',
+      width: 44,
+      textAlign: 'center',
+      fontSize: 11,
+      fontWeight: '700',
+      lineHeight: 14,
+    },
+    xLabel: {
+      position: 'absolute',
+      width: 44,
+      textAlign: 'center',
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
+    },
+    xLabelHighlighted: {
+      color: theme.colors.primary,
+      fontWeight: '800',
+    },
+    yLabel: {
+      position: 'absolute',
+      left: 0,
+      width: 38,
+      textAlign: 'right',
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      paddingRight: 6,
+      lineHeight: 16,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

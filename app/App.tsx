@@ -50,6 +50,7 @@ import {
   setLastSeenVersion,
 } from '@lib/storage';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
+import { isAutoBackupDue, runAutoBackup } from '@lib/backup';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
 import { theme, useThemeVersion } from '@lib/theme';
@@ -86,7 +87,17 @@ type Screen =
   | { type: 'profile' }
   | { type: 'settings' }
   | { type: 'data' }
-  | { type: 'exercise-progress' }
+  | {
+      type: 'exercise-progress';
+      // Ejercicio preseleccionado al abrir la evolución desde el detalle de un día.
+      initialExerciseKey?: string;
+      // Detalle al que volver si se llegó desde ahí (si no, se vuelve a Perfil).
+      detailReturn?: {
+        log: WorkoutLog;
+        day: WorkoutDay;
+        origin: 'home' | 'calendar' | 'cardio';
+      };
+    }
   | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
   | {
       type: 'routine-details';
@@ -201,6 +212,19 @@ function AppContent() {
     }
   };
 
+  // Backup automático local: al abrir la app, si está activado y ha pasado el
+  // intervalo (un día), se escribe un backup silencioso en el dispositivo. Sin
+  // cloud; solo protege frente a perder el móvil sin haber exportado a mano.
+  useEffect(() => {
+    if (!hydrated || isFirstInstall) return;
+    if (!isAutoBackupDue()) return;
+    handleAutoBackup().catch((error) =>
+      console.error('Error en backup automático:', error)
+    );
+    // Solo al arrancar (tras hidratar); el resto de deps son estables.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, isFirstInstall]);
+
   // Oculta el splash nativo una vez los datos reales ya están en pantalla.
   useEffect(() => {
     if (hydrated) {
@@ -266,8 +290,15 @@ function AppContent() {
               return true;
             case 'settings':
             case 'data':
-            case 'exercise-progress':
               goProfile();
+              return true;
+            case 'exercise-progress':
+              // Vuelve al detalle si se abrió desde ahí; si no, a Perfil.
+              if (screen.detailReturn) {
+                setScreen({ type: 'detail', ...screen.detailReturn });
+              } else {
+                goProfile();
+              }
               return true;
             case 'routine-details':
               backFromRoutineDetails(screen.origin);
@@ -409,9 +440,9 @@ function AppContent() {
     setScreen({ type: 'home' });
   };
 
-  const handleExportData = async () => {
-    // Incluye el historial de pesos corporales: las kcal del cardio dependen
-    // del peso vigente en cada tramo.
+  // Arma el JSON del backup (mismo formato que usa import). Incluye el historial
+  // de pesos corporales: las kcal del cardio dependen del peso de cada tramo.
+  const buildBackupJson = async (): Promise<string> => {
     const cardioWeightHistory = await getCardioWeightHistory();
     const payload: WorkoutAppData & {
       version: number;
@@ -425,11 +456,21 @@ function AppContent() {
       logs: state.logs,
       cardioWeightHistory,
     };
+    return JSON.stringify(payload, null, 2);
+  };
 
+  const handleExportData = async () => {
     const fileName = `gymbro-backup-${new Date()
       .toISOString()
       .slice(0, 10)}.json`;
-    await downloadJsonFile(fileName, JSON.stringify(payload, null, 2));
+    await downloadJsonFile(fileName, await buildBackupJson());
+  };
+
+  // Backup silencioso al almacenamiento del dispositivo. Lo usa tanto el disparo
+  // automático (al hidratar, si toca) como el botón "backup ahora" de Datos.
+  const handleAutoBackup = async (): Promise<void> => {
+    if (state.routines.length === 0 && state.logs.length === 0) return;
+    await runAutoBackup(await buildBackupJson());
   };
 
   const handleImportData = async () => {
@@ -603,6 +644,17 @@ function AppContent() {
             dispatch({ type: 'DELETE_WORKOUT_LOG', payload: screen.log.id });
             backFromDetail(screen.origin);
           }}
+          onOpenExerciseProgress={(exerciseKey) =>
+            setScreen({
+              type: 'exercise-progress',
+              initialExerciseKey: exerciseKey,
+              detailReturn: {
+                log: screen.log,
+                day: screen.day,
+                origin: screen.origin,
+              },
+            })
+          }
         />
       )}
 
@@ -647,13 +699,21 @@ function AppContent() {
       {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
 
       {screen.type === 'exercise-progress' && (
-        <ExerciseProgressScreen onBack={goProfile} />
+        <ExerciseProgressScreen
+          initialExerciseKey={screen.initialExerciseKey}
+          onBack={() =>
+            screen.detailReturn
+              ? setScreen({ type: 'detail', ...screen.detailReturn })
+              : goProfile()
+          }
+        />
       )}
 
       {screen.type === 'data' && (
         <DataScreen
           onImportData={handleImportData}
           onExportData={handleExportData}
+          onBackupNow={handleAutoBackup}
           onClearData={handleClearData}
           onBack={goProfile}
         />

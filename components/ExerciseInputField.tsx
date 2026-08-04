@@ -39,6 +39,14 @@ const fadeOut = FadeOut.duration(140);
 // muestre el aviso correcto en vez de un "rellena los datos" genérico.
 export type InvalidAddReason = 'empty' | 'format' | 'negative' | 'too-large';
 
+// Redondea a cuarto de kilo: el peso sugerido en descarga queda siempre en un
+// valor entero o con decimales .25/.5/.75 (nada de 63,8 kg imposibles de poner).
+const roundToQuarter = (n: number): number => Math.round(n * 4) / 4;
+
+// Factor del peso recomendado en descarga: ~75% (punto medio del 70-80%) del
+// peso de la semana anterior.
+const DELOAD_WEIGHT_FACTOR = 0.75;
+
 interface ExerciseInputFieldProps {
   order: number;
   exerciseName: string;
@@ -67,6 +75,13 @@ interface ExerciseInputFieldProps {
   // queden series. El padre decide su contenido; aquí solo se enmarca y anima la
   // altura de la tarjeta al aparecer/desaparecer.
   restTimer?: React.ReactNode;
+  // El padre marca cuál es el ejercicio "en curso" (el primer incompleto del
+  // día): esa tarjeta nace desplegada y se abre sola al pasar a serlo, para no
+  // obligar a desplegar cada ejercicio antes de poder registrar una serie.
+  isCurrent?: boolean;
+  // Semana de descarga: sin porcentaje ni comparación con la anterior, y el peso
+  // por defecto en la casilla baja al ~75% del de la semana previa.
+  deload?: boolean;
 }
 
 export function ExerciseInputField({
@@ -86,6 +101,8 @@ export function ExerciseInputField({
   improvement,
   accent = theme.colors.primary,
   restTimer,
+  isCurrent,
+  deload = false,
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
@@ -94,9 +111,18 @@ export function ExerciseInputField({
   // forma condicional y la tarjeta reajusta su altura con `LinearTransition`
   // de Reanimated: medir la altura a mano (onLayout) para animarla fallaba en
   // el build de release (devolvía 0 y dejaba el cuerpo recortado).
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(!!isCurrent);
 
   const toggleExpanded = () => setExpanded((prev) => !prev);
+
+  // Al convertirse en el ejercicio en curso (el padre lo marca al completarse el
+  // anterior), abrir la tarjeta si estaba colapsada. Solo en la transición
+  // false→true: no pelea con el usuario si luego la cierra a mano.
+  const wasCurrentRef = useRef(!!isCurrent);
+  useEffect(() => {
+    if (isCurrent && !wasCurrentRef.current) setExpanded(true);
+    wasCurrentRef.current = !!isCurrent;
+  }, [isCurrent]);
 
   // Cronómetro para ejercicios medidos en tiempo
   const [timerRunning, setTimerRunning] = useState(false);
@@ -139,20 +165,6 @@ export function ExerciseInputField({
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  };
-
-  const formatImprovementDisplay = (imp: {
-    isImproved: boolean;
-    percent: number;
-  }) => {
-    const { symbol, display, kind } = getImprovementDisplay(imp);
-    const styleKey =
-      kind === 'up'
-        ? 'improvementUp'
-        : kind === 'down'
-        ? 'improvementDown'
-        : 'improvementNeutral';
-    return { symbol, styleKey, display };
   };
 
   const handleAddSet = () => {
@@ -204,19 +216,32 @@ export function ExerciseInputField({
     wasMaxReachedRef.current = isMaxSetsReached;
   }, [isMaxSetsReached]);
 
-  const getWeightPlaceholder = () => {
-    if (addedSets.length > 0)
-      return String(addedSets[addedSets.length - 1].weight);
-    if (previousLog?.parsedSets?.length)
-      return String(previousLog.parsedSets[0].weight);
+  // Peso de la primera serie de la semana anterior (null si no hay historial).
+  const previousFirstWeight = (): number | null => {
+    if (previousLog?.parsedSets?.length) {
+      const w = previousLog.parsedSets[0].weight;
+      return w === -1 ? null : w;
+    }
     if (
       previousLog?.rawInput &&
       previousLog.rawInput.trim() &&
       previousLog.rawInput !== '-'
     ) {
       const parsed = parseSeriesString(previousLog.rawInput);
-      if (parsed.length > 0) return String(parsed[0].weight);
+      if (parsed.length > 0) return parsed[0].weight;
     }
+    return null;
+  };
+
+  const getWeightPlaceholder = () => {
+    if (addedSets.length > 0)
+      return String(addedSets[addedSets.length - 1].weight);
+    const prev = previousFirstWeight();
+    // En descarga se sugiere ~75% del peso previo, redondeado a cuarto de kilo.
+    if (deload && prev != null && prev > 0) {
+      return String(roundToQuarter(prev * DELOAD_WEIGHT_FACTOR));
+    }
+    if (prev != null) return String(prev);
     return '0';
   };
 
@@ -264,15 +289,23 @@ export function ExerciseInputField({
   };
 
   const renderImprovementBadge = () => {
+    // En descarga no hay porcentaje ni comparación con la semana anterior.
+    if (deload) return null;
     if (!improvement || !isMaxSetsReached || addedSets.length === 0)
       return null;
-    const fmt = formatImprovementDisplay(improvement);
+    const { symbol, display, kind } = getImprovementDisplay(improvement);
     const badgeBg =
-      fmt.styleKey === 'improvementUp'
+      kind === 'up'
         ? styles.improvementBadgeUp
-        : fmt.styleKey === 'improvementDown'
+        : kind === 'down'
         ? styles.improvementBadgeDown
         : styles.improvementBadgeNeutral;
+    const textStyle =
+      kind === 'up'
+        ? styles.improvementUp
+        : kind === 'down'
+        ? styles.improvementDown
+        : styles.improvementNeutral;
     return (
       <Animated.View
         entering={fadeIn}
@@ -280,13 +313,8 @@ export function ExerciseInputField({
         layout={layoutTransition}
         style={[styles.improvementBadge, badgeBg]}
       >
-        <Text
-          style={[
-            styles.improvementText,
-            styles[fmt.styleKey as keyof typeof styles],
-          ]}
-        >
-          {fmt.symbol} {fmt.display}%
+        <Text style={[styles.improvementText, textStyle]}>
+          {symbol} {display}%
         </Text>
       </Animated.View>
     );
@@ -362,8 +390,8 @@ export function ExerciseInputField({
           montado siempre (solo se alterna el contenido) para que `exiting` se
           reproduzca al colapsar con un padre estable. */}
       <View style={styles.topSection}>
-        {/* Bloque de contexto: objetivo + anterior */}
-        {expanded && (target?.sets || previousLog) && (
+        {/* Bloque de contexto: objetivo + anterior (o aviso de descarga) */}
+        {expanded && (target?.sets || previousLog || deload) && (
           <Animated.View
             entering={fadeIn}
             exiting={fadeOut}
@@ -383,7 +411,25 @@ export function ExerciseInputField({
                 </Text>
               </View>
             )}
-            {previousLog && getPreviousSetsSummary() ? (
+            {/* En descarga se sustituye el "Anterior" (comparación) por el aviso
+                de que el peso propuesto es una bajada respecto a la semana previa. */}
+            {deload ? (
+              <View style={styles.contextItem}>
+                <MaterialCommunityIcons
+                  name="sleep"
+                  size={13}
+                  color={theme.colors.emoji_blue}
+                />
+                <Text
+                  style={[styles.contextLabel, styles.contextLabelDeload]}
+                >
+                  {t('Descarga')}
+                </Text>
+                <Text style={styles.contextValue} numberOfLines={1}>
+                  {t('Peso sugerido más ligero')}
+                </Text>
+              </View>
+            ) : previousLog && getPreviousSetsSummary() ? (
               <View style={styles.contextItem}>
                 <MaterialCommunityIcons
                   name="history"
@@ -396,7 +442,7 @@ export function ExerciseInputField({
                 </Text>
               </View>
             ) : null}
-            {previousLog?.notes ? (
+            {!deload && previousLog?.notes ? (
               <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
             ) : null}
           </Animated.View>
@@ -550,17 +596,21 @@ export function ExerciseInputField({
                 onPress={onFinishExercise}
               >
                 <MaterialCommunityIcons
-                  name="check"
+                  name="skip-forward"
                   size={15}
                   color={theme.colors.accent}
                 />
+                {/* "Saltar resto": el botón no solo cierra el ejercicio, rellena
+                    con guiones (series omitidas) las que falten hasta el objetivo.
+                    El texto lo dice para que no se pulse creyendo otra cosa. */}
                 <Text
                   style={[
                     styles.secondaryButtonText,
                     { color: theme.colors.accent },
                   ]}
+                  numberOfLines={1}
                 >
-                  {t('Terminar')}
+                  {t('Saltar resto')}
                 </Text>
               </Pressable>
               <Pressable
@@ -590,6 +640,20 @@ export function ExerciseInputField({
             {/* Cronómetro (ejercicios basados en tiempo) */}
             {isTimeBased && (
               <View style={styles.stopwatchContainer}>
+                {/* Título propio: distingue este cronómetro (cuenta hacia
+                    ARRIBA, mide el ejercicio) del temporizador de descanso
+                    (dorado, cuenta hacia ABAJO) que aparece al pie tras
+                    completar una serie. */}
+                <View style={styles.stopwatchLabelRow}>
+                  <MaterialCommunityIcons
+                    name="timer-outline"
+                    size={14}
+                    color={theme.colors.textSecondary}
+                  />
+                  <Text style={styles.stopwatchLabel}>
+                    {t('Cronómetro del ejercicio')}
+                  </Text>
+                </View>
                 <Text style={styles.stopwatchDisplay}>
                   {formatTimerDisplay(timerSeconds)}
                 </Text>
@@ -806,7 +870,7 @@ const makeStyles = () =>
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
-      lineHeight: 23,
+      lineHeight: 27,
     },
 
     // Resultados insertados (bloque único, posición fija)
@@ -876,6 +940,9 @@ const makeStyles = () =>
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       width: 68,
+    },
+    contextLabelDeload: {
+      color: theme.colors.emoji_blue,
     },
     contextValue: {
       fontSize: 13,
@@ -969,10 +1036,13 @@ const makeStyles = () =>
       letterSpacing: 0.3,
     },
 
-    // Botones secundarios
+    // Botones secundarios: acciones de bajo peso frente al héroe dorado
+    // "Añadir serie". Sin relleno ni borde (nada de tarjetas que compitan);
+    // solo icono + texto tintado, para que la jerarquía sea inequívoca sin
+    // esconder ninguna acción (todas siguen visibles con su icono).
     secondaryRow: {
       flexDirection: 'row',
-      gap: 8,
+      gap: 4,
     },
     secondaryButton: {
       flex: 1,
@@ -980,25 +1050,20 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 5,
-      paddingVertical: 10,
+      paddingVertical: 8,
       borderRadius: theme.borderRadius.sm,
-      borderWidth: 1,
+      backgroundColor: 'transparent',
     },
-    deleteButton: {
-      borderColor: theme.colors.error + '50',
-      backgroundColor: theme.colors.error + '15',
-    },
+    // "Terminar" es la única secundaria con relieve (cierra el ejercicio):
+    // un tinte muy leve de acento la diferencia de las otras dos.
+    deleteButton: {},
     finishButton: {
-      borderColor: theme.colors.accent + '50',
-      backgroundColor: theme.colors.accent + '15',
+      backgroundColor: theme.colors.accent + '12',
     },
-    notesButton: {
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.inputBg,
-    },
+    notesButton: {},
     secondaryButtonText: {
       fontWeight: '700',
-      fontSize: 13,
+      fontSize: 12,
     },
     buttonPressed: {
       opacity: 0.75,
@@ -1039,6 +1104,18 @@ const makeStyles = () =>
       gap: 10,
       borderWidth: 1,
       borderColor: theme.colors.border,
+    },
+    stopwatchLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    stopwatchLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
     },
     stopwatchDisplay: {
       fontSize: 32,

@@ -1,5 +1,211 @@
 # UPDATES
 
+## Version 0.6.8 - 2026-08-04
+
+### Arquitectura
+
+- **Eliminada la función muerta `canMoveDay`** (`lib/weeks.ts`,
+  `lib/__tests__/weeks.test.ts`): era un envoltorio de `planWeekMove(...) !== null`
+  sin ningún consumidor en la app (solo la usaban sus propios tests). Se retira y
+  las aserciones de "no se puede mover" pasan a comprobar `planWeekMove(...)`
+  directamente, que es lo equivalente. Sin cambio de comportamiento.
+- **Limpieza de código muerto tras la auditoría** (`lib/theme.ts`,
+  `components/glassTokens.ts`, `lib/themeStore.ts`, `lib/i18n.ts`): se elimina el
+  hook exportado `useThemedStyles`, que no llamaba ningún componente (el tema en
+  caliente se aplica con `useThemeVersion` en la raíz más las fábricas de estilos
+  de módulo `makeStyles`/`subscribeTheme`); los comentarios que lo citaban se
+  corrigen para describir el mecanismo real. Se borran 8 claves de traducción ya
+  sin uso del diccionario EN (flujo antiguo de "reiniciar para cambiar
+  tema/idioma", que hoy es en caliente, y el editor de ejercicios por textarea,
+  sustituido por filas). Sin cambio de comportamiento: `type-check` limpio y los
+  172 tests (14 suites) en verde.
+
+### Nuevas funcionalidades
+
+- **Semana de descarga en la inserción** (`features/workout/WorkoutLogScreen.tsx`,
+  `components/ExerciseInputField.tsx`, `features/workout/HomeScreen.tsx`,
+  `lib/i18n.ts`): al registrar el primer día de una semana nueva aparece en el
+  menú ⋯ la opción "Marcar semana de descarga" (si ya hay series metidas, avisa
+  de que se borrarán y pide confirmar). En descarga la inserción cambia: se
+  recorta una serie por ejercicio (3→2, 2→1), no hay porcentaje ni comparación
+  con la semana anterior, y el peso por defecto de la casilla baja al ~75% del de
+  la semana previa, redondeado a cuarto de kilo (.25/.5/.75). Los días siguientes
+  de una semana ya marcada como descarga entran preparados solos. En la vista de
+  fuerza, los días de descarga muestran un guión azul en vez del porcentaje (como
+  el guión amarillo de la primera semana, pero de descarga).
+- **Backup automático local** (`lib/backup.ts` nuevo, `lib/fileIO.ts`,
+  `lib/appSettings.ts`, `app/App.tsx`, `features/workout/DataScreen.tsx`): al
+  abrir la app se guarda una copia silenciosa del historial en el dispositivo
+  (carpeta `backups/`, sin cloud), una vez al día y rotando los 7 últimos. En
+  Datos hay una tarjeta para activarlo/desactivarlo, ver la fecha del último
+  backup y forzar uno al momento.
+- **Gestionar los días de la rutina: reordenar y borrar** (`NewRoutineScreen.tsx`,
+  `RoutineDetailScreen.tsx`): cada día trae botones ▲▼ para moverlo y una
+  papelera para borrarlo (antes solo se podía quitar el último). Al reordenar se
+  renumeran los días; el historial sigue a su día por id. Borrar un día con
+  entrenamientos pide confirmación (su historial dejaría de verse).
+
+### Cambios
+
+- **El cardio del registro se pinta como en la vista de consulta**
+  (`components/CardioInputField.tsx`, `lib/cardio.ts`,
+  `features/workout/WorkoutLogScreen.tsx`): la sección de cardio de la inserción
+  dejaba las disciplinas registradas como texto crudo ("Correr en cinta:
+  30min, 10kmh, 5%") bajo el título "Disciplinas ejecutadas:" con un icono
+  genérico. Ahora la cabecera es "Cardio" con su icono `run-fast` y cada
+  disciplina se muestra con su icono real (cuesta incluida), el nombre en fuente
+  display y los resultados formateados ("30 min, 10 km/h, 5%"), reutilizando los
+  helpers que ya usa la vista de consulta (`disciplineIconName`,
+  nuevo `formatEntryResults`). Además, el selector de disciplina del modal y la
+  consulta comparten ya el mismo icono por disciplina (antes divergían: bici,
+  correr en exterior y cuesta), con `disciplineIconName` como fuente única.
+- **"Elige la sesión": nombre del día en fuente display y un único gesto para
+  entrar** (`features/workout/DaySelectorScreen.tsx`): el nombre del día pasa a la
+  fuente Anton, como en Inicio y Detalle (antes iba en fuente de sistema, la única
+  lista de días que divergía). Además, tocar un día SIEMPRE arranca la sesión
+  (continúa la semana en curso); la opción de empezar una semana nueva con ese día
+  deja de ser un panel que solo salía al tocar —lo que hacía que el toque no
+  entrara— y pasa a ser un botón visible y constante bajo la tarjeta.
+- **"Terminar" pasa a "Saltar resto" en la tarjeta de ejercicio**
+  (`components/ExerciseInputField.tsx`): el botón no solo cerraba el ejercicio,
+  rellenaba con guiones (series omitidas) las que faltaban hasta el objetivo. El
+  nuevo texto e icono de salto lo dejan claro, para no pulsarlo creyendo otra cosa.
+- **El registro muestra el nombre del día sin el prefijo "Día N -"**
+  (`features/workout/WorkoutLogScreen.tsx`): la barra del registro pintaba el
+  nombre en crudo ("Día 1 - Push (Pesado)"), la única pantalla que no lo limpiaba;
+  ahora pasa por `getDisplayDayName` como Inicio, Detalle y Elige la sesión, así
+  que el mismo día se lee igual en todas ("Push (Pesado)").
+- **Una sola vía visible para cambiar la fecha en el registro**
+  (`features/workout/WorkoutLogScreen.tsx`): se retira el item "Cambiar fecha" del
+  menú ⋯ (en modo normal y en solo-cardio); el subtítulo de la barra ya es un
+  enlace visible con icono `calendar-edit` que abre el mismo selector, igual que
+  en el Detalle. La capacidad de corregir la fecha no se pierde.
+- **Detalle del día con los datos más grandes y legibles**
+  (`features/workout/DetailScreen.tsx`, `components/ExerciseResultDisplay.tsx`):
+  los números de cada serie (peso×reps) y su flecha de comparación crecen a 18px
+  (antes 15/14), dejando el dato que se consulta por encima de su etiqueta. Las
+  cajas de cardio pasan a cuadrícula "valor grande + unidad" (min, km/h, pendiente,
+  kcal), coherentes con la tira-resumen de fuerza. Las micro-etiquetas de columnas,
+  objetivo y resumen suben al mínimo legible (12px). Además se quita el item
+  "Cambiar fecha" del menú ⋯: el subtítulo de la barra ya es un enlace visible
+  (texto dorado + icono) que abre el mismo selector, así que era una vía duplicada.
+- **Semana de descarga: solo la semana en curso y confirmación en ambos sentidos**
+  (`features/workout/WorkoutLogScreen.tsx`, `features/workout/HomeScreen.tsx`,
+  `features/workout/ExerciseProgressScreen.tsx`, `lib/i18n.ts`): marcar semana de
+  descarga ya solo se ofrece en la semana en curso (la más reciente); en las
+  semanas antiguas no aparece ni la opción del menú ⋯ del registro ni el icono de
+  descarga del listado de semanas de Fuerza. Marcar y quitar la descarga piden
+  confirmación con un popup en ambos sitios (antes en el listado era directo).
+  Además, las semanas de descarga quedan fuera de "Tu evolución" y de los récords
+  por ejercicio: al entrenarse con menos series y peso a propósito, no reflejan
+  progreso ni deben ensuciar las mejores marcas.
+- **Semana de descarga más reconocible al consultar días**
+  (`features/workout/DetailScreen.tsx`, `features/workout/CalendarScreen.tsx`): al
+  abrir un día que pertenece a una semana de descarga, aparece una etiqueta azul
+  "Semana de descarga" en la cabecera del detalle. En el calendario, esos días
+  pintan el borde de la celda en azul (el mismo azul del deload) en vez del color
+  del entreno, para distinguirlos de un vistazo.
+- **Conmutador Fuerza/Cardio del calendario junto a la cabecera de mes**
+  (`features/workout/CalendarScreen.tsx`): el toggle que redibuja todo el grid
+  estaba al final de la pantalla; ahora vive justo bajo la cabecera del mes, a la
+  vista al llegar, sin scroll de ida y vuelta.
+- **Acciones secundarias del registro con menos peso** (`components/ExerciseInputField.tsx`):
+  Borrar / Terminar / Nota pasan de botones rellenos con borde a acciones ghost
+  (icono + texto tintado), así "Añadir serie" queda claramente como acción héroe.
+- **Colores sueltos consolidados en tokens** (`lib/theme.ts`, `components/glassTokens.ts`,
+  `WorkoutLogScreen.tsx`, `RoutineDetailScreen.tsx`, `FloatingBackButton.tsx`,
+  `FloatingGlassBar.tsx`, `AchievementPoster.tsx`): los hex/rgba que quedaban en
+  pantallas (QR, cristal flotante, sombra del temporizador, póster de logros)
+  ahora tienen nombre de token; el invariante "solo theme/glassTokens con hex" se
+  sostiene. Sin cambio visual.
+- **Helpers duplicados a fuente única** (`lib/utils.ts`, `HomeScreen.tsx`,
+  `DetailScreen.tsx`, `WorkoutLogScreen.tsx`, `CalendarScreen.tsx`,
+  `ExerciseInputField.tsx`): `findDayInRoutines` (resolver un día por id) y
+  `getImprovementColor` (color de la mejora) viven una sola vez; las cuatro copias
+  repartidas por pantallas ya no pueden diverger. Sin efecto en el comportamiento.
+- **Una sola entrada para editar el temporizador de descanso**
+  (`features/workout/WorkoutLogScreen.tsx`): se quita el botón "Editar" inline del
+  bloque de descanso; queda la opción "Modificar temporizador" del menú ⋯ (misma
+  acción, siempre disponible).
+- **Limpieza: re-exports muertos fuera del barril de componentes**
+  (`components/index.ts`): se han quitado cuatro re-exports que no consumía
+  ninguna pantalla (`AnimatedCounter`, `ExercisePickerModal`, `GifViewerModal`,
+  `ExerciseGifButton`); son piezas internas que otros componentes ya importan por
+  ruta relativa. Sin efecto en el comportamiento; `type-check` y `test` en verde.
+- **Inicio y Cardio, coherentes entre sí** (`components/OptionToggle.tsx` y
+  `components/TrendDelta.tsx` nuevos, `features/workout/HomeScreen.tsx`,
+  `CardioScreen.tsx`, `SettingsScreen.tsx`, `DataScreen.tsx`): los toggles de dos
+  opciones (tema, idioma, backup) y el chip de tendencia (flecha ▲/▼ + valor)
+  salen de un único componente, así que se ven y se animan igual en toda la app
+  (en Cardio el número de la tendencia también se anima ahora). Las dos tabs
+  despliegan las semanas con la misma animación y con el mismo margen de columna,
+  e Inicio pagina el historial de 5 en 5 con "Cargar más", como Cardio. La racha
+  usa el icono de fuego del set de la app en vez del emoji 🔥 (que se veía
+  distinto según el móvil).
+- **Registro de entrenamiento más directo y con mejor jerarquía**
+  (`features/workout/WorkoutLogScreen.tsx`, `components/ExerciseInputField.tsx`,
+  `components/CardioInputField.tsx`, `components/ExerciseGifButton.tsx`,
+  `components/GlassTopBar.tsx`): el ejercicio en curso (el primer incompleto) se
+  abre solo y el siguiente se abre al completarlo, sin obligar a desplegar cada
+  tarjeta para meter una serie. El CTA "Guardar" pasa a "Hecho" (el entreno ya se
+  autoguarda serie a serie; el botón solo cierra, como "Volver") y "Añadir cardio"
+  baja a estilo outline para que el dorado marque una sola acción principal. El
+  botón del ejercicio muestra lupa cuando no tiene GIF (buscar/asignar) y play
+  cuando sí (ver), en vez de un mismo icono con dos comportamientos. El cronómetro
+  de los ejercicios por tiempo se titula ("Cronómetro del ejercicio") para no
+  confundirse con el temporizador de descanso. El subtítulo de la barra queda solo
+  con la fecha y es tocable para cambiarla.
+- **Detalle de rutina: consultar y editar separados**
+  (`features/workout/RoutineDetailScreen.tsx`): la pantalla abre en modo lectura
+  (nombre, días con sus ejercicios, temporizador y compartir, sin controles de
+  edición encima) y un botón "Editar/Hecho" en la barra revela reordenar/borrar
+  días, cambiar icono y editar ejercicios. Los ejercicios de un día se editan
+  ahora inline en la tarjeta (mismas filas que "Nueva rutina"), sin el modal con
+  scroll interno. El temporizador deja de ser un bloque dorado y pasa a fila de
+  ajuste. Las dos tarjetas de compartir (QR + texto plano) se funden en una sola
+  hoja "Compartir rutina".
+- **Nueva rutina más ordenada** (`features/workout/NewRoutineScreen.tsx`): las
+  vías de importación (QR / texto plano) suben al principio, antes del
+  formulario, con un divisor "o créala a mano" (antes colgaban bajo el CTA "Crear
+  rutina"). La cabecera de cada día se reparte en dos líneas (título + icono
+  arriba; reordenar/borrar debajo) para no amontonar cuatro clusters de controles.
+- **La semana en curso muestra "X de N días"** (`features/workout/HomeScreen.tsx`):
+  la cabecera de la semana en curso de la rutina activa muestra los días
+  entrenados sobre el total de la rutina (`2 de 4 días`) para leer el avance de
+  un vistazo; las semanas pasadas mantienen el conteo simple.
+- **Confirmar al mover un día que toca una semana completada**
+  (`features/workout/HomeScreen.tsx`): mover un día entre semanas recalcula racha,
+  progreso y logros. Si el movimiento hace desaparecer una semana o toca una ya
+  completada, se pide confirmación con `ConfirmModal`; en semanas incompletas se
+  aplica directo, como antes.
+
+### Correcciones
+
+- **El registro ya no pierde el cardio ni las notas al salir con "Volver"**
+  (`features/workout/WorkoutLogScreen.tsx`): las series se autoguardaban, pero el
+  cardio y las notas solo se volcaban al pulsar "Hecho"; salir con "Volver" justo
+  después de teclearlos los perdía. Ahora se autoguardan en cuanto cambian, así
+  que salir por cualquier vía es seguro. Como el guardado ya no depende de él, en
+  las sesiones de fuerza se retira el botón "Hecho" (hacía lo mismo que "Volver");
+  en solo-cardio se mantiene, que ahí valida que haya cardio antes de salir.
+- **Backup automático: "Activado" legible en tema oscuro** (`components/OptionToggle.tsx`
+  nuevo, `features/workout/DataScreen.tsx`): el botón seleccionado del backup se
+  pintaba oro sobre oro y quedaba invisible en el tema oscuro; ahora usa el mismo
+  resaltado translúcido que los toggles de tema e idioma y se lee en los dos temas.
+- **El QR de compartir ya no rompe la pantalla con rutinas grandes**
+  (`features/workout/RoutineDetailScreen.tsx`): `react-native-qrcode-svg` lanzaba
+  al renderizar cuando el enlace de la rutina no cabía en un código QR ("The
+  amount of data is too big"). Ahora se genera con `ecl="L"` (más capacidad) y,
+  si aun así no cabe (>2900 caracteres), se muestra un aviso y se ofrece copiar
+  en texto plano (sin tope) en lugar de intentar pintar el QR.
+
+### Documentación
+
+- **Datos corregidos en la documentación** (`.github/docs/SETUP.md`,
+  `.github/docs/ROADMAP.md`): SETUP.md decía "13 suites, 164 tests" (ahora 14 /
+  172). El ROADMAP se reescribe en la auditoría: se podan las 5 entradas ya
+  finalizadas en 0.6.7 y se añaden propuestas nuevas (ver ROADMAP).
+
 ## Version 0.6.7 - 2026-07-29
 
 ### Nuevas funcionalidades
@@ -416,6 +622,7 @@
 - **Insertar cardio partía el día en dos sesiones** (`WorkoutLogScreen`): la absorción solo iba en un sentido (el día de fuerza absorbe el solo cardio). Al revés no: si el cardio del día ya estaba dentro de un día de fuerza, "Insertar cardio" abría el formulario en blanco y creaba un log `cardioOnly` aparte, así que el mismo día quedaba con dos sesiones de cardio. Ahora, en modo `cardioOnly`, si esa fecha ya tiene log de fuerza (`hostStrengthLog`), su `rawInput` se precarga en el campo y al guardar se escribe en ESE log (`UPDATE_WORKOUT_LOG`, fuerza intacta) en vez de crear uno suelto; si además había un `cardioOnly` de la misma fecha (datos ya partidos), se fusiona y se elimina. Un día = un cardio, se meta por donde se meta.
 
 - **Rectángulo en la tarjeta del día de cardio en curso** (`CardioScreen`): `dailyCardToday` marcaba "hoy" pisando el `backgroundColor` de la tarjeta con `primaryMuted` (translúcido). La tarjeta lleva `elevation` (`shadow.soft`) y en Android, sin fondo opaco, el relleno se pinta como un rectángulo con esquinas vivas dentro del redondeo. Pasa a marcar "hoy" como la tarjeta equivalente de Inicio: fondo opaco intacto, aro dorado de 2.5 y `GradientFill`. Era el único `primaryMuted` sobre una superficie elevada.
+
 ## Version 0.6.1 - 2026-07-15
 
 ### Nuevas funcionalidades

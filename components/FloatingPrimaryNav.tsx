@@ -114,46 +114,47 @@ export function FloatingPrimaryNav({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  item: {
-    flex: 1,
-    borderRadius: 14,
-    minHeight: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 4,
-    paddingVertical: 6,
-  },
-  itemActiveBg: {
-    position: 'absolute',
-    top: 2,
-    left: 2,
-    right: 2,
-    bottom: 2,
-    borderRadius: 14,
-    backgroundColor: GLASS_ACTIVE_ITEM_BG,
-    borderWidth: 1,
-    borderColor: GLASS_ACTIVE_ITEM_BORDER,
-  },
-  icon: {
-    color: theme.colors.textSecondary,
-    marginBottom: 3,
-  },
-  iconActive: {
-    color: theme.colors.white,
-  },
-  label: {
-    color: theme.colors.textSecondary,
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-    letterSpacing: -0.2,
-    textAlign: 'center',
-  },
-  labelActive: {
-    color: theme.colors.white,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    item: {
+      flex: 1,
+      borderRadius: 14,
+      minHeight: 50,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 4,
+      paddingVertical: 6,
+    },
+    itemActiveBg: {
+      position: 'absolute',
+      top: 2,
+      left: 2,
+      right: 2,
+      bottom: 2,
+      borderRadius: 14,
+      backgroundColor: GLASS_ACTIVE_ITEM_BG,
+      borderWidth: 1,
+      borderColor: GLASS_ACTIVE_ITEM_BORDER,
+    },
+    icon: {
+      color: theme.colors.textSecondary,
+      marginBottom: 3,
+    },
+    iconActive: {
+      color: theme.colors.white,
+    },
+    label: {
+      color: theme.colors.textSecondary,
+      fontSize: 11,
+      fontWeight: '700',
+      lineHeight: 14,
+      letterSpacing: -0.2,
+      textAlign: 'center',
+    },
+    labelActive: {
+      color: theme.colors.white,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

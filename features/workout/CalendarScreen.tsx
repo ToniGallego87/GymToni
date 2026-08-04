@@ -30,6 +30,7 @@ import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
 import { t } from '@lib/i18n';
+import { findDayInRoutines } from '@lib/utils';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 type CalendarMode = 'fuerza' | 'cardio';
@@ -100,13 +101,8 @@ export function CalendarScreen({
   const { bottom: floatingNavBottom, scrollBottomPadding } =
     getFloatingPrimaryNavMetrics(insets.bottom);
 
-  const getDayById = (dayId: string) => {
-    for (const routine of state.routines) {
-      const day = routine.days.find((item: WorkoutDay) => item.id === dayId);
-      if (day) return day;
-    }
-    return undefined;
-  };
+  const getDayById = (dayId: string) =>
+    findDayInRoutines(state.routines, dayId);
 
   // Número de semana (bloque) dentro de su rutina para cada log.
   const logToWeekBlock = useMemo(() => {
@@ -321,6 +317,40 @@ export function CalendarScreen({
           </Pressable>
         </View>
 
+        {cardioAvailable && (
+          <View style={styles.modeToggle}>
+            {(['fuerza', 'cardio'] as CalendarMode[]).map((m) => {
+              const active = mode === m;
+              // Activo = relleno dorado, así que la tinta es la del oro. Iba con
+              // `background`, que en día es casi blanco y sobre el oro vivo no se
+              // leía (en noche coinciden, así que allí no cambia nada).
+              const color = active
+                ? theme.colors.onGold
+                : theme.colors.textSecondary;
+              return (
+                <Pressable
+                  key={m}
+                  style={[styles.modeButton, active && styles.modeButtonActive]}
+                  onPress={() => {
+                    if (m === mode) return;
+                    animateLayout();
+                    setMode(m);
+                  }}
+                >
+                  <MaterialCommunityIcons
+                    name={m === 'fuerza' ? 'dumbbell' : 'run-fast'}
+                    size={16}
+                    color={color}
+                  />
+                  <Text style={[styles.modeButtonText, { color }]}>
+                    {m === 'fuerza' ? t('Fuerza') : t('Cardio')}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        )}
+
         <View style={styles.weekHeader}>
           {WEEK_DAYS.map((label) => (
             <Text key={label} style={styles.weekHeaderText}>
@@ -427,6 +457,12 @@ export function CalendarScreen({
             const dayColor = primaryDay
               ? getTrainingAccent(primaryDay)
               : theme.colors.primaryLine;
+            // Día de una semana de descarga: el borde se pinta de azul (el mismo
+            // azul del deload en el resto de la app) para reconocerlo de un vistazo.
+            const isDeloadDay = !!primaryLog?.isDeload;
+            const dayBorderColor = isDeloadDay
+              ? theme.colors.emoji_blue
+              : dayColor;
             const routineIndex = primaryLog
               ? state.routines.findIndex(
                   (r: WorkoutRoutine) => r.id === primaryLog.routineId
@@ -455,7 +491,7 @@ export function CalendarScreen({
                 style={[
                   styles.dayCell,
                   hasLogs && styles.dayCellActive,
-                  hasLogs && { borderColor: dayColor },
+                  hasLogs && { borderColor: dayBorderColor },
                   dateKey === todayKey && styles.dayCellToday,
                 ]}
               >
@@ -522,40 +558,6 @@ export function CalendarScreen({
             );
           })}
         </View>
-
-        {cardioAvailable && (
-          <View style={styles.modeToggle}>
-            {(['fuerza', 'cardio'] as CalendarMode[]).map((m) => {
-              const active = mode === m;
-              // Activo = relleno dorado, así que la tinta es la del oro. Iba con
-              // `background`, que en día es casi blanco y sobre el oro vivo no se
-              // leía (en noche coinciden, así que allí no cambia nada).
-              const color = active
-                ? theme.colors.onGold
-                : theme.colors.textSecondary;
-              return (
-                <Pressable
-                  key={m}
-                  style={[styles.modeButton, active && styles.modeButtonActive]}
-                  onPress={() => {
-                    if (m === mode) return;
-                    animateLayout();
-                    setMode(m);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={m === 'fuerza' ? 'dumbbell' : 'run-fast'}
-                    size={16}
-                    color={color}
-                  />
-                  <Text style={[styles.modeButtonText, { color }]}>
-                    {m === 'fuerza' ? t('Fuerza') : t('Cardio')}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -578,191 +580,191 @@ export function CalendarScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    paddingBottom: theme.spacing.xl,
-    marginTop: 0,
-  },
-  monthCard: {
-    backgroundColor: 'transparent',
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    overflow: 'hidden',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    marginBottom: 14,
-    ...theme.shadow.soft,
-  },
-  monthTitle: {
-    fontSize: 22,
-    fontFamily: theme.fonts.display,
-    letterSpacing: 0.5,
-    color: theme.colors.text,
-    lineHeight: 27,
-    // Anton pega el glifo al borde superior de su caja; sin esto el mes/año
-    // queda descentrado frente a las flechas (mismo patrón que HeroCard).
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-    transform: [{ translateY: 2 }],
-  },
-  monthNavButton: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  monthNavButtonDisabled: {
-    opacity: 0.25,
-  },
-  weekHeader: {
-    flexDirection: 'row',
-    marginBottom: 8,
-    gap: 6,
-  },
-  weekHeaderText: {
-    flex: 1,
-    textAlign: 'center',
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 6,
-    justifyContent: 'space-between',
-  },
-  dayCell: {
-    flex: 1,
-    minWidth: '12.8%',
-    // Altura FIJA (no mínima) para que las filas midan lo mismo en los modos
-    // fuerza y cardio, independientemente del contenido de cada celda.
-    height: 80,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 7,
-    paddingHorizontal: 6,
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
-    overflow: 'hidden',
-  },
-  dayCellEmpty: {
-    opacity: 0,
-  },
-  dayCellActive: {
-    ...theme.shadow.soft,
-  },
-  dayCellToday: {
-    borderWidth: 2.5,
-    borderColor: theme.colors.primaryLine,
-  },
-  // Cabecera del cell: número de día (izq) y chip de rutina (der) en una fila.
-  dayHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  dayNumber: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 16,
-  },
-  // Slot del icono: protagonista, ocupa el espacio central y centra la silueta.
-  dayIconSlot: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  // Rutina (R1, R2...): texto suelto en la esquina superior derecha. Amarillo
-  // si es la rutina activa, gris en el resto (color inline).
-  dayRoutineChip: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.2,
-    lineHeight: 13,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    includeFontPadding: false,
-  },
-  // Número de semana (S1, S2...): metadato de pie, discreto y centrado.
-  dayWeekLabel: {
-    fontFamily: theme.fonts.display,
-    fontSize: 15,
-    letterSpacing: 0.5,
-    lineHeight: 19,
-    textAlign: 'center',
-    textAlignVertical: 'center',
-    includeFontPadding: false,
-  },
-  dayWeekSpacer: {
-    height: 19,
-  },
-  // Toggle Fuerza/Cardio bajo el calendario: dos segmentos; el activo se rellena
-  // de amarillo (primary) con texto oscuro, el inactivo va gris sobre surface.
-  modeToggle: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 16,
-    padding: 4,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    backgroundColor: theme.colors.surface,
-  },
-  modeButton: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.sm,
-  },
-  modeButtonActive: {
-    backgroundColor: theme.colors.primaryFill,
-  },
-  modeButtonText: {
-    fontSize: 14,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  emptyState: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  emptyEmoji: {
-    fontSize: 46,
-    marginBottom: 10,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: theme.colors.text,
-    marginBottom: 6,
-  },
-  emptyText: {
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      paddingBottom: theme.spacing.xl,
+      marginTop: 0,
+    },
+    monthCard: {
+      backgroundColor: 'transparent',
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      marginBottom: 14,
+      ...theme.shadow.soft,
+    },
+    monthTitle: {
+      fontSize: 22,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.5,
+      color: theme.colors.text,
+      lineHeight: 31,
+      // Anton pega el glifo al borde superior de su caja; sin esto el mes/año
+      // queda descentrado frente a las flechas (mismo patrón que HeroCard).
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: 2 }],
+    },
+    monthNavButton: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+    },
+    monthNavButtonDisabled: {
+      opacity: 0.25,
+    },
+    weekHeader: {
+      flexDirection: 'row',
+      marginBottom: 8,
+      gap: 6,
+    },
+    weekHeaderText: {
+      flex: 1,
+      textAlign: 'center',
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+      lineHeight: 18,
+    },
+    grid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 6,
+      justifyContent: 'space-between',
+    },
+    dayCell: {
+      flex: 1,
+      minWidth: '12.8%',
+      // Altura FIJA (no mínima) para que las filas midan lo mismo en los modos
+      // fuerza y cardio, independientemente del contenido de cada celda.
+      height: 80,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.md,
+      paddingVertical: 7,
+      paddingHorizontal: 6,
+      alignItems: 'stretch',
+      justifyContent: 'flex-start',
+      overflow: 'hidden',
+    },
+    dayCellEmpty: {
+      opacity: 0,
+    },
+    dayCellActive: {
+      ...theme.shadow.soft,
+    },
+    dayCellToday: {
+      borderWidth: 2.5,
+      borderColor: theme.colors.primaryLine,
+    },
+    // Cabecera del cell: número de día (izq) y chip de rutina (der) en una fila.
+    dayHeaderRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    dayNumber: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 16,
+    },
+    // Slot del icono: protagonista, ocupa el espacio central y centra la silueta.
+    dayIconSlot: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Rutina (R1, R2...): texto suelto en la esquina superior derecha. Amarillo
+    // si es la rutina activa, gris en el resto (color inline).
+    dayRoutineChip: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.2,
+      lineHeight: 13,
+      textAlign: 'center',
+      textAlignVertical: 'center',
+      includeFontPadding: false,
+    },
+    // Número de semana (S1, S2...): metadato de pie, discreto y centrado.
+    dayWeekLabel: {
+      fontFamily: theme.fonts.display,
+      fontSize: 15,
+      letterSpacing: 0.5,
+      lineHeight: 21,
+      textAlign: 'center',
+      textAlignVertical: 'center',
+    },
+    dayWeekSpacer: {
+      height: 19,
+    },
+    // Toggle Fuerza/Cardio junto a la cabecera de mes: dos segmentos; el activo se
+    // rellena de amarillo (primary) con texto oscuro, el inactivo va gris sobre surface.
+    modeToggle: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 14,
+      padding: 4,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    modeButton: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 10,
+      borderRadius: theme.borderRadius.sm,
+    },
+    modeButtonActive: {
+      backgroundColor: theme.colors.primaryFill,
+    },
+    modeButtonText: {
+      fontSize: 14,
+      fontWeight: '800',
+      letterSpacing: 0.3,
+    },
+    emptyState: {
+      flex: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 32,
+    },
+    emptyEmoji: {
+      fontSize: 46,
+      marginBottom: 10,
+    },
+    emptyTitle: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: theme.colors.text,
+      marginBottom: 6,
+    },
+    emptyText: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 18,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

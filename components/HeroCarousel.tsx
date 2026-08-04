@@ -144,64 +144,65 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  wrapper: {
-    position: 'relative',
-  },
-  arrow: {
-    position: 'absolute',
-    top: 0,
-    // Excluye el margen inferior de la hero card para abarcar justo su altura.
-    bottom: theme.spacing.md,
-    // Pegadas al borde exterior de la tarjeta (coincide con su margen horizontal).
-    justifyContent: 'center',
-    alignItems: 'stretch',
-  },
-  arrowLeft: {
-    left: theme.spacing.md,
-  },
-  arrowRight: {
-    right: theme.spacing.md,
-  },
-  // Peldaño lateral: ocupa TODA la altura de la hero card y va pegado a su borde.
-  // Las esquinas exteriores copian el radio de la tarjeta (parecen su propio
-  // borde); las interiores llevan un radio pequeño que apenas se ve, porque el
-  // degradado ya llega transparente a ese lado. El conjunto se lee como un
-  // escalón tallado en el lateral del dorado, no como un botón superpuesto.
-  arrowStep: {
-    width: HERO_ARROW_WIDTH,
-    flex: 1,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowStepLeft: {
-    borderTopLeftRadius: theme.borderRadius.lg,
-    borderBottomLeftRadius: theme.borderRadius.lg,
-    borderTopRightRadius: theme.borderRadius.sm,
-    borderBottomRightRadius: theme.borderRadius.sm,
-  },
-  arrowStepRight: {
-    borderTopRightRadius: theme.borderRadius.lg,
-    borderBottomRightRadius: theme.borderRadius.lg,
-    borderTopLeftRadius: theme.borderRadius.sm,
-    borderBottomLeftRadius: theme.borderRadius.sm,
-  },
-  dots: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: theme.spacing.md + 10,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dot: {
-    height: 6,
-    borderRadius: 3,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrapper: {
+      position: 'relative',
+    },
+    arrow: {
+      position: 'absolute',
+      top: 0,
+      // Excluye el margen inferior de la hero card para abarcar justo su altura.
+      bottom: theme.spacing.md,
+      // Pegadas al borde exterior de la tarjeta (coincide con su margen horizontal).
+      justifyContent: 'center',
+      alignItems: 'stretch',
+    },
+    arrowLeft: {
+      left: theme.spacing.md,
+    },
+    arrowRight: {
+      right: theme.spacing.md,
+    },
+    // Peldaño lateral: ocupa TODA la altura de la hero card y va pegado a su borde.
+    // Las esquinas exteriores copian el radio de la tarjeta (parecen su propio
+    // borde); las interiores llevan un radio pequeño que apenas se ve, porque el
+    // degradado ya llega transparente a ese lado. El conjunto se lee como un
+    // escalón tallado en el lateral del dorado, no como un botón superpuesto.
+    arrowStep: {
+      width: HERO_ARROW_WIDTH,
+      flex: 1,
+      overflow: 'hidden',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    arrowStepLeft: {
+      borderTopLeftRadius: theme.borderRadius.lg,
+      borderBottomLeftRadius: theme.borderRadius.lg,
+      borderTopRightRadius: theme.borderRadius.sm,
+      borderBottomRightRadius: theme.borderRadius.sm,
+    },
+    arrowStepRight: {
+      borderTopRightRadius: theme.borderRadius.lg,
+      borderBottomRightRadius: theme.borderRadius.lg,
+      borderTopLeftRadius: theme.borderRadius.sm,
+      borderBottomLeftRadius: theme.borderRadius.sm,
+    },
+    dots: {
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      bottom: theme.spacing.md + 10,
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      gap: 6,
+    },
+    dot: {
+      height: 6,
+      borderRadius: 3,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

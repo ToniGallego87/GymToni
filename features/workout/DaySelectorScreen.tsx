@@ -1,7 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -42,11 +42,6 @@ export function DaySelectorScreen({
   const scrollBottomPadding =
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
 
-  // Día seleccionado a la espera de confirmar (solo cuando implicaría empezar
-  // una nueva semana). El resto de días arrancan la sesión directamente.
-  const [selectedDayId, setSelectedDayId] = useState<string | null>(null);
-  const [forceNewWeek, setForceNewWeek] = useState(false);
-
   // Días ya entrenados en la semana EN CURSO (último bloque). Si la semana ya
   // tiene sesiones y se elige un día distinto, ese día no es "el primero de la
   // semana": puede forzarse a iniciar una nueva.
@@ -72,23 +67,9 @@ export function DaySelectorScreen({
 
   // Un día "no es el primero de la semana" si la semana en curso ya tiene
   // sesiones y este día aún no se ha entrenado en ella (entrenarlo continuaría
-  // la semana; el check permite forzar el inicio de una nueva).
+  // la semana; el botón de abajo permite forzar el inicio de una nueva).
   const dayImpliesNewWeekChoice = (day: WorkoutDay) =>
     daysInCurrentWeek.size > 0 && !daysInCurrentWeek.has(day.id);
-
-  const handleDayPress = (day: WorkoutDay) => {
-    if (!dayImpliesNewWeekChoice(day)) {
-      onSelectDay(day, false);
-      return;
-    }
-    // Alternar la selección para mostrar/ocultar el check bajo el día.
-    if (selectedDayId === day.id) {
-      setSelectedDayId(null);
-    } else {
-      setSelectedDayId(day.id);
-      setForceNewWeek(false);
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -110,16 +91,21 @@ export function DaySelectorScreen({
         showsVerticalScrollIndicator={false}
       >
         {days.map((day) => {
-          const isSelected = selectedDayId === day.id;
+          // Tocar el día SIEMPRE arranca la sesión (continúa la semana en curso):
+          // es el caso común y el gesto no cambia de un día a otro. Para los días
+          // que además pueden abrir una semana nueva, se ofrece un botón visible y
+          // constante debajo (antes era un panel que solo salía al tocar, y
+          // entonces el toque no entraba: mismo gesto, dos resultados distintos).
+          const canStartNewWeek = dayImpliesNewWeekChoice(day);
           return (
             <View key={day.id}>
               <Pressable
                 style={({ pressed }) => [
                   styles.dayCard,
-                  isSelected && styles.dayCardSelected,
+                  canStartNewWeek && styles.dayCardAttached,
                   pressed && styles.dayCardPressed,
                 ]}
-                onPress={() => handleDayPress(day)}
+                onPress={() => onSelectDay(day, false)}
               >
                 <View style={styles.dayLeading}>
                   <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />
@@ -137,44 +123,27 @@ export function DaySelectorScreen({
                 </Text>
               </Pressable>
 
-              {isSelected && (
-                <View style={styles.newWeekPanel}>
-                  <Pressable
-                    style={styles.newWeekCheckRow}
-                    onPress={() => setForceNewWeek((prev) => !prev)}
-                  >
-                    <View
-                      style={[
-                        styles.checkbox,
-                        forceNewWeek && styles.checkboxChecked,
-                      ]}
-                    >
-                      {forceNewWeek && (
-                        <MaterialCommunityIcons
-                          name="check-bold"
-                          size={14}
-                          color={theme.colors.onGold}
-                        />
-                      )}
-                    </View>
-                    <Text style={styles.newWeekText}>
-                      {t('Empezar una nueva semana con este día')}
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={styles.newWeekStartButton}
-                    onPress={() => onSelectDay(day, forceNewWeek)}
-                  >
-                    <MaterialCommunityIcons
-                      name="arrow-right-bold"
-                      size={18}
-                      color={theme.colors.onGold}
-                    />
-                    <Text style={styles.newWeekStartText}>
-                      {t('Empezar sesión')}
-                    </Text>
-                  </Pressable>
-                </View>
+              {canStartNewWeek && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.newWeekButton,
+                    pressed && styles.dayCardPressed,
+                  ]}
+                  onPress={() => onSelectDay(day, true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t(
+                    'Empezar una nueva semana con este día'
+                  )}
+                >
+                  <MaterialCommunityIcons
+                    name="calendar-plus"
+                    size={18}
+                    color={theme.colors.primary}
+                  />
+                  <Text style={styles.newWeekButtonText}>
+                    {t('Empezar una nueva semana con este día')}
+                  </Text>
+                </Pressable>
               )}
             </View>
           );
@@ -228,148 +197,128 @@ export function DaySelectorScreen({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: theme.colors.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  badge: {
-    backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: theme.borderRadius.pill,
-  },
-  badgeText: {
-    color: theme.colors.primaryLight,
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  content: {
-    paddingHorizontal: theme.spacing.md,
-    marginTop: 0,
-  },
-  dayCard: {
-    backgroundColor: theme.colors.surface,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    padding: theme.spacing.md,
-    marginBottom: 10,
-    flexDirection: 'row',
-    alignItems: 'center',
-    ...theme.shadow.soft,
-  },
-  dayCardSelected: {
-    borderColor: theme.colors.primaryLine,
-    borderWidth: 2,
-    marginBottom: 0,
-  },
-  cardioOnlyCard: {
-    borderColor: theme.colors.emoji_blue,
-    borderStyle: 'dashed',
-  },
-  cardioOnlyIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: theme.colors.emoji_blueMuted,
-  },
-  cardioOnlyBadge: {
-    color: theme.colors.emoji_blue,
-    backgroundColor: theme.colors.emoji_blueMuted,
-  },
-  dayCardPressed: {
-    opacity: 0.85,
-  },
-  newWeekPanel: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.primaryLine,
-    borderTopWidth: 0,
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-    paddingHorizontal: theme.spacing.md,
-    paddingTop: 12,
-    paddingBottom: 12,
-    marginBottom: 10,
-    gap: 12,
-  },
-  newWeekCheckRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  checkbox: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 2,
-    borderColor: theme.colors.primaryLine,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'transparent',
-  },
-  checkboxChecked: {
-    backgroundColor: theme.colors.primaryFill,
-  },
-  newWeekText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: '700',
-    color: theme.colors.text,
-    lineHeight: 19,
-  },
-  newWeekStartButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    borderRadius: theme.borderRadius.md,
-    backgroundColor: theme.colors.primaryFill,
-  },
-  newWeekStartText: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-  },
-  dayLeading: {
-    marginRight: 12,
-  },
-  dayContent: {
-    flex: 1,
-  },
-  dayName: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.text,
-    lineHeight: 22,
-  },
-  dayMeta: {
-    marginTop: 2,
-    fontSize: 13,
-    color: theme.colors.textSecondary,
-    lineHeight: 18,
-  },
-  dayBadge: {
-    color: theme.colors.primaryLight,
-    backgroundColor: theme.colors.primaryMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: theme.borderRadius.pill,
-    fontSize: 14,
-    fontWeight: '800',
-    overflow: 'hidden',
-    lineHeight: 18,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: theme.colors.background,
+    },
+    scroll: {
+      flex: 1,
+    },
+    badge: {
+      backgroundColor: theme.colors.primaryMuted,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
+      borderRadius: theme.borderRadius.pill,
+    },
+    badgeText: {
+      color: theme.colors.primaryLight,
+      fontSize: 16,
+      fontWeight: '800',
+      lineHeight: 20,
+    },
+    content: {
+      paddingHorizontal: theme.spacing.md,
+      marginTop: 0,
+    },
+    dayCard: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      marginBottom: 10,
+      flexDirection: 'row',
+      alignItems: 'center',
+      ...theme.shadow.soft,
+    },
+    // Cuando el día lleva debajo el botón de "nueva semana", la tarjeta se pega a
+    // él (sin margen ni redondeo inferior) para que se lean como un solo bloque.
+    dayCardAttached: {
+      marginBottom: 0,
+      borderBottomLeftRadius: 0,
+      borderBottomRightRadius: 0,
+    },
+    cardioOnlyCard: {
+      borderColor: theme.colors.emoji_blue,
+      borderStyle: 'dashed',
+    },
+    cardioOnlyIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.emoji_blueMuted,
+    },
+    cardioOnlyBadge: {
+      color: theme.colors.emoji_blue,
+      backgroundColor: theme.colors.emoji_blueMuted,
+    },
+    dayCardPressed: {
+      opacity: 0.85,
+    },
+    // Botón secundario, visible y constante, pegado bajo el día: arranca una
+    // semana nueva con ese día en vez de continuar la actual.
+    newWeekButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      paddingVertical: 11,
+      paddingHorizontal: theme.spacing.md,
+      marginBottom: 10,
+      borderRadius: theme.borderRadius.md,
+      borderTopLeftRadius: 0,
+      borderTopRightRadius: 0,
+      borderWidth: 1,
+      borderTopWidth: 0,
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    newWeekButtonText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      lineHeight: 17,
+    },
+    dayLeading: {
+      marginRight: 12,
+    },
+    dayContent: {
+      flex: 1,
+    },
+    // Nombre del día en la fuente display (Anton), igual que en Inicio y Detalle
+    // (antes iba en fuente de sistema, la única lista de días que divergía).
+    dayName: {
+      fontSize: 19,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.3,
+      color: theme.colors.text,
+      lineHeight: 27,
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+    },
+    dayMeta: {
+      marginTop: 2,
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+      lineHeight: 18,
+    },
+    dayBadge: {
+      color: theme.colors.primaryLight,
+      backgroundColor: theme.colors.primaryMuted,
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: theme.borderRadius.pill,
+      fontSize: 14,
+      fontWeight: '800',
+      overflow: 'hidden',
+      lineHeight: 18,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

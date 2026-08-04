@@ -206,91 +206,92 @@ export function HeroWeightCard({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  wrapper: {
-    marginHorizontal: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-    borderRadius: theme.borderRadius.lg,
-    ...theme.shadow.card,
-  },
-  gradient: {
-    borderRadius: theme.borderRadius.lg,
-    paddingHorizontal: 20,
-    // Mismo ritmo vertical que HeroStatsCard (ver allí): el extra de abajo sube
-    // el bloque y aparta la gráfica de los puntitos del carrusel.
-    paddingTop: 14,
-    paddingBottom: 24,
-    minHeight: 172,
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
-  sheen: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: '55%',
-  },
-  kicker: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.75,
-    marginBottom: 2,
-  },
-  mainRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-  },
-  mainValue: {
-    fontFamily: theme.fonts.display,
-    fontSize: 34,
-    // Mismos lineHeight y compensación que HeroStatsCard (el porqué, allí).
-    lineHeight: 44,
-    includeFontPadding: false,
-    transform: [{ translateY: 4 }],
-    color: theme.colors.onGold,
-  },
-  mainUnit: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.colors.onGold,
-    opacity: 0.8,
-    alignSelf: 'flex-end',
-    marginBottom: 4,
-  },
-  subline: {
-    marginTop: 2,
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.85,
-  },
-  chartBlock: {
-    marginTop: 4,
-    paddingTop: 4,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 19, 24, 0.16)',
-    // Deja hueco a las flechas del carrusel, pegadas a los lados de la tarjeta.
-    marginHorizontal: HERO_ARROW_INSET,
-  },
-  chartWrap: {
-    height: CHART_HEIGHT,
-  },
-  chartLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-    color: theme.colors.onGold,
-    opacity: 0.7,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    wrapper: {
+      marginHorizontal: theme.spacing.md,
+      marginBottom: theme.spacing.md,
+      borderRadius: theme.borderRadius.lg,
+      ...theme.shadow.card,
+    },
+    gradient: {
+      borderRadius: theme.borderRadius.lg,
+      paddingHorizontal: 20,
+      // Mismo ritmo vertical que HeroStatsCard (ver allí): el extra de abajo sube
+      // el bloque y aparta la gráfica de los puntitos del carrusel.
+      paddingTop: 14,
+      paddingBottom: 24,
+      minHeight: 172,
+      justifyContent: 'center',
+      overflow: 'hidden',
+    },
+    sheen: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '55%',
+    },
+    kicker: {
+      fontSize: 12,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      textAlign: 'center',
+      color: theme.colors.onGold,
+      opacity: 0.75,
+      marginBottom: 2,
+    },
+    mainRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+    },
+    mainValue: {
+      fontFamily: theme.fonts.display,
+      fontSize: 34,
+      // Mismos lineHeight y compensación que HeroStatsCard (el porqué, allí).
+      lineHeight: 44,
+      includeFontPadding: false,
+      transform: [{ translateY: 4 }],
+      color: theme.colors.onGold,
+    },
+    mainUnit: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+      opacity: 0.8,
+      alignSelf: 'flex-end',
+      marginBottom: 4,
+    },
+    subline: {
+      marginTop: 2,
+      fontSize: 13,
+      fontWeight: '700',
+      textAlign: 'center',
+      color: theme.colors.onGold,
+      opacity: 0.85,
+    },
+    chartBlock: {
+      marginTop: 4,
+      paddingTop: 4,
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(16, 19, 24, 0.16)',
+      // Deja hueco a las flechas del carrusel, pegadas a los lados de la tarjeta.
+      marginHorizontal: HERO_ARROW_INSET,
+    },
+    chartWrap: {
+      height: CHART_HEIGHT,
+    },
+    chartLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      textAlign: 'center',
+      color: theme.colors.onGold,
+      opacity: 0.7,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

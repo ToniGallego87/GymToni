@@ -11,6 +11,8 @@ export type Language = 'es' | 'en';
 
 const THEME_KEY = 'themeMode';
 const LANGUAGE_KEY = 'language';
+const AUTO_BACKUP_KEY = 'autoBackupEnabled';
+const LAST_AUTO_BACKUP_KEY = 'lastAutoBackupAt';
 // En web (sin SQLite en SDK 51) se usa localStorage con este prefijo.
 const WEB_PREFIX = 'gymbro_setting_';
 
@@ -92,4 +94,25 @@ export function getStoredLanguage(): Language {
 
 export function setStoredLanguage(language: Language): void {
   writeSetting(LANGUAGE_KEY, language);
+}
+
+// Backup automático local: activado por defecto (la app es local-only, así que
+// un backup silencioso es la única red de seguridad sin export manual).
+export function getAutoBackupEnabled(): boolean {
+  return readSetting(AUTO_BACKUP_KEY) !== 'false';
+}
+
+export function setAutoBackupEnabled(enabled: boolean): void {
+  writeSetting(AUTO_BACKUP_KEY, enabled ? 'true' : 'false');
+}
+
+/** Marca de tiempo (ms) del último backup automático, o 0 si nunca. */
+export function getLastAutoBackupAt(): number {
+  const raw = readSetting(LAST_AUTO_BACKUP_KEY);
+  const value = raw ? parseInt(raw, 10) : 0;
+  return Number.isFinite(value) ? value : 0;
+}
+
+export function setLastAutoBackupAt(timestamp: number): void {
+  writeSetting(LAST_AUTO_BACKUP_KEY, String(timestamp));
 }

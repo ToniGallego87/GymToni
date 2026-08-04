@@ -62,28 +62,29 @@ export function Toast({
   );
 }
 
-const makeStyles = () => StyleSheet.create({
-  container: {
-    position: 'absolute',
-    left: 16,
-    right: 16,
-    zIndex: 60,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: theme.borderRadius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.card,
-    elevation: 24,
-  },
-  text: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '700',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    container: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      zIndex: 60,
+      paddingVertical: 14,
+      paddingHorizontal: 18,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      ...theme.shadow.card,
+      elevation: 24,
+    },
+    text: {
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '700',
+      textAlign: 'center',
+      lineHeight: 20,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

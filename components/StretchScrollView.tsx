@@ -106,11 +106,12 @@ export const StretchScrollView = forwardRef<
   );
 });
 
-const makeStyles = () => StyleSheet.create({
-  grow: {
-    flexGrow: 1,
-  },
-});
+const makeStyles = () =>
+  StyleSheet.create({
+    grow: {
+      flexGrow: 1,
+    },
+  });
 
 let styles = makeStyles();
 subscribeTheme(() => {

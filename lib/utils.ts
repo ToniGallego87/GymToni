@@ -1,5 +1,22 @@
-import { WorkoutLog } from '../types';
+import { WorkoutLog, WorkoutDay, WorkoutRoutine } from '../types';
 import { localizeDecimals } from './i18n';
+import { theme } from './theme';
+
+/**
+ * Resuelve un día por su id recorriendo todas las rutinas. Fuente única del
+ * bucle que Inicio, Detalle, el registro y el Calendario reimplementaban por
+ * separado (getDay / getDayById / dayNumberForLog).
+ */
+export function findDayInRoutines(
+  routines: WorkoutRoutine[],
+  dayId: string
+): WorkoutDay | undefined {
+  for (const routine of routines) {
+    const day = routine.days.find((d) => d.id === dayId);
+    if (day) return day;
+  }
+  return undefined;
+}
 
 export function generateId(): string {
   const cryptoRef = (globalThis as { crypto?: { randomUUID?: () => string } })
@@ -101,4 +118,16 @@ export function getImprovementDisplay(imp: {
     display: roundedPercent,
     kind: imp.isImproved ? 'up' : 'down',
   };
+}
+
+/**
+ * Color del tema para un tipo de mejora (verde sube / rojo baja / ámbar igual).
+ * Fuente única para que las pantallas no reimplementen el mapeo tipo→color.
+ */
+export function getImprovementColor(kind: ImprovementKind): string {
+  return kind === 'up'
+    ? theme.colors.success
+    : kind === 'down'
+    ? theme.colors.error
+    : theme.colors.warning;
 }

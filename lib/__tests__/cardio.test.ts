@@ -8,6 +8,8 @@ import {
   buildCardioMonths,
   mergeSessionEntries,
   formatMergedResults,
+  formatEntryResults,
+  parseCardioEntry,
   estimateEntryKcal,
   topKcalDiscipline,
   weightForTimestamp,
@@ -248,6 +250,27 @@ describe('formatMergedResults', () => {
     expect(formatMergedResults(cinta)).toBe('20 min, 10 km/h');
     const [bici] = mergeSessionEntries(parseCardioEntries('Bici: 30min'));
     expect(formatMergedResults(bici)).toBe('30 min');
+  });
+});
+
+describe('formatEntryResults', () => {
+  it('formatea una entrada suelta con coma decimal', () => {
+    expect(formatEntryResults(parseCardioEntry('Cinta: 20min, 12.6kmh'))).toBe(
+      '20 min, 12,6 km/h'
+    );
+  });
+
+  it('omite km/h sin velocidad y la pendiente si es llano (0 o ausente)', () => {
+    expect(formatEntryResults(parseCardioEntry('Bici: 30min'))).toBe('30 min');
+    expect(
+      formatEntryResults(parseCardioEntry('Cinta: 20min, 10kmh, 0%'))
+    ).toBe('20 min, 10 km/h');
+  });
+
+  it('pinta la pendiente cuando hay cuesta', () => {
+    expect(
+      formatEntryResults(parseCardioEntry('Correr en cinta: 20min, 11kmh, 2%'))
+    ).toBe('20 min, 11 km/h, 2%');
   });
 });
 
