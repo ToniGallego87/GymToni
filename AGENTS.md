@@ -8,6 +8,8 @@ Para detalles técnicos consulta:
 - [.github/ARCHITECTURE.md](.github/ARCHITECTURE.md) — stack, flujo de datos, tipos, navegación
 - [.github/CONVENTIONS.md](.github/CONVENTIONS.md) — naming, patrones, reglas de código
 - [.github/docs/frontend-design.md](.github/docs/frontend-design.md) — principios de diseño UI
+- [.github/docs/backend-design.md](.github/docs/backend-design.md) — propuesta de backend, cuentas y sincronización (Supabase, por fases)
+- [.github/docs/backend-fase1-runbook.md](.github/docs/backend-fase1-runbook.md) — runbook de ejecución de la Fase 1 (subida de Expo SDK 51→57 + migración a PowerSync)
 - [.github/docs/SETUP.md](.github/docs/SETUP.md) — instalación y estructura de archivos
 - [.github/docs/UPDATES.md](.github/docs/UPDATES.md) — historial de versiones
 - [.github/docs/ROADMAP.md](.github/docs/ROADMAP.md) — seguimiento de futuros desarrollos (mejoras visuales, simplificaciones y nuevas funcionalidades pendientes)
@@ -99,10 +101,13 @@ Cuando cambie: estructura de carpetas, tipos, modelo de datos, flujo de registro
 
 ## Restricciones
 
-NO añadir:
+Backend, cuentas y sincronización cloud **dejan de estar prohibidos**: pasan a
+ser una dirección planificada **por fases**. La fuente única del plan es
+[.github/docs/backend-design.md](.github/docs/backend-design.md) (Supabase,
+offline-first, cuenta opcional). No improvisar nube ni login fuera de ese plan.
 
-- Login / signup / usuarios
-- Backend remoto / sincronización cloud
+NO añadir (sigue vigente):
+
 - Redux / librerías de estado externas
 - Arquitecturas complejas / abstracciones innecesarias
 - Librerías UI externas

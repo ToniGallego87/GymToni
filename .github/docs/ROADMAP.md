@@ -5,44 +5,15 @@ Solo contiene lo que queda por hacer: lo terminado se borra de aquí (el
 historial vive en [UPDATES.md](UPDATES.md)). Marcar `[x]` al completar una
 tarea y eliminarla al cerrar la versión que la incluya.
 
-Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** login,
-**no** backend/cloud, **no** Redux, **no** librerías UI externas.
+Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** Redux,
+**no** librerías de estado o UI externas, **no** arquitecturas complejas.
+Backend, cuentas y sincronización cloud ya **no** están prohibidos: son una
+dirección planificada por fases (plan en [backend-design.md](backend-design.md)).
 
-Última revisión completa: 2026-08-04.
+Última revisión completa: 2026-08-07.
 
 ## Mejoras visuales y de UX
 
-- [x] **Pintar el cardio del registro como en la vista de consulta** — en la
-      inserción de ejercicios, la sección de cardio muestra cada entrada como
-      texto crudo (`Correr en cinta: 30min, 10kmh, 5%`) sin icono, bajo una
-      cabecera "Disciplinas ejecutadas:" con un icono genérico `run`. Rehacerla
-      con el patrón que ya usa la consulta: cabecera "Cardio" con `run-fast`, y
-      cada entrada como fila con su icono de disciplina real (cuesta incluida),
-      el nombre y los resultados formateados (`30 min, 10 km/h, 5%`) sobre
-      superficie de resultado, conservando la X de borrar visible.
-      **Por qué:** registrar cardio es acción frecuente y hoy el resultado se lee
-      como dato crudo, incoherente con Cardio (consulta) que ya lo pinta con
-      icono por disciplina y datos legibles; es la queja directa del usuario.
-      **Archivos:** `components/CardioInputField.tsx:183-214` (cabecera + lista
-      que hoy pinta `localizeDecimals(entry)` crudo sin icono), reutilizando de
-      `lib/cardio.ts` los helpers que la consulta ya usa: `disciplineIconName`
-      (`:261`), `parseCardioEntry` (`:188`) y `formatMergedResults` (`:590`) —
-      patrón vivo en `features/workout/CardioScreen.tsx:645-680`. Alinear de paso
-      el icono de la top bar en solo-cardio (`features/workout/WorkoutLogScreen.tsx:1220`,
-      `run`→`run-fast`).
-      **Esfuerzo:** medio.
-- [x] **Fuente única de icono por disciplina de cardio** — el picker del modal de
-      inserción y la vista de consulta usan iconos distintos para la misma
-      disciplina (bici: `bicycle` vs `bike`; correr en exterior y la cuesta
-      también divergen). Unificar tomando `disciplineIconName` como única fuente
-      del icono de cada disciplina real (la opción "Otro" del picker puede
-      conservar su icono de affordance).
-      **Por qué:** al elegir "Bici estática" se ve un icono en el picker y otro
-      luego en la lista/consulta: dos señales para lo mismo desorientan.
-      **Archivos:** `components/CardioInputField.tsx:36-43` (`CARDIO_OPTIONS` con
-      iconos propios) contra `lib/cardio.ts:261-275` (`disciplineIconName`,
-      fuente única a adoptar).
-      **Esfuerzo:** bajo.
 - [ ] **Transición de tema que revele el contenido real, no un disco opaco** — el
       cambio claro/oscuro anima un círculo de color sólido que tapa la pantalla;
       se pide que ese círculo no sea opaco sino que muestre ya el contenido de la
@@ -50,7 +21,7 @@ Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** login,
       dos pieles y no un barrido de color plano.
       **Por qué:** el disco de color maciza la transición; ver la UI de destino
       crecer desde el punto pulsado haría el cambio de tema mucho más pulido.
-      **Archivos:** `components/ThemeRevealOverlay.tsx:56,130-151` (hoy pinta un
+      **Archivos:** `components/ThemeRevealOverlay.tsx:130-146` (hoy pinta un
       `Animated.View` con `backgroundColor: request.discColor`; para revelar
       contenido real haría falta una captura/snapshot de la vista en el tema de
       destino recortada por el círculo, sin librerías UI externas). Requiere
@@ -59,20 +30,60 @@ Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** login,
 
 ## Funcionalidades a simplificar
 
-Nada pendiente ahora mismo en esta sección.
+Nada pendiente ahora mismo.
 
 ## Nuevas funcionalidades
 
 Candidatas (compatibles con las restricciones):
 
+El salto a la nube es un **epic secuencial** de tres fases (cada una entregable
+por sí sola), sobre **Supabase + PowerSync** — PowerSync trae hecho el motor de
+sync offline, así que no se escribe a mano. El plan completo (modelo de datos,
+sync, seguridad, coste) vive en [backend-design.md](backend-design.md); aquí
+solo el resumen.
+
+- [ ] **Backend Fase 1 — Subir Expo SDK + migrar la persistencia a PowerSync (local)** —
+      arranca subiendo **Expo SDK 51 → 57** (RN 0.86 / React 19 / New Architecture),
+      prerrequisito de PowerSync (op-sqlite ^17); luego reemplazar `lib/db`
+      (expo-sqlite) por la SQLite embebida de PowerSync, 100% offline y sin backend,
+      migrando los datos existentes a su cola de subida.
+      **Por qué:** es el cimiento del sync (PowerSync da el motor hecho) y, al
+      hacerse sin nube, se verifica sin regresiones antes de añadir red.
+      **Archivos:** SDK: todo el proyecto (deps, `android/`, módulo nativo
+      `video-encoder`). PowerSync: `lib/db/schema.ts`, `lib/db/index.ts`,
+      `lib/db/mappers.ts`, `lib/persistence.ts`, `lib/storage.ts`. Pasos en
+      `backend-fase1-runbook.md`; diseño en `backend-design.md` §4.
+      **Esfuerzo:** alto (migración de SDK + reescritura de persistencia; exige
+      dispositivo para verificar).
+- [ ] **Backend Fase 2 — Cuentas y conexión a la nube** — login con Supabase Auth
+      (email + Google + Apple), tabla `profiles` y conectar PowerSync↔Supabase
+      (backend connector + Sync Rules). Al conectar, backup, multi-dispositivo y
+      sync incremental vienen incluidos. Cuenta **opcional**; adopta el estado
+      local anónimo al registrarse.
+      **Por qué:** primer valor real: no perder los datos al cambiar de móvil y
+      verlos en varios dispositivos, con sync continuo sin esfuerzo del usuario.
+      **Archivos:** cliente Supabase + backend connector de PowerSync nuevos,
+      `lib/persistence.ts`, tabla `profiles` en la nube. Detalle en
+      `backend-design.md` §5.
+      **Esfuerzo:** alto.
+- [ ] **Backend Fase 3 — Social (perfiles, follows, tablón)** — perfiles
+      públicos, seguir usuarios, rutinas públicas (`is_public`), likes/guardados,
+      tablón de rutinas populares y clonar una rutina pública a tu espacio;
+      permisos por RLS y replicación de públicas vía Sync Rules.
+      **Por qué:** cierra el salto de app personal a comunidad; descubrir rutinas
+      y seguir a otros es el gancho de retención.
+      **Archivos:** tablas nube `profiles` / `follows` / `routine_likes` + RLS,
+      reutiliza `lib/routines.ts` (duplicar con ids nuevos) para clonar. Detalle
+      en `backend-design.md` §6.
+      **Esfuerzo:** alto.
 - [ ] **Recordatorio de entrenamiento** — notificación local programable por
       día de la semana (la infraestructura de notificaciones ya existe para el
       timer de descanso).
       **Por qué:** la constancia es el producto; un recordatorio a la hora de
       entrenar es la palanca más barata para sostener la racha.
       **Archivos:** `features/workout/SettingsScreen.tsx` (ajuste nuevo),
-      `features/workout/WorkoutLogScreen.tsx:448-493` (patrón de canal/permisos
-      a reutilizar) y `:373-411` (`scheduleNotificationAsync`).
+      `features/workout/WorkoutLogScreen.tsx:446-491` (patrón de canal/permisos
+      a reutilizar) y `:371-409` (`scheduleNotificationAsync`).
       **Esfuerzo:** medio.
 - [ ] **Registrar un ejercicio no planificado durante la sesión** — hoy el
       registro solo pinta los ejercicios que trae el día de la rutina; si en el
@@ -82,11 +93,11 @@ Candidatas (compatibles con las restricciones):
       demás.
       **Por qué:** entrenar de verdad no siempre sigue la plantilla; poder
       apuntar lo que hiciste evita que el registro mienta o se quede corto.
-      **Archivos:** `features/workout/WorkoutLogScreen.tsx:1108` (el registro
+      **Archivos:** `features/workout/WorkoutLogScreen.tsx:1140` (el registro
       itera solo `selectedDay.exercises`), `types/index.ts` (`ExerciseLog.exerciseId`
       apunta al ejercicio de la rutina: un extra necesita un id propio que
       Detalle resuelva por nombre/orden, como ya hace `getExerciseFromLog` en
-      `features/workout/DetailScreen.tsx:328-351`). Alternativa ligera: la ficha
+      `features/workout/DetailScreen.tsx:326-349`). Alternativa ligera: la ficha
       "Nota de sesión" cubre el "cambié banca por mancuernas" sin tocar el modelo.
       **Esfuerzo:** alto.
 - [ ] **Nota de sesión** — además de las notas por ejercicio: "gym lleno,
@@ -114,6 +125,11 @@ Candidatas (compatibles con las restricciones):
 
 ## Descartado por restricciones del proyecto
 
-Autenticación, sincronización cloud, modo coach/atleta, dashboard web e IA:
-requieren backend/usuarios, explícitamente fuera del alcance del MVP.
-Si algún día se replantea, revisar primero AGENTS.md.
+- **Autenticación, sincronización cloud y modo coach/atleta** ya **no** están
+  descartados: pasan a ser el epic de backend por fases (ver "Nuevas
+  funcionalidades" y [backend-design.md](backend-design.md)).
+- **Dashboard web e IA**: sin planificar por ahora — no por restricción, sino
+  por prioridad; se replantearán cuando el backend esté asentado.
+- Siguen fuera por restricción de código: Redux / librerías de estado externas,
+  librerías UI externas y arquitecturas complejas. Revisar AGENTS.md antes de
+  introducir cualquiera.
