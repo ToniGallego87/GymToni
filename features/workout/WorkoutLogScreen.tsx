@@ -251,9 +251,7 @@ export function WorkoutLogScreen({
       (l) => findDayInRoutines(state.routines, l.dayId)?.dayNumber
     );
     const ordered = orderedBlockNumbers(blocks);
-    const lastBlock = ordered.length
-      ? blocks[ordered[ordered.length - 1]]
-      : [];
+    const lastBlock = ordered.length ? blocks[ordered[ordered.length - 1]] : [];
     const lastDays = new Set(lastBlock.map((l) => l.dayId));
     // Continúa la semana en curso si no se fuerza una nueva, la semana tiene días
     // y este día aún no se ha entrenado en ella (si no, abre semana nueva).
@@ -265,8 +263,8 @@ export function WorkoutLogScreen({
     const sessionTs = log
       ? getLogTimestamp(log)
       : existingLog
-        ? getLogTimestamp(existingLog)
-        : new Date(`${selectedDate}T23:59:59`).getTime();
+      ? getLogTimestamp(existingLog)
+      : new Date(`${selectedDate}T23:59:59`).getTime();
     const lastBlockTs = lastBlock.length
       ? Math.max(...lastBlock.map((l) => getLogTimestamp(l)))
       : 0;
@@ -644,7 +642,9 @@ export function WorkoutLogScreen({
     }
   };
 
-  const getPreviousExerciseLog = (exerciseId: string) => {
+  // Todas las ejecuciones anteriores de un ejercicio (ordenadas de más reciente
+  // a más antigua), respetando el tope temporal al editar un log existente.
+  const getPreviousExerciseRuns = (exerciseId: string) => {
     const currentLogId = existingLog?.id;
 
     // Obtener todos los logs del mismo día, sin filtrar por fecha
@@ -671,22 +671,36 @@ export function WorkoutLogScreen({
     const currentLogDate = existingLog?.createdAt ?? Infinity;
 
     // Filtrar por exerciseId, excluir el log actual y descartar los posteriores
-    // al log que se está editando.
-    const matchingExercises = allExercisesForDay.filter(
-      (ex) =>
-        ex.exerciseId === exerciseId &&
-        ex.logId !== currentLogId &&
-        ex.logDate < currentLogDate
-    );
-
-    if (matchingExercises.length === 0) {
-      return null;
-    }
-
-    // Ordenar por fecha descendente y retornar el más reciente anterior
-    matchingExercises.sort((a, b) => b.logDate - a.logDate);
-    return matchingExercises[0] || null;
+    // al log que se está editando; ordenar de más reciente a más antiguo.
+    return allExercisesForDay
+      .filter(
+        (ex) =>
+          ex.exerciseId === exerciseId &&
+          ex.logId !== currentLogId &&
+          ex.logDate < currentLogDate
+      )
+      .sort((a, b) => b.logDate - a.logDate);
   };
+
+  const getPreviousExerciseLog = (exerciseId: string) =>
+    getPreviousExerciseRuns(exerciseId)[0] || null;
+
+  // ¿Tiene el log algún peso real (>0)? Las series a peso corporal (weight -1)
+  // o vacías no sirven para calcular el peso de descarga.
+  const hasUsableWeight = (log: ExerciseLog | null): boolean => {
+    if (!log) return false;
+    if (log.parsedSets?.length) return log.parsedSets.some((s) => s.weight > 0);
+    if (log.rawInput && log.rawInput.trim() && log.rawInput !== '-') {
+      return parseSeriesString(log.rawInput).some((s) => s.weight > 0);
+    }
+    return false;
+  };
+
+  // Base para el peso sugerido en descarga: la última semana en que este
+  // ejercicio se hizo con peso real, no necesariamente la inmediatamente
+  // anterior (que pudo saltarse o hacerse sin carga).
+  const getPreviousWeightLog = (exerciseId: string): ExerciseLog | null =>
+    getPreviousExerciseRuns(exerciseId).find(hasUsableWeight) || null;
 
   const buildExerciseImprovement = (
     currentSets: ParsedSet[],
@@ -1130,6 +1144,15 @@ export function WorkoutLogScreen({
             currentSets,
             previousLog
           );
+          // En descarga el peso sugerido se calcula sobre la última semana con
+          // carga real: si la anterior no tiene peso en este ejercicio, se
+          // retrocede hasta la que sí lo tuvo. (En descarga la comparación
+          // "Anterior" no se muestra, así que reusar este log como previousLog
+          // solo afecta al peso propuesto.)
+          const previousLogForField =
+            isDeloadSession && !hasUsableWeight(previousLog)
+              ? getPreviousWeightLog(exercise.id)
+              : previousLog;
           const targetSets = effectiveTargetSets(exercise.targetSets);
           const isTargetCompleted =
             targetSets > 0 && currentSets.length >= targetSets;
@@ -1161,7 +1184,7 @@ export function WorkoutLogScreen({
                 onFinishExercise={() => handleFinishExercise(exercise.id)}
                 onNotesPress={() => handleExerciseNotesPress(exercise.id)}
                 notes={exerciseNotes[exercise.id]}
-                previousLog={previousLog}
+                previousLog={previousLogForField}
                 improvement={isDeloadSession ? null : improvement}
                 accent={dayAccent}
                 restTimer={
@@ -1308,12 +1331,12 @@ export function WorkoutLogScreen({
                 'La semana volverá a contar como carga normal (objetivos de series y peso completos). ¿Continuar?'
               )
             : hasInsertedData
-              ? t(
-                  'Se borrarán los datos ya insertados de esta sesión para prepararla como descarga (menos series y peso más ligero). ¿Continuar?'
-                )
-              : t(
-                  'La semana se preparará como descarga: menos series y peso más ligero. ¿Continuar?'
-                )
+            ? t(
+                'Se borrarán los datos ya insertados de esta sesión para prepararla como descarga (menos series y peso más ligero). ¿Continuar?'
+              )
+            : t(
+                'La semana se preparará como descarga: menos series y peso más ligero. ¿Continuar?'
+              )
         }
         confirmLabel={t('Continuar')}
         confirmVariant="primary"

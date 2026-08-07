@@ -235,6 +235,7 @@ register({
   Segundos: 'Seconds',
   'Añadir serie': 'Add set',
   'Saltar resto': 'Skip remaining',
+  'Saltar ejercicio': 'Skip exercise',
   Nota: 'Note',
   'Completado · {a}/{b} series': 'Completed · {a}/{b} sets',
   Iniciar: 'Start',

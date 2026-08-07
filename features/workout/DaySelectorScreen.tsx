@@ -1,7 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo } from 'react';
+import React from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, Text, StyleSheet, Pressable, Platform } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -13,10 +13,9 @@ import {
   GLASS_TOP_BAR_BASE_HEIGHT,
   StretchScrollView,
 } from '@components';
-import { useWorkout } from '@hooks/useWorkout';
-import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
+import { dayNameText } from '@lib/textStyles';
 import { t } from '@lib/i18n';
 
 interface DaySelectorScreenProps {
@@ -34,42 +33,12 @@ export function DaySelectorScreen({
   onBack,
 }: DaySelectorScreenProps) {
   const insets = useSafeAreaInsets();
-  const { state } = useWorkout();
   const days = routine?.days || [];
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
     Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
   const scrollBottomPadding =
     floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
-
-  // Días ya entrenados en la semana EN CURSO (último bloque). Si la semana ya
-  // tiene sesiones y se elige un día distinto, ese día no es "el primero de la
-  // semana": puede forzarse a iniciar una nueva.
-  const daysInCurrentWeek = useMemo(() => {
-    if (!routine) return new Set<string>();
-    const dayNumberById = new Map(
-      routine.days.map((day) => [day.id, day.dayNumber])
-    );
-    const routineLogs = state.logs.filter(
-      (log) => log.routineId === routine.id
-    );
-    const blocks = groupLogsIntoWeekBlocks(routineLogs, (log) =>
-      dayNumberById.get(log.dayId)
-    );
-    const blockNumbers = Object.keys(blocks)
-      .map(Number)
-      .sort((a, b) => a - b);
-    const lastBlock = blockNumbers.length
-      ? blocks[blockNumbers[blockNumbers.length - 1]]
-      : [];
-    return new Set(lastBlock.map((log) => log.dayId));
-  }, [routine, state.logs]);
-
-  // Un día "no es el primero de la semana" si la semana en curso ya tiene
-  // sesiones y este día aún no se ha entrenado en ella (entrenarlo continuaría
-  // la semana; el botón de abajo permite forzar el inicio de una nueva).
-  const dayImpliesNewWeekChoice = (day: WorkoutDay) =>
-    daysInCurrentWeek.size > 0 && !daysInCurrentWeek.has(day.id);
 
   return (
     <View style={styles.container}>
@@ -90,64 +59,32 @@ export function DaySelectorScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {days.map((day) => {
-          // Tocar el día SIEMPRE arranca la sesión (continúa la semana en curso):
-          // es el caso común y el gesto no cambia de un día a otro. Para los días
-          // que además pueden abrir una semana nueva, se ofrece un botón visible y
-          // constante debajo (antes era un panel que solo salía al tocar, y
-          // entonces el toque no entraba: mismo gesto, dos resultados distintos).
-          const canStartNewWeek = dayImpliesNewWeekChoice(day);
-          return (
-            <View key={day.id}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.dayCard,
-                  canStartNewWeek && styles.dayCardAttached,
-                  pressed && styles.dayCardPressed,
-                ]}
-                onPress={() => onSelectDay(day, false)}
-              >
-                <View style={styles.dayLeading}>
-                  <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />
-                </View>
-                <View style={styles.dayContent}>
-                  <Text style={styles.dayName}>
-                    {getDisplayDayName(day.name)}
-                  </Text>
-                  <Text style={styles.dayMeta}>
-                    {t('{n} ejercicios', { n: day.exercises.length })}
-                  </Text>
-                </View>
-                <Text style={styles.dayBadge}>
-                  {t('Día')} {day.dayNumber}
-                </Text>
-              </Pressable>
-
-              {canStartNewWeek && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.newWeekButton,
-                    pressed && styles.dayCardPressed,
-                  ]}
-                  onPress={() => onSelectDay(day, true)}
-                  accessibilityRole="button"
-                  accessibilityLabel={t(
-                    'Empezar una nueva semana con este día'
-                  )}
-                >
-                  <MaterialCommunityIcons
-                    name="calendar-plus"
-                    size={18}
-                    color={theme.colors.primary}
-                  />
-                  <Text style={styles.newWeekButtonText}>
-                    {t('Empezar una nueva semana con este día')}
-                  </Text>
-                </Pressable>
-              )}
+        {/* Tocar el día arranca la sesión y continúa la semana en curso. Forzar
+            el inicio de una semana nueva vive ahora en la inserción de
+            ejercicios, no aquí: en el selector solo se elige el día. */}
+        {days.map((day) => (
+          <Pressable
+            key={day.id}
+            style={({ pressed }) => [
+              styles.dayCard,
+              pressed && styles.dayCardPressed,
+            ]}
+            onPress={() => onSelectDay(day, false)}
+          >
+            <View style={styles.dayLeading}>
+              <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />
             </View>
-          );
-        })}
+            <View style={styles.dayContent}>
+              <Text style={styles.dayName}>{getDisplayDayName(day.name)}</Text>
+              <Text style={styles.dayMeta}>
+                {t('{n} ejercicios', { n: day.exercises.length })}
+              </Text>
+            </View>
+            <Text style={styles.dayBadge}>
+              {t('Día')} {day.dayNumber}
+            </Text>
+          </Pressable>
+        ))}
 
         {!!onSelectCardioOnly && (
           <Pressable
@@ -233,13 +170,6 @@ const makeStyles = () =>
       alignItems: 'center',
       ...theme.shadow.soft,
     },
-    // Cuando el día lleva debajo el botón de "nueva semana", la tarjeta se pega a
-    // él (sin margen ni redondeo inferior) para que se lean como un solo bloque.
-    dayCardAttached: {
-      marginBottom: 0,
-      borderBottomLeftRadius: 0,
-      borderBottomRightRadius: 0,
-    },
     cardioOnlyCard: {
       borderColor: theme.colors.emoji_blue,
       borderStyle: 'dashed',
@@ -259,48 +189,15 @@ const makeStyles = () =>
     dayCardPressed: {
       opacity: 0.85,
     },
-    // Botón secundario, visible y constante, pegado bajo el día: arranca una
-    // semana nueva con ese día en vez de continuar la actual.
-    newWeekButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 11,
-      paddingHorizontal: theme.spacing.md,
-      marginBottom: 10,
-      borderRadius: theme.borderRadius.md,
-      borderTopLeftRadius: 0,
-      borderTopRightRadius: 0,
-      borderWidth: 1,
-      borderTopWidth: 0,
-      borderColor: theme.colors.primaryLine,
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    newWeekButtonText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: theme.colors.primary,
-      lineHeight: 17,
-    },
     dayLeading: {
       marginRight: 12,
     },
     dayContent: {
       flex: 1,
     },
-    // Nombre del día en la fuente display (Anton), igual que en Inicio y Detalle
-    // (antes iba en fuente de sistema, la única lista de días que divergía).
-    dayName: {
-      fontSize: 19,
-      fontFamily: theme.fonts.display,
-      letterSpacing: 0.3,
-      color: theme.colors.text,
-      lineHeight: 27,
-      includeFontPadding: false,
-      textAlignVertical: 'center',
-      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-    },
+    // Nombre del día en la fuente display: estilo compartido (lib/textStyles),
+    // igual que en Inicio y Cardio.
+    dayName: dayNameText(),
     dayMeta: {
       marginTop: 2,
       fontSize: 13,

@@ -19,6 +19,12 @@ interface TrendDeltaProps {
   iconSize?: number;
   /** Ajuste extra de la tipografía del número (tamaño por defecto: 15). */
   textStyle?: StyleProp<TextStyle>;
+  /**
+   * Fuerza el color de la flecha y el número (por defecto, verde/rojo según la
+   * dirección). Lo usa la semana de descarga, que va en azul al margen del
+   * signo.
+   */
+  color?: string;
 }
 
 /**
@@ -35,9 +41,11 @@ export function TrendDelta({
   decimals = 1,
   iconSize = 15,
   textStyle,
+  color: colorOverride,
 }: TrendDeltaProps) {
   const isUp = improved ?? value >= 0;
-  const color = isUp ? theme.colors.success : theme.colors.error;
+  const color =
+    colorOverride ?? (isUp ? theme.colors.success : theme.colors.error);
   return (
     <View style={styles.row}>
       <MaterialCommunityIcons

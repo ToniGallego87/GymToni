@@ -13,6 +13,8 @@ import {
   estimateEntryKcal,
   topKcalDiscipline,
   weightForTimestamp,
+  toCardioOnlyLog,
+  CARDIO_ONLY_DAY_ID,
 } from '../cardio';
 import { WorkoutLog } from '../../types';
 
@@ -362,5 +364,35 @@ describe('pesos por tramos', () => {
     // Las kcal son lineales con el peso: la B (80kg) / la A (60kg) = 80/60.
     expect(wA.totalKcal).toBeGreaterThan(0);
     expect(wB.totalKcal / wA.totalKcal).toBeCloseTo(80 / 60, 2);
+  });
+});
+
+describe('toCardioOnlyLog', () => {
+  it('quita la fuerza y conserva el cardio, reasignando al día sintético', () => {
+    const base = makeLog('l1', '2026-01-05', 'Cinta: 20min');
+    const log: WorkoutLog = {
+      ...base,
+      dayId: 'd2',
+      startsNewWeek: true,
+      exercises: [
+        {
+          id: 'ex1',
+          exerciseId: 'e1',
+          exerciseName: 'Press banca',
+          order: 1,
+          rawInput: '60x8',
+          parsedSets: [{ weight: 60, reps: 8 }],
+          timestamp: 1,
+        },
+      ],
+    };
+    const result = toCardioOnlyLog(log, 999);
+    expect(result.dayId).toBe(CARDIO_ONLY_DAY_ID);
+    expect(result.exercises).toEqual([]);
+    expect(result.cardioOnly).toBe(true);
+    expect(result.startsNewWeek).toBeUndefined();
+    expect(result.updatedAt).toBe(999);
+    expect(result.id).toBe('l1');
+    expect(result.cardio).toEqual(base.cardio);
   });
 });

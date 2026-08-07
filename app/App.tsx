@@ -225,11 +225,20 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, isFirstInstall]);
 
-  // Oculta el splash nativo una vez los datos reales ya están en pantalla.
+  // Oculta el splash nativo una vez los datos reales ya están en pantalla, pero
+  // NO en el mismo tick que se marca `hydrated`: se esperan dos frames para que
+  // el primer render con la UI real (incluida la fuente Anton) se pinte y MIDA
+  // antes de revelarlo. Si no, en algunos arranques en frío el splash se retiraba
+  // sobre un primer frame con las métricas de Anton aún sin asentar y el titular
+  // de la HeroCard salía recortado/mal dibujado.
   useEffect(() => {
-    if (hydrated) {
-      SplashScreen.hideAsync().catch(() => {});
-    }
+    if (!hydrated) return;
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        SplashScreen.hideAsync().catch(() => {});
+      });
+    });
+    return () => cancelAnimationFrame(outer);
   }, [hydrated]);
 
   // Navegación "atrás" compartida entre el botón físico de Android y el
@@ -522,6 +531,17 @@ function AppContent() {
 
     setScreen({ type: 'home' });
   };
+
+  // Hasta que termina la hidratación, el reducer aún tiene los datos de fábrica
+  // (WORKOUT_ROUTINES / INITIAL_LOGS): pintar las pantallas con ellos hacía que,
+  // al retirar el splash, se viera un fogonazo de la rutina demo antes de cargar
+  // los datos reales. Mientras no haya datos reales se pinta solo el fondo (el
+  // splash lo cubre); el contenido monta ya directamente con los datos del
+  // usuario. Todos los hooks están declarados arriba, así que el early-return es
+  // seguro (no altera el orden de hooks).
+  if (!hydrated) {
+    return <View style={styles.container} />;
+  }
 
   return (
     <View style={styles.container}>

@@ -107,6 +107,61 @@ export function ExerciseInputField({
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
 
+  // Repetición acelerada de los steppers +/- mientras se mantiene pulsado.
+  const holdTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopHold = () => {
+    if (holdTimerRef.current) {
+      clearTimeout(holdTimerRef.current);
+      holdTimerRef.current = null;
+    }
+  };
+  // Primer paso inmediato; luego cada vez más rápido (mín. 45 ms entre pasos).
+  const startHold = (fn: () => void) => {
+    stopHold();
+    fn();
+    let delay = 320;
+    const tick = () => {
+      fn();
+      delay = Math.max(45, delay * 0.82);
+      holdTimerRef.current = setTimeout(tick, delay);
+    };
+    holdTimerRef.current = setTimeout(tick, delay);
+  };
+  useEffect(() => () => stopHold(), []);
+
+  // Filtros de entrada: peso admite un solo separador decimal; reps/segundos
+  // solo enteros. Bloquea cualquier carácter no numérico.
+  const sanitizeWeightInput = (txt: string): string => {
+    let out = txt.replace(/[^0-9.,]/g, '');
+    const firstSep = out.search(/[.,]/);
+    if (firstSep !== -1) {
+      out =
+        out.slice(0, firstSep + 1) +
+        out.slice(firstSep + 1).replace(/[.,]/g, '');
+    }
+    return out;
+  };
+  const sanitizeIntInput = (txt: string): string => txt.replace(/[^0-9]/g, '');
+
+  // Sube/baja el peso en cuartos de kilo desde el valor actual (o el sugerido si
+  // el campo está vacío), sin bajar de 0.
+  const stepWeight = (dir: 1 | -1) => {
+    const base = parseTypedNumber(
+      weightValue.trim() || getWeightPlaceholder() || '0'
+    );
+    const safe = isNaN(base) ? 0 : base;
+    const next = Math.max(0, roundToQuarter(safe + dir * 0.25));
+    setWeightValue(localizeDecimals(String(next)));
+  };
+  // Sube/baja reps o segundos en unidades enteras, sin bajar de 0.
+  const stepReps = (dir: 1 | -1) => {
+    const base = parseTypedNumber(
+      repsValue.trim() || getRepPlaceholder() || '0'
+    );
+    const safe = isNaN(base) ? 0 : Math.round(base);
+    setRepsValue(String(Math.max(0, safe + dir)));
+  };
+
   // Secciones desplegables (contexto arriba, inputs abajo). Se renderizan de
   // forma condicional y la tarjeta reajusta su altura con `LinearTransition`
   // de Reanimated: medir la altura a mano (onLayout) para animarla fallaba en
@@ -365,9 +420,17 @@ export function ExerciseInputField({
           <View style={[styles.orderBadge, { backgroundColor: cardAccent }]}>
             <Text style={styles.orderBadgeText}>{order}</Text>
           </View>
-          <Text style={styles.exerciseName} numberOfLines={2}>
-            {exerciseName}
-          </Text>
+          {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta a
+              dos líneas; al desplegar se ve entero (sin límite de líneas), así el
+              mismo gesto hace siempre lo mismo y el nombre largo sigue accesible. */}
+          <Pressable style={styles.nameWrap} onPress={toggleExpanded}>
+            <Text
+              style={styles.exerciseName}
+              numberOfLines={expanded ? undefined : 2}
+            >
+              {exerciseName}
+            </Text>
+          </Pressable>
         </Pressable>
         <ExerciseGifButton
           name={exerciseName}
@@ -420,9 +483,7 @@ export function ExerciseInputField({
                   size={13}
                   color={theme.colors.emoji_blue}
                 />
-                <Text
-                  style={[styles.contextLabel, styles.contextLabelDeload]}
-                >
+                <Text style={[styles.contextLabel, styles.contextLabelDeload]}>
                   {t('Descarga')}
                 </Text>
                 <Text style={styles.contextValue} numberOfLines={1}>
@@ -511,19 +572,37 @@ export function ExerciseInputField({
               !hasAddedSets && styles.inputBlockSpaced,
             ]}
           >
-            {/* Inputs peso / reps: dos campos grandes y espaciados */}
+            {/* Inputs peso / reps: dos campos grandes con flechas +/- al lado */}
             <View style={styles.inputRow}>
               <View style={styles.inputField}>
                 <Text style={styles.inputLabel}>{t('Peso · kg')}</Text>
-                <TextInput
-                  style={styles.bigInput}
-                  placeholder={localizeDecimals(getWeightPlaceholder())}
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={weightValue}
-                  onChangeText={setWeightValue}
-                  keyboardType="decimal-pad"
-                  maxLength={6}
-                />
+                <View style={styles.inputWithStepper}>
+                  <TextInput
+                    style={styles.bigInput}
+                    placeholder={localizeDecimals(getWeightPlaceholder())}
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={weightValue}
+                    onChangeText={(txt) =>
+                      setWeightValue(sanitizeWeightInput(txt))
+                    }
+                    keyboardType="decimal-pad"
+                    maxLength={6}
+                  />
+                  <View style={styles.stepperCol}>
+                    <StepButton
+                      icon="chevron-up"
+                      accent={accent}
+                      onHoldStart={() => startHold(() => stepWeight(1))}
+                      onHoldStop={stopHold}
+                    />
+                    <StepButton
+                      icon="chevron-down"
+                      accent={accent}
+                      onHoldStart={() => startHold(() => stepWeight(-1))}
+                      onHoldStop={stopHold}
+                    />
+                  </View>
+                </View>
               </View>
 
               <Text style={styles.timesGlyph}>×</Text>
@@ -532,15 +611,31 @@ export function ExerciseInputField({
                 <Text style={styles.inputLabel}>
                   {isTimeBased ? t('Segundos') : t('Repeticiones')}
                 </Text>
-                <TextInput
-                  style={styles.bigInput}
-                  placeholder={localizeDecimals(getRepPlaceholder())}
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={repsValue}
-                  onChangeText={setRepsValue}
-                  keyboardType="decimal-pad"
-                  maxLength={4}
-                />
+                <View style={styles.inputWithStepper}>
+                  <TextInput
+                    style={styles.bigInput}
+                    placeholder={localizeDecimals(getRepPlaceholder())}
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={repsValue}
+                    onChangeText={(txt) => setRepsValue(sanitizeIntInput(txt))}
+                    keyboardType="number-pad"
+                    maxLength={4}
+                  />
+                  <View style={styles.stepperCol}>
+                    <StepButton
+                      icon="chevron-up"
+                      accent={accent}
+                      onHoldStart={() => startHold(() => stepReps(1))}
+                      onHoldStop={stopHold}
+                    />
+                    <StepButton
+                      icon="chevron-down"
+                      accent={accent}
+                      onHoldStart={() => startHold(() => stepReps(-1))}
+                      onHoldStop={stopHold}
+                    />
+                  </View>
+                </View>
               </View>
             </View>
 
@@ -600,9 +695,10 @@ export function ExerciseInputField({
                   size={15}
                   color={theme.colors.accent}
                 />
-                {/* "Saltar resto": el botón no solo cierra el ejercicio, rellena
-                    con guiones (series omitidas) las que falten hasta el objetivo.
-                    El texto lo dice para que no se pulse creyendo otra cosa. */}
+                {/* Cierra el ejercicio rellenando con guiones (series omitidas)
+                    las que falten hasta el objetivo. Si aún no se ha metido
+                    ninguna serie no hay "resto" que saltar: es el ejercicio
+                    entero, y la etiqueta lo dice. */}
                 <Text
                   style={[
                     styles.secondaryButtonText,
@@ -610,7 +706,7 @@ export function ExerciseInputField({
                   ]}
                   numberOfLines={1}
                 >
-                  {t('Saltar resto')}
+                  {hasAddedSets ? t('Saltar resto') : t('Saltar ejercicio')}
                 </Text>
               </Pressable>
               <Pressable
@@ -796,7 +892,35 @@ export function ExerciseInputField({
           {restTimer}
         </Animated.View>
       )}
+
     </Animated.View>
+  );
+}
+
+// Flecha +/- de un stepper: mantener pulsado repite la acción (acelerando).
+function StepButton({
+  icon,
+  accent,
+  onHoldStart,
+  onHoldStop,
+}: {
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  accent: string;
+  onHoldStart: () => void;
+  onHoldStop: () => void;
+}) {
+  return (
+    <Pressable
+      onPressIn={onHoldStart}
+      onPressOut={onHoldStop}
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.stepBtn,
+        pressed && styles.stepBtnPressed,
+      ]}
+    >
+      <MaterialCommunityIcons name={icon} size={18} color={accent} />
+    </Pressable>
   );
 }
 
@@ -864,8 +988,10 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
     },
-    exerciseName: {
+    nameWrap: {
       flex: 1,
+    },
+    exerciseName: {
       fontSize: 19,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
@@ -995,7 +1121,13 @@ const makeStyles = () =>
       letterSpacing: 0.8,
       textAlign: 'center',
     },
+    inputWithStepper: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      gap: 6,
+    },
     bigInput: {
+      flex: 1,
       backgroundColor: theme.colors.background,
       borderWidth: 1.5,
       borderColor: theme.colors.border,
@@ -1007,6 +1139,22 @@ const makeStyles = () =>
       textAlignVertical: 'center',
       color: theme.colors.text,
       fontWeight: '800',
+    },
+    stepperCol: {
+      width: 34,
+      gap: 6,
+    },
+    stepBtn: {
+      flex: 1,
+      backgroundColor: theme.colors.inputBg,
+      borderWidth: 1.5,
+      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.sm,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    stepBtnPressed: {
+      backgroundColor: theme.colors.border,
     },
     timesGlyph: {
       fontSize: 22,

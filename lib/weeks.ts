@@ -264,6 +264,32 @@ export function planWeekMove(
 }
 
 /**
+ * Decide si un movimiento de día entre semanas necesita confirmación: la pide si
+ * vacía la semana de origen o si toca (origen o destino) una semana ya completada.
+ * Inicio y Detalle compartían esta decisión; cada uno aporta su `sourceBlock` y su
+ * `isBlockCompleted` (con la agrupación que use), así que la semántica no cambia.
+ */
+export function weekMoveNeedsConfirm(params: {
+  plan: WeekMovePlan;
+  sourceBlock: number | undefined;
+  direction: WeekMoveDirection;
+  isBlockCompleted: (block: number | undefined) => boolean;
+}): boolean {
+  const { plan, sourceBlock, direction, isBlockCompleted } = params;
+  const destBlock =
+    sourceBlock == null
+      ? undefined
+      : direction === 'prev'
+      ? sourceBlock - 1
+      : sourceBlock + 1;
+  return (
+    plan.removesSourceWeek ||
+    isBlockCompleted(sourceBlock) ||
+    isBlockCompleted(destBlock)
+  );
+}
+
+/**
  * ¿Reasignar un log a `newTimestamp` lo mete en una semana que YA tiene ese
  * mismo día? En ese caso el bloque se parte en dos por el punto de inserción
  * (el día repetido abre semana nueva; ver `groupLogsIntoWeekBlocks`), así que la

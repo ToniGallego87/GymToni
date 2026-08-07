@@ -97,7 +97,13 @@ export function HeroCard({
         colors={colors}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.gradient}
+        style={[
+          styles.gradient,
+          // "Semana completada" lleva subtítulo; los puntos del carrusel se
+          // superponen abajo, así que se sube el contenido para que la frase no
+          // quede pegada a ellos.
+          variant === 'week-completed' && styles.gradientWithSubtitle,
+        ]}
       >
         {/* Brillo superior (sheen) para dar volumen */}
         <LinearGradient
@@ -155,6 +161,9 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
       overflow: 'hidden',
+    },
+    gradientWithSubtitle: {
+      paddingBottom: 36,
     },
     sheen: {
       position: 'absolute',

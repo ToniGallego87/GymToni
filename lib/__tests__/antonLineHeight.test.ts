@@ -38,12 +38,17 @@ const ALLOWLIST: Record<string, string> = {
   // Displays hero de solo dígitos (kcal/volumen/peso semanal): lineHeight 44
   // para fontSize 34 (ratio 1.29) ajustado a mano con translateY, verificado sin
   // recorte porque los dígitos no suben tanto como mayúsculas y tildes.
-  'components/HeroStatsCard.tsx::heroMainValue': 'display de dígitos, verificado',
+  'components/HeroStatsCard.tsx::heroMainValue':
+    'display de dígitos, verificado',
   'components/HeroWeightCard.tsx::mainValue': 'display de dígitos, verificado',
 };
 
 const ROOT = path.resolve(__dirname, '../../');
 const SCAN_DIRS = ['components', 'features'];
+// Archivos sueltos (fuera de SCAN_DIRS) con estilos de texto display definidos
+// como FÁBRICA (`export const x = () => ({...})`), que también deben cumplir el
+// ratio: lib/textStyles.ts centraliza el nombre de día y el título de semana.
+const EXTRA_FILES = ['lib/textStyles.ts'];
 
 interface AntonStyle {
   file: string;
@@ -99,14 +104,60 @@ function extractAntonStyles(src: string, relFile: string): AntonStyle[] {
   return out;
 }
 
+// Igual que extractAntonStyles pero para estilos en forma de fábrica
+// (`export const nombre = (...) => ({ ... })`), como los de lib/textStyles.ts.
+function extractFactoryAntonStyles(src: string, relFile: string): AntonStyle[] {
+  const out: AntonStyle[] = [];
+  const re = /export const (\w+)\s*=\s*\([^)]*\)[^=]*=>\s*\(\{/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    const braceStart = src.indexOf('{', re.lastIndex - 1);
+    if (braceStart === -1) continue;
+    let depth = 0;
+    let end = -1;
+    for (let i = braceStart; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) {
+          end = i;
+          break;
+        }
+      }
+    }
+    if (end === -1) continue;
+    const body = src.slice(braceStart + 1, end);
+    const usesDisplay =
+      /fontFamily\s*:\s*theme\.fonts\.display/.test(body) ||
+      /fontFamily\s*:\s*['"]Anton/.test(body);
+    if (!usesDisplay) continue;
+    const fsM = body.match(/fontSize\s*:\s*(\d+)/);
+    const lhM = body.match(/lineHeight\s*:\s*(\d+)/);
+    out.push({
+      file: relFile,
+      style: m[1],
+      fontSize: fsM ? Number(fsM[1]) : null,
+      lineHeight: lhM ? Number(lhM[1]) : null,
+    });
+  }
+  return out;
+}
+
 function collectAllAntonStyles(): AntonStyle[] {
   const files = SCAN_DIRS.flatMap((d) => walk(path.join(ROOT, d)));
-  return files.flatMap((f) =>
+  const scanned = files.flatMap((f) =>
     extractAntonStyles(
       fs.readFileSync(f, 'utf8'),
       path.relative(ROOT, f).replace(/\\/g, '/')
     )
   );
+  const extra = EXTRA_FILES.flatMap((rel) =>
+    extractFactoryAntonStyles(
+      fs.readFileSync(path.join(ROOT, rel), 'utf8'),
+      rel
+    )
+  );
+  return [...scanned, ...extra];
 }
 
 describe('titulares con fuente Anton no se recortan por arriba', () => {
@@ -129,7 +180,9 @@ describe('titulares con fuente Anton no se recortan por arriba', () => {
       const ratio = s.lineHeight / s.fontSize;
       if (ratio < MIN_RATIO) {
         offenders.push(
-          `${key} (fontSize ${s.fontSize} / lineHeight ${s.lineHeight} = ${ratio.toFixed(
+          `${key} (fontSize ${s.fontSize} / lineHeight ${
+            s.lineHeight
+          } = ${ratio.toFixed(
             2
           )}, mínimo ${MIN_RATIO}; sube lineHeight a >= ${Math.ceil(
             s.fontSize * MIN_RATIO

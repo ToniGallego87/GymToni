@@ -251,9 +251,7 @@ export function RoutineDetailScreen({
   const handleSaveExercises = () => {
     if (!editingExercisesDayId) return;
 
-    const day = currentRoutine.days.find(
-      (d) => d.id === editingExercisesDayId
-    );
+    const day = currentRoutine.days.find((d) => d.id === editingExercisesDayId);
     if (!day) return;
 
     // Los ids de las filas son los de los ejercicios originales (ver

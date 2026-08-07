@@ -49,6 +49,7 @@ export {
 export { getFloatingPrimaryNavMetrics } from './FloatingGlassBar';
 export { FloatingPrimaryNav } from './FloatingPrimaryNav';
 export { StretchScrollView } from './StretchScrollView';
+export { LoadMoreButton } from './LoadMoreButton';
 export { Collapsible } from './Collapsible';
 export { SegmentedFilter } from './SegmentedFilter';
 export type { SegmentedOption } from './SegmentedFilter';

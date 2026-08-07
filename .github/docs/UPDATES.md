@@ -1,5 +1,92 @@
 # UPDATES
 
+## Version 0.6.9 - 2026-08-07
+
+### Cambios
+
+- **Rutinas más claras** (`features/workout/RoutineSelectorScreen.tsx`): tocar
+  una rutina ahora abre sus detalles (antes solo la marcaba como la de Inicio, y
+  había que adoptarla para poder consultarla); marcar cuál se ve en Inicio pasa a
+  un botón propio "Mostrar en Inicio" en cada tarjeta. "Nueva rutina" queda como
+  único CTA dorado (`GradientCtaButton`) y se retira el segundo botón dorado
+  "Consultar detalles de esta rutina" del pie, que competía con él.
+- **Cabecera de semana de Inicio más limpia** (`features/workout/HomeScreen.tsx`):
+  la cabecera colapsada se queda con los días entrenados y el chevron; los botones
+  de "marcar descarga" (semana en curso) y "ver logros" (semanas pasadas) bajan al
+  cuerpo desplegado de la semana como botones etiquetados, en vez de iconos
+  sueltos amontonados junto al chevron.
+- **Carrusel de Inicio más corto** (`features/workout/HomeScreen.tsx`): el héroe
+  pierde la diapositiva "Ver rutinas", redundante con Perfil → Mis rutinas y con
+  el estado "Rutina cerrada"; quedan situación actual + estadísticas de fuerza.
+- **Registro: nombre de ejercicio predecible** (`components/ExerciseInputField.tsx`):
+  tocar el nombre siempre despliega/colapsa la tarjeta y el nombre largo se ve
+  entero al desplegar (antes, si estaba cortado el toque abría un modal y si no,
+  desplegaba: el mismo gesto hacía dos cosas). Se retira el modal de nombre.
+- **Inicio: el % por sesión, solo donde es accionable** (`features/workout/HomeScreen.tsx`):
+  el badge de mejora de cada tarjeta de día deja de pintarse en las semanas
+  cerradas/colapsadas —donde repetía a menor escala el % que la cabecera de la
+  semana ya resume— y se mantiene en la semana en curso y en hoy, donde es
+  accionable. El % por sesión sigue disponible al abrir el Detalle de ese día;
+  el historial queda con menos señales verde/rojo compitiendo.
+- **Inicio: menú ⋯ del día de hoy más corto** (`features/workout/HomeScreen.tsx`):
+  el modal "¿Qué deseas hacer?" del registro de hoy se queda con Continuar/Editar
+  y Eliminar; se retira "Mover a la semana anterior/siguiente" (con su
+  `ConfirmModal` y toda su lógica), un caso extremo para la sesión en curso. Mover
+  un día entre semanas sigue disponible en el ⋯ del Detalle de cualquier sesión
+  pasada.
+- **Inicio: días de descarga sin badge** (`features/workout/HomeScreen.tsx`): en
+  la semana en curso, las tarjetas de día de una semana de descarga ya no muestran
+  el badge "—"; se ven como el resto de días. La cabecera de la semana ya rotula
+  "Descarga", así que el guión por día era redundante. Se retira también el estilo
+  `historyLogBadgeDeload`, ya sin uso.
+- **Detalle: cardio centrado** (`features/workout/DetailScreen.tsx`): la fila de
+  datos de la tarjeta de resultados de cardio (min / km-h / pendiente / kcal) pasa
+  de pegada a la izquierda a centrada (`justifyContent: 'center'` + celdas
+  centradas), en línea con la tira-resumen de fuerza de la misma pantalla.
+
+### Correcciones
+
+- **Fecha larga en el idioma activo** (`lib/utils.ts`): `formatDate` usa
+  `dateLocale` en vez de `'es-ES'` fijo; en inglés el respaldo de fecha del
+  Detalle ya no salía en español.
+- **HeroCard: titular más estable al arrancar** (`app/App.tsx`): el splash nativo
+  se retira ahora dos frames después de hidratar (doble `requestAnimationFrame`),
+  no en el mismo tick, para que el primer render con la fuente Anton se pinte y
+  mida antes de revelarlo. Mitiga el glitch intermitente de arranque en frío en el
+  que el titular de la tarjeta principal salía recortado/mal dibujado. (Pendiente
+  de confirmar en dispositivo, por ser intermitente.)
+- **Arranque sin fogonazo de datos demo** (`app/App.tsx`): la vista de Inicio no se
+  renderiza hasta que termina la hidratación. Antes, mientras se leía SQLite, el
+  reducer aún tenía los datos de fábrica (`WORKOUT_ROUTINES` / `INITIAL_LOGS`) y se
+  veía un instante la rutina demo antes de cargar la real. Ahora el contenido monta
+  directamente con los datos del usuario (el splash cubre el fondo hasta entonces),
+  sin recurrir a un splash de duración fija que penalizaría el arranque.
+
+### Arquitectura
+
+- **Fuente única para dos acciones de log** que Inicio y Detalle duplicaban:
+  degradar un entreno a "solo cardio" al borrar conservando el cardio
+  (`toCardioOnlyLog`, `lib/cardio.ts`) y decidir si mover un día entre semanas
+  pide confirmación (`weekMoveNeedsConfirm`, `lib/weeks.ts`). Sin cambio de
+  comportamiento; `type-check` limpio y los 181 tests (15 suites) en verde (+4).
+- **Un solo `getToday()`** (`features/workout/HomeScreen.tsx`,
+  `features/workout/CardioScreen.tsx`, `features/workout/CalendarScreen.tsx`):
+  las tres pantallas recalculaban inline `new Date().toISOString().split('T')[0]`
+  para la clave de "hoy" en vez de usar el helper `getToday()` de `lib/utils.ts`
+  que ya existía y sí usaba el registro. Se sustituyen las cinco copias por la
+  llamada al helper (fuente única de "hoy"). Sin cambio de comportamiento (el
+  helper devuelve exactamente esa expresión); `type-check` limpio y los 181 tests
+  (15 suites) en verde.
+- **Estilos de texto display compartidos** (`lib/textStyles.ts` nuevo,
+  `features/workout/HomeScreen.tsx`, `features/workout/CardioScreen.tsx`,
+  `features/workout/DaySelectorScreen.tsx`): el nombre de día y el título de
+  semana en Anton, que las tres pantallas copiaban byte a byte, salen a las
+  fábricas `dayNameText()` / `weekTitleText()` (recalculadas con el tema en
+  caliente). El botón "Cargar más", duplicado en Inicio y Cardio, pasa al
+  componente `components/LoadMoreButton.tsx`. El test `antonLineHeight` también
+  vigila ahora las fábricas. Sin cambio visual; `type-check` limpio y los 181
+  tests (15 suites) en verde.
+
 ## Version 0.6.8 - 2026-08-04
 
 ### Arquitectura

@@ -6,7 +6,9 @@ import {
   isWeekCompleted,
   logsBeforeBlock,
   planWeekMove,
+  weekMoveNeedsConfirm,
   workoutsUpToBlock,
+  WeekMovePlan,
 } from '../weeks';
 import { ParsedSet, WorkoutDay, WorkoutLog } from '../../types';
 
@@ -436,5 +438,56 @@ describe('planWeekMove', () => {
     const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 3, 2)];
     expect(planWeekMove(logs, 'b', 'next', key)).toBeNull();
     expect(planWeekMove(logs, 'b', 'prev', key)).toBeNull();
+  });
+});
+
+describe('weekMoveNeedsConfirm', () => {
+  const plan = (removesSourceWeek: boolean): WeekMovePlan => ({
+    changedLogs: [],
+    createsNewWeek: false,
+    removesSourceWeek,
+  });
+
+  it('pide confirmar si el movimiento vacía la semana de origen', () => {
+    expect(
+      weekMoveNeedsConfirm({
+        plan: plan(true),
+        sourceBlock: 2,
+        direction: 'prev',
+        isBlockCompleted: () => false,
+      })
+    ).toBe(true);
+  });
+
+  it('pide confirmar si toca una semana ya completada (origen o destino)', () => {
+    // 'next' desde el bloque 2 → destino 3, que está completado.
+    expect(
+      weekMoveNeedsConfirm({
+        plan: plan(false),
+        sourceBlock: 2,
+        direction: 'next',
+        isBlockCompleted: (b) => b === 3,
+      })
+    ).toBe(true);
+    // 'prev' desde el bloque 2: el propio origen (2) está completado.
+    expect(
+      weekMoveNeedsConfirm({
+        plan: plan(false),
+        sourceBlock: 2,
+        direction: 'prev',
+        isBlockCompleted: (b) => b === 2,
+      })
+    ).toBe(true);
+  });
+
+  it('no pide confirmar en semanas incompletas que no se vacían', () => {
+    expect(
+      weekMoveNeedsConfirm({
+        plan: plan(false),
+        sourceBlock: 2,
+        direction: 'next',
+        isBlockCompleted: () => false,
+      })
+    ).toBe(false);
   });
 });

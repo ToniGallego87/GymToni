@@ -22,13 +22,14 @@ import {
   isWeekCompleted,
   orderedBlockNumbers,
   planWeekMove,
+  weekMoveNeedsConfirm,
   WeekMoveDirection,
   WeekMovePlan,
 } from '@lib/weeks';
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import {
   cardioSessionFromLog,
-  CARDIO_ONLY_DAY_ID,
+  toCardioOnlyLog,
   disciplineIconName,
   estimateEntryKcal,
   fmtNum,
@@ -196,18 +197,15 @@ export function DetailScreen({
     const sourceBlock = ordered.find((b) =>
       (moveBlocks[b] || []).some((l) => l.id === log.id)
     );
-    const destBlock =
-      sourceBlock == null
-        ? undefined
-        : direction === 'prev'
-        ? sourceBlock - 1
-        : sourceBlock + 1;
     const blockCompleted = (b: number | undefined) =>
       b != null && isWeekCompleted(moveBlocks[b] || [], activeDays);
     if (
-      plan.removesSourceWeek ||
-      blockCompleted(sourceBlock) ||
-      blockCompleted(destBlock)
+      weekMoveNeedsConfirm({
+        plan,
+        sourceBlock,
+        direction,
+        isBlockCompleted: blockCompleted,
+      })
     ) {
       setPendingMove({ plan, removesWeek: plan.removesSourceWeek });
       return;
@@ -608,7 +606,10 @@ export function DetailScreen({
                     extractIncline(log.cardio.rawInput) && (
                       <View style={styles.cardioStat}>
                         <Text style={styles.cardioStatValue}>
-                          {extractIncline(log.cardio.rawInput)?.replace('%', '')}
+                          {extractIncline(log.cardio.rawInput)?.replace(
+                            '%',
+                            ''
+                          )}
                         </Text>
                         <Text style={styles.cardioStatUnit}>
                           {t('Pendiente %')}
@@ -655,14 +656,7 @@ export function DetailScreen({
             // fuerza y pasa a ser una sesión de "Solo cardio" de ese mismo día.
             dispatch({
               type: 'UPDATE_WORKOUT_LOG',
-              payload: {
-                ...log,
-                dayId: CARDIO_ONLY_DAY_ID,
-                exercises: [],
-                cardioOnly: true,
-                startsNewWeek: undefined,
-                updatedAt: Date.now(),
-              },
+              payload: toCardioOnlyLog(log),
             });
             setDeleteCardioToo(false);
             onBack();
@@ -848,12 +842,13 @@ const makeStyles = () =>
     cardioStatsRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
+      justifyContent: 'center',
       columnGap: theme.spacing.lg,
       rowGap: theme.spacing.sm,
       marginTop: 10,
     },
     cardioStat: {
-      alignItems: 'flex-start',
+      alignItems: 'center',
     },
     cardioStatValue: {
       fontSize: 22,

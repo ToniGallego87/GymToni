@@ -30,7 +30,7 @@ import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { theme, getTrainingAccent } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { findDayInRoutines } from '@lib/utils';
+import { findDayInRoutines, getToday } from '@lib/utils';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 type CalendarMode = 'fuerza' | 'cardio';
@@ -217,7 +217,7 @@ export function CalendarScreen({
       dayNumber
     ).padStart(2, '0')}`;
 
-  const todayKey = new Date().toISOString().split('T')[0];
+  const todayKey = getToday();
 
   if (state.logs.length === 0) {
     return (

@@ -1,5 +1,5 @@
 import { WorkoutLog, WorkoutDay, WorkoutRoutine } from '../types';
-import { localizeDecimals } from './i18n';
+import { dateLocale, localizeDecimals } from './i18n';
 import { theme } from './theme';
 
 /**
@@ -34,9 +34,11 @@ export function generateId(): string {
 }
 
 export function formatDate(timestamp: number): string {
+  // Sigue el idioma activo (dateLocale, binding vivo de i18n), como el resto de
+  // fechas de la app; antes fijaba 'es-ES' y en inglés salía el día en español.
   const date = new Date(timestamp);
   return date
-    .toLocaleDateString('es-ES', {
+    .toLocaleDateString(dateLocale, {
       weekday: 'long',
       year: 'numeric',
       month: '2-digit',

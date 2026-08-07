@@ -15,8 +15,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
+import { getToday } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
+import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale, localizeDecimals, parseTypedNumber } from '@lib/i18n';
 import {
   buildCardioDays,
@@ -52,6 +54,7 @@ import {
   SegmentedOption,
   StretchScrollView,
   TrendDelta,
+  LoadMoreButton,
 } from '../../components';
 import { WorkoutDay, WorkoutLog } from '../../types';
 
@@ -331,7 +334,7 @@ export function CardioScreen({
   // Más recientes primero.
   const orderedWeeks = useMemo(() => weeks.slice().reverse(), [weeks]);
 
-  const todayKey = new Date().toISOString().split('T')[0];
+  const todayKey = getToday();
 
   // Datos del hero: HOY como protagonista, con tres referencias diarias para
   // leerlo de un vistazo (mismo día de la semana pasada, media y mejor día).
@@ -688,21 +691,13 @@ export function CardioScreen({
         })}
 
         {hasMore && (
-          <TouchableOpacity
-            style={styles.showMoreButton}
-            activeOpacity={0.8}
+          <LoadMoreButton
+            style={styles.showMore}
             onPress={() => {
               animateLayout();
               setVisibleCount((c) => c + WEEKS_PAGE);
             }}
-          >
-            <MaterialCommunityIcons
-              name="reload"
-              size={16}
-              color={theme.colors.text}
-            />
-            <Text style={styles.showMoreText}>{t('Cargar más')}</Text>
-          </TouchableOpacity>
+          />
         )}
       </StretchScrollView>
 
@@ -852,15 +847,9 @@ const makeStyles = () =>
       gap: 10,
       flexShrink: 1,
     },
-    weekTitle: {
-      fontSize: 21,
-      fontFamily: theme.fonts.display,
-      letterSpacing: 0.5,
-      lineHeight: 30,
-      includeFontPadding: false,
-      textAlignVertical: 'center',
-      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-    },
+    // Título de la semana (rango de fechas): estilo display compartido con Inicio
+    // (lib/textStyles). El color lo pone el render inline (blanco).
+    weekTitle: weekTitleText(),
     weekMetaRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -914,16 +903,9 @@ const makeStyles = () =>
     dailyInfo: {
       flex: 1,
     },
-    dailyName: {
-      fontSize: 19,
-      fontFamily: theme.fonts.display,
-      letterSpacing: 0.3,
-      color: theme.colors.text,
-      lineHeight: 27,
-      includeFontPadding: false,
-      textAlignVertical: 'center',
-      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
-    },
+    // Nombre de la disciplina/día: estilo display compartido con Inicio y el
+    // selector de día.
+    dailyName: dayNameText(),
     dailyResults: {
       fontSize: 13,
       fontWeight: '500',
@@ -955,23 +937,10 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surfaceAlt,
       overflow: 'hidden',
     },
-    showMoreButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 12,
-      marginTop: 2,
+    // Solo el margen horizontal propio de Cardio; el resto del botón "Cargar más"
+    // vive en el componente compartido LoadMoreButton.
+    showMore: {
       marginHorizontal: theme.spacing.md,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
-    },
-    showMoreText: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.colors.text,
     },
     modalButtonRow: {
       flexDirection: 'row',

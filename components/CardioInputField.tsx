@@ -189,9 +189,7 @@ export function CardioInputField({
               size={18}
               color={theme.colors.primary}
             />
-            <Text style={styles.collapsedButtonText}>
-              {t('Añadir cardio')}
-            </Text>
+            <Text style={styles.collapsedButtonText}>{t('Añadir cardio')}</Text>
           </View>
         </Pressable>
       ) : (

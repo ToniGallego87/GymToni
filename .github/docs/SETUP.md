@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (15 suites, 174 tests)
+npm test           # Jest sobre lib/ (15 suites, 181 tests)
 npm run format     # Prettier
 ```
 

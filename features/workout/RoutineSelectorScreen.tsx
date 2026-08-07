@@ -16,6 +16,7 @@ import {
   FLOATING_BACK_BUTTON_MARGIN,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  GradientCtaButton,
   GradientFill,
   StretchScrollView,
   Toast,
@@ -30,8 +31,10 @@ interface RoutineSelectorScreenProps {
 
 /**
  * Vista de Rutinas: lista las rutinas para consultarlas o marcar cuál se ve en
- * Inicio. Pulsar una NO la activa (ver `SET_SELECTED_ROUTINE` en el contexto):
- * la activa la decide entrenar, no mirar.
+ * Inicio. Tocar una tarjeta abre sus detalles (mirar sin adoptarla); el botón
+ * "Mostrar en Inicio" de cada tarjeta la marca como la que se ve en Inicio
+ * (`SET_SELECTED_ROUTINE`). Nada de esto la activa: la activa la decide
+ * entrenar, no mirar.
  */
 export function RoutineSelectorScreen({
   onOpenRoutineDetails,
@@ -57,9 +60,6 @@ export function RoutineSelectorScreen({
   )
     ? state.selectedRoutineId
     : state.activeRoutineId;
-  const displayedRoutine = state.routines.find(
-    (routine) => routine.id === displayedRoutineId
-  );
 
   // La copia queda "preparada" y seleccionada (ADD_ROUTINE): se ajusta y se
   // estrena registrando en ella el primer día, sin tocar la rutina en curso.
@@ -113,7 +113,14 @@ export function RoutineSelectorScreen({
               // "Preparada": creada pero aún no entrenada. Se activará al
               // registrar su primer día.
               isPrepared={!isActive && !routineHasLogs}
-              onPress={() =>
+              // Toque en la tarjeta: abre sus detalles (sin adoptarla como la de
+              // Inicio). El botón "Mostrar en Inicio" es el que la marca.
+              onOpenDetails={
+                onOpenRoutineDetails
+                  ? () => onOpenRoutineDetails(routine)
+                  : undefined
+              }
+              onSelect={() =>
                 dispatch({ type: 'SET_SELECTED_ROUTINE', payload: routine.id })
               }
               onDuplicate={() => handleDuplicateRoutine(routine)}
@@ -128,23 +135,12 @@ export function RoutineSelectorScreen({
         })}
 
         {!!onCreateRoutine && (
-          <TouchableOpacity
-            style={styles.newRoutineCard}
+          <GradientCtaButton
+            icon="plus"
+            title={t('Nueva rutina')}
             onPress={onCreateRoutine}
-          >
-            <Text style={styles.newRoutineCardText}>{t('+ Nueva rutina')}</Text>
-          </TouchableOpacity>
-        )}
-
-        {!!displayedRoutine && !!onOpenRoutineDetails && (
-          <TouchableOpacity
-            style={styles.detailsButton}
-            onPress={() => onOpenRoutineDetails(displayedRoutine)}
-          >
-            <Text style={styles.detailsButtonText}>
-              {t('Consultar detalles de esta rutina')}
-            </Text>
-          </TouchableOpacity>
+            style={styles.newRoutineCta}
+          />
         )}
       </StretchScrollView>
 
@@ -180,10 +176,13 @@ export function RoutineSelectorScreen({
 
 interface RoutineCardProps {
   routine: WorkoutRoutine;
-  isViewed: boolean; // Para el borde grueso (seleccionada)
+  isViewed: boolean; // Para el borde grueso + el control "En Inicio"
   isActive: boolean; // Para el check "Activa"
   isPrepared: boolean; // Para la etiqueta "Preparada"
-  onPress: () => void;
+  // Toque en la tarjeta: abre sus detalles (mirar sin adoptarla).
+  onOpenDetails?: () => void;
+  // Botón "Mostrar en Inicio": marca esta rutina como la que se ve en Inicio.
+  onSelect: () => void;
   onDuplicate: () => void;
   // Sin este handler no se pinta el botón de eliminar.
   onDelete?: () => void;
@@ -194,14 +193,17 @@ function RoutineCard({
   isViewed,
   isActive,
   isPrepared,
-  onPress,
+  onOpenDetails,
+  onSelect,
   onDuplicate,
   onDelete,
 }: RoutineCardProps) {
   return (
     <TouchableOpacity
       style={[styles.routineCard, isViewed && styles.routineCardViewed]}
-      onPress={onPress}
+      onPress={onOpenDetails}
+      accessibilityRole="button"
+      accessibilityLabel={t('Consultar detalles de esta rutina')}
     >
       <GradientFill accent={theme.colors.primaryLine} />
       <View style={styles.routineCardContent}>
@@ -231,6 +233,29 @@ function RoutineCard({
             <Text style={styles.routineCardPreparedText}>{t('Preparada')}</Text>
           </View>
         ) : null}
+        {/* Mostrar en Inicio: hace explícito el marcar cuál se ve en Inicio, que
+            antes era el toque en la tarjeta (ahora abre detalles). Relleno dorado
+            cuando ya es la de Inicio (estado), contorno cuando se puede marcar. */}
+        <Pressable
+          style={({ pressed }: { pressed: boolean }) => [
+            styles.routineCardHomeButton,
+            isViewed && styles.routineCardHomeButtonActive,
+            pressed && styles.routineCardIconButtonPressed,
+          ]}
+          onPress={isViewed ? undefined : onSelect}
+          disabled={isViewed}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            isViewed ? t('En Inicio') : t('Mostrar en Inicio')
+          }
+        >
+          <MaterialCommunityIcons
+            name={isViewed ? 'home' : 'home-outline'}
+            size={18}
+            color={isViewed ? theme.colors.onGold : theme.colors.textSecondary}
+          />
+        </Pressable>
         {/* Duplicar: se parte de una rutina que ya funciona para hacer la
             siguiente (la copia queda "preparada", no toca a la activa). */}
         <Pressable
@@ -317,6 +342,18 @@ const makeStyles = () =>
     routineCardIconButtonPressed: {
       opacity: 0.6,
     },
+    // "Mostrar en Inicio": contorno cuando se puede marcar; relleno dorado
+    // cuando ya es la rutina de Inicio (estado, no acción).
+    routineCardHomeButton: {
+      padding: 4,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    routineCardHomeButtonActive: {
+      backgroundColor: theme.colors.primaryFill,
+      borderColor: theme.colors.primaryFill,
+    },
     routineCardName: {
       fontSize: 21,
       fontFamily: theme.fonts.display,
@@ -364,35 +401,12 @@ const makeStyles = () =>
       color: theme.colors.emoji_blue,
       fontWeight: '800',
     },
-    // Relleno de oro vivo con tinta oscura (como el selector Fuerza/Cardio): el
-    // amarillo brillante solo lee como fondo, no como texto sobre el lienzo claro.
-    newRoutineCard: {
-      backgroundColor: theme.colors.primaryFill,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryFillDark,
-      paddingVertical: 18,
-      alignItems: 'center',
-    },
-    newRoutineCardText: {
-      color: theme.colors.onGold,
-      fontSize: 17,
-      fontWeight: '800',
-    },
-    detailsButton: {
-      marginTop: 8,
-      backgroundColor: theme.colors.primaryFill,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryFillDark,
-      paddingVertical: 14,
-      alignItems: 'center',
-    },
-    detailsButtonText: {
-      color: theme.colors.onGold,
-      fontSize: 15,
-      fontWeight: '800',
-      lineHeight: 20,
+    // "Nueva rutina": único CTA primario de la vista (GradientCtaButton dorado,
+    // como "Crear rutina"/"Guardar"). Antes había además un segundo botón dorado
+    // ("Consultar detalles") que competía; ahora el detalle se abre tocando la
+    // tarjeta, así que este queda como único héroe.
+    newRoutineCta: {
+      marginTop: 4,
     },
   });
 

@@ -9,6 +9,19 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.6.9',
+    items: [
+      'Ahora, al tocar una rutina se abren directamente sus detalles para consultarla. Para elegir cuál se ve en Inicio, cada rutina tiene su propio botón "Mostrar en Inicio".',
+      'Al registrar, tocar el nombre de un ejercicio siempre lo despliega o lo pliega, y los nombres largos se ven ahora enteros.',
+      'Las semanas en Inicio se ven más ordenadas: los botones de "semana de descarga" y "ver logros" aparecen dentro de la semana, con su etiqueta, en vez de amontonados junto a la flecha.',
+      'El historial queda más limpio: el porcentaje de mejora de cada día se muestra solo en la semana en curso y en el día de hoy, que es donde de verdad lo usas.',
+      'Al abrir la app ya no se ve un instante la rutina de ejemplo antes de cargar tus datos.',
+      'Al revisar un entrenamiento, los datos del cardio (minutos, velocidad, pendiente y kcal) se ven ahora centrados y más ordenados.',
+      'En inglés, las fechas se muestran también en inglés.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.8',
     items: [
       'Ahora puedes marcar una semana como semana de descarga: la app te prepara sesiones más suaves (menos series y menos peso) y esa semana queda aparte de tus estadísticas.',

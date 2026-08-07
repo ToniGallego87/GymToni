@@ -144,29 +144,6 @@ export function DataScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {!hasNoData && (
-          <View style={styles.actionCard}>
-            <GradientFill accent={theme.colors.primaryLine} />
-            <View style={styles.titleRow}>
-              <MaterialCommunityIcons
-                name="export-variant"
-                size={18}
-                color={theme.colors.text}
-              />
-              <Text style={styles.actionTitle}>{t('Exportar datos')}</Text>
-            </View>
-            <Text style={styles.actionSubtitle}>
-              {t('Descarga un fichero con todas las rutinas y entrenamientos.')}
-            </Text>
-            <Button
-              title={busyAction === 'export' ? t('Exportando…') : t('Exportar')}
-              onPress={() => handleAction('export', onExportData)}
-              disabled={busyAction !== null}
-              size="large"
-            />
-          </View>
-        )}
-
         {!hasNoData && canBackup && (
           <View style={styles.actionCard}>
             <GradientFill accent={theme.colors.primaryLine} />
@@ -205,6 +182,29 @@ export function DataScreen({
               onPress={handleBackupNow}
               disabled={busyAction !== null}
               variant="secondary"
+              size="large"
+            />
+          </View>
+        )}
+
+        {!hasNoData && (
+          <View style={styles.actionCard}>
+            <GradientFill accent={theme.colors.primaryLine} />
+            <View style={styles.titleRow}>
+              <MaterialCommunityIcons
+                name="export-variant"
+                size={18}
+                color={theme.colors.text}
+              />
+              <Text style={styles.actionTitle}>{t('Exportar datos')}</Text>
+            </View>
+            <Text style={styles.actionSubtitle}>
+              {t('Descarga un fichero con todas las rutinas y entrenamientos.')}
+            </Text>
+            <Button
+              title={busyAction === 'export' ? t('Exportando…') : t('Exportar')}
+              onPress={() => handleAction('export', onExportData)}
+              disabled={busyAction !== null}
               size="large"
             />
           </View>

@@ -254,6 +254,26 @@ export function isCardioOnlyLog(log: WorkoutLog): boolean {
 }
 
 /**
+ * Degrada un log a "solo cardio": le quita la fuerza y lo reasigna al día
+ * sintético, conservando el cardio. Es lo que hacen Inicio y Detalle al borrar
+ * una sesión con la casilla "conservar cardio" (antes cada uno montaba el mismo
+ * payload a mano). `updatedAt` se inyecta para poder testearlo con un sello fijo.
+ */
+export function toCardioOnlyLog(
+  log: WorkoutLog,
+  updatedAt: number = Date.now()
+): WorkoutLog {
+  return {
+    ...log,
+    dayId: CARDIO_ONLY_DAY_ID,
+    exercises: [],
+    cardioOnly: true,
+    startsNewWeek: undefined,
+    updatedAt,
+  };
+}
+
+/**
  * Nombre del icono (MaterialCommunityIcons) de una disciplina de cardio.
  * `hasIncline` fuerza el icono de cuesta arriba. Se devuelve como string para
  * mantener esta librería libre de dependencias de UI; se castea en el consumidor.
