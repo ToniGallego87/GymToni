@@ -644,6 +644,9 @@ export function WorkoutLogScreen({
 
   // Todas las ejecuciones anteriores de un ejercicio (ordenadas de más reciente
   // a más antigua), respetando el tope temporal al editar un log existente.
+  // Salta las semanas de descarga: un deload nunca es la referencia "anterior"
+  // (misma regla que la vista de consulta, DetailScreen), así que al empezar una
+  // semana normal tras una de descarga la referencia es la anterior al deload.
   const getPreviousExerciseRuns = (exerciseId: string) => {
     const currentLogId = existingLog?.id;
 
@@ -654,6 +657,7 @@ export function WorkoutLogScreen({
     const allExercisesForDay: (ExerciseLog & {
       logDate: number;
       logId: string;
+      isDeload: boolean;
     })[] = [];
     logsForDay.forEach((log) => {
       log.exercises.forEach((ex) => {
@@ -661,6 +665,7 @@ export function WorkoutLogScreen({
           ...ex,
           logDate: log.createdAt,
           logId: log.id,
+          isDeload: !!log.isDeload,
         });
       });
     });
@@ -677,7 +682,8 @@ export function WorkoutLogScreen({
         (ex) =>
           ex.exerciseId === exerciseId &&
           ex.logId !== currentLogId &&
-          ex.logDate < currentLogDate
+          ex.logDate < currentLogDate &&
+          !ex.isDeload
       )
       .sort((a, b) => b.logDate - a.logDate);
   };
