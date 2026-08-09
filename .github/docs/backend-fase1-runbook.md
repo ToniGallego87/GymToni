@@ -1,169 +1,81 @@
-# Fase 1 — Runbook de ejecución (Expo SDK upgrade + migración a PowerSync)
+# Fase 1 — Runbook (fundaciones locales de sync sobre expo-sqlite)
 
-> **Estado: preparado, sin ejecutar.** Rama de trabajo: `0.7-version`.
+> **Estado: en implementación.** Rama de trabajo: `0.7-version`.
 > Complementa a [backend-design.md](backend-design.md) (el *qué/por qué*); este
-> doc es el *cómo*, paso a paso. Última revisión: 2026-08-07.
+> doc es el *cómo*. Sin subir SDK, sin New Architecture, sobre RN 0.74.
+> Última revisión: 2026-08-09.
 
-## 0. Constraint y regla de oro
+Objetivo: dejar `expo-sqlite` preparado para sincronizar con la nube (Fases 2-3),
+**sin tocar la nube todavía** y sin cambiar tipos, reducer ni pantallas. Es
+refactor local de bajo riesgo, verificable con `npm test` y en dispositivo.
 
-- **Verificar cada paso en un dispositivo/emulador Android.** Nada de esto es
-  verificable solo con `type-check`: son módulos nativos y cambios de runtime.
-- **No fusionar `0.7-version` a `main` sin verificación en dispositivo.** La rama
-  aísla el riesgo; el merge es el punto de no retorno.
-- **Punto de partida:** Expo SDK 51 · RN 0.74.5 · React 18 · arquitectura antigua.
-- **Destino:** Expo SDK **57** · RN **0.86** · React **19.2** · **New Architecture**.
-  Motivo: PowerSync actual exige `@op-engineering/op-sqlite ^17`, que requiere New
-  Architecture (estándar desde RN 0.76). En RN 0.74 no encaja.
+## Regla de oro
 
-El trabajo son **dos partes secuenciales**: primero subir el SDK (Parte A),
-luego migrar la persistencia (Parte B). La Parte A es entregable por sí sola (la
-app en SDK 57, sin PowerSync, sin regresión) y podría ser su propia versión.
+La UI no cambia. `WorkoutContext`, `useWorkout`, las pantallas y los tipos de
+`types/index.ts` quedan **idénticos**. Todo el trabajo vive en `lib/db/` y
+`lib/persistence.ts`.
 
----
+## Pasos
 
-## Parte A — Subir Expo SDK 51 → 57 (incremental)
+### 1. Metadatos de sync en el schema (`lib/db/schema.ts`)
 
-Expo recomienda subir **de SDK en SDK**, no de golpe, para localizar cada rotura.
-Son 6 saltos: 51→52→53→54→55→56→57.
+- Subir `SCHEMA_VERSION` 3 → 4.
+- Añadir `updated_at INTEGER NOT NULL DEFAULT 0` a las tablas de dominio que no lo
+  tienen: `routines`, `workout_days`, `exercises`, `exercise_logs`, `log_sets`,
+  `cardio_logs`. (`workout_logs` ya lo tiene.)
+- Nueva tabla:
 
-### Método por salto (repetir en cada uno)
+  ```sql
+  CREATE TABLE IF NOT EXISTS sync_outbox (
+    id          TEXT PRIMARY KEY,        -- uuid de la entrada de outbox
+    entity      TEXT NOT NULL,           -- 'routine' | 'workout_day' | 'exercise' | 'workout_log' | ...
+    entity_id   TEXT NOT NULL,           -- id de la fila afectada
+    op          TEXT NOT NULL,           -- 'upsert' | 'delete'
+    payload     TEXT,                    -- snapshot JSON de la fila (null en delete)
+    updated_at  INTEGER NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0
+  );
+  CREATE INDEX IF NOT EXISTS idx_outbox_entity ON sync_outbox(entity, entity_id);
+  ```
 
-1. `npx expo install expo@<sdk-destino> --fix` (ajusta todas las deps al SDK).
-2. Leer el **changelog** del SDK destino, sección *"Deprecations, renamings, and
-   removals"*.
-3. `npx expo-doctor` y resolver lo que marque.
-4. Revisar los parches de **`patch-package`** (`patches/`): tras cada bump pueden
-   dejar de aplicar y hay que regenerarlos o retirarlos.
-5. `npx expo prebuild --clean` + `expo run:android` → **arrancar en dispositivo**
-   y pasar el checklist de no-regresión (abajo).
-6. Commit del salto antes de pasar al siguiente (facilita bisecar si algo rompe).
+- Migración incremental (BD existentes): `ALTER TABLE ... ADD COLUMN updated_at`
+  envuelto en `try/catch` (idempotente, como los ADD COLUMN ya presentes en
+  `lib/db/index.ts`), y `CREATE TABLE IF NOT EXISTS sync_outbox`.
 
-### Puntos calientes específicos de GymBro
+### 2. `updated_at` en las escrituras (`lib/db/index.ts` + `lib/db/mappers.ts`)
 
-- **New Architecture** (por defecto desde SDK 52 / RN 0.76). Afecta a las libs con
-  código nativo: `react-native-reanimated` (3.10 → versión con New Arch),
-  `react-native-gesture-handler`, `react-native-screens`, `react-native-svg`,
-  `react-native-qrcode-svg`.
-- **Módulo nativo propio `video-encoder`** (`lib/videoExport.ts`, vídeo de logros):
-  es código nativo **nuestro**; hay que portarlo a TurboModules/JSI o confirmar que
-  compila bajo New Arch. **Riesgo alto** — es lo más probable que rompa.
-- **React 18 → 19** (SDK 53+): revisar tipos, efectos y librerías que dependan de
-  la versión de React.
-- **`expo-file-system`** cambió de API en SDK 52+: revisar `lib/fileIO.ts`
-  (export/import de backup) y `lib/imageShare.ts` / `lib/videoExport.ts`.
-- **`expo-notifications`**: API y permisos han evolucionado; revisar el timer de
-  descanso (`features/workout/WorkoutLogScreen.tsx`).
-- **`expo-sqlite`**: la versión sube con el SDK. Se **mantiene** durante toda la
-  Parte A (la capa `lib/db` sigue viva hasta el corte a PowerSync en la Parte B).
-- **edge-to-edge / status bar / navigation bar** en Android (SDK 52+): puede
-  afectar al diseño edge-to-edge y a `GlassTopBar` / `FloatingPrimaryNav`.
-- **`resolutions` en `package.json`** (hoy fijan `react-native` y `react`):
-  revisarlas/quitarlas en cada salto; obsoletas rompen el `--fix`.
+- Cada upsert (rutina, día, ejercicio, log, sets, cardio) escribe `updated_at =
+  Date.now()`.
+- `mappers.ts`: mapear la columna nueva en las filas (`RoutineRow`, etc.).
+- `loadAppDataFromDb` puede ignorar `updated_at` al construir `WorkoutAppData`
+  (los tipos de dominio no lo exponen; es metadato de persistencia).
 
-### Checklist de no-regresión (en dispositivo, cada salto y al final)
+### 3. Borrado lógico → registrar en el outbox
 
-Registrar una serie (`60x8`), ver historial y detalle, cardio, crear/editar/
-duplicar rutina, compartir rutina por QR, borrar un log, cambiar rutina activa y
-seleccionada, backup export/import JSON, vaciar datos, popup de novedades,
-cambio de tema, notificación del timer. `npm test` verde, `npm run type-check`
-limpio.
+- El borrado FÍSICO local se mantiene (la app sigue igual de simple). Lo que se
+  añade es **registrar un tombstone en `sync_outbox`** (`op = 'delete'`) al borrar
+  una rutina o un log, para poder propagar el borrado a la nube en la Fase 3.
 
----
+### 4. Encolar en el outbox (`lib/persistence.ts`)
 
-## Parte B — Migrar la persistencia a PowerSync (con el SDK ya en New Arch)
+- `persistence.ts` ya traduce cada acción del reducer a su escritura granular
+  (`dbUpsertRoutine`, `dbDeleteRoutine`, `dbUpsertWorkoutLog`, `dbDeleteWorkoutLog`,
+  `dbUpdateDay`, `dbSetActiveRoutine`, `dbSetSelectedRoutine`). En el MISMO punto,
+  tras la escritura, encolar la operación equivalente en `sync_outbox`.
+- Función nueva en `lib/db/`: `enqueueOutbox(entity, entityId, op, payload)`.
+- **Cero cambios** en el wrapper de `dispatch` fuera de esto.
 
-Solo empieza cuando la Parte A esté verificada. PowerSync trae **su propia SQLite
-local** y su **cola de subida**; en la Fase 1 se usa **en local, sin backend
-connector** (conectar a Supabase es la Fase 2).
+### 5. Verificación
 
-### B.1 Instalación
+- `npm run type-check` limpio.
+- `npm test` verde (la lógica pura de `lib/` no cambia; añadir un test del outbox
+  si aplica).
+- En dispositivo: crear/editar/borrar rutinas y logs, y comprobar (log temporal o
+  una pantalla de debug) que `sync_outbox` acumula las operaciones correctas.
+- La app se comporta EXACTAMENTE igual que 0.6.9 de cara al usuario.
 
-```
-npx expo install @powersync/react-native @op-engineering/op-sqlite @azure/core-asynciterator-polyfill
-```
-- Añadir el plugin de Babel para *async iterators* e importar el polyfill al
-  inicio de la app (`app/App.tsx` o el entry).
-- `npx expo prebuild --clean` + rebuild.
-- Ojo: durante la migración de datos conviven **op-sqlite** y **expo-sqlite** (dos
-  libs SQLite nativas). Verificar que el build no colisiona.
+## Fuera de alcance de la Fase 1
 
-### B.2 AppSchema — espejo de `lib/db/schema.ts`
-
-Definir el schema PowerSync con las mismas 8 tablas: `settings`, `routines`,
-`workout_days`, `exercises`, `workout_logs`, `exercise_logs`, `log_sets`,
-`cardio_logs`. Notas:
-- Los ids siguen siendo **UUID v4** (`generateId`), que hacen de `id` (PK text)
-  que PowerSync exige en cada tabla. Encaja sin cambios.
-- PowerSync local **no aplica FKs estrictas** como SQLite. No es problema: la
-  integridad del plan (CASCADE) **ya la hacemos a mano** en `lib/db/index.ts`
-  (porque `withExclusiveTransactionAsync` abría una conexión sin
-  `PRAGMA foreign_keys = ON`). Ese patrón de borrado explícito hijo→padre se
-  reutiliza tal cual.
-
-### B.3 Cliente PowerSync (local-only)
-
-`PowerSyncDatabase` con el adaptador op-sqlite y el AppSchema. **Sin** backend
-connector ni Sync Rules todavía. Sustituye a `getDb()` de `lib/db/index.ts`.
-
-### B.4 Reescribir `lib/db/index.ts` sobre PowerSync
-
-La API SQL de PowerSync es casi idéntica (`execute(sql, params)`, `getAll`,
-`getOptional`, `writeTransaction`). Mapeo función a función:
-
-| Hoy (expo-sqlite) | PowerSync |
-| --- | --- |
-| `getDb()` + migraciones `PRAGMA user_version` | schema/migraciones gestionadas por PowerSync (diff de AppSchema) |
-| `loadAppDataFromDb` | `getAll` por tabla → `rowsToAppData` (mappers sin cambios) |
-| `saveAppDataToDb` (reemplazo total) | `writeTransaction`: delete-all + insert (import/seed) |
-| `clearAppDataInDb` | `writeTransaction`: delete-all + `settings.initialized` |
-| `dbUpsertRoutine` / `dbUpdateDay` / `dbDeleteRoutine` | mismas queries SQL dentro de `writeTransaction` |
-| `dbUpsertWorkoutLog` / `dbDeleteWorkoutLog` | ídem |
-| `dbSetActiveRoutine` / `dbSetSelectedRoutine` | ídem (`settings` upsert/delete) |
-| `withExclusiveTransactionAsync` | `db.writeTransaction(async tx => …)` |
-| `bulkInsert` (prepared statement) | `execute` en bucle dentro de la transacción o `executeBatch`; vigilar rendimiento en la importación (~3000 filas) |
-
-- **`lib/db/mappers.ts` se conserva** (las filas tienen la misma forma).
-
-### B.5 `storage.ts` y `persistence.ts`
-
-- `storage.ts`: la **rama nativa** (`loadAppDataFromDb` / `saveAppDataToDb` /
-  `clearAppDataInDb`) pasa a las nuevas funciones PowerSync (mismas firmas). La
-  **rama web** (localStorage) **no se toca** hasta decidir el alcance web
-  (backend-design.md §9). `AsyncStorage` para peso de cardio y última versión
-  vista **se mantiene** (no es dato de entreno).
-- `persistence.ts`: **sin cambios estructurales**. Sigue llamando a
-  `dbUpsert*`/`dbSet*` (ahora implementadas sobre PowerSync). Cada escritura queda
-  **auto-registrada en la cola de subida** de PowerSync — justo lo que la Fase 2
-  necesita para subir a la cuenta.
-
-### B.6 Migración de datos `gymbro.db` → PowerSync
-
-En el primer arranque tras el corte: si la BD de PowerSync está vacía y existe la
-`gymbro.db` de expo-sqlite, leerla **una última vez** con expo-sqlite y
-**reinsertar cada fila vía la API de escritura de PowerSync** (NO copiar el
-fichero). Es imprescindible que entren por la API para que queden **en la cola de
-subida** (si no, en la Fase 2 no se subirían a la cuenta). Marcar migrado. Tras
-esto, expo-sqlite puede retirarse.
-
-### B.7 Verificación (en dispositivo)
-
-El mismo checklist de no-regresión de la Parte A, más: confirmar que la cola de
-subida de PowerSync registra las escrituras (aunque no haya backend conectado).
-`npm test` verde (la lógica pura de `lib/` no cambia).
-
----
-
-## Resumen de riesgos (orden de probabilidad)
-
-1. **Módulo nativo `video-encoder` bajo New Architecture** (Parte A).
-2. **Convivencia op-sqlite + expo-sqlite** durante la migración de datos (Parte B.6).
-3. **Parches `patch-package`** obsoletos tras los bumps de SDK.
-4. **React 19** rompiendo componentes o tipos.
-5. `expo-file-system` / `expo-notifications` con API nueva.
-
-## Gating
-
-1. Parte A completa y **verificada en dispositivo** → app en SDK 57 sin regresión
-   (candidata a release propia).
-2. Parte B sobre esa base, también verificada en dispositivo.
-3. Solo entonces, merge de `0.7-version`.
+- Nada de red, Supabase, Auth ni push/pull (eso es Fase 2-3).
+- Web: el `sync_outbox` es nativo (expo-sqlite). Decidir en Fase 3 si la web
+  entra en el sync (ver backend-design.md §10).

@@ -1,7 +1,7 @@
 # Backend, cuentas y sincronización — GymBro (propuesta)
 
 > **Estado: propuesta de arquitectura. Nada de esto está implementado todavía.**
-> Documento vivo. Última revisión: 2026-08-07.
+> Documento vivo. Última revisión: 2026-08-09.
 
 Este documento define cómo GymBro pasaría de app **offline pura** a una app
 **offline-first con nube**: base de datos centralizada, login y perfiles,
@@ -16,36 +16,37 @@ forma controlada y por fases**; este documento es el plan.
 **Decisiones ya tomadas:**
 
 - **Backend gestionado: Supabase** (Postgres + Auth + RLS + Storage + Realtime).
-- **Capa de sincronización offline-first: PowerSync**, que trae su propia SQLite
-  local y su motor de sync bidireccional contra Supabase. Esto **reemplaza** la
-  actual capa `lib/db` (expo-sqlite) y nos ahorra escribir el motor de sync a
-  mano (ver §2 y §4).
+  No requiere New Architecture ni tocar el stack móvil.
+- **Sincronización: motor artesanal (outbox) sobre la `expo-sqlite` ACTUAL**, en
+  RN 0.74 / Expo SDK 51. **Sin subir SDK y sin New Architecture.** Escribimos
+  nosotros el push/pull; a cambio, no tocamos la arquitectura de la app.
+- **PowerSync queda DESCARTADO** (ver §14). Exigía op-sqlite ^17 → New
+  Architecture → que rompía el manejo de toques de la UI de esta app en SDK 52.
+  El intento quedó guardado en el tag git `sdk52-newarch-attempt`.
 
 ---
 
 ## 1. Principios
 
-1. **Offline-first innegociable.** La UI nunca espera a la red. La SQLite local
-   (la de PowerSync) es la fuente de verdad para leer y escribir; la nube es una
-   **réplica** que se reconcilia en segundo plano. Sin conexión, la app funciona
-   igual que hoy.
+1. **Offline-first innegociable.** La UI nunca espera a la red. La `expo-sqlite`
+   local es la fuente de verdad para leer y escribir; la nube es una **réplica**
+   que se reconcilia en segundo plano. Sin conexión, la app funciona igual que hoy.
 2. **Velocidad de uso > todo** (principio del proyecto). La nube no puede añadir
-   spinners en el camino crítico de registrar una serie. PowerSync lee y escribe
-   local justo por esto.
+   spinners en el camino crítico de registrar una serie.
 3. **Cuenta opcional.** La app debe poder usarse sin registrarse, como hoy. El
    login desbloquea backup, multi-dispositivo y lo social; no es un muro.
-4. **No reinventar el motor de sync.** Escribir sincronización bidireccional con
-   resolución de conflictos a mano, en solitario, es la trampa clásica. PowerSync
-   la resuelve; a cambio, adoptamos su capa local (coste asumido en la Fase 1).
+4. **No tocar la arquitectura de la app.** El sync se construye ALREDEDOR de
+   `lib/db` (expo-sqlite), sin cambiar tipos, reducer, pantallas ni el stack
+   nativo. Aprovecha dos cosas que ya existen: ids **UUID v4** (`generateId`) y
+   **escrituras granulares por acción** (`lib/persistence.ts`).
 
 ---
 
-## 2. Stack: Supabase + PowerSync
+## 2. Stack: Supabase + expo-sqlite + sync artesanal
 
-Dos piezas con roles distintos:
+Tres piezas con roles distintos:
 
-- **Supabase** = el backend en la nube (la base de datos centralizada y las
-  cuentas).
+- **Supabase** = el backend en la nube (base de datos central y cuentas).
 
   | Pieza | Para qué |
   | --- | --- |
@@ -55,32 +56,31 @@ Dos piezas con roles distintos:
   | **Storage** | Avatares e imágenes. |
   | **Realtime** | Tablón de populares, notificaciones de seguidores. |
 
-- **PowerSync** = la capa de sincronización offline-first entre el móvil y
-  Supabase. Mantiene una **SQLite embebida en el cliente** que se sincroniza
-  automáticamente con Postgres; las escrituras se guardan local **y** en una
-  **cola de subida** que se procesa vía el cliente de Supabase cuando hay red.
-  Las **Sync Rules** definen qué subconjunto de datos (los del usuario, las
-  rutinas públicas…) se replica a cada cliente.
+- **expo-sqlite** = la base local que YA usa la app (`lib/db`). No se sustituye.
+  Se le añaden metadatos de sincronización (Fase 1).
 
-### Por qué PowerSync y no un outbox artesanal
+- **Motor de sync artesanal** = una cola de cambios (`sync_outbox`) + un proceso
+  de push/pull que escribimos nosotros contra el cliente `@supabase/supabase-js`.
+  Es la pieza con más enjundia (Fase 3), pero es JS puro sobre el stack actual.
 
-Se evaluó construir la sincronización a mano sobre la `expo-sqlite` actual
-(añadir `updated_at`, tombstones y una tabla `sync_outbox`, y escribir push/pull
-+ resolución de conflictos). Se descartó: el motor de sync bidireccional es la
-parte más difícil y arriesgada del proyecto y PowerSync la da hecha. El coste de
-PowerSync —adoptar su capa local en vez de `lib/db`, una dependencia con build
-nativo (ya lo tenemos: `android/` + `expo run:android`, no Expo Go) y su modelo
-de precios— se consideró menor que mantener un motor propio en solitario.
+### Por qué artesanal y no PowerSync (revisado)
 
-Alternativas descartadas: **WatermelonDB** (buena DB local, pero el push/pull lo
-escribes tú), **Firebase** (NoSQL, peor encaje relacional), **backend propio**
+PowerSync habría dado el motor de sync hecho, pero traía **su propia SQLite
+nativa** (op-sqlite ^17) que **exige New Architecture**. Migrar esta app a New
+Architecture (SDK 51→57) rompió el manejo de toques de su UI (ver §14). El coste
+de pelear eso por todo el stack superó con creces el de escribir un motor de sync
+modesto. Para datos de gimnasio (poco volumen, un usuario por dispositivo, sin
+edición colaborativa) un outbox con *last-write-wins* es más que suficiente.
+
+Alternativas también descartadas: **WatermelonDB** (misma pega: DB propia + New
+Arch), **Firebase** (NoSQL, peor encaje relacional), **backend propio**
 (sobrecoste enorme para un dev solo).
 
 ### Qué vive en este repo
 
 El "backend" versionado en el repo son **migraciones SQL de Supabase + políticas
-RLS + las Sync Rules de PowerSync** (carpeta `supabase/` y config de PowerSync).
-No es un segundo proyecto que arrancar cada día.
+RLS** (carpeta `supabase/`). El motor de sync vive en `lib/` como el resto de la
+lógica. No es un segundo proyecto que arrancar cada día.
 
 ---
 
@@ -88,109 +88,95 @@ No es un segundo proyecto que arrancar cada día.
 
 ```
 ┌───────────────────────── Dispositivo (móvil) ──────────────────────────┐
-│                                                                          │
 │  Pantallas / Componentes                                                 │
 │        ↕ dispatch(action)                                                │
 │  WorkoutContext (useReducer)          ← se mantiene igual                │
 │        ↕                                                                  │
-│  Capa de persistencia  ──►  PowerSync SDK (SQLite local + cola de subida)│
-│        (lib/db reescrito sobre PowerSync; fuente de verdad local)        │
-└───────────────────────┼──────────────────────────────────────────────────┘
-                         ↕  PowerSync Service (sync bidireccional, solo con red)
-┌───────────────────────┴──────────────────────────────────────────────────┐
-│  Supabase:  Auth · Postgres (modelo + tablas sociales) · RLS · Storage    │
+│  lib/persistence.ts ──► lib/db (expo-sqlite, fuente de verdad local)     │
+│        │                                                                  │
+│        └──► sync_outbox (cola de cambios pendientes)  ◄── NUEVO          │
+│                     │                                                     │
+│            SyncEngine (lib/, background)  ◄── NUEVO                       │
+│                     ↕ push/pull vía @supabase/supabase-js (solo con red) │
+└─────────────────────┼──────────────────────────────────────────────────┘
+                       ↕
+┌─────────────────────┴──────────────────────────────────────────────────┐
+│  Supabase:  Auth · Postgres (modelo + tablas sociales) · RLS · Storage   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- **Local**: SQLite de PowerSync. El modelo de dominio (rutinas, días,
-  ejercicios, logs…) se conserva; cambia la capa que lo persiste, no los tipos ni
-  el reducer ni las pantallas.
+- **Local**: `expo-sqlite` sin cambios de modelo; solo metadatos de sync.
 - **Nube**: Postgres con las mismas tablas de dominio **más** un `user_id` de
   propietario en cada fila, **más** las tablas sociales.
-- **Sync**: lo hace PowerSync. No escribimos motor de reconciliación.
+- **Sync**: lo escribimos nosotros (Fase 3), enganchado al `sync_outbox`.
 
 ---
 
-## 4. Fase 1 — Migrar la capa local a PowerSync (sin nube)
+## 4. Fase 1 — Fundaciones locales de sync (sin nube)
 
-> **Prerrequisito descubierto:** PowerSync actual exige
-> `@op-engineering/op-sqlite ^17`, que requiere **New Architecture** (estándar
-> desde RN 0.76). El proyecto está en **Expo SDK 51 / RN 0.74** (arquitectura
-> antigua), así que la Fase 1 arranca **subiendo Expo SDK 51 → 57** (RN 0.86,
-> React 19.2) antes de instalar PowerSync. Es una migración en sí misma (6 saltos
-> incrementales + New Arch + React 19) y **exige verificar cada paso en un
-> dispositivo/emulador**. Pasos detallados en
-> [backend-fase1-runbook.md](backend-fase1-runbook.md).
+Objetivo: dejar `expo-sqlite` preparado para sincronizar. **No toca Supabase**;
+es refactor local, de bajo riesgo, sobre RN 0.74 (nada de New Arch). Entregable
+por sí solo (de cara al usuario no cambia nada visible). Detalle de ejecución en
+[backend-fase1-runbook.md](backend-fase1-runbook.md).
 
-Objetivo (tras el upgrade de SDK): sustituir `lib/db` (expo-sqlite) por la SQLite de PowerSync,
-funcionando **100% local y sin backend conectado**. Es el mayor trozo de código
-del epic, pero se hace **sin nube**: la app sigue siendo offline pura y se puede
-verificar sin regresiones antes de añadir la complejidad de la red. Entregable
-por sí solo (aunque de cara al usuario no cambia nada visible).
-
-- Integrar el SDK de PowerSync (`@powersync/react-native`) y definir el **schema
-  local** de PowerSync equivalente al actual (`lib/db/schema.ts`).
-- Reapuntar las lecturas/escrituras a la API de PowerSync: `lib/db/index.ts`
-  (repositorio), `lib/db/mappers.ts`, `lib/persistence.ts` y `lib/storage.ts`.
-  El contrato hacia `WorkoutContext`/pantallas no cambia.
-- **Migración de datos existentes**: importar el contenido de la `gymbro.db`
-  actual a la SQLite de PowerSync en el primer arranque tras actualizar. Ojo: los
-  datos deben quedar **en la cola de subida** de PowerSync para que en la Fase 2,
-  al conectar, se suban a la cuenta (no basta con insertarlos "por debajo").
-- Sin `updated_at`/tombstones/`sync_outbox` manuales: PowerSync gestiona su
-  propio versionado y cola de cambios.
-- **Esfuerzo:** alto (toca toda la persistencia). Riesgo controlado por ser local
-  y verificable con los tests de `lib/` y pruebas manuales.
+- **Metadatos de sync.** Añadir `updated_at INTEGER` a las tablas de dominio que
+  no lo tienen (`routines`, `workout_days`, `exercises`, `exercise_logs`,
+  `log_sets`, `cardio_logs`); `workout_logs` ya lo tiene. Se actualiza en cada
+  escritura granular.
+- **Borrado lógico (tombstones).** Hoy el borrado es físico con `ON DELETE
+  CASCADE`. Un borrado físico no se puede propagar. Registrar el borrado (en el
+  outbox como operación `delete`) para poder replicarlo a la nube y a otros
+  dispositivos.
+- **Tabla `sync_outbox`**: `{ id, entity, entity_id, op ('upsert'|'delete'),
+  payload, updated_at, attempts }`. `lib/persistence.ts` ya traduce cada acción a
+  su escritura mínima → el mismo sitio encola en el outbox. **Cero cambios en
+  pantallas y reducer.**
+- **Migración**: `SCHEMA_VERSION` 3 → 4 en `lib/db/schema.ts` (por
+  `PRAGMA user_version`), sin pérdida de datos.
+- **Esfuerzo:** medio.
 
 ---
 
-## 5. Fase 2 — Cuentas y conexión a la nube (backup + multi-dispositivo + sync)
+## 5. Fase 2 — Auth + copia de seguridad en la nube
 
-Objetivo: conectar PowerSync a Supabase y añadir login. Al conectar, el **sync
-bidireccional incremental viene incluido** — por eso esta fase absorbe lo que en
-el plan artesanal habrían sido dos fases (backup y sync fino). Entregable por sí
-solo.
+Objetivo: cuentas y **backup/restore completo** contra Supabase. Todavía sin sync
+incremental fino: subir/bajar el snapshot entero ya da multi-dispositivo y "no
+perder los datos si cambio de móvil". Entregable por sí solo.
 
-### 5.1. Auth
+- **Auth** con Supabase (`@supabase/supabase-js`): email + Google + Apple (*Apple
+  obligatorio en la App Store* si hay otro login social).
+- Tabla `profiles` (1:1 con Auth): `display_name`, `avatar_url`, `bio`, `is_public`.
+- **Cuenta opcional**: la app arranca anónima (como hoy) y ofrece "Crear cuenta /
+  Iniciar sesión" desde Perfil.
+- **Adopción del estado local anónimo** al crear cuenta: subir el `expo-sqlite`
+  existente y asociarlo a `user_id`. Idempotente y reintentable (momento delicado:
+  no duplicar, no perder).
+- **Esfuerzo:** alto (la migración inicial es lo delicado).
 
-- Supabase Auth con **email + Google + Apple**. *Apple es obligatorio en la App
-  Store* si se ofrece cualquier otro login social.
-- Tabla `profiles` (1:1 con el usuario de Auth): `display_name`, `avatar_url`,
-  `bio`, `is_public`.
-- **Cuenta opcional**: la app arranca en modo anónimo (como hoy) y ofrece "Crear
-  cuenta / Iniciar sesión" desde Perfil.
+---
 
-### 5.2. Conexión PowerSync ↔ Supabase
+## 6. Fase 3 — Sincronización incremental bidireccional
 
-- **Backend connector**: sube la cola de PowerSync a Supabase autenticado como el
-  usuario, y aplica los datos que bajan.
-- **Sync Rules**: definen qué filas se replican a cada cliente (las del usuario;
-  más adelante, las rutinas públicas para el tablón).
-- **Resolución de conflictos**: PowerSync es **servidor-autoritativo**; el
-  conflicto se resuelve en el backend connector / Postgres. Por defecto
-  *last-write-wins*, configurable. Para datos de gimnasio sobra.
+Objetivo: sync fino y continuo. Es la fase con más enjundia técnica (el motor que
+antes nos iba a dar PowerSync).
 
-### 5.3. Adopción del usuario anónimo
-
-Al crear cuenta por primera vez, los datos locales (anónimos, ya en PowerSync
-desde la Fase 1) se suben y se asocian a `user_id`. Debe ser idempotente y
-reintentable: es el momento más delicado (no duplicar, no perder).
-
-### 5.4. Impacto en la app
-
-- Nuevos estados no bloqueantes: `sincronizando`, `sin conexión`, `error de
-  sync` — siempre fuera del camino crítico.
-- El flujo actual (sin cuenta) sigue intacto.
+- **Push**: vaciar `sync_outbox` → `upsert`/`delete` en Supabase vía
+  `@supabase/supabase-js`. Al confirmar, se borra la entrada del outbox.
+- **Pull (delta)**: traer del servidor las filas del usuario con
+  `updated_at > last_pull_cursor`. Cursor por dispositivo.
+- **Conflictos**: **last-write-wins por `updated_at`** (desempate por id de
+  dispositivo). Para datos de gym sobra; se documenta como decisión explícita.
+- **Identidad y seguridad**: cada fila lleva `user_id`; **RLS** garantiza que cada
+  usuario solo lee/escribe lo suyo (las públicas, en Fase 4).
 - **Esfuerzo:** alto.
 
 ---
 
-## 6. Fase 3 — Social
+## 7. Fase 4 — Social
 
-Objetivo: perfiles públicos, seguir usuarios, rutinas públicas y tablón de
-populares.
+Objetivo: perfiles públicos, seguir usuarios, rutinas públicas y tablón.
 
-### 6.1. Modelo de datos (nube)
+### 7.1. Modelo de datos (nube)
 
 | Tabla | Contenido |
 | --- | --- |
@@ -200,24 +186,23 @@ populares.
 | `routine_likes` | Likes/guardados; alimentan el ranking. |
 | `reports` | Moderación mínima (reportar contenido público). |
 
-- **Tablón de populares** = consulta/vista ordenada por likes recientes. Las
-  rutinas públicas se replican al cliente vía Sync Rules de PowerSync.
+- **Tablón de populares** = consulta/vista ordenada por likes recientes.
 - **Clonar rutina pública**: copiar una rutina de otro a tu espacio. Reutiliza
   `lib/routines.ts` (duplicar con ids nuevos) — más útil que solo verla.
 - **Feed de actividad** (opcional): nuevos seguidores, PRs de a quién sigues.
 - **Esfuerzo:** alto.
 
-### 6.2. RLS (esquema)
+### 7.2. RLS (esquema)
 
-- Rutina: `SELECT` si `is_public = true` **o** `owner_id = auth.uid()`;
-  escritura solo si `owner_id = auth.uid()`.
+- Rutina: `SELECT` si `is_public = true` **o** `owner_id = auth.uid()`; escritura
+  solo si `owner_id = auth.uid()`.
 - `follows`: cada quien gestiona los suyos.
 - Contenido público requiere, como mínimo, **botón de reportar** y borrado por
   moderación.
 
 ---
 
-## 7. Seguridad, privacidad y tiendas
+## 8. Seguridad, privacidad y tiendas
 
 - **RGPD (España/UE)**: los datos de entrenamiento pueden considerarse datos de
   salud. Obligan a: política de privacidad, consentimiento y **borrado de cuenta
@@ -229,54 +214,48 @@ populares.
 
 ---
 
-## 8. Coste
+## 9. Coste
 
 - **Supabase**: plan gratuito generoso para empezar; coste con volumen de datos,
-  ancho de banda y storage.
-- **PowerSync**: free tier (2 GB de datos sincronizados/mes, 50 conexiones
-  concurrentes), luego planes de pago por datos sincronizados y conexiones;
-  alternativa **self-host Open Edition gratuita** (motor de sync + Sync Rules +
-  SDKs). Presupuestar antes de la Fase 3 (lo social multiplica lecturas).
+  ancho de banda y storage. Presupuestar antes de la Fase 4 (lo social multiplica
+  lecturas).
+- El motor de sync artesanal **no añade coste de terceros** (es código propio).
 
 ---
 
-## 9. Alcance web
+## 10. Alcance web
 
-Hoy la web usa JSON en `localStorage` (expo-sqlite no soporta web en SDK 51).
-PowerSync **sí tiene SDK web**, así que a futuro podría unificar web y nativo
-bajo el mismo motor — pero portar la web a PowerSync es trabajo extra. Decisión
-abierta: portar la web a PowerSync o dejarla fuera del alcance de sync inicial
-(ver §11).
+Hoy la web usa JSON en `localStorage` (expo-sqlite no soporta web en SDK 51). El
+`sync_outbox` y el SyncEngine deben contemplar la rama web **o** declararla fuera
+del alcance de la primera versión de sync. Decisión abierta (ver §12).
 
 ---
 
-## 10. Resumen por fases
+## 11. Resumen por fases
 
 | Fase | Entrega | Nube | Esfuerzo |
 | --- | --- | --- | --- |
-| **1 — Migrar a PowerSync (local)** | Persistencia sobre PowerSync, 100% offline, sin regresiones | No | Alto |
-| **2 — Cuentas + conexión a la nube** | Login, backup, multi-dispositivo y sync incremental (todo junto vía PowerSync) | Sí | Alto |
-| **3 — Social** | Perfiles públicos, follows, rutinas públicas, tablón, clonar | Sí | Alto |
+| **1 — Fundaciones locales** | `updated_at` + tombstones + `sync_outbox` en expo-sqlite | No | Medio |
+| **2 — Auth + backup** | Login, perfiles, backup/restore completo, multi-dispositivo básico | Sí | Alto |
+| **3 — Sync incremental** | Push/pull delta + conflictos (motor propio) | Sí | Alto |
+| **4 — Social** | Perfiles públicos, follows, rutinas públicas, tablón, clonar | Sí | Alto |
 
-PowerSync colapsa el antiguo "backup" + "sync fino" en una sola fase: al conectar
-el cliente a Supabase, la sincronización bidireccional ya está.
+Cada fase es entregable por sí sola y aporta valor sin depender de la siguiente.
 
 ---
 
-## 11. Decisiones abiertas
+## 12. Decisiones abiertas
 
-- **Motor de sync** → ~~decidido: **PowerSync**~~ (cerrado).
-- **Expo SDK** → ~~decidido: subir a **SDK 57** (RN 0.86 / React 19.2)~~ como
-  prerrequisito de PowerSync (op-sqlite ^17 / New Architecture). Ver runbook.
+- **Motor de sync** → ~~decidido: **artesanal (outbox) sobre expo-sqlite**~~
+  (cerrado; PowerSync descartado, ver §14).
 - **Login opcional u obligatorio** → propuesta: opcional (principio 3). Cerrar
   antes de la Fase 2.
-- **Web dentro o fuera** del alcance de sync inicial (PowerSync la soporta, pero
-  es trabajo extra).
-- **Branding social** (nombre de la parte comunitaria, si procede). Fase 3.
+- **Web dentro o fuera** del alcance de sync inicial.
+- **Branding social** (nombre de la parte comunitaria, si procede). Fase 4.
 
 ---
 
-## 12. Otras ideas que abre este cambio
+## 13. Otras ideas que abre este cambio
 
 - **Backup automático** en la nube (resuelve el "perdí el móvil"; hoy depende del
   export JSON manual).
@@ -285,3 +264,27 @@ el cliente a Supabase, la sincronización bidireccional ya está.
 - **Modo coach/atleta**: un entrenador asigna rutinas y ve el progreso de sus
   clientes. Encaja de lleno con este backend.
 - **Comentarios/reacciones** en rutinas públicas.
+
+---
+
+## 14. Apéndice — Por qué se descartó PowerSync / New Architecture
+
+Se intentó (agosto 2026) la vía PowerSync, que exigía subir Expo SDK 51 → 57 para
+tener op-sqlite ^17 y New Architecture. Lo que se aprendió, para no repetirlo:
+
+- El **build nativo** en New Arch se resolvió (ruta sin espacios, Hermes vía New
+  Arch, `SoLoader.init` con `OpenSourceMergedSoMapping`, reanimated C++). La app
+  **compilaba y arrancaba** en RN 0.76 / New Architecture.
+- Pero en New Architecture la app quedaba **con los toques muertos** (todo el
+  `dispatch` de toques por la ruta de interop de Fabric se quedaba pillado en
+  DOWN). Se descartó gesture-handler, expo-blur y expo-linear-gradient como causa;
+  un botón pelado sí respondía. El culpable era algún componente pervasivo del
+  stack (probablemente reanimated) rompiendo el touch bajo el interop de New Arch.
+- Conclusión: el stack de UI de esta app (glass + reanimated, muy cargado de
+  vistas nativas via interop) es **profundamente incompatible con New Architecture
+  en SDK 52**, y arreglarlo era un pozo sin fondo con 5 saltos de SDK más por
+  delante. El intento quedó en el tag git **`sdk52-newarch-attempt`**.
+
+Si algún día se replantea PowerSync/New Arch, empezar por reproducir el bug de
+toques en un SDK más nuevo (RN 0.77+ arregló varios problemas de interop) antes de
+volver a migrar.

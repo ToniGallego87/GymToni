@@ -36,45 +36,48 @@ Nada pendiente ahora mismo.
 
 Candidatas (compatibles con las restricciones):
 
-El salto a la nube es un **epic secuencial** de tres fases (cada una entregable
-por sí sola), sobre **Supabase + PowerSync** — PowerSync trae hecho el motor de
-sync offline, así que no se escribe a mano. El plan completo (modelo de datos,
-sync, seguridad, coste) vive en [backend-design.md](backend-design.md); aquí
-solo el resumen.
+El salto a la nube es un **epic secuencial** de cuatro fases (cada una entregable
+por sí sola), sobre **Supabase + un motor de sync artesanal** en la `expo-sqlite`
+ACTUAL — sin subir SDK ni New Architecture (PowerSync descartado, ver
+[backend-design.md](backend-design.md) §14). El plan completo (modelo de datos,
+sync, seguridad, coste) vive en ese doc; aquí solo el resumen.
 
-- [ ] **Backend Fase 1 — Subir Expo SDK + migrar la persistencia a PowerSync (local)** —
-      arranca subiendo **Expo SDK 51 → 57** (RN 0.86 / React 19 / New Architecture),
-      prerrequisito de PowerSync (op-sqlite ^17); luego reemplazar `lib/db`
-      (expo-sqlite) por la SQLite embebida de PowerSync, 100% offline y sin backend,
-      migrando los datos existentes a su cola de subida.
-      **Por qué:** es el cimiento del sync (PowerSync da el motor hecho) y, al
-      hacerse sin nube, se verifica sin regresiones antes de añadir red.
-      **Archivos:** SDK: todo el proyecto (deps, `android/`, módulo nativo
-      `video-encoder`). PowerSync: `lib/db/schema.ts`, `lib/db/index.ts`,
-      `lib/db/mappers.ts`, `lib/persistence.ts`, `lib/storage.ts`. Pasos en
-      `backend-fase1-runbook.md`; diseño en `backend-design.md` §4.
-      **Esfuerzo:** alto (migración de SDK + reescritura de persistencia; exige
-      dispositivo para verificar).
-- [ ] **Backend Fase 2 — Cuentas y conexión a la nube** — login con Supabase Auth
-      (email + Google + Apple), tabla `profiles` y conectar PowerSync↔Supabase
-      (backend connector + Sync Rules). Al conectar, backup, multi-dispositivo y
-      sync incremental vienen incluidos. Cuenta **opcional**; adopta el estado
-      local anónimo al registrarse.
+- [ ] **Backend Fase 1 — Fundaciones locales de sync** — preparar `expo-sqlite`
+      para sincronizar sin tocar aún la nube: `updated_at` en las tablas de
+      dominio, tombstones (borrado registrado) y una tabla `sync_outbox` que
+      acumule cada cambio pendiente. Sin subir SDK, sobre RN 0.74.
+      **Por qué:** es el cimiento del sync; al ser refactor local es de bajo
+      riesgo y no cambia nada de cara al usuario.
+      **Archivos:** `lib/db/schema.ts` (columnas + `sync_outbox` + migración
+      `SCHEMA_VERSION` 3→4), `lib/db/index.ts`, `lib/db/mappers.ts`,
+      `lib/persistence.ts`. Pasos en `backend-fase1-runbook.md`; diseño en
+      `backend-design.md` §4.
+      **Esfuerzo:** medio.
+- [ ] **Backend Fase 2 — Cuentas y backup en la nube** — login con Supabase Auth
+      (email + Google + Apple), tabla `profiles`, y backup/restore completo del
+      historial a la nube. Cuenta **opcional**; adopta el estado local anónimo al
+      registrarse.
       **Por qué:** primer valor real: no perder los datos al cambiar de móvil y
-      verlos en varios dispositivos, con sync continuo sin esfuerzo del usuario.
-      **Archivos:** cliente Supabase + backend connector de PowerSync nuevos,
-      `lib/persistence.ts`, tabla `profiles` en la nube. Detalle en
-      `backend-design.md` §5.
+      verlos en varios dispositivos.
+      **Archivos:** cliente `@supabase/supabase-js` nuevo, `lib/persistence.ts`,
+      tabla `profiles` en la nube. Detalle en `backend-design.md` §5.
       **Esfuerzo:** alto.
-- [ ] **Backend Fase 3 — Social (perfiles, follows, tablón)** — perfiles
+- [ ] **Backend Fase 3 — Sincronización incremental** — motor de push/pull propio
+      sobre `sync_outbox`: subir cambios y bajar deltas (`updated_at > cursor`)
+      con resolución *last-write-wins*.
+      **Por qué:** convierte el backup manual en sync continuo y transparente.
+      **Archivos:** motor de sync nuevo en `lib/`, `lib/persistence.ts`. Detalle
+      en `backend-design.md` §6.
+      **Esfuerzo:** alto.
+- [ ] **Backend Fase 4 — Social (perfiles, follows, tablón)** — perfiles
       públicos, seguir usuarios, rutinas públicas (`is_public`), likes/guardados,
       tablón de rutinas populares y clonar una rutina pública a tu espacio;
-      permisos por RLS y replicación de públicas vía Sync Rules.
+      permisos por RLS.
       **Por qué:** cierra el salto de app personal a comunidad; descubrir rutinas
       y seguir a otros es el gancho de retención.
       **Archivos:** tablas nube `profiles` / `follows` / `routine_likes` + RLS,
       reutiliza `lib/routines.ts` (duplicar con ids nuevos) para clonar. Detalle
-      en `backend-design.md` §6.
+      en `backend-design.md` §7.
       **Esfuerzo:** alto.
 - [ ] **Recordatorio de entrenamiento** — notificación local programable por
       día de la semana (la infraestructura de notificaciones ya existe para el
