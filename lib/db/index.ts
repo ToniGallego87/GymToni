@@ -24,6 +24,28 @@ import {
   rowsToAppData,
 } from './mappers';
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
+import { generateId } from '../utils';
+
+// Entidades que se sincronizan con la nube (sync artesanal, Fase 1). El sync
+// (Fase 3) vacía sync_outbox; aquí solo se encolan las operaciones.
+type SyncEntity = 'routine' | 'workout_day' | 'workout_log';
+type SyncOp = 'upsert' | 'delete';
+
+// Encola una operación en sync_outbox dentro de la MISMA transacción que la
+// escritura, para que el cambio y su registro de sync sean atómicos. `payload`
+// es el snapshot JSON de la entidad (null en delete).
+function enqueueOutbox(
+  runner: SQLiteRunner,
+  entity: SyncEntity,
+  entityId: string,
+  op: SyncOp,
+  payload: string | null
+): Promise<unknown> {
+  return runner.runAsync(
+    'INSERT INTO sync_outbox (id, entity, entity_id, op, payload, updated_at, attempts) VALUES (?, ?, ?, ?, ?, ?, 0)',
+    [generateId(), entity, entityId, op, payload, Date.now()]
+  );
+}
 
 type SQLiteDatabase = import('expo-sqlite').SQLiteDatabase;
 type SQLiteBindParams = import('expo-sqlite').SQLiteBindParams;
@@ -107,6 +129,22 @@ function getDb(): Promise<SQLiteDatabase> {
             'ALTER TABLE exercises ADD COLUMN catalog_id TEXT'
           );
         } catch {}
+        // v4 (sync): updated_at en las tablas de dominio que no lo tenían.
+        // workout_logs ya lo trae; sync_outbox se crea vía SCHEMA_SQL (IF NOT EXISTS).
+        for (const table of [
+          'routines',
+          'workout_days',
+          'exercises',
+          'exercise_logs',
+          'log_sets',
+          'cardio_logs',
+        ]) {
+          try {
+            await db.execAsync(
+              `ALTER TABLE ${table} ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0`
+            );
+          } catch {}
+        }
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -122,7 +160,7 @@ function insertExercise(
   row: ExerciseRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets, catalog_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercises (id, workout_days_id, name, exercise_order, target_reps, target_sets, catalog_id, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.workout_days_id,
@@ -131,6 +169,7 @@ function insertExercise(
       row.target_reps,
       row.target_sets,
       row.catalog_id,
+      Date.now(),
     ]
   );
 }
@@ -160,7 +199,7 @@ function insertExerciseLog(
   row: ExerciseLogRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, exercise_order, raw_input, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, exercise_order, raw_input, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.workout_logs_id,
@@ -170,14 +209,22 @@ function insertExerciseLog(
       row.raw_input,
       row.notes,
       row.created_at,
+      Date.now(),
     ]
   );
 }
 
 function insertLogSet(runner: SQLiteRunner, row: LogSetRow): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps) VALUES (?, ?, ?, ?, ?)',
-    [row.id, row.exercise_logs_id, row.set_order, row.weight, row.reps]
+    'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [
+      row.id,
+      row.exercise_logs_id,
+      row.set_order,
+      row.weight,
+      row.reps,
+      Date.now(),
+    ]
   );
 }
 
@@ -186,7 +233,7 @@ function insertCardioLog(
   row: CardioLogRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO cardio_logs (id, workout_logs_id, type, raw_input, duration, distance, pace, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO cardio_logs (id, workout_logs_id, type, raw_input, duration, distance, pace, notes, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.workout_logs_id,
@@ -196,6 +243,7 @@ function insertCardioLog(
       row.distance,
       row.pace,
       row.notes,
+      Date.now(),
     ]
   );
 }
@@ -414,19 +462,21 @@ export async function dbUpsertRoutine(routine: WorkoutRoutine): Promise<void> {
 
   await db.withExclusiveTransactionAsync(async (txn) => {
     await txn.runAsync(
-      `INSERT INTO routines (id, name, description, timer_duration, created_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO routines (id, name, description, timer_duration, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          description = excluded.description,
          timer_duration = excluded.timer_duration,
-         created_at = excluded.created_at`,
+         created_at = excluded.created_at,
+         updated_at = excluded.updated_at`,
       [
         routineRow.id,
         routineRow.name,
         routineRow.description,
         routineRow.timer_duration,
         routineRow.created_at,
+        Date.now(),
       ]
     );
 
@@ -457,6 +507,14 @@ export async function dbUpsertRoutine(routine: WorkoutRoutine): Promise<void> {
     for (const day of routine.days) {
       await upsertDayWithExercises(txn, routine.id, day);
     }
+
+    await enqueueOutbox(
+      txn,
+      'routine',
+      routine.id,
+      'upsert',
+      JSON.stringify(routine)
+    );
   });
 }
 
@@ -468,14 +526,15 @@ async function upsertDayWithExercises(
   const { day: dayRow, exercises } = dayToRows(routineId, day);
 
   await runner.runAsync(
-    `INSERT INTO workout_days (id, routines_id, day_number, name, emoji, description)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO workout_days (id, routines_id, day_number, name, emoji, description, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET
        routines_id = excluded.routines_id,
        day_number = excluded.day_number,
        name = excluded.name,
        emoji = excluded.emoji,
-       description = excluded.description`,
+       description = excluded.description,
+       updated_at = excluded.updated_at`,
     [
       dayRow.id,
       dayRow.routines_id,
@@ -483,6 +542,7 @@ async function upsertDayWithExercises(
       dayRow.name,
       dayRow.emoji,
       dayRow.description,
+      Date.now(),
     ]
   );
 
@@ -528,6 +588,7 @@ export async function dbDeleteRoutine(routineId: string): Promise<void> {
       routineId,
     ]);
     await txn.runAsync('DELETE FROM routines WHERE id = ?', [routineId]);
+    await enqueueOutbox(txn, 'routine', routineId, 'delete', null);
   });
 }
 
@@ -538,6 +599,13 @@ export async function dbUpdateDay(
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async (txn) => {
     await upsertDayWithExercises(txn, routineId, day);
+    await enqueueOutbox(
+      txn,
+      'workout_day',
+      day.id,
+      'upsert',
+      JSON.stringify(day)
+    );
   });
 }
 
@@ -559,12 +627,22 @@ export async function dbUpsertWorkoutLog(log: WorkoutLog): Promise<void> {
     ]);
     await txn.runAsync('DELETE FROM workout_logs WHERE id = ?', [log.id]);
     await insertLogRows(txn, log);
+    await enqueueOutbox(
+      txn,
+      'workout_log',
+      log.id,
+      'upsert',
+      JSON.stringify(log)
+    );
   });
 }
 
 export async function dbDeleteWorkoutLog(logId: string): Promise<void> {
   const db = await getDb();
-  await db.runAsync('DELETE FROM workout_logs WHERE id = ?', [logId]);
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    await txn.runAsync('DELETE FROM workout_logs WHERE id = ?', [logId]);
+    await enqueueOutbox(txn, 'workout_log', logId, 'delete', null);
+  });
 }
 
 export async function dbSetActiveRoutine(

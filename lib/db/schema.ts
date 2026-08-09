@@ -1,9 +1,14 @@
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
 // Historial (workout_logs/...): referencias débiles (SET NULL) para que
 // sobreviva a cambios del plan; exercise_name es snapshot intencionado.
+//
+// `updated_at` (epoch ms) en todas las tablas de dominio: metadato de
+// sincronización (Fase 1 del backend). Lo escribe cada upsert; el sync lo usará
+// para el pull incremental y el last-write-wins. `sync_outbox` acumula cada
+// cambio pendiente de subir a la nube (ver .github/docs/backend-fase1-runbook.md).
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
@@ -15,7 +20,8 @@ CREATE TABLE IF NOT EXISTS routines (
   name           TEXT NOT NULL,
   description    TEXT,
   timer_duration INTEGER,
-  created_at     INTEGER NOT NULL
+  created_at     INTEGER NOT NULL,
+  updated_at     INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS workout_days (
@@ -24,7 +30,8 @@ CREATE TABLE IF NOT EXISTS workout_days (
   day_number  INTEGER NOT NULL,
   name        TEXT NOT NULL,
   emoji       TEXT NOT NULL DEFAULT '',
-  description TEXT
+  description TEXT,
+  updated_at  INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS exercises (
@@ -34,7 +41,8 @@ CREATE TABLE IF NOT EXISTS exercises (
   exercise_order  INTEGER NOT NULL,
   target_reps     TEXT,
   target_sets     INTEGER,
-  catalog_id      TEXT
+  catalog_id      TEXT,
+  updated_at      INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS workout_logs (
@@ -57,7 +65,8 @@ CREATE TABLE IF NOT EXISTS exercise_logs (
   exercise_order  INTEGER NOT NULL,
   raw_input       TEXT NOT NULL DEFAULT '',
   notes           TEXT,
-  created_at      INTEGER NOT NULL
+  created_at      INTEGER NOT NULL,
+  updated_at      INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS log_sets (
@@ -65,7 +74,8 @@ CREATE TABLE IF NOT EXISTS log_sets (
   exercise_logs_id TEXT NOT NULL REFERENCES exercise_logs(id) ON DELETE CASCADE,
   set_order        INTEGER NOT NULL,
   weight           REAL NOT NULL,
-  reps             INTEGER NOT NULL
+  reps             INTEGER NOT NULL,
+  updated_at       INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS cardio_logs (
@@ -76,7 +86,20 @@ CREATE TABLE IF NOT EXISTS cardio_logs (
   duration        REAL,
   distance        REAL,
   pace            TEXT,
-  notes           TEXT
+  notes           TEXT,
+  updated_at      INTEGER NOT NULL DEFAULT 0
+);
+
+-- Cola de cambios pendientes de subir a la nube (sync artesanal, Fase 1).
+-- Una fila por operación granular; el motor de sync (Fase 3) la vacía.
+CREATE TABLE IF NOT EXISTS sync_outbox (
+  id         TEXT PRIMARY KEY,
+  entity     TEXT NOT NULL,
+  entity_id  TEXT NOT NULL,
+  op         TEXT NOT NULL,
+  payload    TEXT,
+  updated_at INTEGER NOT NULL,
+  attempts   INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_days_routine     ON workout_days(routines_id);
@@ -86,4 +109,5 @@ CREATE INDEX IF NOT EXISTS idx_logs_routine_day ON workout_logs(routines_id, wor
 CREATE INDEX IF NOT EXISTS idx_exlogs_log       ON exercise_logs(workout_logs_id);
 CREATE INDEX IF NOT EXISTS idx_exlogs_exercise  ON exercise_logs(exercises_id);
 CREATE INDEX IF NOT EXISTS idx_sets_exlog       ON log_sets(exercise_logs_id);
+CREATE INDEX IF NOT EXISTS idx_outbox_entity    ON sync_outbox(entity, entity_id);
 `;
