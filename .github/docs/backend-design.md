@@ -26,6 +26,41 @@ forma controlada y por fases**; este documento es el plan.
 
 ---
 
+## 0. Estado de implementación (2026-08-11)
+
+Rama de trabajo: `0.7-version`. Progreso del epic:
+
+- **Fase 1 — Fundaciones locales — HECHO ✅** (verificado en dispositivo).
+  `updated_at` en todas las tablas de dominio + tabla `sync_outbox`; cada
+  escritura granular encola su operación en la misma transacción
+  (`lib/db/schema.ts`, `lib/db/index.ts`). Ver §4.
+- **Fase 2 — Cuentas + backup/restore — HECHO ✅** (verificado: round-trip de
+  ~2800 series correcto). Auth email (`lib/cloud/auth.ts`), backup/restore contra
+  las tablas espejo (`lib/cloud/backup.ts`), pantalla "Cuenta y nube"
+  (`features/workout/CloudScreen.tsx`), cliente (`lib/supabase.ts`), schema de la
+  nube (`supabase/schema.sql`). Cuenta opcional. Ver §5.
+- **Fase 3 — Sync incremental — PENDIENTE.** Es lo siguiente: vaciar el
+  `sync_outbox` a la nube y bajar deltas automáticamente, en vez del
+  backup/restore manual. Ver §6.
+- **Fase 4 — Social — PENDIENTE.** Ver §7.
+
+### Cabos sueltos antes de producción
+
+- **Confirmación de email:** en desarrollo la cuenta se creó desde el panel de
+  Supabase (atajo). Para producción hay que habilitar la confirmación de email en
+  el registro real desde la app, lo que requiere **SMTP propio** (el correo
+  integrado de Supabase tiene un límite fijo de ~2 emails/h) o un flujo
+  equivalente. La UX de registro de `CloudScreen` asume que se puede entrar tras
+  crear la cuenta; revisar al activar la confirmación.
+- **Notas técnicas del backup/restore (ya resueltas, no repetir):** PostgREST
+  devuelve máx. 1000 filas/consulta → el restore **pagina** con `.range()`; y las
+  columnas `bigint` (`created_at`/`updated_at`) llegan como **string** → se
+  reconvierten a número. (Ver `lib/cloud/backup.ts`.)
+- **Login social (Google/Apple):** se dejó para después (se arrancó con email).
+- **Alcance web del sync:** aún por decidir (§10).
+
+---
+
 ## 1. Principios
 
 1. **Offline-first innegociable.** La UI nunca espera a la red. La `expo-sqlite`

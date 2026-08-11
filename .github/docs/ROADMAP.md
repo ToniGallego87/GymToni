@@ -42,7 +42,7 @@ ACTUAL — sin subir SDK ni New Architecture (PowerSync descartado, ver
 [backend-design.md](backend-design.md) §14). El plan completo (modelo de datos,
 sync, seguridad, coste) vive en ese doc; aquí solo el resumen.
 
-- [ ] **Backend Fase 1 — Fundaciones locales de sync** — preparar `expo-sqlite`
+- [x] **Backend Fase 1 — Fundaciones locales de sync** — preparar `expo-sqlite`
       para sincronizar sin tocar aún la nube: `updated_at` en las tablas de
       dominio, tombstones (borrado registrado) y una tabla `sync_outbox` que
       acumule cada cambio pendiente. Sin subir SDK, sobre RN 0.74.
@@ -53,7 +53,7 @@ sync, seguridad, coste) vive en ese doc; aquí solo el resumen.
       `lib/persistence.ts`. Pasos en `backend-fase1-runbook.md`; diseño en
       `backend-design.md` §4.
       **Esfuerzo:** medio.
-- [ ] **Backend Fase 2 — Cuentas y backup en la nube** — login con Supabase Auth
+- [x] **Backend Fase 2 — Cuentas y backup en la nube** — login con Supabase Auth
       (email + Google + Apple), tabla `profiles`, y backup/restore completo del
       historial a la nube. Cuenta **opcional**; adopta el estado local anónimo al
       registrarse.
