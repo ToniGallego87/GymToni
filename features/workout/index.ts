@@ -7,6 +7,7 @@ export { DetailScreen } from './DetailScreen';
 export { ExerciseProgressScreen } from './ExerciseProgressScreen';
 export { CalendarScreen } from './CalendarScreen';
 export { DataScreen } from './DataScreen';
+export { CloudScreen } from './CloudScreen';
 export { ProfileScreen } from './ProfileScreen';
 export { SettingsScreen } from './SettingsScreen';
 export { DaySelectorScreen } from './DaySelectorScreen';

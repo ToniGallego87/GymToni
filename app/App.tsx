@@ -17,6 +17,7 @@ const Notifications: typeof import('expo-notifications') | null =
 import {
   CalendarScreen,
   CardioScreen,
+  CloudScreen,
   DataScreen,
   DaySelectorScreen,
   DetailScreen,
@@ -87,6 +88,7 @@ type Screen =
   | { type: 'profile' }
   | { type: 'settings' }
   | { type: 'data' }
+  | { type: 'cloud' }
   | {
       type: 'exercise-progress';
       // Ejercicio preseleccionado al abrir la evolución desde el detalle de un día.
@@ -708,6 +710,7 @@ function AppContent() {
             setScreen({ type: 'exercise-progress' })
           }
           onOpenData={() => setScreen({ type: 'data' })}
+          onOpenCloud={() => setScreen({ type: 'cloud' })}
           onOpenSettings={() => setScreen({ type: 'settings' })}
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
@@ -717,6 +720,8 @@ function AppContent() {
       )}
 
       {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
+
+      {screen.type === 'cloud' && <CloudScreen onBack={goProfile} />}
 
       {screen.type === 'exercise-progress' && (
         <ExerciseProgressScreen

@@ -22,6 +22,7 @@ interface ProfileScreenProps {
   onOpenRoutines?: () => void;
   onOpenExerciseProgress?: () => void;
   onOpenData?: () => void;
+  onOpenCloud?: () => void;
   onOpenSettings?: () => void;
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
@@ -40,6 +41,7 @@ export function ProfileScreen({
   onOpenRoutines,
   onOpenExerciseProgress,
   onOpenData,
+  onOpenCloud,
   onOpenSettings,
   onNavigateHome,
   onNavigateCardio,
@@ -75,6 +77,12 @@ export function ProfileScreen({
       label: t('Datos'),
       hint: t('Importa, exporta o limpia la información'),
       onPress: onOpenData,
+    },
+    {
+      icon: 'cloud-outline',
+      label: t('Cuenta y nube'),
+      hint: t('Login, copia de seguridad y sincronización'),
+      onPress: onOpenCloud,
     },
     {
       icon: 'cog-outline',
