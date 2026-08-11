@@ -75,13 +75,31 @@ export async function backupToCloud(
 export async function restoreFromCloud(
   userId: string
 ): Promise<WorkoutAppData> {
+  // PostgREST limita cada consulta a 1000 filas → hay que PAGINAR o el restore
+  // trunca (con semanas de historial, log_sets pasa de 1000 y se pierden series).
+  // Además, las columnas bigint (created_at/updated_at) llegan como STRING (para
+  // no perder precisión); se reconvierten a número o la lógica de semanas se rompe.
+  const PAGE = 1000;
   const fetchTable = async (table: string): Promise<Record<string, unknown>[]> => {
-    const { data, error } = await supabase
-      .from(table)
-      .select('*')
-      .eq('deleted', false);
-    if (error) throw new Error(`${table}: ${error.message}`);
-    return data ?? [];
+    const all: Record<string, unknown>[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .eq('deleted', false)
+        .range(from, from + PAGE - 1);
+      if (error) throw new Error(`${table}: ${error.message}`);
+      const page = data ?? [];
+      for (const r of page) {
+        all.push({
+          ...r,
+          ...(r.created_at != null ? { created_at: Number(r.created_at) } : {}),
+          ...(r.updated_at != null ? { updated_at: Number(r.updated_at) } : {}),
+        });
+      }
+      if (page.length < PAGE) break;
+    }
+    return all;
   };
 
   const [
