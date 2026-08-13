@@ -1,5 +1,68 @@
 # UPDATES
 
+## Version 0.7.0 - 2026-08-13
+
+### Nuevas funcionalidades
+
+- **Cuenta y nube** (`features/workout/CloudScreen.tsx`, entrada desde
+  `features/workout/ProfileScreen.tsx`): registro/inicio de sesión por email
+  (`lib/cloud/auth.ts`, `useSession` reactiva) y, con sesión iniciada, copia de
+  seguridad (`backupToCloud`) y restaurar (`restoreFromCloud` → `SET_APP_DATA`)
+  contra tablas espejo en Supabase. Cuenta opcional: la app sigue funcionando
+  100% en local sin registrarse.
+- **Sincronización incremental bidireccional entre dispositivos**
+  (`lib/cloud/sync.ts`): motor propio de push/pull sobre `sync_outbox` y las
+  tablas espejo. El push vacía el outbox a la nube; el pull baja los deltas
+  (`updated_at > cursor`) y los aplica al SQLite local sin re-encolar. Disparos:
+  al iniciar sesión y al volver a primer plano (`hooks/useCloudSync.ts`) y
+  debounced tras cada escritura (`schedulePush` desde `lib/persistence.ts`).
+  Resolución last-write-wins por hora de push. Verificado con dos dispositivos
+  reales (A→B, B→A, borrados y rutina activa).
+
+### Arquitectura
+
+- **Fundaciones de sync (Fase 1)** (`lib/db/schema.ts`, `lib/db/index.ts`):
+  `SCHEMA_VERSION` 3→4; columna `updated_at` (epoch ms) en `routines`,
+  `workout_days`, `exercises`, `exercise_logs`, `log_sets` y `cardio_logs`, más la
+  nueva tabla `sync_outbox`. Migración idempotente (ALTER ADD COLUMN + CREATE);
+  cada upsert estampa `updated_at` y encola su operación (`enqueueOutbox`) en la
+  MISMA transacción que la escritura (atómico). Sin cambios de tipos, reducer ni
+  pantallas: la app se comporta igual.
+- **Backend en la nube** (`lib/supabase.ts`, `lib/supabaseConfig.ts`,
+  `supabase/schema.sql`): cliente Supabase único con sesión persistida en
+  AsyncStorage (`@supabase/supabase-js` + `react-native-url-polyfill`); schema con
+  tablas espejo de dominio (`user_id` + `updated_at` bigint + `deleted`),
+  `profiles`, `user_settings`, RLS por usuario y trigger de alta de profile.
+- **Robustez del motor de sync** (`lib/cloud/sync.ts`, `lib/db/index.ts`): ids de
+  `log_sets` deterministas (`exerciseLogId:orden`) para no duplicar series; rutina
+  activa/seleccionada sincronizada vía `user_settings` (entidad `settings`); push
+  resiliente (el fallo de red no penaliza, la entrada corrupta se descarta tras 5
+  intentos y backup/restore vacían el outbox con `clearOutbox`).
+
+### Cambios
+
+- **Se descarta PowerSync / New Architecture**: la New Arch (requerida por
+  op-sqlite de PowerSync) rompía el manejo de toques de la UI en SDK 52. Se pivota
+  a un motor de sync artesanal (outbox) sobre la `expo-sqlite` actual, en RN 0.74
+  y sin subir de SDK. Actualizados `backend-design.md`, el runbook de Fase 1 y las
+  fichas del ROADMAP.
+- **CloudScreen** (`features/workout/CloudScreen.tsx`): "Sincronizar ahora" y el
+  estado de sincronización pasan a ser la acción principal; la copia de seguridad y
+  el restore se mueven a una sección "Avanzado".
+
+### Correcciones
+
+- **La referencia "anterior" del registro salta las semanas de descarga**:
+  `getPreviousExerciseRuns` descartaba mal el deload y lo usaba como base al
+  empezar una semana normal; ahora lo excluye (`!ex.isDeload`), igual que ya hacía
+  `DetailScreen`, y `getPreviousWeightLog` mira la última semana normal con peso
+  real.
+- **Restore completo** (`lib/cloud/backup.ts`): PostgREST corta a 1000 filas por
+  consulta, así que `restoreFromCloud` truncaba el historial (con `log_sets` >1000
+  se perdían series → score de fuerza 0); ahora pagina con `.range()`. Además, las
+  columnas `bigint` (`created_at`/`updated_at`) llegan como string y se reconvierten
+  a número. Verificado en dispositivo con 2776 series y gráficas correctas.
+
 ## Version 0.6.9 - 2026-08-07
 
 ### Cambios

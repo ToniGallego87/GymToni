@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.0',
+    items: [
+      'Ahora puedes crear una cuenta gratis y guardar tus entrenamientos en la nube. Si cambias de móvil o lo pierdes, tu historial sigue a salvo.',
+      'Tus datos se sincronizan solos entre tus móviles: lo que registras en uno aparece en el otro, siempre al día.',
+      'Usar la cuenta es opcional. Si lo prefieres, la app sigue funcionando igual que siempre, con todo guardado solo en tu móvil.',
+      'Al empezar una semana normal después de una semana de descarga, la app vuelve a fijarse en tu última semana fuerte para sugerirte el peso, en lugar de en los pesos suaves de la descarga.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.6.9',
     items: [
       'Ahora, al tocar una rutina se abren directamente sus detalles para consultarla. Para elegir cuál se ve en Inicio, cada rutina tiene su propio botón "Mostrar en Inicio".',
