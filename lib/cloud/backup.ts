@@ -1,5 +1,6 @@
 import type { WorkoutAppData } from '../../types';
 import { supabase } from '../supabase';
+import { clearOutbox } from '../db';
 import {
   appDataToRows,
   rowsToAppData,
@@ -27,7 +28,9 @@ async function upsertAll(
   rows: Record<string, unknown>[]
 ): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase.from(table).upsert(rows.slice(i, i + CHUNK));
+    const { error } = await supabase
+      .from(table)
+      .upsert(rows.slice(i, i + CHUNK));
     if (error) throw new Error(`${table}: ${error.message}`);
   }
 }
@@ -68,6 +71,11 @@ export async function backupToCloud(
     updated_at: now,
   });
   if (error) throw new Error(`user_settings: ${error.message}`);
+
+  // El snapshot completo ya está en la nube: los deltas pendientes del outbox
+  // (historial acumulado, posibles formatos viejos) quedan obsoletos y se
+  // descartan para que el sync incremental arranque limpio.
+  await clearOutbox();
 }
 
 // Descarga todo lo del usuario y lo reconstruye como AppData (para reemplazar el
@@ -80,7 +88,9 @@ export async function restoreFromCloud(
   // Además, las columnas bigint (created_at/updated_at) llegan como STRING (para
   // no perder precisión); se reconvierten a número o la lógica de semanas se rompe.
   const PAGE = 1000;
-  const fetchTable = async (table: string): Promise<Record<string, unknown>[]> => {
+  const fetchTable = async (
+    table: string
+  ): Promise<Record<string, unknown>[]> => {
     const all: Record<string, unknown>[] = [];
     for (let from = 0; ; from += PAGE) {
       const { data, error } = await supabase
@@ -130,7 +140,10 @@ export async function restoreFromCloud(
     { key: SETTING_INITIALIZED, value: '1' },
   ];
   if (us?.active_routine_id)
-    settings.push({ key: SETTING_ACTIVE_ROUTINE_ID, value: us.active_routine_id });
+    settings.push({
+      key: SETTING_ACTIVE_ROUTINE_ID,
+      value: us.active_routine_id,
+    });
   if (us?.selected_routine_id)
     settings.push({
       key: SETTING_SELECTED_ROUTINE_ID,

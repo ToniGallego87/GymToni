@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import {
   WorkoutAppData,
   WorkoutDay,
@@ -28,7 +29,7 @@ import { generateId } from '../utils';
 
 // Entidades que se sincronizan con la nube (sync artesanal, Fase 1). El sync
 // (Fase 3) vacía sync_outbox; aquí solo se encolan las operaciones.
-type SyncEntity = 'routine' | 'workout_day' | 'workout_log';
+type SyncEntity = 'routine' | 'workout_day' | 'workout_log' | 'settings';
 type SyncOp = 'upsert' | 'delete';
 
 // Encola una operación en sync_outbox dentro de la MISMA transacción que la
@@ -599,12 +600,14 @@ export async function dbUpdateDay(
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async (txn) => {
     await upsertDayWithExercises(txn, routineId, day);
+    // El día por sí solo no lleva su routines_id (lo necesita la tabla espejo de
+    // la nube), así que el snapshot del outbox guarda ambos.
     await enqueueOutbox(
       txn,
       'workout_day',
       day.id,
       'upsert',
-      JSON.stringify(day)
+      JSON.stringify({ routineId, day })
     );
   });
 }
@@ -645,36 +648,304 @@ export async function dbDeleteWorkoutLog(logId: string): Promise<void> {
   });
 }
 
+async function readSetting(
+  db: SQLiteDatabase,
+  key: string
+): Promise<string | null> {
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM settings WHERE key = ?',
+    [key]
+  );
+  return row?.value ?? null;
+}
+
+// Encola el snapshot de ajustes de sincronización (rutina activa/seleccionada).
+// La rutina activa se sincroniza vía user_settings en la nube; como no pasa por
+// una escritura de dominio hay que registrarla explícitamente en el outbox.
+function enqueueSettings(
+  runner: SQLiteRunner,
+  active: string | null,
+  selected: string | null
+): Promise<unknown> {
+  return enqueueOutbox(
+    runner,
+    'settings',
+    'user',
+    'upsert',
+    JSON.stringify({ active, selected })
+  );
+}
+
+async function writeSetting(
+  runner: SQLiteRunner,
+  key: string,
+  value: string | undefined
+): Promise<void> {
+  if (value) {
+    await runner.runAsync(
+      `INSERT INTO settings (key, value) VALUES (?, ?)
+       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+      [key, value]
+    );
+  } else {
+    await runner.runAsync('DELETE FROM settings WHERE key = ?', [key]);
+  }
+}
+
 export async function dbSetActiveRoutine(
   routineId: string | undefined
 ): Promise<void> {
   const db = await getDb();
-  if (routineId) {
-    await db.runAsync(
-      `INSERT INTO settings (key, value) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [SETTING_ACTIVE_ROUTINE_ID, routineId]
-    );
-  } else {
-    await db.runAsync('DELETE FROM settings WHERE key = ?', [
-      SETTING_ACTIVE_ROUTINE_ID,
-    ]);
-  }
+  const selected = await readSetting(db, SETTING_SELECTED_ROUTINE_ID);
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    await writeSetting(txn, SETTING_ACTIVE_ROUTINE_ID, routineId);
+    await enqueueSettings(txn, routineId ?? null, selected);
+  });
 }
 
 export async function dbSetSelectedRoutine(
   routineId: string | undefined
 ): Promise<void> {
   const db = await getDb();
-  if (routineId) {
-    await db.runAsync(
-      `INSERT INTO settings (key, value) VALUES (?, ?)
-       ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
-      [SETTING_SELECTED_ROUTINE_ID, routineId]
-    );
-  } else {
-    await db.runAsync('DELETE FROM settings WHERE key = ?', [
-      SETTING_SELECTED_ROUTINE_ID,
-    ]);
-  }
+  const active = await readSetting(db, SETTING_ACTIVE_ROUTINE_ID);
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    await writeSetting(txn, SETTING_SELECTED_ROUTINE_ID, routineId);
+    await enqueueSettings(txn, active, routineId ?? null);
+  });
+}
+
+// ─────────────────────────── Sync (Fase 3) ───────────────────────────
+// El motor de sync (lib/cloud/sync.ts) es quien orquesta push/pull; aquí viven
+// solo las operaciones locales de bajo nivel que necesita: leer/vaciar el outbox
+// y aplicar los cambios que llegan de la nube directamente al SQLite, SIN volver
+// a encolarlos en el outbox (o el cambio remoto rebotaría de vuelta a la nube).
+
+export interface OutboxRow {
+  id: string;
+  entity: SyncEntity;
+  entity_id: string;
+  op: SyncOp;
+  payload: string | null;
+  updated_at: number;
+  attempts: number;
+}
+
+// Lee el outbox en orden de llegada (rowid). El sync procesa en ese orden para
+// respetar la secuencia de cambios (p. ej. crear y luego borrar la misma fila).
+export async function getOutboxBatch(limit = 500): Promise<OutboxRow[]> {
+  const db = await getDb();
+  return db.getAllAsync<OutboxRow>(
+    'SELECT id, entity, entity_id, op, payload, updated_at, attempts FROM sync_outbox ORDER BY rowid ASC LIMIT ?',
+    [limit]
+  );
+}
+
+export async function deleteOutboxEntries(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const db = await getDb();
+  const placeholders = ids.map(() => '?').join(', ');
+  await db.runAsync(
+    `DELETE FROM sync_outbox WHERE id IN (${placeholders})`,
+    ids
+  );
+}
+
+// Suma 1 a los intentos de las entradas que fallaron al subir. Una entrada que
+// agota los reintentos se descarta (el motor la trata como envenenada), para que
+// un cambio corrupto no bloquee para siempre la cola detrás de él.
+export async function incrementOutboxAttempts(ids: string[]): Promise<void> {
+  if (!ids.length) return;
+  const db = await getDb();
+  const placeholders = ids.map(() => '?').join(', ');
+  await db.runAsync(
+    `UPDATE sync_outbox SET attempts = attempts + 1 WHERE id IN (${placeholders})`,
+    ids
+  );
+}
+
+// Vacía el outbox. Un backup/restore completo (Fase 2) sube o baja TODO el
+// estado, así que los deltas pendientes quedan obsoletos: se descartan para no
+// re-subir historial viejo (posiblemente en formatos anteriores) en el sync.
+export async function clearOutbox(): Promise<void> {
+  // En web no hay expo-sqlite ni outbox (el backup usa el estado JSON): no-op.
+  if (Platform.OS === 'web') return;
+  const db = await getDb();
+  await db.runAsync('DELETE FROM sync_outbox');
+}
+
+// Cambios que trae el pull para una tabla: filas a insertar/actualizar y filas a
+// borrar (tombstones de la nube). Los settings viajan aparte (tabla settings).
+export interface RemoteTableChange {
+  upserts: Record<string, unknown>[];
+  deletes: string[];
+}
+
+export interface RemoteChanges {
+  routines: RemoteTableChange;
+  workoutDays: RemoteTableChange;
+  exercises: RemoteTableChange;
+  workoutLogs: RemoteTableChange;
+  exerciseLogs: RemoteTableChange;
+  logSets: RemoteTableChange;
+  cardioLogs: RemoteTableChange;
+  settings: { active: string | null; selected: string | null } | null;
+}
+
+function buildUpsertSql(table: string, cols: string[]): string {
+  const placeholders = cols.map(() => '?').join(', ');
+  const setClause = cols
+    .filter((col) => col !== 'id')
+    .map((col) => `${col} = excluded.${col}`)
+    .join(', ');
+  return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})
+     ON CONFLICT(id) DO UPDATE SET ${setClause}`;
+}
+
+// Orden padres→hijos: en el upsert da igual (la conexión de la transacción
+// exclusiva no aplica FK, ver saveAppDataToDb), pero mantiene el código legible.
+const REMOTE_TABLES: {
+  key: keyof Omit<RemoteChanges, 'settings'>;
+  table: string;
+  cols: string[];
+}[] = [
+  {
+    key: 'routines',
+    table: 'routines',
+    cols: [
+      'id',
+      'name',
+      'description',
+      'timer_duration',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  {
+    key: 'workoutDays',
+    table: 'workout_days',
+    cols: [
+      'id',
+      'routines_id',
+      'day_number',
+      'name',
+      'emoji',
+      'description',
+      'updated_at',
+    ],
+  },
+  {
+    key: 'exercises',
+    table: 'exercises',
+    cols: [
+      'id',
+      'workout_days_id',
+      'name',
+      'exercise_order',
+      'target_reps',
+      'target_sets',
+      'catalog_id',
+      'updated_at',
+    ],
+  },
+  {
+    key: 'workoutLogs',
+    table: 'workout_logs',
+    cols: [
+      'id',
+      'routines_id',
+      'workout_days_id',
+      'date',
+      'created_at',
+      'updated_at',
+      'starts_new_week',
+      'cardio_only',
+      'is_deload',
+    ],
+  },
+  {
+    key: 'exerciseLogs',
+    table: 'exercise_logs',
+    cols: [
+      'id',
+      'workout_logs_id',
+      'exercises_id',
+      'exercise_name',
+      'exercise_order',
+      'raw_input',
+      'notes',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  {
+    key: 'logSets',
+    table: 'log_sets',
+    cols: [
+      'id',
+      'exercise_logs_id',
+      'set_order',
+      'weight',
+      'reps',
+      'updated_at',
+    ],
+  },
+  {
+    key: 'cardioLogs',
+    table: 'cardio_logs',
+    cols: [
+      'id',
+      'workout_logs_id',
+      'type',
+      'raw_input',
+      'duration',
+      'distance',
+      'pace',
+      'notes',
+      'updated_at',
+    ],
+  },
+];
+
+// Aplica en bloque, en una sola transacción, los cambios bajados de la nube.
+// Borra por id (tombstones) y hace upsert de las filas vivas, tabla a tabla.
+export async function applyRemoteChanges(
+  changes: RemoteChanges
+): Promise<void> {
+  const db = await getDb();
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    for (const { key, table, cols } of REMOTE_TABLES) {
+      const change = changes[key];
+      if (change.deletes.length) {
+        for (let i = 0; i < change.deletes.length; i += 300) {
+          const slice = change.deletes.slice(i, i + 300);
+          const placeholders = slice.map(() => '?').join(', ');
+          await txn.runAsync(
+            `DELETE FROM ${table} WHERE id IN (${placeholders})`,
+            slice
+          );
+        }
+      }
+      if (change.upserts.length) {
+        await bulkInsert(
+          txn,
+          buildUpsertSql(table, cols),
+          change.upserts,
+          (row) => cols.map((col) => row[col] ?? null) as SQLiteBindParams
+        );
+      }
+    }
+
+    if (changes.settings) {
+      await writeSetting(
+        txn,
+        SETTING_ACTIVE_ROUTINE_ID,
+        changes.settings.active ?? undefined
+      );
+      await writeSetting(
+        txn,
+        SETTING_SELECTED_ROUTINE_ID,
+        changes.settings.selected ?? undefined
+      );
+    }
+  });
 }

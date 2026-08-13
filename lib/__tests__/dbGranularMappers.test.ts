@@ -120,11 +120,12 @@ describe('logToRows', () => {
       exercises_id: 'e1',
       created_at: 250,
     });
+    // id determinista `exerciseLogId:orden` (estable entre push/pull del sync).
     expect(
       rows.logSets.map((s) => [s.id, s.set_order, s.weight, s.reps])
     ).toEqual([
-      ['set-1', 1, 60, 8],
-      ['set-2', 2, 60, 8],
+      ['el1:1', 1, 60, 8],
+      ['el1:2', 2, 60, 8],
     ]);
     expect(rows.cardio).toMatchObject({
       id: 'c1',

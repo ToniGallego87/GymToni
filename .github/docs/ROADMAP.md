@@ -62,13 +62,13 @@ sync, seguridad, coste) vive en ese doc; aquí solo el resumen.
       **Archivos:** cliente `@supabase/supabase-js` nuevo, `lib/persistence.ts`,
       tabla `profiles` en la nube. Detalle en `backend-design.md` §5.
       **Esfuerzo:** alto.
-- [ ] **Backend Fase 3 — Sincronización incremental** — motor de push/pull propio
-      sobre `sync_outbox`: subir cambios y bajar deltas (`updated_at > cursor`)
-      con resolución *last-write-wins*.
-      **Por qué:** convierte el backup manual en sync continuo y transparente.
-      **Archivos:** motor de sync nuevo en `lib/`, `lib/persistence.ts`. Detalle
-      en `backend-design.md` §6.
-      **Esfuerzo:** alto.
+- [x] **Backend Fase 3 — Sincronización incremental** — motor de push/pull propio
+      sobre `sync_outbox` (`lib/cloud/sync.ts`): sube los cambios del outbox y baja
+      deltas (`updated_at > cursor`) con *last-write-wins*; aplica en local sin
+      re-encolar (`applyRemoteChanges`), reconcilia hijos por parentesco y dispara
+      al iniciar sesión / primer plano (`hooks/useCloudSync.ts`) y tras cada
+      escritura. Detalle en `backend-design.md` §6. Verificado con dos
+      dispositivos (A→B, B→A, borrado y rutina activa).
 - [ ] **Backend Fase 4 — Social (perfiles, follows, tablón)** — perfiles
       públicos, seguir usuarios, rutinas públicas (`is_public`), likes/guardados,
       tablón de rutinas populares y clonar una rutina pública a tu espacio;

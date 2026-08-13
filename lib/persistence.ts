@@ -10,6 +10,7 @@ import {
   dbUpsertWorkoutLog,
 } from './db';
 import { saveAppData } from './storage';
+import { schedulePush } from './cloud/sync';
 
 const isWeb = Platform.OS === 'web';
 const WEB_SAVE_DEBOUNCE_MS = 500;
@@ -33,6 +34,9 @@ function enqueue(operation: () => Promise<void>): void {
       console.error('Error persisting change:', error);
     });
   writeChain = writeChain.then(run, run);
+  // Tras cada escritura granular, agendar un push a la nube (debounced, no-op si
+  // no hay sesión). El cambio ya quedó en el outbox dentro de la operación.
+  schedulePush();
 }
 
 let webSaveTimer: ReturnType<typeof setTimeout> | null = null;

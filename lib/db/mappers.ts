@@ -191,7 +191,12 @@ export function logToRows(
 
     exerciseLog.parsedSets.forEach((set, index) => {
       logSets.push({
-        id: newId(),
+        // id DETERMINISTA (no aleatorio): una serie de gimnasio no tiene id
+        // propio en el dominio, pero el sync incremental (Fase 3) necesita que
+        // el mismo dato lógico produzca SIEMPRE el mismo id, o cada push/pull
+        // crearía filas nuevas y duplicaría las series. `exerciseLogId:orden`
+        // es único (el exerciseLog.id es único y el orden lo es dentro de él).
+        id: `${exerciseLog.id}:${index + 1}`,
         exercise_logs_id: exerciseLog.id,
         set_order: index + 1,
         weight: set.weight,

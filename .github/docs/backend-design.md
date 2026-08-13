@@ -39,10 +39,23 @@ Rama de trabajo: `0.7-version`. Progreso del epic:
   las tablas espejo (`lib/cloud/backup.ts`), pantalla "Cuenta y nube"
   (`features/workout/CloudScreen.tsx`), cliente (`lib/supabase.ts`), schema de la
   nube (`supabase/schema.sql`). Cuenta opcional. Ver §5.
-- **Fase 3 — Sync incremental — PENDIENTE.** Es lo siguiente: vaciar el
-  `sync_outbox` a la nube y bajar deltas automáticamente, en vez del
-  backup/restore manual. Ver §6.
-- **Fase 4 — Social — PENDIENTE.** Ver §7.
+- **Fase 3 — Sync incremental — HECHO ✅** (verificado con dos dispositivos:
+  A→B, B→A, borrado y rutina activa se propagan). Motor propio de push/pull sobre
+  el `sync_outbox`
+  (`lib/cloud/sync.ts`): el push vacía el outbox a las tablas espejo y el pull baja
+  los deltas (`updated_at > cursor`, cursor por dispositivo en AsyncStorage) y los
+  aplica al SQLite local sin re-encolarlos (`applyRemoteChanges` en
+  `lib/db/index.ts`). Disparos: al iniciar sesión, al volver a primer plano
+  (`hooks/useCloudSync.ts`, montado en `app/App.tsx`) y debounced tras cada
+  escritura (`schedulePush` desde `lib/persistence.ts`). Reconciliación de hijos
+  por parentesco (marcar `deleted` los que ya no están) porque las tablas espejo
+  no tienen FKs. `last-write-wins` por `updated_at` (= hora del push). Los ids de
+  `log_sets` se hicieron **deterministas** (`exerciseLogId:orden`) para que el
+  mismo dato no se duplique en cada push/pull (`lib/db/mappers.ts`). La rutina
+  activa/seleccionada se sincroniza vía `user_settings` (encolada en el outbox
+  como entidad `settings`). Backup/restore de la Fase 2 se mantienen como
+  "Avanzado" y fijan el cursor al terminar (`markSynced`). Ver §6.
+- **Fase 4 — Social — PENDIENTE.** Es lo siguiente. Ver §7.
 
 ### Cabos sueltos antes de producción
 
@@ -57,7 +70,9 @@ Rama de trabajo: `0.7-version`. Progreso del epic:
   columnas `bigint` (`created_at`/`updated_at`) llegan como **string** → se
   reconvierten a número. (Ver `lib/cloud/backup.ts`.)
 - **Login social (Google/Apple):** se dejó para después (se arrancó con email).
-- **Alcance web del sync:** aún por decidir (§10).
+- **Alcance web del sync:** el sync incremental está **desactivado en web** (no
+  hay `expo-sqlite` en SDK 51); en web sigue el almacenamiento JSON local. Queda
+  por decidir si se lleva el sync a web con otra ruta (§10).
 
 ---
 
@@ -190,19 +205,54 @@ perder los datos si cambio de móvil". Entregable por sí solo.
 
 ---
 
-## 6. Fase 3 — Sincronización incremental bidireccional
+## 6. Fase 3 — Sincronización incremental bidireccional (HECHO ✅)
 
 Objetivo: sync fino y continuo. Es la fase con más enjundia técnica (el motor que
-antes nos iba a dar PowerSync).
+antes nos iba a dar PowerSync). Implementado en `lib/cloud/sync.ts`.
 
-- **Push**: vaciar `sync_outbox` → `upsert`/`delete` en Supabase vía
-  `@supabase/supabase-js`. Al confirmar, se borra la entrada del outbox.
-- **Pull (delta)**: traer del servidor las filas del usuario con
-  `updated_at > last_pull_cursor`. Cursor por dispositivo.
-- **Conflictos**: **last-write-wins por `updated_at`** (desempate por id de
-  dispositivo). Para datos de gym sobra; se documenta como decisión explícita.
+- **Push**: `pushOutbox` lee `sync_outbox` en orden de llegada y traduce cada
+  entrada (snapshot de la entidad de dominio) a filas de las tablas espejo con los
+  mappers; `upsert`/`delete` en Supabase vía `@supabase/supabase-js`. Al confirmar,
+  se borran las entradas procesadas del outbox. Se detiene en el primer fallo para
+  no perder el orden (reintento en el próximo sync).
+- **Pull (delta)**: `pullTable` trae las filas del usuario con
+  `updated_at > cursor` (incluidos los tombstones `deleted`), tabla a tabla y
+  paginado; `applyRemoteChanges` (`lib/db/index.ts`) las vuelca al SQLite local en
+  una transacción **sin re-encolarlas** en el outbox (o rebotarían). Cursor por
+  usuario y dispositivo en AsyncStorage.
+- **Reconciliación de hijos**: las tablas espejo no tienen FKs, así que un borrado
+  de hijos (p. ej. quitar un día o una serie) no viaja como operación propia: al
+  subir el padre se marcan `deleted` en la nube los hijos que ya no están
+  (`reconcileChildren`). Para que esto funcione, los ids de `log_sets` se hicieron
+  **deterministas** (`exerciseLogId:orden`, `lib/db/mappers.ts`): sin id estable,
+  cada push generaría filas nuevas y duplicaría las series.
+- **Conflictos**: **last-write-wins por `updated_at`**. Decisión explícita:
+  `updated_at` en la nube = **hora del push**, no de la edición. Así todo cambio
+  queda por encima del cursor de los demás dispositivos y se propaga siempre (a
+  costa de que el desempate sea "gana el último en subir"; sobra para un usuario
+  con varios dispositivos).
+- **Rutina activa/seleccionada**: no es una escritura de dominio, así que se encola
+  en el outbox como entidad `settings` y se sincroniza vía la tabla
+  `user_settings`.
+- **Disparos**: al iniciar sesión y al volver la app a primer plano
+  (`hooks/useCloudSync.ts`, montado en `app/App.tsx`, que además refresca el estado
+  en memoria si el pull trajo cambios), y debounced tras cada escritura local
+  (`schedulePush` invocado desde `lib/persistence.ts`). Un mutex evita solapes.
+- **Adopción inicial**: el backup/restore completo de la Fase 2 se mantiene como
+  "Avanzado" en `CloudScreen` para sembrar la nube o reemplazar el dispositivo; al
+  terminar **vacían el outbox** (`clearOutbox`) y fijan el cursor (`markSynced`),
+  para que el incremental parta limpio de ahí. Sin esto, el outbox arrastra todo el
+  historial de deltas (posibles formatos viejos) y una entrada corrupta podía
+  bloquear la cola detrás de ella.
+- **Resiliencia del push**: cada entrada del outbox se sube en su propio try/catch;
+  un fallo de red aborta el push sin penalizar (se reintenta con cobertura), y una
+  entrada corrupta suma un intento y tras `MAX_OUTBOX_ATTEMPTS` (5) se descarta, sin
+  congelar el resto de la cola (`pushOutbox` en `lib/cloud/sync.ts`).
 - **Identidad y seguridad**: cada fila lleva `user_id`; **RLS** garantiza que cada
   usuario solo lee/escribe lo suyo (las públicas, en Fase 4).
+- **Nota de sync**: no es en tiempo real; el pull ocurre al abrir/volver a primer
+  plano, al iniciar sesión o con "Sincronizar ahora". El sync está desactivado en
+  web (sin `expo-sqlite`).
 - **Esfuerzo:** alto.
 
 ---

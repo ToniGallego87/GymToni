@@ -58,6 +58,7 @@ import { theme, useThemeVersion } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t, useLanguageVersion } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
+import { useCloudSync } from '@hooks/useCloudSync';
 import {
   WorkoutAppData,
   WorkoutDay,
@@ -115,6 +116,9 @@ type Screen =
 
 function AppContent() {
   const { dispatch, state } = useWorkout();
+  // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
+  // plano. Refresca el estado si el pull trae cambios de otro dispositivo.
+  useCloudSync(dispatch);
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
   // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
   // que esto es true, para no pintar primero los datos semilla y saltar luego
