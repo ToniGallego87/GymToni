@@ -65,12 +65,17 @@ GymToni/
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Exportar / importar / limpiar datos
+│   ├── CloudScreen.tsx       ← Cuenta y nube: login, backup/restore y sync
 │   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx / QRScannerScreen.tsx
 │   └── WeekAchievementScreen.tsx ← Compartir logros semanales
-├── hooks/useWorkout.ts       ← Consumer del contexto
+├── hooks/
+│   ├── useWorkout.ts         ← Consumer del contexto
+│   └── useCloudSync.ts       ← Sync de fondo (login / foreground) → refresca estado
 ├── lib/                      ← Lógica compartida (ver ARCHITECTURE.md)
 │   ├── theme.ts              ← Colores, degradados, tipografía, spacing
 │   ├── storage.ts / persistence.ts / db/ ← Persistencia SQLite (nativo) / JSON (web)
+│   ├── cloud/               ← Nube: auth.ts (Supabase Auth), backup.ts, sync.ts (motor push/pull)
+│   ├── supabase.ts / supabaseConfig.ts ← Cliente Supabase (clave anon pública)
 │   └── parsers.ts, progress.ts, weeks.ts, exerciseProgress.ts, routines.ts,
 │       cardio.ts, achievements.ts…
 ├── lib/__tests__/            ← Tests Jest de la lógica pura
@@ -78,6 +83,7 @@ GymToni/
 ├── data/
 │   ├── workoutDays.ts / seedData.ts ← Rutinas y logs de fábrica
 │   └── changelog.ts          ← Novedades por versión (popup in-app)
+├── supabase/schema.sql       ← Esquema de la nube (tablas espejo + RLS)
 ├── android/                  ← Proyecto nativo Android (build.gradle: versionCode)
 └── assets/                   ← Iconos, wordmark, fuente Anton
 ```
@@ -95,6 +101,10 @@ GymToni/
 - **Nativo**: SQLite (`gymbro.db`) con escrituras granulares por acción.
 - **Web**: JSON en localStorage con debounce.
 - Backup manual: pantalla Datos → Exportar/Importar (JSON con historial de peso corporal).
+- **Nube (opcional, desde 0.7.0)**: pantalla Cuenta y nube → cuenta Supabase,
+  copia/restauración completa y **sincronización incremental** entre dispositivos
+  sobre `sync_outbox` (`lib/cloud/sync.ts`; solo nativo). Plan en
+  [backend-design.md](backend-design.md).
 
 Detalle completo del esquema y migraciones en
 [ARCHITECTURE.md](../ARCHITECTURE.md#persistencia).

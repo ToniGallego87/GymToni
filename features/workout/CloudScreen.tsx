@@ -16,25 +16,13 @@ import {
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
-import { t } from '@lib/i18n';
+import { t, formatAgo } from '@lib/i18n';
 import { useSession, signUp, signIn, signOut } from '@lib/cloud/auth';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
 import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
 import { clearOutbox } from '@lib/db';
 import { saveAppData, loadAppData } from '@lib/storage';
 import type { WorkoutAppData } from '../../types';
-
-// "hace 3 min", "hace 2 h"… para el estado de última sincronización.
-function formatAgo(ts: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
-  if (s < 60) return t('hace un momento');
-  const m = Math.round(s / 60);
-  if (m < 60) return `${t('hace')} ${m} min`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${t('hace')} ${h} h`;
-  const d = Math.round(h / 24);
-  return `${t('hace')} ${d} d`;
-}
 
 interface CloudScreenProps {
   onBack: () => void;
@@ -143,10 +131,10 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
     if (!user) return;
     setBusy('backup');
     try {
-      const at = Date.now();
-      await backupToCloud(currentAppData(), user.id);
-      // La nube queda sembrada con este estado: fija el cursor a este instante
-      // para que el pull incremental no rebaje de vuelta todo lo recién subido.
+      const at = await backupToCloud(currentAppData(), user.id);
+      // La nube queda sembrada con este estado: fija el cursor al instante que
+      // llevan las filas subidas, para que el pull incremental no rebaje de
+      // vuelta todo lo recién subido.
       await markSynced(user.id, at);
       setLastSync(await getLastSync(user.id));
       notify(t('Copia de seguridad subida'), 'success');
@@ -168,7 +156,9 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
       // El estado local se acaba de reemplazar por el de la nube: los deltas
       // pendientes del outbox referían al estado viejo y ya no aplican.
       await clearOutbox();
-      dispatch({ type: 'SET_APP_DATA', payload: restored });
+      // Releer de la BD (y no pintar `restored` a pelo): lo guardado pasa por la
+      // normalización, que es la que quita duplicados heredados de la nube.
+      await refreshFromDb();
       // Ya tenemos todo el estado de la nube: fija el cursor a este instante para
       // que el sync incremental parta de aquí y no vuelva a bajarlo entero.
       await markSynced(user.id, at);

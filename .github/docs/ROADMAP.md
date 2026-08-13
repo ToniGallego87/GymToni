@@ -10,10 +10,21 @@ Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** Redux,
 Backend, cuentas y sincronización cloud ya **no** están prohibidos: son una
 dirección planificada por fases (plan en [backend-design.md](backend-design.md)).
 
-Última revisión completa: 2026-08-07.
+Última revisión completa: 2026-08-13.
 
 ## Mejoras visuales y de UX
 
+- [ ] **Estado de la nube visible desde Perfil** — hoy el estado de la cuenta
+      (sesión iniciada, última sincronización, si hay cambios sin subir) solo se
+      ve entrando en "Cuenta y nube". Mostrar un subtítulo dinámico en la fila del
+      menú (o un punto de estado) daría confianza de "mis datos están a salvo" sin
+      abrir la pantalla.
+      **Por qué:** el valor de la 0.7.0 es no perder datos; que se note de un
+      vistazo que la copia está al día refuerza justo eso.
+      **Archivos:** `features/workout/ProfileScreen.tsx:81-86` (la entrada "Cuenta
+      y nube" hoy tiene un `hint` fijo), `features/workout/CloudScreen.tsx`
+      (`getLastSync`), `lib/cloud/sync.ts` (`getLastSync`, cola pendiente).
+      **Esfuerzo:** bajo.
 - [ ] **Transición de tema que revele el contenido real, no un disco opaco** — el
       cambio claro/oscuro anima un círculo de color sólido que tapa la pantalla;
       se pide que ese círculo no sea opaco sino que muestre ya el contenido de la
@@ -30,45 +41,32 @@ dirección planificada por fases (plan en [backend-design.md](backend-design.md)
 
 ## Funcionalidades a simplificar
 
-Nada pendiente ahora mismo.
+- [ ] **Unificar el discurso de "proteger mis datos" (Datos ↔ Cuenta y nube)** —
+      tras la 0.7.0 hay tres mecanismos de respaldo conviviendo sin relación
+      visible: exportar/importar JSON y copia automática a archivo local
+      (`DataScreen`), y copia/restauración + sincronización en la nube
+      (`CloudScreen`), en dos entradas separadas de Perfil ("Datos" y "Cuenta y
+      nube"). El usuario no sabe cuál le protege de verdad ni si se pisan. Aclarar
+      la jerarquía: la nube como copia principal y el JSON local como exportación
+      puntual; revisar si "Copia de seguridad ahora" (nube) debe seguir en
+      "Avanzado" ahora que el sync es automático.
+      **Por qué:** tres caminos para lo mismo generan dudas ("¿ya está guardado?")
+      justo en lo más sensible; una sola narrativa clara da tranquilidad.
+      **Archivos:** `features/workout/ProfileScreen.tsx:74-92` (entradas "Datos" y
+      "Cuenta y nube"), `features/workout/DataScreen.tsx:23-36`,
+      `features/workout/CloudScreen.tsx` (bloque "Avanzado").
+      **Esfuerzo:** medio.
 
 ## Nuevas funcionalidades
 
 Candidatas (compatibles con las restricciones):
 
-El salto a la nube es un **epic secuencial** de cuatro fases (cada una entregable
-por sí sola), sobre **Supabase + un motor de sync artesanal** en la `expo-sqlite`
-ACTUAL — sin subir SDK ni New Architecture (PowerSync descartado, ver
-[backend-design.md](backend-design.md) §14). El plan completo (modelo de datos,
-sync, seguridad, coste) vive en ese doc; aquí solo el resumen.
+El salto a la nube fue un **epic de cuatro fases** sobre **Supabase + un motor de
+sync artesanal** en la `expo-sqlite` actual (plan en
+[backend-design.md](backend-design.md)). Las fases 1-3 (fundaciones de sync,
+cuentas + backup, y sincronización incremental) se entregaron en la 0.7.0; queda
+la fase social.
 
-- [x] **Backend Fase 1 — Fundaciones locales de sync** — preparar `expo-sqlite`
-      para sincronizar sin tocar aún la nube: `updated_at` en las tablas de
-      dominio, tombstones (borrado registrado) y una tabla `sync_outbox` que
-      acumule cada cambio pendiente. Sin subir SDK, sobre RN 0.74.
-      **Por qué:** es el cimiento del sync; al ser refactor local es de bajo
-      riesgo y no cambia nada de cara al usuario.
-      **Archivos:** `lib/db/schema.ts` (columnas + `sync_outbox` + migración
-      `SCHEMA_VERSION` 3→4), `lib/db/index.ts`, `lib/db/mappers.ts`,
-      `lib/persistence.ts`. Pasos en `backend-fase1-runbook.md`; diseño en
-      `backend-design.md` §4.
-      **Esfuerzo:** medio.
-- [x] **Backend Fase 2 — Cuentas y backup en la nube** — login con Supabase Auth
-      (email + Google + Apple), tabla `profiles`, y backup/restore completo del
-      historial a la nube. Cuenta **opcional**; adopta el estado local anónimo al
-      registrarse.
-      **Por qué:** primer valor real: no perder los datos al cambiar de móvil y
-      verlos en varios dispositivos.
-      **Archivos:** cliente `@supabase/supabase-js` nuevo, `lib/persistence.ts`,
-      tabla `profiles` en la nube. Detalle en `backend-design.md` §5.
-      **Esfuerzo:** alto.
-- [x] **Backend Fase 3 — Sincronización incremental** — motor de push/pull propio
-      sobre `sync_outbox` (`lib/cloud/sync.ts`): sube los cambios del outbox y baja
-      deltas (`updated_at > cursor`) con *last-write-wins*; aplica en local sin
-      re-encolar (`applyRemoteChanges`), reconcilia hijos por parentesco y dispara
-      al iniciar sesión / primer plano (`hooks/useCloudSync.ts`) y tras cada
-      escritura. Detalle en `backend-design.md` §6. Verificado con dos
-      dispositivos (A→B, B→A, borrado y rutina activa).
 - [ ] **Backend Fase 4 — Social (perfiles, follows, tablón)** — perfiles
       públicos, seguir usuarios, rutinas públicas (`is_public`), likes/guardados,
       tablón de rutinas populares y clonar una rutina pública a tu espacio;
@@ -110,7 +108,10 @@ sync, seguridad, coste) vive en ese doc; aquí solo el resumen.
       **Archivos:** `types/index.ts` (`WorkoutLog`, campo/flag nuevo),
       `features/workout/WorkoutLogScreen.tsx`,
       `features/workout/DetailScreen.tsx`, `lib/db/schema.ts` (columna nueva +
-      migración) y `lib/db/mappers.ts` (mapear la columna).
+      migración) y `lib/db/mappers.ts` (mapear la columna). **Ojo sync:** una
+      columna nueva de dominio hay que reflejarla también en la tabla espejo de la
+      nube (`supabase/schema.sql`) y en el mapeo de `lib/cloud/sync.ts` /
+      `applyRemoteChanges`.
       **Esfuerzo:** medio.
 - [ ] **Exportar CSV además de JSON** — para abrir el historial en Excel.
       **Por qué:** el JSON del backup no se puede analizar sin herramientas; un

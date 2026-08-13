@@ -18,6 +18,7 @@ import {
   CalendarScreen,
   CardioScreen,
   CloudScreen,
+  CommunityScreen,
   DataScreen,
   DaySelectorScreen,
   DetailScreen,
@@ -90,6 +91,7 @@ type Screen =
   | { type: 'settings' }
   | { type: 'data' }
   | { type: 'cloud' }
+  | { type: 'community' }
   | {
       type: 'exercise-progress';
       // Ejercicio preseleccionado al abrir la evolución desde el detalle de un día.
@@ -715,6 +717,7 @@ function AppContent() {
           }
           onOpenData={() => setScreen({ type: 'data' })}
           onOpenCloud={() => setScreen({ type: 'cloud' })}
+          onOpenCommunity={() => setScreen({ type: 'community' })}
           onOpenSettings={() => setScreen({ type: 'settings' })}
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
@@ -726,6 +729,8 @@ function AppContent() {
       {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
 
       {screen.type === 'cloud' && <CloudScreen onBack={goProfile} />}
+
+      {screen.type === 'community' && <CommunityScreen onBack={goProfile} />}
 
       {screen.type === 'exercise-progress' && (
         <ExerciseProgressScreen

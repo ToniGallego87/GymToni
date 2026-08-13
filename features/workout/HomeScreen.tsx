@@ -1591,9 +1591,6 @@ const makeStyles = () =>
     progressLatestUp: {
       color: theme.colors.success,
     },
-    progressLatestDown: {
-      color: theme.colors.error,
-    },
     weeksSection: {
       marginHorizontal: theme.spacing.md,
       // Misma separación que hay entre la HeroCard y la tarjeta de la gráfica

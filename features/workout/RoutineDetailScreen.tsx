@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
@@ -38,6 +38,8 @@ import {
   buildRoutineShareText,
 } from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
+import { useSession } from '@lib/cloud/auth';
+import { setRoutinePublic, getPublicRoutineIds } from '@lib/cloud/social';
 
 interface RoutineDetailScreenProps {
   routine: WorkoutRoutine;
@@ -77,6 +79,11 @@ export function RoutineDetailScreen({
     message: string;
     type: 'success' | 'error';
   } | null>(null);
+  // Estado de "rutina pública en la comunidad" (Fase 4). is_public vive solo en
+  // la nube; se consulta al abrir si hay sesión.
+  const { user } = useSession();
+  const [isPublic, setIsPublic] = useState(false);
+  const [publishing, setPublishing] = useState(false);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
@@ -149,6 +156,52 @@ export function RoutineDetailScreen({
   // encima se ofrece solo el texto plano, que no tiene tope.
   const QR_MAX_CHARS = 2900;
   const qrTooBig = shareLink.length > QR_MAX_CHARS;
+
+  // Consulta si esta rutina ya está publicada (solo con sesión).
+  useEffect(() => {
+    if (!user) {
+      setIsPublic(false);
+      return;
+    }
+    let active = true;
+    getPublicRoutineIds(user.id)
+      .then((ids) => {
+        if (active) setIsPublic(ids.includes(routine.id));
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [user?.id, routine.id]);
+
+  // Publica/retira la rutina de la comunidad. is_public es un atributo de la nube
+  // (el sync no lo pisa). Optimista: refleja al instante y revierte si falla.
+  const handleTogglePublic = async () => {
+    if (!user) {
+      setToast({
+        message: t('Inicia sesión en «Cuenta y nube» para compartir'),
+        type: 'error',
+      });
+      return;
+    }
+    const next = !isPublic;
+    setPublishing(true);
+    setIsPublic(next);
+    try {
+      await setRoutinePublic(routine.id, next);
+      setToast({
+        message: next
+          ? t('Rutina publicada en la comunidad')
+          : t('Rutina retirada de la comunidad'),
+        type: 'success',
+      });
+    } catch (e) {
+      setIsPublic(!next);
+      setToast({ message: (e as Error).message, type: 'error' });
+    } finally {
+      setPublishing(false);
+    }
+  };
 
   const handleCopyPlainText = async () => {
     try {
@@ -701,6 +754,38 @@ export function RoutineDetailScreen({
             color={theme.colors.textSecondary}
           />
         </Pressable>
+
+        {/* Publicar en la comunidad (tablón). is_public vive en la nube; requiere
+            sesión. Es un interruptor visible, no un gesto oculto. */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.settingRow,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={handleTogglePublic}
+          disabled={publishing}
+        >
+          <MaterialCommunityIcons
+            name={isPublic ? 'earth' : 'earth-off'}
+            size={20}
+            color={isPublic ? theme.colors.success : theme.colors.text}
+          />
+          <View style={styles.settingRowTextWrap}>
+            <Text style={styles.settingRowLabel}>
+              {t('Compartir en la comunidad')}
+            </Text>
+            <Text style={styles.settingRowHint}>
+              {!user
+                ? t('Inicia sesión para compartir')
+                : isPublic
+                ? t('Pública · aparece en el tablón')
+                : t('Privada · solo tú la ves')}
+            </Text>
+          </View>
+          <Text style={[styles.publicPill, isPublic && styles.publicPillOn]}>
+            {isPublic ? t('Pública') : t('Privada')}
+          </Text>
+        </Pressable>
       </StretchScrollView>
 
       <GlassTopBar
@@ -1241,6 +1326,22 @@ const makeStyles = () =>
       fontSize: 13,
       color: theme.colors.textSecondary,
       lineHeight: 17,
+    },
+    // Pastilla de estado público/privado a la derecha de la fila de comunidad.
+    publicPill: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.borderRadius.pill,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      overflow: 'hidden',
+      lineHeight: 16,
+    },
+    publicPillOn: {
+      color: theme.colors.onGold,
+      backgroundColor: theme.colors.success,
     },
     shareModalFooter: {
       gap: 10,

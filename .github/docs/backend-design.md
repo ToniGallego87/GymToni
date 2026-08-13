@@ -55,7 +55,17 @@ Rama de trabajo: `0.7-version`. Progreso del epic:
   activa/seleccionada se sincroniza vía `user_settings` (encolada en el outbox
   como entidad `settings`). Backup/restore de la Fase 2 se mantienen como
   "Avanzado" y fijan el cursor al terminar (`markSynced`). Ver §6.
-- **Fase 4 — Social — PENDIENTE.** Es lo siguiente. Ver §7.
+- **Fase 4 — Social — EN PROGRESO 🚧.** Hechas las **fundaciones**: esquema de la
+  nube (`supabase/social-schema.sql`: `routines.is_public`, tablas `follows` y
+  `routine_likes`, RLS de lectura pública para perfiles/rutinas/plan, y la función
+  `popular_routines` para el tablón) y la **capa de datos** (`lib/cloud/social.ts`:
+  perfil, seguir, publicar rutina, tablón de populares, likes y clonar una rutina
+  pública reutilizando `duplicateRoutine`). **UI del primer slice hecha**: tablón
+  de rutinas populares con like y clonar (`features/workout/CommunityScreen.tsx`,
+  entrada en Perfil + pantalla `community` en `app/App.tsx`) e interruptor
+  "Compartir en la comunidad" en el detalle de rutina
+  (`features/workout/RoutineDetailScreen.tsx`). **Pendiente:** ejecutar el SQL en
+  Supabase y verificar; después, perfiles públicos + seguir. Ver §7.
 
 ### Cabos sueltos antes de producción
 

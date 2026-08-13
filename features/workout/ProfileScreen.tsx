@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -16,13 +16,16 @@ import {
 import { useWorkout } from '@hooks/useWorkout';
 import { hasAnyCardio, cardioSessionFromLog } from '@lib/cardio';
 import { theme } from '@lib/theme';
-import { t } from '@lib/i18n';
+import { t, formatAgo } from '@lib/i18n';
+import { useSession } from '@lib/cloud/auth';
+import { getLastSync } from '@lib/cloud/sync';
 
 interface ProfileScreenProps {
   onOpenRoutines?: () => void;
   onOpenExerciseProgress?: () => void;
   onOpenData?: () => void;
   onOpenCloud?: () => void;
+  onOpenCommunity?: () => void;
   onOpenSettings?: () => void;
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
@@ -35,6 +38,8 @@ type MenuEntry = {
   label: string;
   hint: string;
   onPress?: () => void;
+  // Punto de estado sobre el icono (verde = sesión de nube iniciada).
+  statusDot?: boolean;
 };
 
 export function ProfileScreen({
@@ -42,6 +47,7 @@ export function ProfileScreen({
   onOpenExerciseProgress,
   onOpenData,
   onOpenCloud,
+  onOpenCommunity,
   onOpenSettings,
   onNavigateHome,
   onNavigateCardio,
@@ -50,6 +56,23 @@ export function ProfileScreen({
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  // Estado de la nube para mostrarlo ya en el menú (sin abrir "Cuenta y nube").
+  const { user } = useSession();
+  const [lastSync, setLastSync] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setLastSync(null);
+      return;
+    }
+    let active = true;
+    getLastSync(user.id).then((ts) => {
+      if (active) setLastSync(ts);
+    });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { bottom: floatingNavBottom, scrollBottomPadding } =
@@ -58,6 +81,14 @@ export function ProfileScreen({
   const cardioSessionsCount = state.logs.filter(
     (l) => cardioSessionFromLog(l) != null
   ).length;
+
+  // Hint dinámico de "Cuenta y nube": refleja sesión y última sincronización, de
+  // modo que "mis datos están a salvo" se vea de un vistazo desde el menú.
+  const cloudHint = !user
+    ? t('Guarda tus datos en la nube y sincroniza')
+    : lastSync
+    ? `${t('Sincronizado')} · ${formatAgo(lastSync)}`
+    : t('Sesión iniciada');
 
   const menu: MenuEntry[] = [
     {
@@ -75,14 +106,21 @@ export function ProfileScreen({
     {
       icon: 'folder-cog-outline',
       label: t('Datos'),
-      hint: t('Importa, exporta o limpia la información'),
+      hint: t('Exporta, importa o borra (copia local)'),
       onPress: onOpenData,
     },
     {
       icon: 'cloud-outline',
       label: t('Cuenta y nube'),
-      hint: t('Login, copia de seguridad y sincronización'),
+      hint: cloudHint,
       onPress: onOpenCloud,
+      statusDot: !!user,
+    },
+    {
+      icon: 'account-group-outline',
+      label: t('Comunidad'),
+      hint: t('Descubre y comparte rutinas populares'),
+      onPress: onOpenCommunity,
     },
     {
       icon: 'cog-outline',
@@ -154,6 +192,7 @@ export function ProfileScreen({
                 size={22}
                 color={theme.colors.text}
               />
+              {entry.statusDot && <View style={styles.statusDot} />}
             </View>
             <View style={styles.menuTextWrap}>
               <Text style={styles.menuLabel}>{entry.label}</Text>
@@ -276,6 +315,18 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surfaceAlt,
+    },
+    // Punto verde de "sesión de nube activa" en la esquina del icono.
+    statusDot: {
+      position: 'absolute',
+      top: 4,
+      right: 4,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: theme.colors.success,
+      borderWidth: 1.5,
+      borderColor: theme.colors.surface,
     },
     menuTextWrap: {
       flex: 1,

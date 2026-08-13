@@ -256,6 +256,12 @@ export function DataScreen({
             />
           </View>
         )}
+
+        {/* Aclara la frontera con la nube: aquí todo es copia LOCAL (archivo en
+            el móvil). La sincronización entre dispositivos vive en Cuenta y nube. */}
+        <Text style={styles.cloudNote}>
+          {t('Para sincronizar entre varios móviles, usa Cuenta y nube.')}
+        </Text>
       </StretchScrollView>
 
       <GlassTopBar
@@ -360,6 +366,13 @@ const makeStyles = () =>
     },
     dangerSubtitle: {
       color: theme.colors.errorLight,
+    },
+    cloudNote: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.colors.textMuted,
+      textAlign: 'center',
+      paddingHorizontal: theme.spacing.sm,
     },
   });
 

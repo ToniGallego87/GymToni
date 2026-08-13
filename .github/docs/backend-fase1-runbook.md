@@ -1,9 +1,10 @@
 # Fase 1 — Runbook (fundaciones locales de sync sobre expo-sqlite)
 
-> **Estado: en implementación.** Rama de trabajo: `0.7-version`.
-> Complementa a [backend-design.md](backend-design.md) (el *qué/por qué*); este
-> doc es el *cómo*. Sin subir SDK, sin New Architecture, sobre RN 0.74.
-> Última revisión: 2026-08-09.
+> **Estado: entregada en 0.7.0.** Se conserva como referencia del *cómo* se
+> montaron las fundaciones de sync. Complementa a
+> [backend-design.md](backend-design.md) (el *qué/por qué*). Sin subir SDK, sin
+> New Architecture, sobre RN 0.74.
+> Última revisión: 2026-08-13.
 
 Objetivo: dejar `expo-sqlite` preparado para sincronizar con la nube (Fases 2-3),
 **sin tocar la nube todavía** y sin cambiar tipos, reducer ni pantallas. Es

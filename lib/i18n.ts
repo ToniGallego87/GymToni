@@ -66,6 +66,18 @@ export function useLanguageVersion(): number {
   );
 }
 
+/** Tiempo relativo corto y localizado: "hace un momento", "hace 3 min", "hace 2 h". */
+export function formatAgo(ts: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ts) / 1000));
+  if (s < 60) return t('hace un momento');
+  const m = Math.round(s / 60);
+  if (m < 60) return t('hace {n} min', { n: m });
+  const h = Math.round(m / 60);
+  if (h < 24) return t('hace {n} h', { n: h });
+  const d = Math.round(h / 24);
+  return t('hace {n} d', { n: d });
+}
+
 /** Pinta los decimales de un texto ("12.6 km/h" → "12,6 km/h") en el idioma. */
 export function localizeDecimals(text: string): string {
   if (decimalSeparator === '.') return text;
@@ -122,8 +134,18 @@ register({
   'Progreso por ejercicio': 'Progress by exercise',
   'Tu evolución y tus récords, ejercicio a ejercicio':
     'Your progress and records, exercise by exercise',
-  'Importa, exporta o limpia la información':
-    'Import, export or wipe your data',
+  'Exporta, importa o borra (copia local)':
+    'Export, import or wipe (local copy)',
+  'Login, copia de seguridad y sincronización': 'Login, backup and sync',
+  'Guarda tus datos en la nube y sincroniza': 'Back up to the cloud and sync',
+  Sincronizado: 'Synced',
+  'Sesión iniciada': 'Signed in',
+  'hace un momento': 'just now',
+  'hace {n} min': '{n} min ago',
+  'hace {n} h': '{n} h ago',
+  'hace {n} d': '{n} d ago',
+  'Para sincronizar entre varios móviles, usa Cuenta y nube.':
+    'To sync across devices, use Account & cloud.',
   'Tema, idioma y novedades': "Theme, language and what's new",
   'Tu rutina, tus datos y la configuración': 'Your routine, data and settings',
   Entrenamientos: 'Workouts',

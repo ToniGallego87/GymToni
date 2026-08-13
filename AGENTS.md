@@ -9,7 +9,7 @@ Para detalles técnicos consulta:
 - [.github/CONVENTIONS.md](.github/CONVENTIONS.md) — naming, patrones, reglas de código
 - [.github/docs/frontend-design.md](.github/docs/frontend-design.md) — principios de diseño UI
 - [.github/docs/backend-design.md](.github/docs/backend-design.md) — propuesta de backend, cuentas y sincronización (Supabase, por fases)
-- [.github/docs/backend-fase1-runbook.md](.github/docs/backend-fase1-runbook.md) — runbook de ejecución de la Fase 1 (subida de Expo SDK 51→57 + migración a PowerSync)
+- [.github/docs/backend-fase1-runbook.md](.github/docs/backend-fase1-runbook.md) — runbook de la Fase 1 del backend: fundaciones locales de sync sobre la `expo-sqlite` actual (sin subir SDK ni New Architecture). Entregada en 0.7.0; PowerSync se descartó (ver backend-design.md §14)
 - [.github/docs/SETUP.md](.github/docs/SETUP.md) — instalación y estructura de archivos
 - [.github/docs/UPDATES.md](.github/docs/UPDATES.md) — historial de versiones
 - [.github/docs/ROADMAP.md](.github/docs/ROADMAP.md) — seguimiento de futuros desarrollos (mejoras visuales, simplificaciones y nuevas funcionalidades pendientes)

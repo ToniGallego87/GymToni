@@ -1,5 +1,84 @@
 # UPDATES
 
+## Sin publicar
+
+### Arquitectura
+
+- **Backend Fase 4 (social)**: esquema social de la nube
+  (`supabase/social-schema.sql`: `routines.is_public`, tablas `follows` y
+  `routine_likes`, RLS de lectura pública para perfiles/rutinas y su plan, y la
+  función `popular_routines` para el tablón) y capa de acceso
+  (`lib/cloud/social.ts`: perfil, seguir/dejar de seguir, publicar rutina, tablón
+  de populares, likes y clonar una rutina pública reutilizando `duplicateRoutine`).
+  Pendiente de ejecutar el SQL en Supabase para probar.
+
+### Nuevas funcionalidades
+
+- **Comunidad: tablón de rutinas populares** (`features/workout/CommunityScreen.tsx`,
+  entrada nueva en Perfil): lista las rutinas públicas por nº de likes, con autor;
+  permite dar/quitar like (con sesión) y **añadir cualquiera a tus rutinas**
+  (clona con ids nuevos, reutilizando `duplicateRoutine`). Navegación cableada en
+  `app/App.tsx` (pantalla `community`).
+- **Publicar una rutina en la comunidad** (`features/workout/RoutineDetailScreen.tsx`):
+  interruptor "Compartir en la comunidad" (pública/privada) en el detalle de la
+  rutina; escribe `is_public` en la nube (atributo que el sync no pisa). Requiere
+  sesión.
+
+- **Estado de la nube visible desde Perfil** (`features/workout/ProfileScreen.tsx`):
+  la fila "Cuenta y nube" muestra ahora un texto dinámico según la sesión
+  (sin cuenta / "Sesión iniciada" / "Sincronizado · hace X") y un punto verde en
+  el icono cuando hay sesión activa. Reutiliza `getLastSync` (`lib/cloud/sync.ts`)
+  y un `formatAgo` compartido movido a `lib/i18n.ts` (antes duplicado en
+  `CloudScreen`).
+
+### Cambios
+
+- **Narrativa de respaldo más clara (Datos ↔ Cuenta y nube)**: el menú de Perfil
+  distingue "Datos" (copia local en archivo) de "Cuenta y nube" (sesión + sync); y
+  `DataScreen` añade un pie que remite a Cuenta y nube para sincronizar entre
+  dispositivos. Sin cambios de comportamiento.
+- **Revisión completa (revision-app)**: ROADMAP reescrito
+  (`.github/docs/ROADMAP.md`) — podadas las fichas de Backend Fase 1-3 (entregadas
+  en 0.7.0), integradas dos propuestas nuevas ("Estado de la nube visible desde
+  Perfil" y "Unificar el discurso de proteger mis datos") y actualizada la fecha
+  de última revisión.
+- **Documentación al día con la 0.7.0**: corregida en `AGENTS.md` la descripción
+  del runbook de Fase 1 (ya no menciona PowerSync/SDK 57, descartados);
+  `backend-fase1-runbook.md` marcado como entregado; `SETUP.md` incluye
+  `lib/cloud/`, `CloudScreen`, `useCloudSync`, `supabase/schema.sql` y la nube en
+  la sección de Persistencia.
+
+### Correcciones
+
+- **Restaurar desde la nube duplicaba el historial** (series multiplicadas: 3 → 6
+  → 9). El backup de la Fase 2 subía cada serie con id ALEATORIO, así que cada
+  copia de seguridad creaba filas nuevas en la nube para las mismas series (los
+  ids deterministas llegaron en la Fase 3, cuando la basura ya estaba subida) y
+  `backupToCloud` nunca borraba lo que sobraba, así que cada restauración la
+  volvía a bajar. Cuatro frentes:
+  - `lib/cloud/backup.ts`: el backup deja la nube como **espejo exacto** de local
+    (upsert + tombstone de todo lo que ya no existe: `tombstoneMissing`), así que
+    una copia de seguridad limpia de una vez lo acumulado. Devuelve el instante
+    estampado en las filas para fijar bien el cursor de sync.
+  - `lib/cloud/backup.ts` / `lib/cloud/sync.ts`: la paginación de restore y pull
+    va **ordenada** (`id`, y `updated_at + id` en el pull). Sin ORDER BY el orden
+    entre páginas no está garantizado: una misma fila podía repetirse y otra
+    perderse. El restore filtra además por `user_id` y deduplica por id.
+  - `lib/db/mappers.ts`: al reconstruir el historial, una serie es
+    ejercicio + orden; las filas repetidas de la nube se descartan.
+  - `lib/normalize.ts`: `dedupeExerciseLogs` + `repairDuplicatedSets` reparan el
+    historial ya duplicado. Las copias NO vienen seguidas (cada restauración
+    renumera las series, así que al ordenarlas se entrelazan: "A A B A C B B C C"
+    para tres series), de modo que no basta con recortar: se rehace la lista
+    desde `rawInput`, el único apunte fiel de lo entrenado (se escribe entero al
+    guardar y ninguna capa de sync lo toca). `lib/storage.ts` reescribe la BD al
+    arrancar si había duplicados, así que el historial se arregla solo.
+    Verificado contra backups reales: en cuatro sanos no cambia ni una serie, y
+    reparando uno duplicado (8351 series) el resultado coincide exacto con el
+    backup sano del mismo día en los 969 ejercicios comunes.
+- Eliminado un estilo huérfano (`progressLatestDown`) en
+  `features/workout/HomeScreen.tsx` (sin efecto visible; limpieza).
+
 ## Version 0.7.0 - 2026-08-13
 
 ### Nuevas funcionalidades
