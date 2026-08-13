@@ -11,6 +11,7 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  OptionToggle,
   Toast,
   StretchScrollView,
 } from '@components';
@@ -20,6 +21,7 @@ import { t, formatAgo } from '@lib/i18n';
 import { useSession, signUp, signIn, signOut } from '@lib/cloud/auth';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
 import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
+import { getProfile, updateProfile } from '@lib/cloud/social';
 import { clearOutbox } from '@lib/db';
 import { saveAppData, loadAppData } from '@lib/storage';
 import type { WorkoutAppData } from '../../types';
@@ -40,6 +42,11 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
   >(null);
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  // Perfil público (Fase 4): nombre visible, bio y visibilidad.
+  const [profileName, setProfileName] = useState('');
+  const [profileBio, setProfileBio] = useState('');
+  const [profilePublic, setProfilePublic] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -168,6 +175,41 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
       notify((e as Error).message, 'error');
     } finally {
       setBusy(null);
+    }
+  };
+
+  // Carga el perfil público al iniciar sesión (nombre, bio, visibilidad).
+  useEffect(() => {
+    if (!user) return;
+    let active = true;
+    getProfile(user.id)
+      .then((p) => {
+        if (!active || !p) return;
+        setProfileName(p.display_name ?? '');
+        setProfileBio(p.bio ?? '');
+        setProfilePublic(p.is_public);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    setSavingProfile(true);
+    try {
+      await updateProfile(user.id, {
+        display_name: profileName.trim() || null,
+        bio: profileBio.trim() || null,
+        is_public: profilePublic,
+      });
+      notify(t('Perfil guardado'), 'success');
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setSavingProfile(false);
     }
   };
 
@@ -314,6 +356,51 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
             </>
           )}
         </View>
+
+        {session && user && (
+          <View style={styles.card}>
+            <GradientFill accent={theme.colors.primaryLine} />
+            <Text style={styles.status}>{t('Perfil público')}</Text>
+            <Text style={styles.hint}>
+              {t('Así te ven en la comunidad cuando publicas una rutina.')}
+            </Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('Nombre visible')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={profileName}
+              onChangeText={setProfileName}
+              maxLength={40}
+            />
+            <TextInput
+              style={[styles.input, styles.bioInput]}
+              placeholder={t('Bio (opcional)')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={profileBio}
+              onChangeText={setProfileBio}
+              multiline
+              maxLength={160}
+            />
+            <OptionToggle
+              options={[
+                { value: true, label: t('Público') },
+                { value: false, label: t('Privado') },
+              ]}
+              value={profilePublic}
+              onChange={setProfilePublic}
+            />
+            <Text style={styles.hint}>
+              {profilePublic
+                ? t('Otros pueden ver tu perfil y seguirte.')
+                : t('Tu perfil no aparece para otros.')}
+            </Text>
+            <Button
+              title={savingProfile ? t('Guardando…') : t('Guardar perfil')}
+              onPress={handleSaveProfile}
+              disabled={savingProfile}
+            />
+          </View>
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -349,7 +436,7 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: theme.colors.background },
   scroll: { flex: 1 },
-  content: { paddingHorizontal: 16 },
+  content: { paddingHorizontal: 16, gap: 12 },
   card: {
     borderRadius: 20,
     overflow: 'hidden',
@@ -389,6 +476,10 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     color: theme.colors.text,
     fontSize: 16,
+  },
+  bioInput: {
+    minHeight: 76,
+    textAlignVertical: 'top',
   },
   actions: { gap: 10, marginTop: 4 },
 });

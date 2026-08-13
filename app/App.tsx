@@ -19,6 +19,7 @@ import {
   CardioScreen,
   CloudScreen,
   CommunityScreen,
+  UserProfileScreen,
   DataScreen,
   DaySelectorScreen,
   DetailScreen,
@@ -92,6 +93,7 @@ type Screen =
   | { type: 'data' }
   | { type: 'cloud' }
   | { type: 'community' }
+  | { type: 'user-profile'; userId: string; name: string }
   | {
       type: 'exercise-progress';
       // Ejercicio preseleccionado al abrir la evolución desde el detalle de un día.
@@ -730,7 +732,22 @@ function AppContent() {
 
       {screen.type === 'cloud' && <CloudScreen onBack={goProfile} />}
 
-      {screen.type === 'community' && <CommunityScreen onBack={goProfile} />}
+      {screen.type === 'community' && (
+        <CommunityScreen
+          onBack={goProfile}
+          onOpenProfile={(userId, name) =>
+            setScreen({ type: 'user-profile', userId, name })
+          }
+        />
+      )}
+
+      {screen.type === 'user-profile' && (
+        <UserProfileScreen
+          userId={screen.userId}
+          name={screen.name}
+          onBack={() => setScreen({ type: 'community' })}
+        />
+      )}
 
       {screen.type === 'exercise-progress' && (
         <ExerciseProgressScreen

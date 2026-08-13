@@ -23,18 +23,21 @@ import {
   getPopularRoutines,
   likeRoutine,
   unlikeRoutine,
-  fetchPublicRoutine,
+  cloneablePublicRoutine,
   PopularRoutine,
 } from '@lib/cloud/social';
-import { duplicateRoutine } from '@lib/routines';
 
 interface CommunityScreenProps {
   onBack: () => void;
+  onOpenProfile?: (userId: string, name: string) => void;
 }
 
 // Tablón de rutinas populares (Fase 4). Lista las rutinas públicas por nº de
 // likes; permite dar/quitar like (con sesión) y clonar cualquiera a tus rutinas.
-export function CommunityScreen({ onBack }: CommunityScreenProps) {
+export function CommunityScreen({
+  onBack,
+  onOpenProfile,
+}: CommunityScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const { user } = useSession();
@@ -103,16 +106,15 @@ export function CommunityScreen({ onBack }: CommunityScreenProps) {
   const handleClone = async (item: PopularRoutine) => {
     setCloningId(item.id);
     try {
-      const routine = await fetchPublicRoutine(item.id);
-      if (!routine) {
+      // Ids nuevos (como al duplicar una propia) para no cruzar historiales.
+      const clone = await cloneablePublicRoutine(
+        item.id,
+        state.routines.map((r) => r.name)
+      );
+      if (!clone) {
         notify(t('Esta rutina ya no está disponible'), 'error');
         return;
       }
-      // Ids nuevos (como al duplicar una propia) para no cruzar historiales.
-      const clone = duplicateRoutine(
-        routine,
-        state.routines.map((r) => r.name)
-      );
       dispatch({ type: 'ADD_ROUTINE', payload: clone });
       notify(t('Añadida a tus rutinas'), 'success');
     } catch (e) {
@@ -172,11 +174,23 @@ export function CommunityScreen({ onBack }: CommunityScreenProps) {
                   <Text style={styles.routineName} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  <Text style={styles.author} numberOfLines={1}>
-                    {t('por {name}', {
-                      name: item.author_name || t('Anónimo'),
-                    })}
-                  </Text>
+                  {/* El autor es pulsable: abre su perfil público. */}
+                  <Pressable
+                    onPress={() =>
+                      onOpenProfile?.(
+                        item.owner_id,
+                        item.author_name || t('Anónimo')
+                      )
+                    }
+                    hitSlop={6}
+                    disabled={!onOpenProfile}
+                  >
+                    <Text style={styles.author} numberOfLines={1}>
+                      {t('por {name}', {
+                        name: item.author_name || t('Anónimo'),
+                      })}
+                    </Text>
+                  </Pressable>
                 </View>
                 <Pressable
                   style={({ pressed }) => [

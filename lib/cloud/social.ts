@@ -1,5 +1,6 @@
 import type { WorkoutRoutine } from '../../types';
 import { supabase } from '../supabase';
+import { duplicateRoutine } from '../routines';
 import {
   rowsToAppData,
   DbRows,
@@ -79,6 +80,31 @@ export async function getFollowingIds(followerId: string): Promise<string[]> {
   return (data ?? []).map((r) => (r as { following_id: string }).following_id);
 }
 
+// ¿followerId sigue a targetId? (para el botón Seguir/Siguiendo de un perfil).
+export async function isFollowing(
+  followerId: string,
+  targetId: string
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', followerId)
+    .eq('following_id', targetId)
+    .maybeSingle();
+  if (error) throw new Error(`follows: ${error.message}`);
+  return !!data;
+}
+
+// Cuántos seguidores tiene un usuario (para su perfil público).
+export async function getFollowerCount(userId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('following_id', userId);
+  if (error) throw new Error(`follows: ${error.message}`);
+  return count ?? 0;
+}
+
 // ─────────────────────── Rutinas públicas ───────────────────────
 
 // Marca/desmarca una rutina como pública. is_public es un atributo SOLO de la
@@ -92,6 +118,27 @@ export async function setRoutinePublic(
     .update({ is_public: isPublic, updated_at: Date.now() })
     .eq('id', routineId);
   if (error) throw new Error(`routines: ${error.message}`);
+}
+
+export interface PublicRoutineSummary {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+// Rutinas públicas de un usuario (para su perfil). RLS deja leerlas a cualquiera.
+export async function getUserPublicRoutines(
+  userId: string
+): Promise<PublicRoutineSummary[]> {
+  const { data, error } = await supabase
+    .from('routines')
+    .select('id, name, description')
+    .eq('user_id', userId)
+    .eq('is_public', true)
+    .eq('deleted', false)
+    .order('updated_at', { ascending: false });
+  if (error) throw new Error(`routines: ${error.message}`);
+  return (data ?? []) as PublicRoutineSummary[];
 }
 
 // Qué rutinas propias están publicadas (para el estado del interruptor en la UI).
@@ -213,4 +260,15 @@ export async function fetchPublicRoutine(
     cardioLogs: [],
   };
   return rowsToAppData(rows).routines[0] ?? null;
+}
+
+// Baja una rutina pública y la devuelve YA duplicada (ids nuevos), lista para
+// añadir al espacio del usuario con ADD_ROUTINE. Helper común del tablón y del
+// perfil (evita repetir fetch + duplicate en cada pantalla).
+export async function cloneablePublicRoutine(
+  routineId: string,
+  existingNames: string[]
+): Promise<WorkoutRoutine | null> {
+  const routine = await fetchPublicRoutine(routineId);
+  return routine ? duplicateRoutine(routine, existingNames) : null;
 }

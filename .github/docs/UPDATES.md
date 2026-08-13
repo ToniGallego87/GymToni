@@ -23,6 +23,11 @@
   interruptor "Compartir en la comunidad" (pública/privada) en el detalle de la
   rutina; escribe `is_public` en la nube (atributo que el sync no pisa). Requiere
   sesión.
+- **Perfiles públicos y seguir** (Fase 4, slice 2): edición del perfil público
+  (nombre visible, bio, visibilidad) en Cuenta y nube; ver el perfil de otro
+  usuario desde el tablón (tocando el autor) con sus rutinas públicas y botón
+  Seguir/Siguiendo (`features/workout/UserProfileScreen.tsx`, datos en
+  `lib/cloud/social.ts`: `isFollowing`, `getFollowerCount`, `getUserPublicRoutines`).
 
 - **Estado de la nube visible desde Perfil** (`features/workout/ProfileScreen.tsx`):
   la fila "Cuenta y nube" muestra ahora un texto dinámico según la sesión
