@@ -1,5 +1,7 @@
 import {
   CardioLog,
+  ExerciseLog,
+  ParsedSet,
   WorkoutAppData,
   WorkoutLog,
   WorkoutRoutine,
@@ -35,6 +37,116 @@ export function ensureParsedSets(logs: WorkoutLog[]): WorkoutLog[] {
         : parseSeriesString(exercise.rawInput || ''),
     })),
   }));
+}
+
+// ─────────────── Reparación de duplicados venidos de la nube ───────────────
+// El backup de la Fase 2 subía cada serie con un id ALEATORIO (los ids
+// deterministas llegaron en la Fase 3), así que cada copia de seguridad creaba
+// filas nuevas en la nube para las mismas series y restaurar bajaba el bloque
+// repetido k veces (3 series → 6 → 9…). Lo mismo con los ejercicios de un
+// entreno reguardado: sus `exercise_logs` viejos se quedaban vivos en la nube.
+//
+// `rawInput` es la referencia fiable del número real de series: se escribe de
+// una sola vez al guardar el entreno y ninguna capa de sync lo toca. Si hay más
+// series guardadas que apuntes en `rawInput`, el exceso es basura.
+
+/** Apunte de una serie saltada en `rawInput` (peso/reps a -1 en las parseadas). */
+const SKIPPED_SET_INPUT = '-';
+
+/** Apuntes de series de un `rawInput` ("60x8, 65x6, -" → 3). */
+function rawEntries(rawInput: string): string[] {
+  return (rawInput || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function isSkippedSet(set: ParsedSet): boolean {
+  return set.weight === -1 || set.reps === -1;
+}
+
+/**
+ * Rehace la lista de series de un `rawInput`: un apunte, una serie. Los apuntes
+ * que no son una serie válida ("80x", medio tecleados) se caen, como al parsear.
+ * Las saltadas ("-") solo se conservan si el ejercicio ya las traía: el historial
+ * viejo las descartaba y el nuevo las guarda como (-1, -1).
+ */
+function setsFromRawInput(rawInput: string, keepSkipped: boolean): ParsedSet[] {
+  const sets: ParsedSet[] = [];
+  for (const entry of rawEntries(rawInput)) {
+    const [parsed] = parseSeriesString(entry);
+    if (parsed) sets.push(parsed);
+    else if (keepSkipped && entry === SKIPPED_SET_INPUT) {
+      sets.push({ weight: -1, reps: -1 });
+    }
+  }
+  return sets;
+}
+
+/**
+ * Devuelve las series reales de un ejercicio. Solo actúa si hay MÁS series que
+ * apuntes en `rawInput`, que es lo que guardar un entreno nunca produce.
+ *
+ * Las copias NO vienen una detrás de otra: cada restauración renumera las series
+ * (1..9), así que al reconstruir el historial por orden de serie las copias
+ * salen entrelazadas ("A A B A C B B C C" para un ejercicio de tres series).
+ * Recortar el sobrante daría valores equivocados: hay que rehacer la lista desde
+ * `rawInput`, que es el único apunte fiel de lo que se entrenó.
+ */
+function repairSets(exerciseLog: ExerciseLog): ParsedSet[] {
+  const sets = exerciseLog.parsedSets ?? [];
+  const entries = rawEntries(exerciseLog.rawInput).length;
+  if (!entries || sets.length <= entries) return sets;
+
+  const rebuilt = setsFromRawInput(
+    exerciseLog.rawInput,
+    sets.some(isSkippedSet)
+  );
+  return rebuilt.length ? rebuilt : sets;
+}
+
+/**
+ * Quita los ejercicios repetidos dentro de un entreno (el mismo ejercicio no se
+ * registra dos veces en una sesión: la pantalla de registro los saca del día de
+ * la rutina, que no repite ejercicio). Se queda con el apunte más reciente, que
+ * es el del último guardado.
+ */
+export function dedupeExerciseLogs(logs: WorkoutLog[]): WorkoutLog[] {
+  let changed = false;
+  const deduped = logs.map((log) => {
+    const byExercise = new Map<string, ExerciseLog>();
+    for (const exerciseLog of log.exercises || []) {
+      const key =
+        exerciseLog.exerciseId ||
+        `${exerciseLog.exerciseName}|${exerciseLog.order}`;
+      const previous = byExercise.get(key);
+      if (!previous || exerciseLog.timestamp > previous.timestamp) {
+        byExercise.set(key, exerciseLog);
+      }
+    }
+    if (byExercise.size === (log.exercises || []).length) return log;
+    changed = true;
+    return { ...log, exercises: [...byExercise.values()] };
+  });
+  return changed ? deduped : logs;
+}
+
+/** Recorta las series duplicadas de todos los entrenos (ver `repairSets`). */
+export function repairDuplicatedSets(logs: WorkoutLog[]): WorkoutLog[] {
+  let changed = false;
+  const repaired = logs.map((log) => {
+    let logChanged = false;
+    const exercises = (log.exercises || []).map((exerciseLog) => {
+      const sets = repairSets(exerciseLog);
+      if (sets === exerciseLog.parsedSets) return exerciseLog;
+      logChanged = true;
+      return { ...exerciseLog, parsedSets: sets };
+    });
+    if (!logChanged) return log;
+    changed = true;
+    return { ...log, exercises };
+  });
+  return changed ? repaired : logs;
 }
 
 /**
@@ -113,8 +225,9 @@ export function resolveActiveRoutineId(
 
 /**
  * Normalizes raw/partial app data into a consistent WorkoutAppData shape.
- * Ensures parsedSets are populated, isActive flags are coherent and the cardio
- * de cada fecha vive en un único log (ver mergeSameDayCardio).
+ * Ensures parsedSets are populated, isActive flags are coherent, el cardio
+ * de cada fecha vive en un único log (ver mergeSameDayCardio) y el historial no
+ * arrastra duplicados del restore (ver repairDuplicatedSets).
  */
 export function normalizeAppData(
   payload: Partial<WorkoutAppData> | null | undefined,
@@ -139,6 +252,8 @@ export function normalizeAppData(
     routines: syncActiveRoutine(routines, activeRoutineId),
     activeRoutineId,
     selectedRoutineId,
-    logs: mergeSameDayCardio(ensureParsedSets(rawLogs)),
+    logs: mergeSameDayCardio(
+      repairDuplicatedSets(dedupeExerciseLogs(ensureParsedSets(rawLogs)))
+    ),
   };
 }

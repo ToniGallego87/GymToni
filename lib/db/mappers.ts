@@ -368,7 +368,14 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
     }));
 
   const setsByExerciseLog = new Map<string, LogSetRow[]>();
+  // Una serie = un ejercicio + un orden. La nube arrastra filas de más para la
+  // misma serie (las que se subieron con id aleatorio antes de la Fase 3), así
+  // que se descartan las repetidas o el historial saldría multiplicado.
+  const seenSets = new Set<string>();
   for (const row of [...rows.logSets].sort(byNumber((r) => r.set_order))) {
+    const key = `${row.exercise_logs_id}:${row.set_order}`;
+    if (seenSets.has(key)) continue;
+    seenSets.add(key);
     const list = setsByExerciseLog.get(row.exercise_logs_id) ?? [];
     list.push(row);
     setsByExerciseLog.set(row.exercise_logs_id, list);

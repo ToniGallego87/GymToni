@@ -31,7 +31,9 @@ import { dayToRows, logToRows, routineToRows } from '../db/mappers';
 
 const isWeb = Platform.OS === 'web';
 const UPSERT_CHUNK = 500;
-const DELETE_CHUNK = 200;
+// Los ids viajan en la URL (filtro `in`): con uuid (36 caracteres) y los de las
+// series (`uuid:orden`), 100 por lote deja la petición lejos del límite de URL.
+const DELETE_CHUNK = 100;
 const PULL_PAGE = 1000;
 
 type Row = Record<string, unknown>;
@@ -447,7 +449,11 @@ async function pullTable(
       .select('*')
       .eq('user_id', userId)
       .gt('updated_at', cursor)
+      // Orden TOTAL (updated_at + id): un push sube muchas filas con el mismo
+      // updated_at y, sin desempate, la misma fila podría repetirse entre
+      // páginas y otra perderse.
       .order('updated_at', { ascending: true })
+      .order('id', { ascending: true })
       .range(from, from + PULL_PAGE - 1);
     if (error) throw new Error(`${table} pull: ${error.message}`);
     const page = data ?? [];

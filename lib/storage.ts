@@ -105,6 +105,21 @@ async function readLegacyJsonData(
   return null;
 }
 
+// Ejercicios + series del historial: sirve para detectar si la normalización ha
+// tenido que quitar duplicados (no para nada más; es un simple recuento).
+function countLogEntries(logs: WorkoutAppData['logs']): number {
+  return logs.reduce(
+    (total, log) =>
+      total +
+      log.exercises.length +
+      log.exercises.reduce(
+        (sets, exercise) => sets + (exercise.parsedSets?.length ?? 0),
+        0
+      ),
+    0
+  );
+}
+
 export async function saveAppData(data: WorkoutAppData): Promise<void> {
   const normalized = normalizeAppData(data, getDefaultAppData());
 
@@ -126,7 +141,14 @@ export async function loadAppData(): Promise<WorkoutAppData | null> {
 
     const fromDb = await loadAppDataFromDb();
     if (fromDb) {
-      return normalizeAppData(fromDb, fallback);
+      const normalized = normalizeAppData(fromDb, fallback);
+      // Autorreparación: si al normalizar han desaparecido series o ejercicios,
+      // eran duplicados del restore de la nube (ver normalize.ts). Hay que
+      // reescribir la BD o la basura seguiría ahí y volvería a subir a la nube.
+      if (countLogEntries(normalized.logs) < countLogEntries(fromDb.logs)) {
+        await saveAppDataToDb(normalized);
+      }
+      return normalized;
     }
 
     // Migración única: primer arranque tras pasar a SQLite. Si hay JSON
