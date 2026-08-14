@@ -28,6 +28,19 @@
   usuario desde el tablón (tocando el autor) con sus rutinas públicas y botón
   Seguir/Siguiendo (`features/workout/UserProfileScreen.tsx`, datos en
   `lib/cloud/social.ts`: `isFollowing`, `getFollowerCount`, `getUserPublicRoutines`).
+- **Comunidad ampliada** (Fase 4, pulido): buscar usuarios por nombre, pestañas
+  **Populares / Siguiendo** (feed de rutinas de quien sigues), lista **A quién
+  sigo** (`features/workout/FollowingScreen.tsx`) y **foto de perfil** (avatar):
+  se elige de la galería, se recorta a cuadrado y se guarda reducida (256px jpeg
+  base64) en `profiles.avatar_url`, y sale como avatar en el tablón, la búsqueda,
+  los seguidos y los perfiles. Nuevas deps `expo-image-picker` /
+  `expo-image-manipulator`. Datos en `lib/cloud/social.ts` (`searchProfiles`,
+  `getProfilesByIds`, `getFollowingProfiles`, `getFollowingFeed`). Sin SQL nuevo.
+
+### Correcciones
+
+- Eliminado el parche basura `patches/expo-modules-core+1.12.26.patch` (9,9 MB de
+  caché de build `.cxx` capturada por error; hacía fallar `patch-package`).
 
 - **Estado de la nube visible desde Perfil** (`features/workout/ProfileScreen.tsx`):
   la fila "Cuenta y nube" muestra ahora un texto dinámico según la sesión

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -159,13 +159,20 @@ export function UserProfileScreen({
         <View style={styles.card}>
           <GradientFill accent={theme.colors.primaryLine} />
           <View style={styles.headerRow}>
-            <View style={styles.avatar}>
-              <MaterialCommunityIcons
-                name="account"
-                size={28}
-                color={theme.colors.onGold}
+            {profile?.avatar_url ? (
+              <Image
+                source={{ uri: profile.avatar_url }}
+                style={styles.avatarPhoto}
               />
-            </View>
+            ) : (
+              <View style={styles.avatar}>
+                <MaterialCommunityIcons
+                  name="account"
+                  size={28}
+                  color={theme.colors.onGold}
+                />
+              </View>
+            )}
             <View style={styles.headerInfo}>
               <Text style={styles.name} numberOfLines={1}>
                 {displayName}
@@ -272,6 +279,12 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.primaryFill,
+    },
+    avatarPhoto: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      backgroundColor: theme.colors.surfaceAlt,
     },
     headerInfo: { flex: 1, minWidth: 0 },
     name: {

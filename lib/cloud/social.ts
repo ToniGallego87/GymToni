@@ -24,6 +24,50 @@ export interface Profile {
   is_public: boolean;
 }
 
+// Versión ligera del perfil para listas (búsqueda, seguidos, autor del tablón).
+export interface ProfileLite {
+  id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+}
+
+// Busca perfiles públicos por nombre (para "Buscar usuarios").
+export async function searchProfiles(
+  query: string,
+  limit = 20
+): Promise<ProfileLite[]> {
+  const q = query.trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .eq('is_public', true)
+    .ilike('display_name', `%${q}%`)
+    .limit(limit);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  return (data ?? []) as ProfileLite[];
+}
+
+// Perfiles (nombre + avatar) de un conjunto de ids: enriquece las listas de
+// rutinas con la foto del autor sin repetir la foto por cada rutina.
+export async function getProfilesByIds(
+  userIds: string[]
+): Promise<Map<string, ProfileLite>> {
+  const ids = Array.from(new Set(userIds)).filter(Boolean);
+  const map = new Map<string, ProfileLite>();
+  if (!ids.length) return map;
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', ids);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  for (const r of data ?? []) {
+    const p = r as ProfileLite;
+    map.set(p.id, p);
+  }
+  return map;
+}
+
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
@@ -78,6 +122,20 @@ export async function getFollowingIds(followerId: string): Promise<string[]> {
     .eq('follower_id', followerId);
   if (error) throw new Error(`follows: ${error.message}`);
   return (data ?? []).map((r) => (r as { following_id: string }).following_id);
+}
+
+// Perfiles a los que sigue el usuario (para la lista "A quién sigo").
+export async function getFollowingProfiles(
+  followerId: string
+): Promise<ProfileLite[]> {
+  const ids = await getFollowingIds(followerId);
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', ids);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  return (data ?? []) as ProfileLite[];
 }
 
 // ¿followerId sigue a targetId? (para el botón Seguir/Siguiendo de un perfil).
@@ -182,6 +240,45 @@ export async function getPopularRoutines(
     likes: Number(r.likes ?? 0),
     liked_by_me: !!r.liked_by_me,
   }));
+}
+
+// Feed de "Siguiendo": rutinas públicas de la gente que sigues, recientes antes.
+export interface FeedRoutine {
+  id: string;
+  name: string;
+  description: string | null;
+  owner_id: string;
+}
+
+export async function getFollowingFeed(
+  followerId: string,
+  limit = 50
+): Promise<FeedRoutine[]> {
+  const ids = await getFollowingIds(followerId);
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('routines')
+    .select('id, name, description, user_id')
+    .in('user_id', ids)
+    .eq('is_public', true)
+    .eq('deleted', false)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`routines: ${error.message}`);
+  return (data ?? []).map((r) => {
+    const row = r as {
+      id: string;
+      name: string;
+      description: string | null;
+      user_id: string;
+    };
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? null,
+      owner_id: row.user_id,
+    };
+  });
 }
 
 export async function likeRoutine(

@@ -20,6 +20,7 @@ import {
   CloudScreen,
   CommunityScreen,
   UserProfileScreen,
+  FollowingScreen,
   DataScreen,
   DaySelectorScreen,
   DetailScreen,
@@ -93,6 +94,7 @@ type Screen =
   | { type: 'data' }
   | { type: 'cloud' }
   | { type: 'community' }
+  | { type: 'following' }
   | { type: 'user-profile'; userId: string; name: string }
   | {
       type: 'exercise-progress';
@@ -735,6 +737,16 @@ function AppContent() {
       {screen.type === 'community' && (
         <CommunityScreen
           onBack={goProfile}
+          onOpenProfile={(userId, name) =>
+            setScreen({ type: 'user-profile', userId, name })
+          }
+          onOpenFollowing={() => setScreen({ type: 'following' })}
+        />
+      )}
+
+      {screen.type === 'following' && (
+        <FollowingScreen
+          onBack={() => setScreen({ type: 'community' })}
           onOpenProfile={(userId, name) =>
             setScreen({ type: 'user-profile', userId, name })
           }

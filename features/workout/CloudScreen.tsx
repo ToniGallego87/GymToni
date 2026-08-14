@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Image } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Button,
@@ -46,6 +49,8 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
   const [profileName, setProfileName] = useState('');
   const [profileBio, setProfileBio] = useState('');
   const [profilePublic, setProfilePublic] = useState(false);
+  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
+  const [pickingAvatar, setPickingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
@@ -188,6 +193,7 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
         setProfileName(p.display_name ?? '');
         setProfileBio(p.bio ?? '');
         setProfilePublic(p.is_public);
+        setProfileAvatar(p.avatar_url ?? null);
       })
       .catch(() => {});
     return () => {
@@ -195,6 +201,37 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // Selecciona una foto, la recorta a cuadrado y la reduce a 256px jpeg. Se
+  // guarda como data URI base64 en profiles.avatar_url (sin bucket de Storage).
+  const handlePickAvatar = async () => {
+    try {
+      setPickingAvatar(true);
+      const res = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 1,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const manip = await ImageManipulator.manipulateAsync(
+        res.assets[0].uri,
+        [{ resize: { width: 256 } }],
+        {
+          compress: 0.6,
+          format: ImageManipulator.SaveFormat.JPEG,
+          base64: true,
+        }
+      );
+      if (manip.base64) {
+        setProfileAvatar(`data:image/jpeg;base64,${manip.base64}`);
+      }
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setPickingAvatar(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     if (!user) return;
@@ -204,6 +241,7 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
         display_name: profileName.trim() || null,
         bio: profileBio.trim() || null,
         is_public: profilePublic,
+        avatar_url: profileAvatar,
       });
       notify(t('Perfil guardado'), 'success');
     } catch (e) {
@@ -364,6 +402,29 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
             <Text style={styles.hint}>
               {t('Así te ven en la comunidad cuando publicas una rutina.')}
             </Text>
+            <View style={styles.avatarRow}>
+              {profileAvatar ? (
+                <Image
+                  source={{ uri: profileAvatar }}
+                  style={styles.avatarPreview}
+                />
+              ) : (
+                <View style={[styles.avatarPreview, styles.avatarPlaceholder]}>
+                  <MaterialCommunityIcons
+                    name="account"
+                    size={30}
+                    color={theme.colors.textMuted}
+                  />
+                </View>
+              )}
+              <Button
+                title={pickingAvatar ? t('Abriendo…') : t('Cambiar foto')}
+                variant="secondary"
+                onPress={handlePickAvatar}
+                disabled={pickingAvatar}
+                style={styles.avatarButton}
+              />
+            </View>
             <TextInput
               style={styles.input}
               placeholder={t('Nombre visible')}
@@ -481,5 +542,14 @@ const styles = StyleSheet.create({
     minHeight: 76,
     textAlignVertical: 'top',
   },
+  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+  avatarPreview: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+  avatarButton: { flex: 1 },
   actions: { gap: 10, marginTop: 4 },
 });
