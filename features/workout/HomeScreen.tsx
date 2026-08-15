@@ -15,6 +15,7 @@ import { StatusBar } from 'expo-status-bar';
 import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
+import { useDeferredReady } from '@hooks/useDeferredReady';
 import {
   WorkoutDay,
   WorkoutRoutine,
@@ -84,6 +85,7 @@ interface HomeScreenProps {
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
+  onNavigateCommunity?: () => void;
   onNavigateProfile?: () => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
@@ -185,6 +187,7 @@ export function HomeScreen({
   onNavigateHome,
   onNavigateCardio,
   onNavigateCalendar,
+  onNavigateCommunity,
   onNavigateProfile,
   onOpenDaySelector,
   onOpenRoutineSelector,
@@ -193,6 +196,9 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
+  // La cabecera (hero + barra) se pinta al instante; el historial de semanas y
+  // demás secciones pesadas se difieren un frame para que abrir Inicio sea ágil.
+  const ready = useDeferredReady();
   const showCardioTab = hasAnyCardio(state.logs);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [chartDayFilter, setChartDayFilter] = useState<string | undefined>(
@@ -330,10 +336,15 @@ export function HomeScreen({
     [state.logs, todayWorkoutStatus, todayLog]
   );
 
+  // Cómputo caro (puntuación de fuerza por entreno): diferido hasta `ready` para
+  // no bloquear la primera pintura. Solo alimenta secciones diferidas (tarjeta de
+  // progreso, gráfica, logros), no el hero.
   const weeklyProgress = useMemo(
     () =>
-      buildWeekProgress(completionStateLogs, displayedRoutineId, activeDays),
-    [activeDays, completionStateLogs, displayedRoutineId]
+      ready
+        ? buildWeekProgress(completionStateLogs, displayedRoutineId, activeDays)
+        : [],
+    [ready, activeDays, completionStateLogs, displayedRoutineId]
   );
   const chartWidth = Math.max(
     250,
@@ -642,6 +653,9 @@ export function HomeScreen({
   // por semana de la rutina mostrada. El volumen ignora el peso corporal
   // (series sin carga) por definición de "kg levantados".
   const strengthStats = useMemo(() => {
+    // Diferido hasta `ready`: alimenta la tarjeta de estadísticas del hero
+    // (segunda diapositiva del carrusel), no la vista inicial.
+    if (!ready) return { hasData: false as const };
     const workoutVolume = (log: WorkoutLog): number =>
       log.exercises.reduce(
         (sum, ex) =>
@@ -732,7 +746,7 @@ export function HomeScreen({
       reps,
       ejercicios,
     };
-  }, [groupedByBlock]);
+  }, [ready, groupedByBlock]);
 
   const fmtKg = (v: number | null | undefined) =>
     v == null ? '—' : Math.round(v).toLocaleString(dateLocale);
@@ -918,7 +932,7 @@ export function HomeScreen({
           />
         )}
 
-        {isDisplayedRoutineActive && streak.weeks >= 2 && (
+        {ready && isDisplayedRoutineActive && streak.weeks >= 2 && (
           <View style={styles.streakChip}>
             <MaterialCommunityIcons
               name="fire"
@@ -931,7 +945,8 @@ export function HomeScreen({
           </View>
         )}
 
-        {filteredWeeklyProgress.length > 0 &&
+        {ready &&
+          filteredWeeklyProgress.length > 0 &&
           (() => {
             // Primera semana de la rutina: no hay semana previa con la que
             // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
@@ -1034,7 +1049,7 @@ export function HomeScreen({
             );
           })()}
 
-        {displayedRoutineLogs.length > 0 && (
+        {ready && displayedRoutineLogs.length > 0 && (
           // Sin ScrollView anidado: recortaba las sombras de las tarjetas de
           // semana (bordes duros) e interfería con el colapsable. Las semanas
           // scrollean con la vista principal, como en Cardio.
@@ -1462,6 +1477,7 @@ export function HomeScreen({
         onPressHome={onNavigateHome}
         onPressCardio={onNavigateCardio}
         onPressCalendar={onNavigateCalendar}
+        onPressCommunity={onNavigateCommunity}
         onPressProfile={onNavigateProfile}
       />
 

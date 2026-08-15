@@ -1,5 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Image } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Image,
+  Pressable,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
@@ -24,16 +31,27 @@ import { t, formatAgo } from '@lib/i18n';
 import { useSession, signUp, signIn, signOut } from '@lib/cloud/auth';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
 import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
-import { getProfile, updateProfile } from '@lib/cloud/social';
+import {
+  getProfile,
+  updateProfile,
+  getFollowingCount,
+  getFollowerCount,
+} from '@lib/cloud/social';
 import { clearOutbox } from '@lib/db';
 import { saveAppData, loadAppData } from '@lib/storage';
 import type { WorkoutAppData } from '../../types';
 
 interface CloudScreenProps {
   onBack: () => void;
+  onOpenFollowing?: () => void;
+  onOpenFollowers?: () => void;
 }
 
-export function CloudScreen({ onBack }: CloudScreenProps) {
+export function CloudScreen({
+  onBack,
+  onOpenFollowing,
+  onOpenFollowers,
+}: CloudScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const { session, user, loading } = useSession();
@@ -52,6 +70,8 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   const [pickingAvatar, setPickingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
+  const [followingCount, setFollowingCount] = useState(0);
+  const [followersCount, setFollowersCount] = useState(0);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -194,6 +214,13 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
         setProfileBio(p.bio ?? '');
         setProfilePublic(p.is_public);
         setProfileAvatar(p.avatar_url ?? null);
+      })
+      .catch(() => {});
+    Promise.all([getFollowingCount(user.id), getFollowerCount(user.id)])
+      .then(([fg, fr]) => {
+        if (!active) return;
+        setFollowingCount(fg);
+        setFollowersCount(fr);
       })
       .catch(() => {});
     return () => {
@@ -402,6 +429,33 @@ export function CloudScreen({ onBack }: CloudScreenProps) {
             <Text style={styles.hint}>
               {t('Así te ven en la comunidad cuando publicas una rutina.')}
             </Text>
+            <View style={styles.countsRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.countItem,
+                  pressed && styles.countPressed,
+                ]}
+                onPress={onOpenFollowing}
+                disabled={!onOpenFollowing}
+              >
+                <Text style={styles.countValue}>{followingCount}</Text>
+                <Text style={styles.countLabel}>{t('Siguiendo')}</Text>
+              </Pressable>
+              <View style={styles.countDivider} />
+              <Pressable
+                style={({ pressed }) => [
+                  styles.countItem,
+                  pressed && styles.countPressed,
+                ]}
+                onPress={onOpenFollowers}
+                disabled={!onOpenFollowers}
+              >
+                <Text style={styles.countValue}>{followersCount}</Text>
+                <Text style={styles.countLabel}>
+                  {followersCount === 1 ? t('Seguidor') : t('Seguidores')}
+                </Text>
+              </Pressable>
+            </View>
             <View style={styles.avatarRow}>
               {profileAvatar ? (
                 <Image
@@ -541,6 +595,27 @@ const styles = StyleSheet.create({
   bioInput: {
     minHeight: 76,
     textAlignVertical: 'top',
+  },
+  countsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.borderRadius.md,
+    paddingVertical: 10,
+  },
+  countItem: { flex: 1, alignItems: 'center' },
+  countPressed: { opacity: 0.6 },
+  countValue: {
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: '800',
+    lineHeight: 24,
+  },
+  countLabel: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
+  countDivider: {
+    width: 1,
+    height: 28,
+    backgroundColor: theme.colors.border,
   },
   avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   avatarPreview: {

@@ -15,15 +15,22 @@ import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
-import { getFollowingProfiles, ProfileLite } from '@lib/cloud/social';
+import {
+  getFollowingProfiles,
+  getFollowerProfiles,
+  ProfileLite,
+} from '@lib/cloud/social';
 
 interface FollowingScreenProps {
+  // 'following' = a quién sigo; 'followers' = quién me sigue.
+  mode: 'following' | 'followers';
   onBack: () => void;
   onOpenProfile?: (userId: string, name: string) => void;
 }
 
-// Lista de usuarios a los que sigues (Fase 4). Cada uno abre su perfil.
+// Lista de personas (seguidos o seguidores). Cada una abre su perfil.
 export function FollowingScreen({
+  mode,
   onBack,
   onOpenProfile,
 }: FollowingScreenProps) {
@@ -45,13 +52,17 @@ export function FollowingScreen({
     }
     setLoading(true);
     try {
-      setProfiles(await getFollowingProfiles(user.id));
+      setProfiles(
+        mode === 'followers'
+          ? await getFollowerProfiles(user.id)
+          : await getFollowingProfiles(user.id)
+      );
     } catch {
       // Silencioso: la lista queda vacía si falla.
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, mode]);
 
   useEffect(() => {
     load();
@@ -80,7 +91,9 @@ export function FollowingScreen({
           <Text style={styles.muted}>{t('Cargando…')}</Text>
         ) : profiles.length === 0 ? (
           <Text style={styles.muted}>
-            {t('Aún no sigues a nadie. Busca usuarios en Comunidad.')}
+            {mode === 'followers'
+              ? t('Aún no te sigue nadie.')
+              : t('Aún no sigues a nadie. Busca usuarios en Comunidad.')}
           </Text>
         ) : (
           profiles.map((p) => (
@@ -116,7 +129,7 @@ export function FollowingScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title={t('A quién sigo')}
+        title={mode === 'followers' ? t('Seguidores') : t('A quién sigo')}
         icon="account-multiple-outline"
         topInset={insets.top}
       />

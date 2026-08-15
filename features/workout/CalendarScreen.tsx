@@ -55,6 +55,7 @@ interface CalendarScreenProps {
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
+  onNavigateCommunity?: () => void;
   onNavigateProfile?: () => void;
 }
 
@@ -64,6 +65,7 @@ export function CalendarScreen({
   onNavigateHome,
   onNavigateCardio,
   onNavigateCalendar,
+  onNavigateCommunity,
   onNavigateProfile,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
@@ -255,6 +257,7 @@ export function CalendarScreen({
           onPressHome={onNavigateHome}
           onPressCardio={onNavigateCardio}
           onPressCalendar={onNavigateCalendar}
+          onPressCommunity={onNavigateCommunity}
           onPressProfile={onNavigateProfile}
         />
       </View>
@@ -574,6 +577,7 @@ export function CalendarScreen({
         onPressHome={onNavigateHome}
         onPressCardio={onNavigateCardio}
         onPressCalendar={onNavigateCalendar}
+        onPressCommunity={onNavigateCommunity}
         onPressProfile={onNavigateProfile}
       />
     </View>

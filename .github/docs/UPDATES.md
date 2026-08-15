@@ -2,6 +2,30 @@
 
 ## Sin publicar
 
+### Nuevas funcionalidades
+
+- **Comunidad en la barra de navegación**: pasa a ser una pestaña propia (icono de
+  personas) en lugar de una entrada de Perfil, accesible desde cualquier pantalla
+  (`components/FloatingPrimaryNav.tsx` + cableado en las pantallas y `app/App.tsx`).
+- **Contadores Siguiendo / Seguidores** en el perfil público (`CloudScreen`),
+  pulsables para abrir cada lista; **pantalla de Seguidores** reutilizando
+  `FollowingScreen` con un modo (`getFollowerProfiles`/`getFollowingProfiles`).
+- **Aviso de nuevos seguidores** en Comunidad desde la última visita (comparación
+  local en AsyncStorage; no es push).
+
+### Rendimiento
+
+- **Navegación entre pestañas instantánea**: las pestañas se mantienen montadas
+  (keep-alive) en vez de reconstruirse al cambiar; al arrancar se monta solo la
+  activa y el resto se "calienta" en segundo plano tras el primer render
+  (`warmTabs` + `tabLayer` en `app/App.tsx`), para no penalizar el arranque.
+- **Apertura ágil de Fuerza/Cardio**: su contenido pesado (historial de semanas,
+  gráficas, cálculos de puntuación/kcal) se difiere un frame con
+  `hooks/useDeferredReady.ts`, pintando primero el hero.
+- **Comunidad más fluida**: lista virtualizada (`FlatList`), caché en memoria por
+  pestaña, spinner y carga diferida; corrección de un fallo por el que el botón de
+  Comunidad quedaba deshabilitado en la vista del calendario.
+
 ### Arquitectura
 
 - **Backend Fase 4 (social)**: esquema social de la nube

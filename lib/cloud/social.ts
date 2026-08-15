@@ -163,6 +163,38 @@ export async function getFollowerCount(userId: string): Promise<number> {
   return count ?? 0;
 }
 
+// A cuántos sigue el usuario (contador de "Siguiendo" en su propio perfil).
+export async function getFollowingCount(followerId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from('follows')
+    .select('*', { count: 'exact', head: true })
+    .eq('follower_id', followerId);
+  if (error) throw new Error(`follows: ${error.message}`);
+  return count ?? 0;
+}
+
+// Perfiles que TE siguen (lista "Seguidores"). Solo devuelve los de perfil
+// público (la RLS oculta los privados), así que puede ser menor que el contador.
+export async function getFollowerProfiles(
+  userId: string
+): Promise<ProfileLite[]> {
+  const { data, error } = await supabase
+    .from('follows')
+    .select('follower_id')
+    .eq('following_id', userId);
+  if (error) throw new Error(`follows: ${error.message}`);
+  const ids = (data ?? []).map(
+    (r) => (r as { follower_id: string }).follower_id
+  );
+  if (!ids.length) return [];
+  const { data: profs, error: e2 } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .in('id', ids);
+  if (e2) throw new Error(`profiles: ${e2.message}`);
+  return (profs ?? []) as ProfileLite[];
+}
+
 // ─────────────────────── Rutinas públicas ───────────────────────
 
 // Marca/desmarca una rutina como pública. is_public es un atributo SOLO de la

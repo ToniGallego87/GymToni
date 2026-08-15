@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   BackHandler,
+  InteractionManager,
   Platform,
   StatusBar,
   StyleSheet,
@@ -94,7 +95,8 @@ type Screen =
   | { type: 'data' }
   | { type: 'cloud' }
   | { type: 'community' }
-  | { type: 'following' }
+  | { type: 'following'; back: 'community' | 'cloud' }
+  | { type: 'followers'; back: 'community' | 'cloud' }
   | { type: 'user-profile'; userId: string; name: string }
   | {
       type: 'exercise-progress';
@@ -126,6 +128,10 @@ function AppContent() {
   // plano. Refresca el estado si el pull trae cambios de otro dispositivo.
   useCloudSync(dispatch);
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
+  // "Calentar" el resto de pestañas: al arrancar se monta SOLO la activa (splash
+  // corto y arranque ágil); tras el primer render se montan las demás en segundo
+  // plano, de modo que la primera entrada a cualquiera ya sea instantánea.
+  const [warmTabs, setWarmTabs] = useState(false);
   // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
   // que esto es true, para no pintar primero los datos semilla y saltar luego
   // a los reales (el "carga a trompicones" del arranque).
@@ -253,6 +259,16 @@ function AppContent() {
     return () => cancelAnimationFrame(outer);
   }, [hydrated]);
 
+  // Tras hidratar y pintar la pantalla inicial, monta el resto de pestañas en
+  // segundo plano (runAfterInteractions) para que ya estén listas al entrar.
+  useEffect(() => {
+    if (!hydrated) return;
+    const task = InteractionManager.runAfterInteractions(() =>
+      setWarmTabs(true)
+    );
+    return () => task.cancel();
+  }, [hydrated]);
+
   // Navegación "atrás" compartida entre el botón físico de Android y el
   // "Volver" en pantalla de cada vista: una sola función por pantalla para
   // que ambos caminos lleven siempre al mismo sitio.
@@ -292,6 +308,7 @@ function AppContent() {
             case 'cardio':
             case 'calendar':
             case 'profile':
+            case 'community':
             case 'day-selector':
             case 'new-routine':
             case 'week-achievement':
@@ -311,7 +328,15 @@ function AppContent() {
               return true;
             case 'settings':
             case 'data':
+            case 'cloud':
               goProfile();
+              return true;
+            case 'following':
+            case 'followers':
+              setScreen({ type: screen.back });
+              return true;
+            case 'user-profile':
+              setScreen({ type: 'community' });
               return true;
             case 'exercise-progress':
               // Vuelve al detalle si se abrió desde ahí; si no, a Perfil.
@@ -555,6 +580,28 @@ function AppContent() {
     return <View style={styles.container} />;
   }
 
+  // Pestañas montadas "en caliente": al arrancar se monta SOLO la activa (splash
+  // corto), y tras el primer render se montan las demás (warmTabs) y se quedan
+  // vivas, ocultas con display:none al no estar activas. Así la PRIMERA entrada a
+  // cualquiera ya está lista (sus useMemo caros ya calculados) y el cambio es
+  // instantáneo. Cada pantalla difiere además su contenido pesado un frame
+  // (useDeferredReady), para no bloquear al calentarse. El registro guarda las
+  // series en estado local (no despacha por serie), así que tenerlas de fondo no
+  // recalcula durante el entreno.
+  const tabLayer = (type: Screen['type'], node: React.ReactNode) => {
+    const active = screen.type === type;
+    // Al arrancar solo se monta la pestaña activa; las demás esperan a warmTabs.
+    if (!active && !warmTabs) return null;
+    return (
+      <View
+        style={[StyleSheet.absoluteFill, { display: active ? 'flex' : 'none' }]}
+        pointerEvents={active ? 'auto' : 'none'}
+      >
+        {node}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <WhatsNewModal
@@ -578,7 +625,8 @@ function AppContent() {
         />
       )}
 
-      {screen.type === 'home' && (
+      {tabLayer(
+        'home',
         <HomeScreen
           onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
           onSelectLog={(log, day) =>
@@ -588,6 +636,7 @@ function AppContent() {
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateCommunity={() => setScreen({ type: 'community' })}
           onNavigateProfile={() => setScreen({ type: 'profile' })}
           onOpenDaySelector={() => {
             if (displayedRoutine?.days.length) {
@@ -606,7 +655,8 @@ function AppContent() {
         />
       )}
 
-      {screen.type === 'cardio' && (
+      {tabLayer(
+        'cardio',
         <CardioScreen
           onSelectLog={(log, day) =>
             setScreen({ type: 'detail', log, day, origin: 'cardio' })
@@ -622,6 +672,7 @@ function AppContent() {
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateCommunity={() => setScreen({ type: 'community' })}
           onNavigateProfile={() => setScreen({ type: 'profile' })}
         />
       )}
@@ -690,7 +741,8 @@ function AppContent() {
         />
       )}
 
-      {screen.type === 'calendar' && (
+      {tabLayer(
+        'calendar',
         <CalendarScreen
           onSelectLog={(log, day) =>
             setScreen({ type: 'detail', log, day, origin: 'calendar' })
@@ -707,11 +759,13 @@ function AppContent() {
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateCommunity={() => setScreen({ type: 'community' })}
           onNavigateProfile={() => setScreen({ type: 'profile' })}
         />
       )}
 
-      {screen.type === 'profile' && (
+      {tabLayer(
+        'profile',
         <ProfileScreen
           onOpenRoutines={() =>
             setScreen({ type: 'routine-selector', origin: 'profile' })
@@ -721,8 +775,42 @@ function AppContent() {
           }
           onOpenData={() => setScreen({ type: 'data' })}
           onOpenCloud={() => setScreen({ type: 'cloud' })}
-          onOpenCommunity={() => setScreen({ type: 'community' })}
           onOpenSettings={() => setScreen({ type: 'settings' })}
+          onNavigateHome={() => setScreen({ type: 'home' })}
+          onNavigateCardio={() => setScreen({ type: 'cardio' })}
+          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
+          onNavigateCommunity={() => setScreen({ type: 'community' })}
+          onNavigateProfile={() => setScreen({ type: 'profile' })}
+        />
+      )}
+
+      {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
+
+      {screen.type === 'cloud' && (
+        <CloudScreen
+          onBack={goProfile}
+          onOpenFollowing={() =>
+            setScreen({ type: 'following', back: 'cloud' })
+          }
+          onOpenFollowers={() =>
+            setScreen({ type: 'followers', back: 'cloud' })
+          }
+        />
+      )}
+
+      {tabLayer(
+        'community',
+        <CommunityScreen
+          active={screen.type === 'community'}
+          onOpenProfile={(userId, name) =>
+            setScreen({ type: 'user-profile', userId, name })
+          }
+          onOpenFollowing={() =>
+            setScreen({ type: 'following', back: 'community' })
+          }
+          onOpenFollowers={() =>
+            setScreen({ type: 'followers', back: 'community' })
+          }
           onNavigateHome={() => setScreen({ type: 'home' })}
           onNavigateCardio={() => setScreen({ type: 'cardio' })}
           onNavigateCalendar={() => setScreen({ type: 'calendar' })}
@@ -730,23 +818,20 @@ function AppContent() {
         />
       )}
 
-      {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
-
-      {screen.type === 'cloud' && <CloudScreen onBack={goProfile} />}
-
-      {screen.type === 'community' && (
-        <CommunityScreen
-          onBack={goProfile}
+      {screen.type === 'following' && (
+        <FollowingScreen
+          mode="following"
+          onBack={() => setScreen({ type: screen.back })}
           onOpenProfile={(userId, name) =>
             setScreen({ type: 'user-profile', userId, name })
           }
-          onOpenFollowing={() => setScreen({ type: 'following' })}
         />
       )}
 
-      {screen.type === 'following' && (
+      {screen.type === 'followers' && (
         <FollowingScreen
-          onBack={() => setScreen({ type: 'community' })}
+          mode="followers"
+          onBack={() => setScreen({ type: screen.back })}
           onOpenProfile={(userId, name) =>
             setScreen({ type: 'user-profile', userId, name })
           }

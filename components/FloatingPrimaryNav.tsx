@@ -8,7 +8,12 @@ import { t } from '@lib/i18n';
 import { FloatingGlassBar } from './FloatingGlassBar';
 import { GLASS_ACTIVE_ITEM_BG, GLASS_ACTIVE_ITEM_BORDER } from './glassTokens';
 
-type FloatingPrimaryNavKey = 'home' | 'cardio' | 'calendar' | 'profile';
+type FloatingPrimaryNavKey =
+  | 'home'
+  | 'cardio'
+  | 'calendar'
+  | 'community'
+  | 'profile';
 
 interface FloatingPrimaryNavProps {
   bottom: number;
@@ -18,6 +23,7 @@ interface FloatingPrimaryNavProps {
   onPressHome?: () => void;
   onPressCardio?: () => void;
   onPressCalendar?: () => void;
+  onPressCommunity?: () => void;
   onPressProfile?: () => void;
 }
 
@@ -35,6 +41,7 @@ export function FloatingPrimaryNav({
   onPressHome,
   onPressCardio,
   onPressCalendar,
+  onPressCommunity,
   onPressProfile,
 }: FloatingPrimaryNavProps) {
   const items: NavItem[] = [
@@ -55,6 +62,12 @@ export function FloatingPrimaryNav({
       label: t('Calendario'),
       icon: 'calendar-month-outline',
       onPress: onPressCalendar,
+    },
+    {
+      key: 'community',
+      label: t('Comunidad'),
+      icon: 'account-group-outline',
+      onPress: onPressCommunity,
     },
     {
       key: 'profile',

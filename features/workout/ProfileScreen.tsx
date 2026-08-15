@@ -25,11 +25,11 @@ interface ProfileScreenProps {
   onOpenExerciseProgress?: () => void;
   onOpenData?: () => void;
   onOpenCloud?: () => void;
-  onOpenCommunity?: () => void;
   onOpenSettings?: () => void;
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
+  onNavigateCommunity?: () => void;
   onNavigateProfile?: () => void;
 }
 
@@ -47,11 +47,11 @@ export function ProfileScreen({
   onOpenExerciseProgress,
   onOpenData,
   onOpenCloud,
-  onOpenCommunity,
   onOpenSettings,
   onNavigateHome,
   onNavigateCardio,
   onNavigateCalendar,
+  onNavigateCommunity,
   onNavigateProfile,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
@@ -115,12 +115,6 @@ export function ProfileScreen({
       hint: cloudHint,
       onPress: onOpenCloud,
       statusDot: !!user,
-    },
-    {
-      icon: 'account-group-outline',
-      label: t('Comunidad'),
-      hint: t('Descubre y comparte rutinas populares'),
-      onPress: onOpenCommunity,
     },
     {
       icon: 'cog-outline',
@@ -225,6 +219,7 @@ export function ProfileScreen({
         onPressHome={onNavigateHome}
         onPressCardio={onNavigateCardio}
         onPressCalendar={onNavigateCalendar}
+        onPressCommunity={onNavigateCommunity}
         onPressProfile={onNavigateProfile}
       />
     </View>

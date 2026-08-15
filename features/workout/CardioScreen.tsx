@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
+import { useDeferredReady } from '@hooks/useDeferredReady';
 import { getToday } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
@@ -62,6 +63,7 @@ interface CardioScreenProps {
   onNavigateHome?: () => void;
   onNavigateCardio?: () => void;
   onNavigateCalendar?: () => void;
+  onNavigateCommunity?: () => void;
   onNavigateProfile?: () => void;
   // Abre la vista de resultados (DetailScreen) del día de cardio pulsado.
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
@@ -205,12 +207,16 @@ export function CardioScreen({
   onNavigateHome,
   onNavigateCardio,
   onNavigateCalendar,
+  onNavigateCommunity,
   onNavigateProfile,
   onSelectLog,
   onInsertCardioOnly,
 }: CardioScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  // El hero se pinta al instante; la gráfica y el historial de semanas (lo caro
+  // de Cardio) se difieren un frame para que abrir Cardio sea ágil.
+  const ready = useDeferredReady();
   const { width: windowWidth } = useWindowDimensions();
   const [showChart, setShowChart] = useState(false);
   const [metricIdx, setMetricIdx] = useState(0);
@@ -372,9 +378,10 @@ export function CardioScreen({
   const latestMonth = months[months.length - 1];
   const metric = CHART_METRICS[metricIdx];
   const latestMonthValue = latestMonth ? metric.get(latestMonth) : null;
+  // Diferido hasta `ready`: solo alimenta la gráfica (diferida y colapsada).
   const metricChart = useMemo(
-    () => buildMetricChart(months, metric),
-    [months, metric]
+    () => (ready ? buildMetricChart(months, metric) : null),
+    [ready, months, metric]
   );
 
   // Lista: 5 semanas más recientes (incluida la actual); "Cargar más" añade 5.
@@ -477,7 +484,7 @@ export function CardioScreen({
           ]}
         />
 
-        {kcalMonths.length >= 2 && (
+        {ready && kcalMonths.length >= 2 && (
           <View style={[styles.progressCard, { borderColor: progressAccent }]}>
             <GradientFill accent={progressAccent} />
             <TouchableOpacity
@@ -546,151 +553,152 @@ export function CardioScreen({
           </View>
         )}
 
-        {visibleWeeks.map((week) => {
-          const isExpanded = expandedWeeks[week.weekKey] ?? week.isCurrent;
-          // Tarjeta: acento estructural salvo la semana en curso (amarilla). El
-          // verde/rojo solo se usa en el dato de subida/bajada (kcalDelta).
-          const accent = week.isCurrent
-            ? theme.colors.primaryLine
-            : theme.colors.accentLine;
+        {ready &&
+          visibleWeeks.map((week) => {
+            const isExpanded = expandedWeeks[week.weekKey] ?? week.isCurrent;
+            // Tarjeta: acento estructural salvo la semana en curso (amarilla). El
+            // verde/rojo solo se usa en el dato de subida/bajada (kcalDelta).
+            const accent = week.isCurrent
+              ? theme.colors.primaryLine
+              : theme.colors.accentLine;
 
-          return (
-            <View key={week.weekKey} style={styles.weekBlock}>
-              <Pressable
-                style={[styles.weekHeader, { borderColor: accent }]}
-                onPress={() => {
-                  // Sin animateLayout: la altura la anima <Collapsible/> (mismo
-                  // motor que Inicio); un LayoutAnimation encima competiría.
-                  setExpandedWeeks((prev) => ({
-                    ...prev,
-                    [week.weekKey]: !isExpanded,
-                  }));
-                }}
-              >
-                <GradientFill accent={accent} />
-                <View style={styles.weekTitleRow}>
-                  <Text
-                    style={[styles.weekTitle, { color: theme.colors.white }]}
-                    numberOfLines={1}
-                  >
-                    {dayMonth(week.weekStart)} – {dayMonth(week.weekEnd)}
-                  </Text>
-                  {/* Arriba a la derecha: diferencia de kcal vs semana anterior.
+            return (
+              <View key={week.weekKey} style={styles.weekBlock}>
+                <Pressable
+                  style={[styles.weekHeader, { borderColor: accent }]}
+                  onPress={() => {
+                    // Sin animateLayout: la altura la anima <Collapsible/> (mismo
+                    // motor que Inicio); un LayoutAnimation encima competiría.
+                    setExpandedWeeks((prev) => ({
+                      ...prev,
+                      [week.weekKey]: !isExpanded,
+                    }));
+                  }}
+                >
+                  <GradientFill accent={accent} />
+                  <View style={styles.weekTitleRow}>
+                    <Text
+                      style={[styles.weekTitle, { color: theme.colors.white }]}
+                      numberOfLines={1}
+                    >
+                      {dayMonth(week.weekStart)} – {dayMonth(week.weekEnd)}
+                    </Text>
+                    {/* Arriba a la derecha: diferencia de kcal vs semana anterior.
                       La semana en curso no la muestra (aún está acumulando). */}
-                  {week.kcalDelta != null && !week.isCurrent && (
-                    <TrendDelta
-                      value={week.kcalDelta}
-                      suffix=" kcal"
-                      decimals={0}
+                    {week.kcalDelta != null && !week.isCurrent && (
+                      <TrendDelta
+                        value={week.kcalDelta}
+                        suffix=" kcal"
+                        decimals={0}
+                      />
+                    )}
+                  </View>
+                  <View style={styles.weekMetaRow}>
+                    <Text style={styles.weekMeta}>
+                      {week.sessionCount}{' '}
+                      {week.sessionCount === 1 ? t('sesión') : t('sesiones')}
+                    </Text>
+                    <MaterialCommunityIcons
+                      name={isExpanded ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={theme.colors.textSecondary}
                     />
-                  )}
-                </View>
-                <View style={styles.weekMetaRow}>
-                  <Text style={styles.weekMeta}>
-                    {week.sessionCount}{' '}
-                    {week.sessionCount === 1 ? t('sesión') : t('sesiones')}
-                  </Text>
-                  <MaterialCommunityIcons
-                    name={isExpanded ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={theme.colors.textSecondary}
-                  />
-                </View>
-              </Pressable>
+                  </View>
+                </Pressable>
 
-              {/* Una tarjeta por DÍA: fecha y kcal del día arriba, y dentro el
+                {/* Una tarjeta por DÍA: fecha y kcal del día arriba, y dentro el
                   listado de disciplinas que se hicieron ese día. La altura la
                   anima <Collapsible/>, el mismo motor que las semanas de Inicio
                   (antes: FadeInDown escalonado por día + animateLayout). */}
-              <Collapsible open={isExpanded}>
-                {week.days
-                  .slice()
-                  .reverse()
-                  .map((day) => {
-                    const d = new Date(`${day.date}T00:00:00`);
-                    const weekday = d.toLocaleDateString(dateLocale, {
-                      weekday: 'long',
-                    });
-                    const weekdayCap =
-                      weekday.charAt(0).toUpperCase() + weekday.slice(1);
-                    const dateStr = d.toLocaleDateString(dateLocale);
-                    const isToday = day.date === todayKey;
-                    return (
-                      <View key={day.date}>
-                        {/* "Hoy" se marca con el aro dorado y el GradientFill,
+                <Collapsible open={isExpanded}>
+                  {week.days
+                    .slice()
+                    .reverse()
+                    .map((day) => {
+                      const d = new Date(`${day.date}T00:00:00`);
+                      const weekday = d.toLocaleDateString(dateLocale, {
+                        weekday: 'long',
+                      });
+                      const weekdayCap =
+                        weekday.charAt(0).toUpperCase() + weekday.slice(1);
+                      const dateStr = d.toLocaleDateString(dateLocale);
+                      const isToday = day.date === todayKey;
+                      return (
+                        <View key={day.date}>
+                          {/* "Hoy" se marca con el aro dorado y el GradientFill,
                               como en Inicio; el texto va en sus colores de
                               siempre (fecha y resultados en gris). */}
-                        <Pressable
-                          onPress={() => handleDayPress(day)}
-                          style={({ pressed }) => [
-                            styles.dailyCard,
-                            isToday && styles.dailyCardToday,
-                            pressed && { opacity: 0.7 },
-                          ]}
-                        >
-                          {isToday && (
-                            <GradientFill accent={theme.colors.primaryLine} />
-                          )}
-                          <View style={styles.dailyHeader}>
-                            <Text style={styles.dailyDate} numberOfLines={1}>
-                              <Text style={styles.dailyWeekday}>
-                                {weekdayCap}{' '}
+                          <Pressable
+                            onPress={() => handleDayPress(day)}
+                            style={({ pressed }) => [
+                              styles.dailyCard,
+                              isToday && styles.dailyCardToday,
+                              pressed && { opacity: 0.7 },
+                            ]}
+                          >
+                            {isToday && (
+                              <GradientFill accent={theme.colors.primaryLine} />
+                            )}
+                            <View style={styles.dailyHeader}>
+                              <Text style={styles.dailyDate} numberOfLines={1}>
+                                <Text style={styles.dailyWeekday}>
+                                  {weekdayCap}{' '}
+                                </Text>
+                                <Text style={styles.dailyDateBold}>
+                                  {dateStr}
+                                </Text>
                               </Text>
-                              <Text style={styles.dailyDateBold}>
-                                {dateStr}
+                              <Text style={styles.dailyBadge}>
+                                {Math.round(day.totalKcal)} kcal
                               </Text>
-                            </Text>
-                            <Text style={styles.dailyBadge}>
-                              {Math.round(day.totalKcal)} kcal
-                            </Text>
-                          </View>
-
-                          {day.disciplines.map((entry, eIdx) => (
-                            <View
-                              key={`${day.date}-${eIdx}`}
-                              style={styles.disciplineRow}
-                            >
-                              <MaterialCommunityIcons
-                                name={disciplineIcon(
-                                  entry.type,
-                                  hasIncline(entry.maxPendiente)
-                                )}
-                                size={28}
-                                color={theme.colors.white}
-                              />
-                              <View style={styles.dailyInfo}>
-                                <Text
-                                  style={styles.dailyName}
-                                  numberOfLines={1}
-                                >
-                                  {entry.type}
-                                </Text>
-                                <Text
-                                  style={styles.dailyResults}
-                                  numberOfLines={1}
-                                >
-                                  {formatMergedResults(entry)}
-                                </Text>
-                              </View>
-                              {/* Las kcal por disciplina solo aportan si hay
-                                    más de una: si no, repiten las del día. */}
-                              {day.disciplines.length > 1 && (
-                                <Text style={styles.disciplineKcal}>
-                                  {Math.round(entry.kcal)} kcal
-                                </Text>
-                              )}
                             </View>
-                          ))}
-                        </Pressable>
-                      </View>
-                    );
-                  })}
-              </Collapsible>
-            </View>
-          );
-        })}
 
-        {hasMore && (
+                            {day.disciplines.map((entry, eIdx) => (
+                              <View
+                                key={`${day.date}-${eIdx}`}
+                                style={styles.disciplineRow}
+                              >
+                                <MaterialCommunityIcons
+                                  name={disciplineIcon(
+                                    entry.type,
+                                    hasIncline(entry.maxPendiente)
+                                  )}
+                                  size={28}
+                                  color={theme.colors.white}
+                                />
+                                <View style={styles.dailyInfo}>
+                                  <Text
+                                    style={styles.dailyName}
+                                    numberOfLines={1}
+                                  >
+                                    {entry.type}
+                                  </Text>
+                                  <Text
+                                    style={styles.dailyResults}
+                                    numberOfLines={1}
+                                  >
+                                    {formatMergedResults(entry)}
+                                  </Text>
+                                </View>
+                                {/* Las kcal por disciplina solo aportan si hay
+                                    más de una: si no, repiten las del día. */}
+                                {day.disciplines.length > 1 && (
+                                  <Text style={styles.disciplineKcal}>
+                                    {Math.round(entry.kcal)} kcal
+                                  </Text>
+                                )}
+                              </View>
+                            ))}
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                </Collapsible>
+              </View>
+            );
+          })}
+
+        {ready && hasMore && (
           <LoadMoreButton
             style={styles.showMore}
             onPress={() => {
@@ -707,6 +715,7 @@ export function CardioScreen({
         onPressHome={onNavigateHome}
         onPressCardio={onNavigateCardio}
         onPressCalendar={onNavigateCalendar}
+        onPressCommunity={onNavigateCommunity}
         onPressProfile={onNavigateProfile}
       />
 
