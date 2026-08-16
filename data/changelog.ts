@@ -9,6 +9,16 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.1',
+    items: [
+      'Llega Comunidad: descubre rutinas de otras personas en un tablón de las más populares y añade la que quieras a las tuyas con un toque.',
+      'Puedes compartir tus propias rutinas para que otros las usen.',
+      'Sigue a otros usuarios, mira sus perfiles y sus rutinas, busca gente por su nombre y ponte tu foto de perfil.',
+      'La app va más fluida: al cambiar de pestaña la vista se desliza al instante, sin esperas.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.7.0',
     items: [
       'Ahora puedes crear una cuenta gratis y guardar tus entrenamientos en la nube. Si cambias de móvil o lo pierdes, tu historial sigue a salvo.',

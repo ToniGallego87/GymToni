@@ -3,7 +3,7 @@
     "name": "GymBro",
     "slug": "gymbro",
     "icon": "./assets/icon.png",
-    "version": "0.7.0",
+    "version": "0.7.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": ["**/*"],

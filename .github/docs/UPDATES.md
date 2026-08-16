@@ -1,17 +1,45 @@
 # UPDATES
 
-## Sin publicar
+## Version 0.7.1 - 2026-08-16
 
 ### Nuevas funcionalidades
 
+- **Comunidad: tablón de rutinas populares** (`features/workout/CommunityScreen.tsx`):
+  lista las rutinas públicas por nº de likes, con autor; permite dar/quitar like
+  (con sesión) y **añadir cualquiera a tus rutinas** (clona con ids nuevos,
+  reutilizando `duplicateRoutine`). Navegación cableada en `app/App.tsx` (pantalla
+  `community`).
 - **Comunidad en la barra de navegación**: pasa a ser una pestaña propia (icono de
   personas) en lugar de una entrada de Perfil, accesible desde cualquier pantalla
   (`components/FloatingPrimaryNav.tsx` + cableado en las pantallas y `app/App.tsx`).
+- **Publicar una rutina en la comunidad** (`features/workout/RoutineDetailScreen.tsx`):
+  interruptor "Compartir en la comunidad" (pública/privada) en el detalle de la
+  rutina; escribe `is_public` en la nube (atributo que el sync no pisa). Requiere
+  sesión.
+- **Perfiles públicos y seguir** (Fase 4, slice 2): edición del perfil público
+  (nombre visible, bio, visibilidad) en Cuenta y nube; ver el perfil de otro
+  usuario desde el tablón (tocando el autor) con sus rutinas públicas y botón
+  Seguir/Siguiendo (`features/workout/UserProfileScreen.tsx`, datos en
+  `lib/cloud/social.ts`: `isFollowing`, `getFollowerCount`, `getUserPublicRoutines`).
+- **Comunidad ampliada** (Fase 4, pulido): buscar usuarios por nombre, pestañas
+  **Populares / Siguiendo** (feed de rutinas de quien sigues), lista **A quién
+  sigo** (`features/workout/FollowingScreen.tsx`) y **foto de perfil** (avatar):
+  se elige de la galería, se recorta a cuadrado y se guarda reducida (256px jpeg
+  base64) en `profiles.avatar_url`, y sale como avatar en el tablón, la búsqueda,
+  los seguidos y los perfiles. Nuevas deps `expo-image-picker` /
+  `expo-image-manipulator`. Datos en `lib/cloud/social.ts` (`searchProfiles`,
+  `getProfilesByIds`, `getFollowingProfiles`, `getFollowingFeed`). Sin SQL nuevo.
 - **Contadores Siguiendo / Seguidores** en el perfil público (`CloudScreen`),
   pulsables para abrir cada lista; **pantalla de Seguidores** reutilizando
   `FollowingScreen` con un modo (`getFollowerProfiles`/`getFollowingProfiles`).
 - **Aviso de nuevos seguidores** en Comunidad desde la última visita (comparación
   local en AsyncStorage; no es push).
+- **Estado de la nube visible desde Perfil** (`features/workout/ProfileScreen.tsx`):
+  la fila "Cuenta y nube" muestra ahora un texto dinámico según la sesión
+  (sin cuenta / "Sesión iniciada" / "Sincronizado · hace X") y un punto verde en
+  el icono cuando hay sesión activa. Reutiliza `getLastSync` (`lib/cloud/sync.ts`)
+  y un `formatAgo` compartido movido a `lib/i18n.ts` (antes duplicado en
+  `CloudScreen`).
 
 ### Rendimiento
 
@@ -45,66 +73,17 @@
 ### Cambios
 
 - **Revisión (revision-app)**: ROADMAP reescrito (`.github/docs/ROADMAP.md`):
-  podadas las fichas ya entregadas ("Estado de la nube en Perfil", "Unificar
-  Datos↔Cuenta y nube" y todo el epic social de la Fase 4); integradas propuestas
-  nuevas con foco en Comunidad (aligerar la barra de 5 pestañas, `CloudScreen`
-  reactivo al tema, pull-to-refresh/like en el feed, avatares en Storage). Limpieza:
-  `getFollowingIds` y `fetchPublicRoutine` pasan a uso interno en `lib/cloud/social.ts`
-  (solo los consumían funciones del propio módulo). Docs al día (SETUP, backend-design).
-
-### Nuevas funcionalidades
-
-- **Comunidad: tablón de rutinas populares** (`features/workout/CommunityScreen.tsx`,
-  entrada nueva en Perfil): lista las rutinas públicas por nº de likes, con autor;
-  permite dar/quitar like (con sesión) y **añadir cualquiera a tus rutinas**
-  (clona con ids nuevos, reutilizando `duplicateRoutine`). Navegación cableada en
-  `app/App.tsx` (pantalla `community`).
-- **Publicar una rutina en la comunidad** (`features/workout/RoutineDetailScreen.tsx`):
-  interruptor "Compartir en la comunidad" (pública/privada) en el detalle de la
-  rutina; escribe `is_public` en la nube (atributo que el sync no pisa). Requiere
-  sesión.
-- **Perfiles públicos y seguir** (Fase 4, slice 2): edición del perfil público
-  (nombre visible, bio, visibilidad) en Cuenta y nube; ver el perfil de otro
-  usuario desde el tablón (tocando el autor) con sus rutinas públicas y botón
-  Seguir/Siguiendo (`features/workout/UserProfileScreen.tsx`, datos en
-  `lib/cloud/social.ts`: `isFollowing`, `getFollowerCount`, `getUserPublicRoutines`).
-- **Comunidad ampliada** (Fase 4, pulido): buscar usuarios por nombre, pestañas
-  **Populares / Siguiendo** (feed de rutinas de quien sigues), lista **A quién
-  sigo** (`features/workout/FollowingScreen.tsx`) y **foto de perfil** (avatar):
-  se elige de la galería, se recorta a cuadrado y se guarda reducida (256px jpeg
-  base64) en `profiles.avatar_url`, y sale como avatar en el tablón, la búsqueda,
-  los seguidos y los perfiles. Nuevas deps `expo-image-picker` /
-  `expo-image-manipulator`. Datos en `lib/cloud/social.ts` (`searchProfiles`,
-  `getProfilesByIds`, `getFollowingProfiles`, `getFollowingFeed`). Sin SQL nuevo.
-
-### Correcciones
-
-- Eliminado el parche basura `patches/expo-modules-core+1.12.26.patch` (9,9 MB de
-  caché de build `.cxx` capturada por error; hacía fallar `patch-package`).
-
-- **Estado de la nube visible desde Perfil** (`features/workout/ProfileScreen.tsx`):
-  la fila "Cuenta y nube" muestra ahora un texto dinámico según la sesión
-  (sin cuenta / "Sesión iniciada" / "Sincronizado · hace X") y un punto verde en
-  el icono cuando hay sesión activa. Reutiliza `getLastSync` (`lib/cloud/sync.ts`)
-  y un `formatAgo` compartido movido a `lib/i18n.ts` (antes duplicado en
-  `CloudScreen`).
-
-### Cambios
-
+  podadas las fichas ya entregadas (Backend Fase 1-3, "Estado de la nube en
+  Perfil", "Unificar Datos↔Cuenta y nube" y todo el epic social de la Fase 4);
+  integradas propuestas nuevas con foco en Comunidad (aligerar la barra de 5
+  pestañas, `CloudScreen` reactivo al tema, pull-to-refresh/like en el feed,
+  avatares en Storage). Limpieza: `getFollowingIds` y `fetchPublicRoutine` pasan a
+  uso interno en `lib/cloud/social.ts`. Docs al día (SETUP, backend-design,
+  `AGENTS.md`, `backend-fase1-runbook.md`).
 - **Narrativa de respaldo más clara (Datos ↔ Cuenta y nube)**: el menú de Perfil
   distingue "Datos" (copia local en archivo) de "Cuenta y nube" (sesión + sync); y
   `DataScreen` añade un pie que remite a Cuenta y nube para sincronizar entre
   dispositivos. Sin cambios de comportamiento.
-- **Revisión completa (revision-app)**: ROADMAP reescrito
-  (`.github/docs/ROADMAP.md`) — podadas las fichas de Backend Fase 1-3 (entregadas
-  en 0.7.0), integradas dos propuestas nuevas ("Estado de la nube visible desde
-  Perfil" y "Unificar el discurso de proteger mis datos") y actualizada la fecha
-  de última revisión.
-- **Documentación al día con la 0.7.0**: corregida en `AGENTS.md` la descripción
-  del runbook de Fase 1 (ya no menciona PowerSync/SDK 57, descartados);
-  `backend-fase1-runbook.md` marcado como entregado; `SETUP.md` incluye
-  `lib/cloud/`, `CloudScreen`, `useCloudSync`, `supabase/schema.sql` y la nube en
-  la sección de Persistencia.
 
 ### Correcciones
 
@@ -136,6 +115,8 @@
     backup sano del mismo día en los 969 ejercicios comunes.
 - Eliminado un estilo huérfano (`progressLatestDown`) en
   `features/workout/HomeScreen.tsx` (sin efecto visible; limpieza).
+- Eliminado el parche basura `patches/expo-modules-core+1.12.26.patch` (9,9 MB de
+  caché de build `.cxx` capturada por error; hacía fallar `patch-package`).
 
 ## Version 0.7.0 - 2026-08-13
 
