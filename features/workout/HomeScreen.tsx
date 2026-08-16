@@ -1467,19 +1467,8 @@ export function HomeScreen({
         onCancel={closeDeleteLogModal}
       />
 
-      {/* La nav se muestra siempre, también con la BD vacía: si no, no hay
-          forma de llegar a Perfil → Datos → Importar en el primer arranque
-          (restaurar un backup tras reinstalar o cambiar de móvil). */}
-      <FloatingPrimaryNav
-        bottom={floatingNavBottom}
-        activeTab="home"
-        showCardio={showCardioTab}
-        onPressHome={onNavigateHome}
-        onPressCardio={onNavigateCardio}
-        onPressCalendar={onNavigateCalendar}
-        onPressCommunity={onNavigateCommunity}
-        onPressProfile={onNavigateProfile}
-      />
+      {/* La barra de navegación es fija y vive en app/App.tsx (fuera del pager
+          de pestañas), para que no deslice con el contenido al cambiar de vista. */}
 
       <GlassTopBar
         title={t('Inicio')}

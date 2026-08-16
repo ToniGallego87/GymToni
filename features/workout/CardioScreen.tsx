@@ -709,15 +709,7 @@ export function CardioScreen({
         )}
       </StretchScrollView>
 
-      <FloatingPrimaryNav
-        bottom={floatingNavBottom}
-        activeTab="cardio"
-        onPressHome={onNavigateHome}
-        onPressCardio={onNavigateCardio}
-        onPressCalendar={onNavigateCalendar}
-        onPressCommunity={onNavigateCommunity}
-        onPressProfile={onNavigateProfile}
-      />
+      {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
 
       <GlassTopBar
         title={t('Cardio')}

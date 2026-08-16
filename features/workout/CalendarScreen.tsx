@@ -250,16 +250,7 @@ export function CalendarScreen({
           topInset={insets.top}
         />
 
-        <FloatingPrimaryNav
-          bottom={floatingNavBottom}
-          activeTab="calendar"
-          showCardio={hasAnyCardio(state.logs)}
-          onPressHome={onNavigateHome}
-          onPressCardio={onNavigateCardio}
-          onPressCalendar={onNavigateCalendar}
-          onPressCommunity={onNavigateCommunity}
-          onPressProfile={onNavigateProfile}
-        />
+        {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
       </View>
     );
   }
@@ -570,16 +561,7 @@ export function CalendarScreen({
         topInset={insets.top}
       />
 
-      <FloatingPrimaryNav
-        bottom={floatingNavBottom}
-        activeTab="calendar"
-        showCardio={hasAnyCardio(state.logs)}
-        onPressHome={onNavigateHome}
-        onPressCardio={onNavigateCardio}
-        onPressCalendar={onNavigateCalendar}
-        onPressCommunity={onNavigateCommunity}
-        onPressProfile={onNavigateProfile}
-      />
+      {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
     </View>
   );
 }

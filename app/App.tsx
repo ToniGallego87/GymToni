@@ -5,8 +5,17 @@ import {
   Platform,
   StatusBar,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from 'react-native';
+import Animated, {
+  Easing,
+  SharedValue,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
@@ -38,9 +47,14 @@ import {
   WorkoutLogScreen,
   useWorkout,
 } from '@features/workout';
-import { WhatsNewModal, ThemeRevealOverlay } from '@components';
+import {
+  WhatsNewModal,
+  ThemeRevealOverlay,
+  FloatingPrimaryNav,
+  getFloatingPrimaryNavMetrics,
+} from '@components';
 import type { WeekAchievements } from '@lib/achievements';
-import { CARDIO_ONLY_DAY } from '@lib/cardio';
+import { CARDIO_ONLY_DAY, hasAnyCardio } from '@lib/cardio';
 import type { WeightSegment } from '@lib/cardio';
 import {
   clearAppData,
@@ -122,6 +136,51 @@ type Screen =
       routineName?: string;
     };
 
+// Orden de las pestañas en la barra (índice = posición para el deslizamiento).
+const TAB_ORDER = [
+  'home',
+  'cardio',
+  'calendar',
+  'community',
+  'profile',
+] as const;
+type TabType = (typeof TAB_ORDER)[number];
+
+// Capa de una pestaña en el "pager": se traslada en horizontal según su distancia
+// a la pestaña activa (`pos` animado), dando el deslizamiento estilo Telegram. Las
+// pestañas quedan montadas (keep-alive); solo la activa recibe toques.
+function TabSlide({
+  index,
+  pos,
+  width,
+  active,
+  hidden,
+  children,
+}: {
+  index: number;
+  pos: SharedValue<number>;
+  width: number;
+  active: boolean;
+  // En subpantallas el pager entero se saca de pantalla (sin desmontarlo) para
+  // que ninguna pestaña tape la subpantalla, sea cual sea el orden del JSX.
+  hidden: boolean;
+  children: React.ReactNode;
+}) {
+  const style = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: hidden ? width * 2 : (index - pos.value) * width },
+    ],
+  }));
+  return (
+    <Animated.View
+      style={[StyleSheet.absoluteFill, style]}
+      pointerEvents={active ? 'auto' : 'none'}
+    >
+      {children}
+    </Animated.View>
+  );
+}
+
 function AppContent() {
   const { dispatch, state } = useWorkout();
   // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
@@ -132,6 +191,13 @@ function AppContent() {
   // corto y arranque ágil); tras el primer render se montan las demás en segundo
   // plano, de modo que la primera entrada a cualquiera ya sea instantánea.
   const [warmTabs, setWarmTabs] = useState(false);
+  const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  // Pager de pestañas: índice de la activa (-1 en subpantallas) y valor animado
+  // que desliza entre vistas (estilo Telegram, barra inferior fija).
+  const tabIndex = TAB_ORDER.indexOf(screen.type as TabType);
+  const isTab = tabIndex >= 0;
+  const pos = useSharedValue(0);
   // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
   // que esto es true, para no pintar primero los datos semilla y saltar luego
   // a los reales (el "carga a trompicones" del arranque).
@@ -268,6 +334,16 @@ function AppContent() {
     );
     return () => task.cancel();
   }, [hydrated]);
+
+  // Al cambiar de pestaña, desliza el pager hacia ella. En subpantallas no se
+  // toca (se queda en la última pestaña, tapada por la subpantalla).
+  useEffect(() => {
+    if (tabIndex < 0) return;
+    pos.value = withTiming(tabIndex, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [tabIndex, pos]);
 
   // Navegación "atrás" compartida entre el botón físico de Android y el
   // "Volver" en pantalla de cada vista: una sola función por pantalla para
@@ -588,17 +664,21 @@ function AppContent() {
   // (useDeferredReady), para no bloquear al calentarse. El registro guarda las
   // series en estado local (no despacha por serie), así que tenerlas de fondo no
   // recalcula durante el entreno.
-  const tabLayer = (type: Screen['type'], node: React.ReactNode) => {
+  const tabLayer = (type: TabType, node: React.ReactNode) => {
     const active = screen.type === type;
     // Al arrancar solo se monta la pestaña activa; las demás esperan a warmTabs.
     if (!active && !warmTabs) return null;
     return (
-      <View
-        style={[StyleSheet.absoluteFill, { display: active ? 'flex' : 'none' }]}
-        pointerEvents={active ? 'auto' : 'none'}
+      <TabSlide
+        key={type}
+        index={TAB_ORDER.indexOf(type)}
+        pos={pos}
+        width={screenWidth}
+        active={active}
+        hidden={!isTab}
       >
         {node}
-      </View>
+      </TabSlide>
     );
   };
 
@@ -905,6 +985,21 @@ function AppContent() {
           achievements={screen.achievements}
           routineName={screen.routineName}
           onBack={goHome}
+        />
+      )}
+
+      {/* Barra de navegación FIJA (fuera del pager): solo en pestañas. El
+          contenido de cada pestaña desliza por debajo; la barra no se mueve. */}
+      {isTab && (
+        <FloatingPrimaryNav
+          bottom={getFloatingPrimaryNavMetrics(insets.bottom).bottom}
+          activeTab={screen.type as TabType}
+          showCardio={hasAnyCardio(state.logs)}
+          onPressHome={() => setScreen({ type: 'home' })}
+          onPressCardio={() => setScreen({ type: 'cardio' })}
+          onPressCalendar={() => setScreen({ type: 'calendar' })}
+          onPressCommunity={() => setScreen({ type: 'community' })}
+          onPressProfile={() => setScreen({ type: 'profile' })}
         />
       )}
 

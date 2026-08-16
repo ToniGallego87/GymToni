@@ -15,6 +15,12 @@
 
 ### Rendimiento
 
+- **Transición deslizante entre pestañas (estilo Telegram)**: al cambiar de
+  pestaña la vista entra deslizando por el lado (según el orden en la barra) con la
+  barra inferior FIJA. La barra se hoistó a `app/App.tsx` (fuera de las pantallas)
+  y cada pestaña es una capa (`TabSlide`) que se traslada con reanimated según su
+  distancia a la activa; en subpantallas el pager se saca de pantalla (sin
+  desmontar) para no taparlas.
 - **Navegación entre pestañas instantánea**: las pestañas se mantienen montadas
   (keep-alive) en vez de reconstruirse al cambiar; al arrancar se monta solo la
   activa y el resto se "calienta" en segundo plano tras el primer render
