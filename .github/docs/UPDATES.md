@@ -34,7 +34,17 @@
   función `popular_routines` para el tablón) y capa de acceso
   (`lib/cloud/social.ts`: perfil, seguir/dejar de seguir, publicar rutina, tablón
   de populares, likes y clonar una rutina pública reutilizando `duplicateRoutine`).
-  Pendiente de ejecutar el SQL en Supabase para probar.
+  SQL ejecutado en Supabase; social verificado en dispositivo.
+
+### Cambios
+
+- **Revisión (revision-app)**: ROADMAP reescrito (`.github/docs/ROADMAP.md`):
+  podadas las fichas ya entregadas ("Estado de la nube en Perfil", "Unificar
+  Datos↔Cuenta y nube" y todo el epic social de la Fase 4); integradas propuestas
+  nuevas con foco en Comunidad (aligerar la barra de 5 pestañas, `CloudScreen`
+  reactivo al tema, pull-to-refresh/like en el feed, avatares en Storage). Limpieza:
+  `getFollowingIds` y `fetchPublicRoutine` pasan a uso interno en `lib/cloud/social.ts`
+  (solo los consumían funciones del propio módulo). Docs al día (SETUP, backend-design).
 
 ### Nuevas funcionalidades
 

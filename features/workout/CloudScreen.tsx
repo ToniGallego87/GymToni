@@ -27,6 +27,7 @@ import {
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
+import { subscribeTheme } from '@lib/themeStore';
 import { t, formatAgo } from '@lib/i18n';
 import { useSession, signUp, signIn, signOut } from '@lib/cloud/auth';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
@@ -34,6 +35,7 @@ import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
 import {
   getProfile,
   updateProfile,
+  uploadAvatar,
   getFollowingCount,
   getFollowerCount,
 } from '@lib/cloud/social';
@@ -229,8 +231,9 @@ export function CloudScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
-  // Selecciona una foto, la recorta a cuadrado y la reduce a 256px jpeg. Se
-  // guarda como data URI base64 en profiles.avatar_url (sin bucket de Storage).
+  // Selecciona una foto, la recorta a cuadrado y la reduce a 256px jpeg. Se sube
+  // al bucket `avatars` de Storage (URL ligera); si no está configurado, cae a
+  // guardar el base64 en el propio perfil.
   const handlePickAvatar = async () => {
     try {
       setPickingAvatar(true);
@@ -250,8 +253,18 @@ export function CloudScreen({
           base64: true,
         }
       );
-      if (manip.base64) {
-        setProfileAvatar(`data:image/jpeg;base64,${manip.base64}`);
+      if (!manip.base64) return;
+      const dataUri = `data:image/jpeg;base64,${manip.base64}`;
+      if (user) {
+        try {
+          setProfileAvatar(await uploadAvatar(user.id, manip.base64));
+        } catch {
+          // Bucket de Storage sin configurar o subida fallida: guardamos el
+          // base64 en el perfil (funciona igual, solo más pesado).
+          setProfileAvatar(dataUri);
+        }
+      } else {
+        setProfileAvatar(dataUri);
       }
     } catch (e) {
       notify((e as Error).message, 'error');
@@ -548,83 +561,89 @@ export function CloudScreen({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.background },
-  scroll: { flex: 1 },
-  content: { paddingHorizontal: 16, gap: 12 },
-  card: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    padding: 20,
-    backgroundColor: theme.colors.surface,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    gap: 12,
-  },
-  status: { color: theme.colors.textMuted, fontSize: 13, fontWeight: '700' },
-  email: { color: theme.colors.text, fontSize: 20, fontWeight: '800' },
-  hint: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
-  syncStatus: {
-    color: theme.colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  advanced: {
-    marginTop: 8,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    gap: 12,
-  },
-  advancedTitle: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  muted: { color: theme.colors.textMuted, fontSize: 14 },
-  input: {
-    backgroundColor: theme.colors.backgroundElevated,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    color: theme.colors.text,
-    fontSize: 16,
-  },
-  bioInput: {
-    minHeight: 76,
-    textAlignVertical: 'top',
-  },
-  countsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.borderRadius.md,
-    paddingVertical: 10,
-  },
-  countItem: { flex: 1, alignItems: 'center' },
-  countPressed: { opacity: 0.6 },
-  countValue: {
-    color: theme.colors.text,
-    fontSize: 20,
-    fontWeight: '800',
-    lineHeight: 24,
-  },
-  countLabel: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
-  countDivider: {
-    width: 1,
-    height: 28,
-    backgroundColor: theme.colors.border,
-  },
-  avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  avatarPreview: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
-  avatarButton: { flex: 1 },
-  actions: { gap: 10, marginTop: 4 },
+const makeStyles = () =>
+  StyleSheet.create({
+    container: { flex: 1, backgroundColor: theme.colors.background },
+    scroll: { flex: 1 },
+    content: { paddingHorizontal: 16, gap: 12 },
+    card: {
+      borderRadius: 20,
+      overflow: 'hidden',
+      padding: 20,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      gap: 12,
+    },
+    status: { color: theme.colors.textMuted, fontSize: 13, fontWeight: '700' },
+    email: { color: theme.colors.text, fontSize: 20, fontWeight: '800' },
+    hint: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
+    syncStatus: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    advanced: {
+      marginTop: 8,
+      paddingTop: 16,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+      gap: 12,
+    },
+    advancedTitle: {
+      color: theme.colors.textMuted,
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    muted: { color: theme.colors.textMuted, fontSize: 14 },
+    input: {
+      backgroundColor: theme.colors.backgroundElevated,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      color: theme.colors.text,
+      fontSize: 16,
+    },
+    bioInput: {
+      minHeight: 76,
+      textAlignVertical: 'top',
+    },
+    countsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.borderRadius.md,
+      paddingVertical: 10,
+    },
+    countItem: { flex: 1, alignItems: 'center' },
+    countPressed: { opacity: 0.6 },
+    countValue: {
+      color: theme.colors.text,
+      fontSize: 20,
+      fontWeight: '800',
+      lineHeight: 24,
+    },
+    countLabel: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
+    countDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: theme.colors.border,
+    },
+    avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
+    avatarPreview: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
+    avatarButton: { flex: 1 },
+    actions: { gap: 10, marginTop: 4 },
+  });
+
+let styles = makeStyles();
+subscribeTheme(() => {
+  styles = makeStyles();
 });

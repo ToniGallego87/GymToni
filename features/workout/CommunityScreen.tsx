@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   InteractionManager,
   FlatList,
+  RefreshControl,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -33,6 +34,7 @@ import { useSession } from '@lib/cloud/auth';
 import {
   getPopularRoutines,
   getFollowingFeed,
+  getLikeInfo,
   searchProfiles,
   getProfilesByIds,
   getFollowerCount,
@@ -131,6 +133,7 @@ export function CommunityScreen({
   );
   // Si ya hay algo en caché para la pestaña inicial, no arrancamos en "Cargando".
   const [loading, setLoading] = useState(!boardCache.popular);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cloningId, setCloningId] = useState<string | null>(null);
   const [toast, setToast] = useState<{
@@ -159,9 +162,18 @@ export function CommunityScreen({
         if (tab === 'popular') {
           rows = await getPopularRoutines();
         } else if (user) {
-          rows = (await getFollowingFeed(user.id)).map((r: FeedRoutine) => ({
+          const feed = await getFollowingFeed(user.id);
+          // El feed no trae likes de serie: se enriquecen para poder dar like
+          // también aquí (coherencia con el tablón).
+          const likeInfo = await getLikeInfo(
+            feed.map((r) => r.id),
+            user.id
+          );
+          rows = feed.map((r: FeedRoutine) => ({
             ...r,
             author_name: null,
+            likes: likeInfo.get(r.id)?.likes ?? 0,
+            liked_by_me: likeInfo.get(r.id)?.liked ?? false,
           }));
         }
         // Pinta las rutinas ya (sin esperar a las fotos): el tablón aparece en
@@ -556,6 +568,26 @@ export function CommunityScreen({
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={
+          showingSearch ? undefined : (
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={async () => {
+                setRefreshing(true);
+                try {
+                  await load(true);
+                } finally {
+                  setRefreshing(false);
+                }
+              }}
+              // El spinner cae por debajo de la GlassTopBar (que es fija y
+              // translúcida) en vez de quedarse escondido tras ella.
+              progressViewOffset={topBarHeight}
+              tintColor={theme.colors.primary}
+              colors={[theme.colors.primary]}
+            />
+          )
+        }
         initialNumToRender={6}
         windowSize={7}
         removeClippedSubviews

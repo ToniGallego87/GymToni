@@ -117,6 +117,10 @@ export function FloatingPrimaryNav({
             <Text
               style={[styles.label, isActive && styles.labelActive]}
               numberOfLines={1}
+              // Con 5 pestañas, etiquetas largas ("Calendario", "Comunidad") se
+              // encogen lo justo para caber en su celda en vez de truncarse.
+              adjustsFontSizeToFit
+              minimumFontScale={0.8}
             >
               {item.label}
             </Text>

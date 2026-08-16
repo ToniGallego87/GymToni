@@ -7,23 +7,44 @@ tarea y eliminarla al cerrar la versión que la incluya.
 
 Las restricciones de [AGENTS.md](../../AGENTS.md) mandan: **no** Redux,
 **no** librerías de estado o UI externas, **no** arquitecturas complejas.
-Backend, cuentas y sincronización cloud ya **no** están prohibidos: son una
-dirección planificada por fases (plan en [backend-design.md](backend-design.md)).
+Backend, cuentas y sincronización cloud ya **no** están prohibidos: el epic de
+Supabase (cuentas, sync y social) está entregado; plan en
+[backend-design.md](backend-design.md).
 
-Última revisión completa: 2026-08-13.
+Última revisión completa: 2026-08-15.
 
 ## Mejoras visuales y de UX
 
-- [ ] **Estado de la nube visible desde Perfil** — hoy el estado de la cuenta
-      (sesión iniciada, última sincronización, si hay cambios sin subir) solo se
-      ve entrando en "Cuenta y nube". Mostrar un subtítulo dinámico en la fila del
-      menú (o un punto de estado) daría confianza de "mis datos están a salvo" sin
-      abrir la pantalla.
-      **Por qué:** el valor de la 0.7.0 es no perder datos; que se note de un
-      vistazo que la copia está al día refuerza justo eso.
-      **Archivos:** `features/workout/ProfileScreen.tsx:81-86` (la entrada "Cuenta
-      y nube" hoy tiene un `hint` fijo), `features/workout/CloudScreen.tsx`
-      (`getLastSync`), `lib/cloud/sync.ts` (`getLastSync`, cola pendiente).
+- [ ] **Barra de navegación de 5 pestañas: aliviar densidad** — con Cardio visible
+      la barra tiene 5 pestañas (Fuerza, Cardio, Calendario, Comunidad, Perfil) con
+      etiqueta a 11px; "Calendario" y "Comunidad" son largas y en pantallas
+      estrechas quedan justas.
+      **Por qué:** es la navegación de uso constante; apretada resta legibilidad y
+      aciertos de toque.
+      **Archivos:** `components/FloatingPrimaryNav.tsx:40-70` (items) y `:150-165`
+      (label 11px). Opciones sin librerías: etiquetas más cortas, o icono-only por
+      debajo de cierto ancho (`useWindowDimensions`).
+      **Esfuerzo:** bajo.
+- [ ] **"Cuenta y nube" no reacciona al cambio de tema en caliente** — `CloudScreen`
+      define sus estilos con `StyleSheet.create` a nivel de módulo, no con
+      `makeStyles()` + `subscribeTheme` como el resto de pantallas; al cambiar
+      claro/oscuro en caliente no recolorea hasta reabrirla.
+      **Por qué:** incoherencia con el sistema de tema en caliente
+      ([frontend-design.md](frontend-design.md)); tras la 0.7.0 esta pantalla es
+      prominente (perfil público, contadores, backup).
+      **Archivos:** `features/workout/CloudScreen.tsx:551` (envolver en `makeStyles`
+      + `subscribeTheme`, patrón de `HomeScreen`/`CommunityScreen`).
+      **Esfuerzo:** bajo.
+- [ ] **Comunidad: refresco manual (pull-to-refresh) y like en el feed** — el
+      tablón refresca al abrir la pestaña y desde caché, pero no hay "tirar para
+      refrescar"; y el corazón de like solo aparece en "Populares", no en el feed
+      "Siguiendo".
+      **Por qué:** el gesto de tirar para refrescar es esperable en una lista
+      social; y una rutina pública debería poder gustarte esté en el tablón o en el
+      feed (coherencia).
+      **Archivos:** `features/workout/CommunityScreen.tsx` (`FlatList` admite
+      `refreshing`/`onRefresh`; el like se pinta solo si `item.likes !== undefined`),
+      `lib/cloud/social.ts` (`getFollowingFeed` no trae `likes`/`liked_by_me`).
       **Esfuerzo:** bajo.
 - [ ] **Transición de tema que revele el contenido real, no un disco opaco** — el
       cambio claro/oscuro anima un círculo de color sólido que tapa la pantalla;
@@ -41,42 +62,24 @@ dirección planificada por fases (plan en [backend-design.md](backend-design.md)
 
 ## Funcionalidades a simplificar
 
-- [ ] **Unificar el discurso de "proteger mis datos" (Datos ↔ Cuenta y nube)** —
-      tras la 0.7.0 hay tres mecanismos de respaldo conviviendo sin relación
-      visible: exportar/importar JSON y copia automática a archivo local
-      (`DataScreen`), y copia/restauración + sincronización en la nube
-      (`CloudScreen`), en dos entradas separadas de Perfil ("Datos" y "Cuenta y
-      nube"). El usuario no sabe cuál le protege de verdad ni si se pisan. Aclarar
-      la jerarquía: la nube como copia principal y el JSON local como exportación
-      puntual; revisar si "Copia de seguridad ahora" (nube) debe seguir en
-      "Avanzado" ahora que el sync es automático.
-      **Por qué:** tres caminos para lo mismo generan dudas ("¿ya está guardado?")
-      justo en lo más sensible; una sola narrativa clara da tranquilidad.
-      **Archivos:** `features/workout/ProfileScreen.tsx:74-92` (entradas "Datos" y
-      "Cuenta y nube"), `features/workout/DataScreen.tsx:23-36`,
-      `features/workout/CloudScreen.tsx` (bloque "Avanzado").
-      **Esfuerzo:** medio.
+Nada pendiente ahora mismo.
 
 ## Nuevas funcionalidades
 
 Candidatas (compatibles con las restricciones):
 
-El salto a la nube fue un **epic de cuatro fases** sobre **Supabase + un motor de
-sync artesanal** en la `expo-sqlite` actual (plan en
-[backend-design.md](backend-design.md)). Las fases 1-3 (fundaciones de sync,
-cuentas + backup, y sincronización incremental) se entregaron en la 0.7.0; queda
-la fase social.
-
-- [ ] **Backend Fase 4 — Social (perfiles, follows, tablón)** — perfiles
-      públicos, seguir usuarios, rutinas públicas (`is_public`), likes/guardados,
-      tablón de rutinas populares y clonar una rutina pública a tu espacio;
-      permisos por RLS.
-      **Por qué:** cierra el salto de app personal a comunidad; descubrir rutinas
-      y seguir a otros es el gancho de retención.
-      **Archivos:** tablas nube `profiles` / `follows` / `routine_likes` + RLS,
-      reutiliza `lib/routines.ts` (duplicar con ids nuevos) para clonar. Detalle
-      en `backend-design.md` §7.
-      **Esfuerzo:** alto.
+- [ ] **Avatares en Supabase Storage en vez de base64** — hoy la foto de perfil se
+      guarda como data URI base64 en `profiles.avatar_url` y se baja y pinta así en
+      el tablón, la búsqueda y los perfiles. Migrar a un bucket de Storage y guardar
+      la URL: payloads ligeros, caché de imagen nativa y el tablón deja de arrastrar
+      la foto de cada autor en base64.
+      **Por qué:** el base64 infla la fila `profiles` y cada consulta de perfiles;
+      con muchos usuarios/rutinas el tablón pesa y decodificar tantas imágenes
+      recarga el render.
+      **Archivos:** `lib/cloud/social.ts` (`updateProfile`, `getProfilesByIds`),
+      `features/workout/CloudScreen.tsx` (`handlePickAvatar`), `supabase/` (bucket
+      `avatars` + políticas de Storage).
+      **Esfuerzo:** medio.
 - [ ] **Recordatorio de entrenamiento** — notificación local programable por
       día de la semana (la infraestructura de notificaciones ya existe para el
       timer de descanso).
@@ -129,9 +132,10 @@ la fase social.
 
 ## Descartado por restricciones del proyecto
 
-- **Autenticación, sincronización cloud y modo coach/atleta** ya **no** están
-  descartados: pasan a ser el epic de backend por fases (ver "Nuevas
-  funcionalidades" y [backend-design.md](backend-design.md)).
+- **Autenticación, sincronización cloud y social** ya **no** están descartados:
+  fueron el epic de backend (Supabase, por fases), **ya entregado** (cuentas +
+  backup, sync incremental y social: perfiles, seguir, tablón). Ver
+  [backend-design.md](backend-design.md).
 - **Dashboard web e IA**: sin planificar por ahora — no por restricción, sino
   por prioridad; se replantearán cuando el backend esté asentado.
 - Siguen fuera por restricción de código: Redux / librerías de estado externas,

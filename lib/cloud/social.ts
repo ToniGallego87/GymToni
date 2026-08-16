@@ -88,6 +88,52 @@ export async function updateProfile(
   if (error) throw new Error(`profiles: ${error.message}`);
 }
 
+// Decodifica base64 → bytes (Hermes no trae `atob`). Algoritmo estándar de
+// base64-arraybuffer; escrituras que sobrepasan el buffer (relleno `=`) son no-op.
+function base64ToBytes(base64: string): Uint8Array {
+  const chars =
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const lookup = new Uint8Array(256);
+  for (let i = 0; i < chars.length; i++) lookup[chars.charCodeAt(i)] = i;
+  const len = base64.length;
+  let bufferLength = len * 0.75;
+  if (base64[len - 1] === '=') {
+    bufferLength--;
+    if (base64[len - 2] === '=') bufferLength--;
+  }
+  const bytes = new Uint8Array(bufferLength);
+  let p = 0;
+  for (let i = 0; i < len; i += 4) {
+    const e1 = lookup[base64.charCodeAt(i)];
+    const e2 = lookup[base64.charCodeAt(i + 1)];
+    const e3 = lookup[base64.charCodeAt(i + 2)];
+    const e4 = lookup[base64.charCodeAt(i + 3)];
+    bytes[p++] = (e1 << 2) | (e2 >> 4);
+    bytes[p++] = ((e2 & 15) << 4) | (e3 >> 2);
+    bytes[p++] = ((e3 & 3) << 6) | (e4 & 63);
+  }
+  return bytes;
+}
+
+// Sube la foto (jpeg base64) al bucket `avatars` de Storage y devuelve su URL
+// pública (con cache-bust). Requiere el bucket creado (supabase/storage-avatars.sql).
+// Si falla (bucket sin configurar), el llamante cae a guardar el base64 en el perfil.
+export async function uploadAvatar(
+  userId: string,
+  base64Jpeg: string
+): Promise<string> {
+  const path = `${userId}/avatar.jpg`;
+  const { error } = await supabase.storage
+    .from('avatars')
+    .upload(path, base64ToBytes(base64Jpeg), {
+      contentType: 'image/jpeg',
+      upsert: true,
+    });
+  if (error) throw new Error(`avatars: ${error.message}`);
+  const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+  return `${data.publicUrl}?v=${Date.now()}`;
+}
+
 // ─────────────────────────── Seguir ───────────────────────────
 
 export async function followUser(
@@ -114,8 +160,8 @@ export async function unfollowUser(
   if (error) throw new Error(`follows: ${error.message}`);
 }
 
-// Ids que sigue el usuario (para pintar el estado "siguiendo" en las listas).
-export async function getFollowingIds(followerId: string): Promise<string[]> {
+// Ids que sigue el usuario. Uso interno (perfiles seguidos y feed lo consumen).
+async function getFollowingIds(followerId: string): Promise<string[]> {
   const { data, error } = await supabase
     .from('follows')
     .select('following_id')
@@ -313,6 +359,31 @@ export async function getFollowingFeed(
   });
 }
 
+// Likes de un conjunto de rutinas (nº y si el usuario les ha dado): enriquece el
+// feed "Siguiendo", que no trae likes de serie. RLS deja leer los likes de
+// rutinas públicas (que son las del feed).
+export async function getLikeInfo(
+  routineIds: string[],
+  userId: string | null
+): Promise<Map<string, { likes: number; liked: boolean }>> {
+  const map = new Map<string, { likes: number; liked: boolean }>();
+  for (const id of routineIds) map.set(id, { likes: 0, liked: false });
+  if (!routineIds.length) return map;
+  const { data, error } = await supabase
+    .from('routine_likes')
+    .select('routine_id, user_id')
+    .in('routine_id', routineIds);
+  if (error) throw new Error(`routine_likes: ${error.message}`);
+  for (const r of data ?? []) {
+    const row = r as { routine_id: string; user_id: string };
+    const entry = map.get(row.routine_id);
+    if (!entry) continue;
+    entry.likes += 1;
+    if (userId && row.user_id === userId) entry.liked = true;
+  }
+  return map;
+}
+
 export async function likeRoutine(
   routineId: string,
   userId: string
@@ -341,7 +412,8 @@ export async function unlikeRoutine(
 // WorkoutRoutine del dominio, con sus ids ORIGINALES. El llamante la pasa por
 // `duplicateRoutine` (lib/routines.ts) para asignar ids nuevos antes de
 // añadirla al espacio del usuario (ADD_ROUTINE), como al duplicar una propia.
-export async function fetchPublicRoutine(
+// Uso interno: lo envuelve cloneablePublicRoutine (fetch + duplicate).
+async function fetchPublicRoutine(
   routineId: string
 ): Promise<WorkoutRoutine | null> {
   const coerce = (r: Record<string, unknown>): Record<string, unknown> => ({

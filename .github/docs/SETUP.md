@@ -65,16 +65,19 @@ GymToni/
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Exportar / importar / limpiar datos
-│   ├── CloudScreen.tsx       ← Cuenta y nube: login, backup/restore y sync
+│   ├── CloudScreen.tsx       ← Cuenta y nube: login, perfil público, backup/restore y sync
+│   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, buscar usuarios
+│   ├── UserProfileScreen.tsx / FollowingScreen.tsx ← Perfil de otro y listas de seguir/seguidores
 │   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx / QRScannerScreen.tsx
 │   └── WeekAchievementScreen.tsx ← Compartir logros semanales
 ├── hooks/
 │   ├── useWorkout.ts         ← Consumer del contexto
-│   └── useCloudSync.ts       ← Sync de fondo (login / foreground) → refresca estado
+│   ├── useCloudSync.ts       ← Sync de fondo (login / foreground) → refresca estado
+│   └── useDeferredReady.ts   ← Difiere el contenido pesado de una pantalla un frame
 ├── lib/                      ← Lógica compartida (ver ARCHITECTURE.md)
 │   ├── theme.ts              ← Colores, degradados, tipografía, spacing
 │   ├── storage.ts / persistence.ts / db/ ← Persistencia SQLite (nativo) / JSON (web)
-│   ├── cloud/               ← Nube: auth.ts (Supabase Auth), backup.ts, sync.ts (motor push/pull)
+│   ├── cloud/               ← Nube: auth.ts, backup.ts, sync.ts (motor push/pull), social.ts (perfiles/seguir/tablón)
 │   ├── supabase.ts / supabaseConfig.ts ← Cliente Supabase (clave anon pública)
 │   └── parsers.ts, progress.ts, weeks.ts, exerciseProgress.ts, routines.ts,
 │       cardio.ts, achievements.ts…
@@ -83,7 +86,9 @@ GymToni/
 ├── data/
 │   ├── workoutDays.ts / seedData.ts ← Rutinas y logs de fábrica
 │   └── changelog.ts          ← Novedades por versión (popup in-app)
-├── supabase/schema.sql       ← Esquema de la nube (tablas espejo + RLS)
+├── supabase/
+│   ├── schema.sql            ← Esquema de la nube (tablas espejo + RLS)
+│   └── social-schema.sql     ← Esquema social (is_public, follows, likes, RLS pública)
 ├── android/                  ← Proyecto nativo Android (build.gradle: versionCode)
 └── assets/                   ← Iconos, wordmark, fuente Anton
 ```
