@@ -53,8 +53,9 @@ import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
 import { t, dateLocale } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
+  buildWorkoutImprovement,
   getExerciseStrengthScore,
-  getWorkoutStrengthScore,
+  hasScoringSets,
 } from '@lib/progress';
 
 interface DetailScreenProps {
@@ -306,12 +307,7 @@ export function DetailScreen({
   // del log) y totales de cardio. Da la respuesta "¿cómo fue?" de un vistazo sin
   // escanear todas las tarjetas.
   const exerciseCount = log.exercises?.length ?? 0;
-  const sessionImprovement = previousLog
-    ? buildImprovementFromStrengthScores(
-        getWorkoutStrengthScore(log),
-        getWorkoutStrengthScore(previousLog)
-      )
-    : null;
+  const sessionImprovement = buildWorkoutImprovement(log, previousLog);
   // Duración estimada: hueco entre el primer y el último ejercicio insertados
   // (cada ExerciseLog guarda su timestamp = created_at). Mide cuándo se
   // registró, no el tiempo real bajo la barra: si todo se mete al acabar, sale 0.
@@ -442,8 +438,11 @@ export function DetailScreen({
             exercise.name,
             exercise.order
           );
+          // Sin series válidas en alguno de los dos lados no hay comparación:
+          // un ejercicio que no se hizo salía como −100%, no como "sin dato".
           const exerciseImprovement =
-            (fallbackExercise || currentExercise) && prevExercise
+            hasScoringSets(fallbackExercise || currentExercise) &&
+            hasScoringSets(prevExercise)
               ? buildImprovementFromStrengthScores(
                   getExerciseStrengthScore(fallbackExercise || currentExercise),
                   getExerciseStrengthScore(prevExercise)

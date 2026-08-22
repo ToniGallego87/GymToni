@@ -62,6 +62,8 @@
 - Título de pantalla → prop `icon` de `GlassTopBar` (icono 18px + texto 20/800);
   `titleElement` solo para casos especiales (logo de Inicio, `DayAccentIcon` del día)
 - Botones de acción → `components/Button.tsx` (variants `primary`/`secondary`/`danger`)
+- Foto de perfil de un usuario → `components/Avatar.tsx` (solo se le pasa `uri` y
+  `size`); no volver a pintar `Image` + marcador a mano en cada pantalla social
 
 ## Formato de entrada (parsers)
 
@@ -76,13 +78,29 @@
 - Lógica pura y testeable en `lib/` (`parsers.ts`, `progress.ts`, `weeks.ts`, `cardio.ts`, `achievements.ts`, `utils.ts`); la persistencia (`storage.ts`, `persistence.ts`, `db/`) es la excepción con side effects
 - Side effects de UI solo en hooks o Context
 
+## Navegación y pager de pestañas
+
+- Navegación **por estado** en `app/App.tsx` (`setScreen`), no react-navigation.
+- Las 5 pestañas principales (`TAB_ORDER`) van en un **`PagerView` nativo**
+  (`react-native-pager-view`). **No** reintroducir un pager casero con
+  gesture-handler/reanimated: se probó y en MIUI el gesto se colgaba dejando la
+  vista a medias (detalle y sync estado↔pager en
+  [ARCHITECTURE.md](ARCHITECTURE.md#pager-de-pestañas-nativo)).
+- Un scroll vertical dentro de una pestaña debe **ceder el gesto horizontal** al
+  pager (patrón de `StretchScrollView`: `activeOffsetY` + `failOffsetX`).
+
 ## Lo que NO se hace
 
-- No login/auth/usuarios
-- No backend/cloud/sync
-- No Redux
-- No librerías UI externas (todo custom)
+- No Redux ni librerías externas de estado
+- **UI custom por defecto**: nada de librerías de componentes/estilo externas. Las
+  únicas dependencias no-custom permitidas son de comportamiento nativo, ya
+  presentes y justificadas: `react-native-gesture-handler`, `react-native-reanimated`
+  y `react-native-pager-view` (pager de pestañas). Añadir otra requiere justificarla.
 - No sobre-abstracciones (si solo se usa una vez, no crear helper)
+- Backend/cuentas/sync/social **ya NO están prohibidos**: son el epic de Supabase,
+  entregado por fases (offline-first, cuenta opcional). Fuente única del plan:
+  [docs/backend-design.md](docs/backend-design.md). No improvisar nube/login fuera
+  de ese plan.
 
 ## Tests
 

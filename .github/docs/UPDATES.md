@@ -1,5 +1,170 @@
 # UPDATES
 
+## Version 0.7.2 - 2026-08-22
+
+### Nuevas funcionalidades
+
+- **Ver una rutina de la comunidad antes de copiarla**
+  (`features/workout/PublicRoutineScreen.tsx` nueva): tocar una tarjeta del
+  tablón —o una rutina del perfil de otra persona— abre sus días y ejercicios en
+  SOLO lectura, con "Añadir a mis rutinas" como acción de la vista. Antes la
+  única forma de saber qué traía dentro era clonarla y borrarla si no gustaba.
+  `fetchPublicRoutine` deja de ser privada en `lib/cloud/social.ts` (la RLS de
+  `supabase/social-schema.sql` ya permitía leer días y ejercicios de una rutina
+  pública, así que no hubo que tocar el backend). Cableado en `app/App.tsx`
+  (pantalla `public-routine`, que recuerda si se abrió desde el tablón o desde
+  un perfil para volver ahí).
+- **Intensidad de una rutina (Suave / Medio / Intenso) y filtro en Comunidad**
+  (`lib/routines.ts`, `features/workout/CommunityScreen.tsx`): se deriva del
+  nº TOTAL de series por semana (suma de `targetSets` de todos los ejercicios de
+  todos los días), se pinta como distintivo en la tarjeta junto al nº de series y
+  se puede filtrar por tramo con un segundo `SegmentedFilter`. Cortes en 40 y 70
+  series/semana (`INTENSITY_SOFT_MAX` / `INTENSITY_MEDIUM_MAX`), con tests en
+  `lib/__tests__/routines.test.ts`. El total de series de cada rutina del tablón
+  llega en **dos consultas por lote** (`getRoutineSetTotals` en
+  `lib/cloud/social.ts`), lanzadas después de pintar la lista: si fallan, el
+  tablón se queda sin distintivo pero entero.
+- **Cambiar de pestaña arrastrando** (`app/App.tsx`, dependencia nueva
+  `react-native-pager-view`): además de la barra, ahora se pasa de una vista
+  principal a otra con un gesto horizontal (sigue el dedo, estilo Telegram). Las 5
+  pestañas viven en un **pager nativo** (ViewPager2), que gestiona el arrastre y el
+  asentamiento de forma nativa. Se descartó una implementación casera con
+  `react-native-gesture-handler` + `reanimated` porque en MIUI el gesto se quedaba
+  "colgado" emitiendo eventos fantasma y la vista quedaba a medias (ver
+  [[gymtoni-pager-nativo]]). `StretchScrollView` cede el gesto horizontal al pager
+  (`activeOffsetY`/`failOffsetX`) para que el rubber-band vertical no lo capture.
+- **Transición de barra de duración constante** (`app/App.tsx`): al tocar una
+  pestaña, la animación dura lo mismo sea cual sea la distancia. Como `setPage` de
+  ViewPager2 va a velocidad fija, en saltos de más de una pestaña se coloca sin
+  animación en la contigua y se anima solo el último tramo. Un guard
+  (`navTargetRef`/`pagerPageRef`) evita el bucle de realimentación pager↔estado con
+  toques rápidos.
+
+### Cambios
+
+- **"Datos" y "Cuenta y nube" pasan a ser una sola pantalla**
+  (`features/workout/DataScreen.tsx`; `features/workout/CloudScreen.tsx`
+  eliminada): había cuatro conceptos de copia repartidos entre dos pantallas y
+  dos botones casi homónimos con destinos distintos ("Hacer backup ahora" iba a
+  un fichero local, "Copia de seguridad ahora" a la nube). Ahora es "Datos y
+  nube", en tres bloques rotulados —**Tu cuenta** (sesión, sincronización),
+  **Copias de seguridad** (copia automática, "Guardar copia en el móvil", "Subir
+  copia a la nube", exportar) y **Reemplazar o borrar** (importar, restaurar de
+  la nube, borrar)— y el menú de Perfil tiene una entrada en vez de dos. No se
+  pierde ninguna acción: todas siguen ahí con el destino en el propio rótulo.
+- **El perfil público se edita desde Comunidad** (`features/workout/CommunityScreen.tsx`,
+  `features/workout/ProfileEditScreen.tsx`, `app/App.tsx`): la foto, el nombre
+  visible, la bio y el interruptor público/privado estaban escondidos dentro de
+  la pantalla de la copia de seguridad. Ahora se abren con un botón propio en la
+  barra de Comunidad, que es donde ese perfil se usa, y el "Volver" lleva ahí.
+- **Foto de perfil única** (`components/Avatar.tsx` nuevo): las cuatro pantallas
+  sociales pintaban su propio avatar y el mismo usuario salía distinto según
+  dónde lo miraras (gris en el tablón, con relleno dorado en su perfil, de otro
+  tamaño en las listas de seguir). Ahora solo cambia el diámetro. De paso, sus
+  tarjetas e inputs pasan de radios a pelo (20 / 12) a los tokens del tema
+  (`theme.borderRadius.lg` / `md`).
+- **La versión de la app deja de imprimirse tres veces**
+  (`features/workout/ProfileScreen.tsx`): se quita del pie de Perfil; sigue en
+  Inicio y en Configuración (junto a "Novedades", que es su sitio).
+- **Flechas de peso en pasos enteros** (`components/ExerciseInputField.tsx`): al
+  registrar una serie, las flechitas ▲▼ de peso suben/bajan de kilo en kilo (antes
+  0,25); si el valor tenía decimales, van al entero contiguo en el sentido pulsado.
+- **Revisión completa (revision-app, 2026-08-21)**: auditoría de la app entera.
+  El ROADMAP (`.github/docs/ROADMAP.md`) queda con 6 fichas pendientes: se
+  podaron las 6 aportadas por esta pasada porque se han implementado aquí mismo
+  (ficha de rutina pública, intensidad + filtro, fusión Datos/nube, perfil
+  público a Comunidad, `Avatar` compartido y los rótulos duplicados). Docs al día:
+  `ARCHITECTURE.md` (mapa de navegación), `SETUP.md` (mapa de archivos, nº de
+  tests) y `CONVENTIONS.md` (patrón `Avatar`); corregida la ruta obsoleta de
+  `COMMANDS.md` ("Proyectos Visual Studio Code" → "Projects").
+- **Revisión completa (revision-app anterior)**: ROADMAP reescrito
+  (`.github/docs/ROADMAP.md`) — podadas las fichas ya entregadas (barra de 5
+  pestañas, tema reactivo en Cuenta y nube, pull-to-refresh/like en Comunidad,
+  avatares en Storage); y actualizada la fecha de última revisión.
+- **Docs del repo al día** (`.github/ARCHITECTURE.md`, `.github/CONVENTIONS.md`):
+  documentado el pager de pestañas nativo (sync estado↔pager, transición de barra,
+  StretchScrollView cede el horizontal) y el mapa de navegación real (5 pestañas +
+  pantallas cloud/social). Corregida la sección "Lo que NO se hace" (backend/cloud
+  ya entregado; dependencias nativas permitidas y justificadas).
+
+### Correcciones
+
+- **La hero de "Semana completada" estiraba el carrusel** (`components/HeroCard.tsx`,
+  `HeroStatsCard.tsx`, `HeroWeightCard.tsx`): el marco era `minHeight: 172`, no una
+  altura fija, y esa variante es la única con subtítulo, así que crecía ~26px y el
+  carrusel daba un salto al cambiar de página. Ahora las tres tarjetas comparten
+  `HERO_CARD_HEIGHT` como altura EXACTA y la variante con subtítulo se compacta
+  para caber en la misma caja (icono 68→60, márgenes más apretados y el hueco de
+  abajo repartido) en vez de estirarla. El `paddingVertical` base baja a 10 para
+  que un título de dos líneas siga cabiendo ahora que la altura no cede.
+- **"Copia automática" partido en dos líneas** (`features/workout/DataScreen.tsx`):
+  los títulos de tarjeta de Datos y nube van en una fila junto a su icono, y
+  Android medía la caja del texto al ancho de su palabra más larga, así que el
+  título más largo de la pantalla se partía dejando media tarjeta vacía al lado.
+  El título pasa a ocupar el ancho que queda a la derecha del icono (`flex: 1`).
+- **Un ejercicio que no se hizo contaba como −100%** (`lib/progress.ts`,
+  `lib/weeks.ts`, `features/workout/DetailScreen.tsx`, `HomeScreen.tsx`,
+  `WorkoutLogScreen.tsx`): saltarse un ejercicio dejaba su tarjeta en −100% y,
+  peor, hundía el % de la sesión y el de la semana, porque su puntuación entraba
+  como un cero frente a la de la vez anterior. Ahora una sesión se compara con
+  otra contando SOLO los ejercicios registrados en las dos
+  (`getComparableWorkoutScores` / `buildWorkoutImprovement`, emparejando por
+  `exerciseId` y si no por nombre normalizado): el que hoy no se hizo queda
+  fuera de los dos lados —y el que se estrena tampoco cuenta como mejora
+  infinita—. Un ejercicio sin series válidas ya no pinta porcentaje en Detalle
+  ni mientras se registra, en vez de un −100%. La semana usa el mismo criterio
+  dentro de cada día. Tests en `lib/__tests__/progress.test.ts`.
+- **El % de la semana se disparaba (+76,8% con días al +3%)** (`lib/weeks.ts`,
+  `lib/achievements.ts`, `features/workout/HomeScreen.tsx`): la mejora de una
+  semana se medía contra el MISMO hueco de la semana de carga anterior, así que
+  un día que no se entrenó esa semana entraba en el denominador como un cero y
+  el porcentaje se inflaba (una semana completa contra otra a la que le faltaban
+  dos días daba +70% aunque cada día hubiera subido un 3%). Ahora cada día se
+  compara contra su ÚLTIMA sesión de ese día que no sea descarga, retrocediendo
+  las semanas que haga falta (`referenceLogsByDay`), que es el mismo criterio
+  del % de cada tarjeta de día: la cabecera de la semana vuelve a ser coherente
+  con lo que se ve debajo. Los días sin ninguna sesión previa quedan fuera de
+  los dos lados de la comparación, y si no hay ninguna referencia no se pinta
+  porcentaje (antes salía el 30% de estreno). Mismo arreglo en la gráfica y en
+  el % de la rutina (`buildWeekProgress`), donde la base pasa a ser la primera
+  sesión DE CADA DÍA en vez de los días de la primera semana. El póster de
+  logros usa ya la misma función (`improvementAgainstHistory`) para que tarjeta
+  y póster no puedan divergir. Tests nuevos en `lib/__tests__/weeks.test.ts`.
+- **Código muerto de la barra de navegación** (`app/App.tsx` y las 5 pantallas
+  de pestaña): desde que `FloatingPrimaryNav` es fija y vive en `app/App.tsx`
+  (fuera del pager), las pestañas ya no la montan. Quedaban 24 props
+  `onNavigate*` declaradas, desestructuradas y pasadas desde `App.tsx` sin que
+  nadie las usara, 5 imports de `FloatingPrimaryNav` y 5 `floatingNavBottom`
+  huérfanos. Fuera también `showCardioTab` (`HomeScreen`), los imports muertos
+  de `hasAnyCardio` (`CommunityScreen`, `ProfileScreen`) y el tipo
+  `PopularRoutine` sin usar. Verificado con `tsc --noUnusedLocals`.
+- **Helpers sin consumidores** (`lib/backup.ts`, `lib/supabaseConfig.ts`):
+  borradas `countLocalBackups` e `isSupabaseConfigured`, que no llamaba nadie.
+  Actualizada la cabecera de `backup.ts`, que seguía diciendo que la app es
+  "local-only" (hay nube opcional desde 0.7.0).
+- **Flechas +/- de peso y repeticiones más grandes**
+  (`components/ExerciseInputField.tsx`): las flechitas ▲▼ que hay junto a las
+  cajas de Peso y Repeticiones/Segundos se quedaban pequeñas y dejaban un hueco
+  muerto contra el número. La columna pasa de 34 a 44 de ancho (objetivo táctil
+  recomendado), la separación baja de 6 a 4 y el icono de 18 a 22; la caja
+  compensa el ancho reduciendo su padding lateral, así que sigue cabiendo el
+  mismo número de dígitos.
+- **Línea de la tarjeta de cardio visible** (`components/CardioInputField.tsx`):
+  la barra de acento izquierda iba a 3 mientras las tarjetas de ejercicio de la
+  misma pantalla van a 5, y se leía como una raya deslavazada; ahora comparten
+  grosor. El separador entre disciplinas ya registradas sube de 1 a 2 para que
+  la lista se lea como lista.
+- **% del día no compara contra una descarga** (`features/workout/HomeScreen.tsx`):
+  la tarjeta de cada día en Fuerza mostraba la mejora frente a la sesión anterior
+  del mismo día aunque esa cayera en una semana de deload (pesos rebajados a
+  propósito). Ahora `getPreviousFilledLogForSameDay` salta los logs de descarga y
+  usa como referencia la anterior de carga.
+- **Botón "Volver" unificado**: en Cuenta y nube, perfil de usuario y listas de
+  seguidos/seguidores el back button usaba `insets.bottom` crudo y quedaba más bajo
+  que en el resto de pantallas; ahora usa el mismo cálculo estándar
+  (`Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN`) en
+  `CloudScreen`, `UserProfileScreen` y `FollowingScreen`.
+
 ## Version 0.7.1 - 2026-08-16
 
 ### Nuevas funcionalidades

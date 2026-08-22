@@ -713,6 +713,9 @@ export function WorkoutLogScreen({
     previousLog: ExerciseLog | null
   ): { isImproved: boolean; percent: number } | null => {
     if (!previousLog) return null;
+    // Sin ninguna serie válida todavía no hay nada que comparar: un ejercicio
+    // que no se ha hecho salía en −100% en vez de quedarse sin dato.
+    if (!currentSets.some((set) => set.reps > 0)) return null;
 
     const currentScore = getTotalSetsStrengthScore(currentSets);
     const previousScore = getTotalSetsStrengthScore(

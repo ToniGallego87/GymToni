@@ -6,7 +6,6 @@ import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   DayAccentIcon,
-  FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
@@ -52,21 +51,11 @@ interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
   // Reabre la inserción de una sesión de solo cardio ya registrada (solo hoy).
   onEditCardioOnly?: (log: WorkoutLog) => void;
-  onNavigateHome?: () => void;
-  onNavigateCardio?: () => void;
-  onNavigateCalendar?: () => void;
-  onNavigateCommunity?: () => void;
-  onNavigateProfile?: () => void;
 }
 
 export function CalendarScreen({
   onSelectLog,
   onEditCardioOnly,
-  onNavigateHome,
-  onNavigateCardio,
-  onNavigateCalendar,
-  onNavigateCommunity,
-  onNavigateProfile,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -100,8 +89,7 @@ export function CalendarScreen({
   const [mode, setMode] = useState<CalendarMode>('fuerza');
   const cardioAvailable = hasAnyCardio(state.logs);
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const { bottom: floatingNavBottom, scrollBottomPadding } =
-    getFloatingPrimaryNavMetrics(insets.bottom);
+  const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
 
   const getDayById = (dayId: string) =>
     findDayInRoutines(state.routines, dayId);

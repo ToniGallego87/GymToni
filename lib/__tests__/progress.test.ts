@@ -1,10 +1,12 @@
 import {
+  buildWorkoutImprovement,
   getEstimatedOneRepMax,
   getTotalSetsStrengthScore,
   buildImprovementFromStrengthScores,
   BODYWEIGHT_VIRTUAL_LOAD,
   FIRST_TIME_IMPROVEMENT_PERCENT,
 } from '../progress';
+import { ParsedSet, WorkoutLog } from '../../types';
 
 describe('getEstimatedOneRepMax (Epley)', () => {
   it('devuelve 0 con reps no válidas', () => {
@@ -98,5 +100,68 @@ describe('buildImprovementFromStrengthScores', () => {
     const result = buildImprovementFromStrengthScores(90, 100);
     expect(result?.isImproved).toBe(false);
     expect(result?.percent).toBeCloseTo(10, 5);
+  });
+});
+
+describe('buildWorkoutImprovement', () => {
+  const set = (weight: number) => ({ weight, reps: 10 } as ParsedSet);
+
+  const makeLog = (
+    id: string,
+    exercises: { exerciseId: string; sets: ParsedSet[] }[]
+  ): WorkoutLog =>
+    ({
+      id,
+      routineId: 'r1',
+      dayId: 'd1',
+      date: '2026-08-21',
+      createdAt: 1,
+      updatedAt: 1,
+      exercises: exercises.map((exercise, index) => ({
+        id: `${id}-${index}`,
+        exerciseId: exercise.exerciseId,
+        exerciseName: exercise.exerciseId,
+        order: index + 1,
+        rawInput: '',
+        parsedSets: exercise.sets,
+        timestamp: 1,
+      })),
+    } as WorkoutLog);
+
+  it('un ejercicio que hoy no se hizo no cuenta como −100%', () => {
+    const previous = makeLog('p', [
+      { exerciseId: 'press', sets: [set(100)] },
+      { exerciseId: 'remo', sets: [set(100)] },
+    ]);
+    // Hoy el remo se dejó a cero series: no debe hundir el porcentaje.
+    const current = makeLog('c', [
+      { exerciseId: 'press', sets: [set(110)] },
+      { exerciseId: 'remo', sets: [] },
+    ]);
+
+    const improvement = buildWorkoutImprovement(current, previous);
+    expect(improvement?.isImproved).toBe(true);
+    expect(improvement?.percent).toBeCloseTo(9.090909, 5);
+  });
+
+  it('un ejercicio nuevo tampoco infla el porcentaje', () => {
+    const previous = makeLog('p', [{ exerciseId: 'press', sets: [set(100)] }]);
+    const current = makeLog('c', [
+      { exerciseId: 'press', sets: [set(110)] },
+      { exerciseId: 'peso muerto', sets: [set(200)] },
+    ]);
+
+    expect(buildWorkoutImprovement(current, previous)?.percent).toBeCloseTo(
+      9.090909,
+      5
+    );
+  });
+
+  it('sin ejercicios en común no hay porcentaje', () => {
+    const previous = makeLog('p', [{ exerciseId: 'press', sets: [set(100)] }]);
+    const current = makeLog('c', [{ exerciseId: 'sentadilla', sets: [set(100)] }]);
+
+    expect(buildWorkoutImprovement(current, previous)).toBeNull();
+    expect(buildWorkoutImprovement(current, null)).toBeNull();
   });
 });

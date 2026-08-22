@@ -15,6 +15,7 @@ import { theme } from '@lib/theme';
 import { fmtNum } from '@lib/cardio';
 import { t } from '@lib/i18n';
 import { HERO_ARROW_INSET } from './HeroCarousel';
+import { HERO_CARD_HEIGHT } from './HeroCard';
 
 // A partir de cuántos pesos del histórico tiene sentido dibujar la evolución, y
 // cuántos de los últimos se pintan como máximo.
@@ -221,7 +222,7 @@ const makeStyles = () =>
       // el bloque y aparta la gráfica de los puntitos del carrusel.
       paddingTop: 14,
       paddingBottom: 24,
-      minHeight: 172,
+      height: HERO_CARD_HEIGHT,
       justifyContent: 'center',
       overflow: 'hidden',
     },

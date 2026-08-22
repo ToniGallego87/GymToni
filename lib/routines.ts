@@ -53,3 +53,46 @@ export function duplicateRoutine(
     })),
   };
 }
+
+// ─────────────────────── Intensidad de una rutina ───────────────────────
+//
+// Se deriva del nº TOTAL de series planificadas por semana: la suma de
+// `targetSets` de todos los ejercicios de todos los días. El dato ya vive en el
+// plan (no hay que pedir nada nuevo al usuario) y es lo que de verdad decide si
+// una rutina cabe en tu semana, así que sirve tanto de distintivo en el tablón
+// de Comunidad como de filtro.
+
+export type RoutineIntensity = 'soft' | 'medium' | 'hard';
+
+// Cortes en series/semana. Referencia de volumen habitual: por debajo de ~40 la
+// semana es de mantenimiento, entre 40 y 70 está la mayoría de rutinas de
+// hipertrofia, y por encima de 70 es alto volumen.
+export const INTENSITY_SOFT_MAX = 40;
+export const INTENSITY_MEDIUM_MAX = 70;
+
+/** Series planificadas en toda la rutina (todos los días, todos los ejercicios). */
+export function countRoutineSets(routine: WorkoutRoutine): number {
+  return routine.days.reduce(
+    (total, day) =>
+      total +
+      day.exercises.reduce(
+        (sum, exercise) => sum + (exercise.targetSets ?? 0),
+        0
+      ),
+    0
+  );
+}
+
+/** Tramo de intensidad para un total de series semanales. */
+export function routineIntensity(totalSets: number): RoutineIntensity {
+  if (totalSets <= INTENSITY_SOFT_MAX) return 'soft';
+  if (totalSets <= INTENSITY_MEDIUM_MAX) return 'medium';
+  return 'hard';
+}
+
+/** Etiqueta traducida del tramo (la que se pinta en el distintivo y el filtro). */
+export function intensityLabel(level: RoutineIntensity): string {
+  if (level === 'soft') return t('Suave');
+  if (level === 'medium') return t('Medio');
+  return t('Intenso');
+}

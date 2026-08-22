@@ -5,18 +5,11 @@ import {
   Platform,
   StatusBar,
   StyleSheet,
-  useWindowDimensions,
   View,
 } from 'react-native';
-import Animated, {
-  Easing,
-  SharedValue,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import PagerView from 'react-native-pager-view';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
@@ -27,8 +20,9 @@ const Notifications: typeof import('expo-notifications') | null =
 import {
   CalendarScreen,
   CardioScreen,
-  CloudScreen,
+  ProfileEditScreen,
   CommunityScreen,
+  PublicRoutineScreen,
   UserProfileScreen,
   FollowingScreen,
   DataScreen,
@@ -107,11 +101,22 @@ type Screen =
   | { type: 'profile' }
   | { type: 'settings' }
   | { type: 'data' }
-  | { type: 'cloud' }
+  | { type: 'profile-edit' }
   | { type: 'community' }
-  | { type: 'following'; back: 'community' | 'cloud' }
-  | { type: 'followers'; back: 'community' | 'cloud' }
+  | { type: 'following'; back: 'community' | 'profile-edit' }
+  | { type: 'followers'; back: 'community' | 'profile-edit' }
   | { type: 'user-profile'; userId: string; name: string }
+  | {
+      // Consulta de una rutina PÚBLICA (solo lectura) antes de copiarla.
+      type: 'public-routine';
+      routineId: string;
+      name: string;
+      authorName?: string;
+      // Vista desde la que se abrió, para volver a ella y no siempre al tablón.
+      back:
+        | { type: 'community' }
+        | { type: 'user-profile'; userId: string; name: string };
+    }
   | {
       type: 'exercise-progress';
       // Ejercicio preseleccionado al abrir la evolución desde el detalle de un día.
@@ -146,41 +151,6 @@ const TAB_ORDER = [
 ] as const;
 type TabType = (typeof TAB_ORDER)[number];
 
-// Capa de una pestaña en el "pager": se traslada en horizontal según su distancia
-// a la pestaña activa (`pos` animado), dando el deslizamiento estilo Telegram. Las
-// pestañas quedan montadas (keep-alive); solo la activa recibe toques.
-function TabSlide({
-  index,
-  pos,
-  width,
-  active,
-  hidden,
-  children,
-}: {
-  index: number;
-  pos: SharedValue<number>;
-  width: number;
-  active: boolean;
-  // En subpantallas el pager entero se saca de pantalla (sin desmontarlo) para
-  // que ninguna pestaña tape la subpantalla, sea cual sea el orden del JSX.
-  hidden: boolean;
-  children: React.ReactNode;
-}) {
-  const style = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: hidden ? width * 2 : (index - pos.value) * width },
-    ],
-  }));
-  return (
-    <Animated.View
-      style={[StyleSheet.absoluteFill, style]}
-      pointerEvents={active ? 'auto' : 'none'}
-    >
-      {children}
-    </Animated.View>
-  );
-}
-
 function AppContent() {
   const { dispatch, state } = useWorkout();
   // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
@@ -192,12 +162,17 @@ function AppContent() {
   // plano, de modo que la primera entrada a cualquiera ya sea instantánea.
   const [warmTabs, setWarmTabs] = useState(false);
   const insets = useSafeAreaInsets();
-  const { width: screenWidth } = useWindowDimensions();
-  // Pager de pestañas: índice de la activa (-1 en subpantallas) y valor animado
-  // que desliza entre vistas (estilo Telegram, barra inferior fija).
+  // Índice de la pestaña activa (-1 en subpantallas, donde el pager queda tapado).
   const tabIndex = TAB_ORDER.indexOf(screen.type as TabType);
   const isTab = tabIndex >= 0;
-  const pos = useSharedValue(0);
+  // Pager NATIVO (react-native-pager-view / ViewPager2): gestiona el arrastre
+  // horizontal y el asentamiento de forma nativa, sin pasar por el hilo JS ni por
+  // react-native-gesture-handler (el enfoque casero se colgaba por un bug de
+  // gestos del dispositivo). `pagerRef.setPageWithoutAnimation` mueve a la
+  // pestaña tocada en la barra; el swipe dispara `onPageSelected`.
+  const pagerRef = React.useRef<PagerView>(null);
+  // La barra oculta la pestaña de cardio si no hay ningún cardio.
+  const showCardio = hasAnyCardio(state.logs);
   // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
   // que esto es true, para no pintar primero los datos semilla y saltar luego
   // a los reales (el "carga a trompicones" del arranque).
@@ -335,15 +310,44 @@ function AppContent() {
     return () => task.cancel();
   }, [hydrated]);
 
-  // Al cambiar de pestaña, desliza el pager hacia ella. En subpantallas no se
-  // toca (se queda en la última pestaña, tapada por la subpantalla).
+  // Cambia de pestaña por índice de TAB_ORDER (lo llama el swipe del pager).
+  const goToTabIndex = React.useCallback((i: number) => {
+    setScreen({ type: TAB_ORDER[i] });
+  }, []);
+
+  // Página real en la que está el pager (la actualiza onPageSelected). Sirve para
+  // que la sincronización con `tabIndex` NO haga nada si ya coincide (evita el
+  // bucle de realimentación pager↔estado con toques rápidos en la barra).
+  const pagerPageRef = React.useRef(0);
+  // Destino de una navegación PROGRAMÁTICA en curso (toque en la barra). Mientras
+  // está fijado, onPageSelected ignora los eventos intermedios (los del salto de
+  // tramo) y solo lo limpia al llegar al destino. Así el swipe del usuario (con
+  // esto a null) es lo único que empuja el estado.
+  const navTargetRef = React.useRef<number | null>(null);
+
+  // Sincroniza el pager con la pestaña activa cuando el cambio NO viene del
+  // propio swipe (toque en la barra, volver de una subpantalla, deep link…).
+  //
+  // La animación de `setPage` de ViewPager2 va a velocidad fija, así que tardaría
+  // más cuanto más lejos esté la pestaña. Para que la transición dure LO MISMO
+  // sea cual sea la distancia, cuando el salto es de más de una pestaña se salta
+  // sin animación hasta la contigua y se anima solo el último tramo (una pestaña).
   useEffect(() => {
     if (tabIndex < 0) return;
-    pos.value = withTiming(tabIndex, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-    });
-  }, [tabIndex, pos]);
+    const pager = pagerRef.current;
+    if (!pager) return;
+    // Ya está en esa página (p. ej. el estado cambió por un swipe): no tocar.
+    if (pagerPageRef.current === tabIndex) return;
+    const from = pagerPageRef.current;
+    navTargetRef.current = tabIndex;
+    if (Math.abs(tabIndex - from) > 1) {
+      // Salto lejano: colócate instantáneo junto al destino y anima 1 tramo.
+      pager.setPageWithoutAnimation(tabIndex + (tabIndex > from ? -1 : 1));
+      requestAnimationFrame(() => pagerRef.current?.setPage(tabIndex));
+    } else {
+      pager.setPage(tabIndex);
+    }
+  }, [tabIndex]);
 
   // Navegación "atrás" compartida entre el botón físico de Android y el
   // "Volver" en pantalla de cada vista: una sola función por pantalla para
@@ -404,13 +408,18 @@ function AppContent() {
               return true;
             case 'settings':
             case 'data':
-            case 'cloud':
               goProfile();
+              return true;
+            case 'profile-edit':
+              setScreen({ type: 'community' });
               return true;
             case 'following':
             case 'followers':
               setScreen({ type: screen.back });
               return true;
+            case 'public-routine':
+              setScreen(screen.back);
+              break;
             case 'user-profile':
               setScreen({ type: 'community' });
               return true;
@@ -664,21 +673,15 @@ function AppContent() {
   // (useDeferredReady), para no bloquear al calentarse. El registro guarda las
   // series en estado local (no despacha por serie), así que tenerlas de fondo no
   // recalcula durante el entreno.
+  // Cada página del PagerView. El contenido se monta al calentar o si es la
+  // activa (al arrancar solo la activa; las demás esperan a warmTabs), pero el
+  // View-página va SIEMPRE para que el pager mantenga sus 5 índices.
   const tabLayer = (type: TabType, node: React.ReactNode) => {
     const active = screen.type === type;
-    // Al arrancar solo se monta la pestaña activa; las demás esperan a warmTabs.
-    if (!active && !warmTabs) return null;
     return (
-      <TabSlide
-        key={type}
-        index={TAB_ORDER.indexOf(type)}
-        pos={pos}
-        width={screenWidth}
-        active={active}
-        hidden={!isTab}
-      >
-        {node}
-      </TabSlide>
+      <View key={type} style={styles.pagerPage} collapsable={false}>
+        {active || warmTabs ? node : null}
+      </View>
     );
   };
 
@@ -689,6 +692,137 @@ function AppContent() {
         entry={whatsNewEntry}
         onClose={handleCloseWhatsNew}
       />
+
+      {/* Pager de pestañas NATIVO (react-native-pager-view): las 5 vistas
+          principales. El arrastre y el asentamiento los gestiona ViewPager2 de
+          forma nativa. Va lo PRIMERO del árbol: cualquier subpantalla se renderiza
+          después (encima) y, siendo opaca a pantalla completa, la tapa. El scroll
+          horizontal solo se habilita en pestañas (no en subpantallas). */}
+      <PagerView
+        ref={pagerRef}
+        style={StyleSheet.absoluteFill}
+        initialPage={0}
+        scrollEnabled={isTab}
+        offscreenPageLimit={4}
+        onPageSelected={(e) => {
+          const p = e.nativeEvent.position;
+          pagerPageRef.current = p;
+          if (navTargetRef.current !== null) {
+            // Navegación programática (barra): ignora intermedios; limpia al
+            // llegar al destino. No empuja el estado (ya lo hizo el toque).
+            if (p === navTargetRef.current) navTargetRef.current = null;
+            return;
+          }
+          // Swipe real del usuario: sincroniza el estado con la página.
+          if (isTab && p !== tabIndex) goToTabIndex(p);
+        }}
+      >
+        {tabLayer(
+          'home',
+          <HomeScreen
+            onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
+            onSelectLog={(log, day) =>
+              setScreen({ type: 'detail', log, day, origin: 'home' })
+            }
+            onEditLog={(log, day) =>
+              setScreen({ type: 'workout-log', day, log })
+            }
+            onOpenDaySelector={() => {
+              if (displayedRoutine?.days.length) {
+                setScreen({ type: 'day-selector' });
+              } else {
+                setScreen({ type: 'new-routine' });
+              }
+            }}
+            onOpenRoutineSelector={() =>
+              setScreen({ type: 'routine-selector', origin: 'home' })
+            }
+            onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+            onShowWeekAchievement={(achievements, routineName) =>
+              setScreen({
+                type: 'week-achievement',
+                achievements,
+                routineName,
+              })
+            }
+          />
+        )}
+
+        {tabLayer(
+          'cardio',
+          <CardioScreen
+            onSelectLog={(log, day) =>
+              setScreen({ type: 'detail', log, day, origin: 'cardio' })
+            }
+            onInsertCardioOnly={() =>
+              setScreen({
+                type: 'workout-log',
+                day: CARDIO_ONLY_DAY,
+                cardioOnly: true,
+                origin: 'cardio',
+              })
+            }
+          />
+        )}
+
+        {tabLayer(
+          'calendar',
+          <CalendarScreen
+            onSelectLog={(log, day) =>
+              setScreen({ type: 'detail', log, day, origin: 'calendar' })
+            }
+            onEditCardioOnly={(log) =>
+              setScreen({
+                type: 'workout-log',
+                day: CARDIO_ONLY_DAY,
+                log,
+                cardioOnly: true,
+                origin: 'calendar',
+              })
+            }
+          />
+        )}
+
+        {tabLayer(
+          'community',
+          <CommunityScreen
+            active={screen.type === 'community'}
+            onOpenProfile={(userId, name) =>
+              setScreen({ type: 'user-profile', userId, name })
+            }
+            onOpenRoutine={(routineId, name, authorName) =>
+              setScreen({
+                type: 'public-routine',
+                routineId,
+                name,
+                authorName,
+                back: { type: 'community' },
+              })
+            }
+            onOpenProfileEdit={() => setScreen({ type: 'profile-edit' })}
+            onOpenFollowing={() =>
+              setScreen({ type: 'following', back: 'community' })
+            }
+            onOpenFollowers={() =>
+              setScreen({ type: 'followers', back: 'community' })
+            }
+          />
+        )}
+
+        {tabLayer(
+          'profile',
+          <ProfileScreen
+            onOpenRoutines={() =>
+              setScreen({ type: 'routine-selector', origin: 'profile' })
+            }
+            onOpenExerciseProgress={() =>
+              setScreen({ type: 'exercise-progress' })
+            }
+            onOpenData={() => setScreen({ type: 'data' })}
+            onOpenSettings={() => setScreen({ type: 'settings' })}
+          />
+        )}
+      </PagerView>
 
       {screen.type === 'routine-selector' && (
         <RoutineSelectorScreen
@@ -702,58 +836,6 @@ function AppContent() {
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
           // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
           onBack={() => backFromRoutineSelector(screen.origin)}
-        />
-      )}
-
-      {tabLayer(
-        'home',
-        <HomeScreen
-          onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
-          onSelectLog={(log, day) =>
-            setScreen({ type: 'detail', log, day, origin: 'home' })
-          }
-          onEditLog={(log, day) => setScreen({ type: 'workout-log', day, log })}
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateCommunity={() => setScreen({ type: 'community' })}
-          onNavigateProfile={() => setScreen({ type: 'profile' })}
-          onOpenDaySelector={() => {
-            if (displayedRoutine?.days.length) {
-              setScreen({ type: 'day-selector' });
-            } else {
-              setScreen({ type: 'new-routine' });
-            }
-          }}
-          onOpenRoutineSelector={() =>
-            setScreen({ type: 'routine-selector', origin: 'home' })
-          }
-          onCreateRoutine={() => setScreen({ type: 'new-routine' })}
-          onShowWeekAchievement={(achievements, routineName) =>
-            setScreen({ type: 'week-achievement', achievements, routineName })
-          }
-        />
-      )}
-
-      {tabLayer(
-        'cardio',
-        <CardioScreen
-          onSelectLog={(log, day) =>
-            setScreen({ type: 'detail', log, day, origin: 'cardio' })
-          }
-          onInsertCardioOnly={() =>
-            setScreen({
-              type: 'workout-log',
-              day: CARDIO_ONLY_DAY,
-              cardioOnly: true,
-              origin: 'cardio',
-            })
-          }
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateCommunity={() => setScreen({ type: 'community' })}
-          onNavigateProfile={() => setScreen({ type: 'profile' })}
         />
       )}
 
@@ -821,80 +903,17 @@ function AppContent() {
         />
       )}
 
-      {tabLayer(
-        'calendar',
-        <CalendarScreen
-          onSelectLog={(log, day) =>
-            setScreen({ type: 'detail', log, day, origin: 'calendar' })
-          }
-          onEditCardioOnly={(log) =>
-            setScreen({
-              type: 'workout-log',
-              day: CARDIO_ONLY_DAY,
-              log,
-              cardioOnly: true,
-              origin: 'calendar',
-            })
-          }
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateCommunity={() => setScreen({ type: 'community' })}
-          onNavigateProfile={() => setScreen({ type: 'profile' })}
-        />
-      )}
-
-      {tabLayer(
-        'profile',
-        <ProfileScreen
-          onOpenRoutines={() =>
-            setScreen({ type: 'routine-selector', origin: 'profile' })
-          }
-          onOpenExerciseProgress={() =>
-            setScreen({ type: 'exercise-progress' })
-          }
-          onOpenData={() => setScreen({ type: 'data' })}
-          onOpenCloud={() => setScreen({ type: 'cloud' })}
-          onOpenSettings={() => setScreen({ type: 'settings' })}
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateCommunity={() => setScreen({ type: 'community' })}
-          onNavigateProfile={() => setScreen({ type: 'profile' })}
-        />
-      )}
-
       {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
 
-      {screen.type === 'cloud' && (
-        <CloudScreen
-          onBack={goProfile}
+      {screen.type === 'profile-edit' && (
+        <ProfileEditScreen
+          onBack={() => setScreen({ type: 'community' })}
           onOpenFollowing={() =>
-            setScreen({ type: 'following', back: 'cloud' })
+            setScreen({ type: 'following', back: 'profile-edit' })
           }
           onOpenFollowers={() =>
-            setScreen({ type: 'followers', back: 'cloud' })
+            setScreen({ type: 'followers', back: 'profile-edit' })
           }
-        />
-      )}
-
-      {tabLayer(
-        'community',
-        <CommunityScreen
-          active={screen.type === 'community'}
-          onOpenProfile={(userId, name) =>
-            setScreen({ type: 'user-profile', userId, name })
-          }
-          onOpenFollowing={() =>
-            setScreen({ type: 'following', back: 'community' })
-          }
-          onOpenFollowers={() =>
-            setScreen({ type: 'followers', back: 'community' })
-          }
-          onNavigateHome={() => setScreen({ type: 'home' })}
-          onNavigateCardio={() => setScreen({ type: 'cardio' })}
-          onNavigateCalendar={() => setScreen({ type: 'calendar' })}
-          onNavigateProfile={() => setScreen({ type: 'profile' })}
         />
       )}
 
@@ -923,6 +942,28 @@ function AppContent() {
           userId={screen.userId}
           name={screen.name}
           onBack={() => setScreen({ type: 'community' })}
+          onOpenRoutine={(routineId, name, authorName) =>
+            setScreen({
+              type: 'public-routine',
+              routineId,
+              name,
+              authorName,
+              back: {
+                type: 'user-profile',
+                userId: screen.userId,
+                name: screen.name,
+              },
+            })
+          }
+        />
+      )}
+
+      {screen.type === 'public-routine' && (
+        <PublicRoutineScreen
+          routineId={screen.routineId}
+          name={screen.name}
+          authorName={screen.authorName}
+          onBack={() => setScreen(screen.back)}
         />
       )}
 
@@ -994,7 +1035,7 @@ function AppContent() {
         <FloatingPrimaryNav
           bottom={getFloatingPrimaryNavMetrics(insets.bottom).bottom}
           activeTab={screen.type as TabType}
-          showCardio={hasAnyCardio(state.logs)}
+          showCardio={showCardio}
           onPressHome={() => setScreen({ type: 'home' })}
           onPressCardio={() => setScreen({ type: 'cardio' })}
           onPressCalendar={() => setScreen({ type: 'calendar' })}
@@ -1054,6 +1095,10 @@ const makeStyles = () =>
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
+    },
+    // Cada página del PagerView ocupa toda la vista.
+    pagerPage: {
+      flex: 1,
     },
   });
 

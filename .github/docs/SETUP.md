@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (15 suites, 181 tests)
+npm test           # Jest sobre lib/ (15 suites, 190 tests)
 npm run format     # Prettier
 ```
 
@@ -52,6 +52,7 @@ GymToni/
 │   ├── ExerciseFormRow.tsx   ← Edición de un ejercicio (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
 │   ├── GymIcon.tsx / DayAccentIcon.tsx ← Iconos de grupo muscular por día
+│   ├── Avatar.tsx            ← Foto de perfil (fuente única de las pantallas sociales)
 │   ├── AchievementPoster.tsx ← Póster SVG de logros semanales (imagen/vídeo)
 │   ├── WhatsNewModal.tsx     ← Popup de novedades tras actualizar
 │   └── Toast.tsx, GradientFill.tsx, AnimatedCounter.tsx, StretchScrollView.tsx…
@@ -64,9 +65,12 @@ GymToni/
 │   ├── DetailScreen.tsx      ← Detalle de una sesión guardada
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
-│   ├── DataScreen.tsx        ← Exportar / importar / limpiar datos
-│   ├── CloudScreen.tsx       ← Cuenta y nube: login, perfil público, backup/restore y sync
-│   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, buscar usuarios
+│   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
+│   ├── ProfileScreen.tsx     ← Perfil (pestaña): resumen + menú (rutinas, progreso, datos, ajustes)
+│   ├── SettingsScreen.tsx    ← Configuración: tema, idioma y novedades
+│   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
+│   ├── PublicRoutineScreen.tsx ← Rutina ajena en solo lectura (antes de copiarla)
+│   ├── ProfileEditScreen.tsx ← Perfil público propio (se abre desde Comunidad)
 │   ├── UserProfileScreen.tsx / FollowingScreen.tsx ← Perfil de otro y listas de seguir/seguidores
 │   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx / QRScannerScreen.tsx
 │   └── WeekAchievementScreen.tsx ← Compartir logros semanales
@@ -105,8 +109,8 @@ GymToni/
 
 - **Nativo**: SQLite (`gymbro.db`) con escrituras granulares por acción.
 - **Web**: JSON en localStorage con debounce.
-- Backup manual: pantalla Datos → Exportar/Importar (JSON con historial de peso corporal).
-- **Nube (opcional, desde 0.7.0)**: pantalla Cuenta y nube → cuenta Supabase,
+- Backup manual: pantalla Datos y nube → Exportar/Importar (JSON con historial de peso corporal).
+- **Nube (opcional, desde 0.7.0)**: misma pantalla, bloque de cuenta → cuenta Supabase,
   copia/restauración completa y **sincronización incremental** entre dispositivos
   sobre `sync_outbox` (`lib/cloud/sync.ts`; solo nativo). Plan en
   [backend-design.md](backend-design.md).

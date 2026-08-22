@@ -1,4 +1,12 @@
-import { buildCopyName, duplicateRoutine } from '../routines';
+import {
+  buildCopyName,
+  countRoutineSets,
+  duplicateRoutine,
+  intensityLabel,
+  routineIntensity,
+  INTENSITY_MEDIUM_MAX,
+  INTENSITY_SOFT_MAX,
+} from '../routines';
 import { WorkoutRoutine } from '../../types';
 
 const routine: WorkoutRoutine = {
@@ -99,5 +107,34 @@ describe('duplicateRoutine', () => {
     duplicateRoutine(routine, []);
 
     expect(routine).toEqual(snapshot);
+  });
+});
+
+describe('intensidad por nº total de series', () => {
+  it('countRoutineSets suma los targetSets de todos los días', () => {
+    // La rutina de arriba: 4 series en e1, y e2/e3 sin targetSets (no suman).
+    expect(countRoutineSets(routine)).toBe(4);
+  });
+
+  it('los ejercicios sin targetSets no cuentan', () => {
+    const sinSeries: WorkoutRoutine = {
+      ...routine,
+      days: [{ ...routine.days[1] }],
+    };
+    expect(countRoutineSets(sinSeries)).toBe(0);
+  });
+
+  it('los tramos parten en los cortes documentados', () => {
+    expect(routineIntensity(0)).toBe('soft');
+    expect(routineIntensity(INTENSITY_SOFT_MAX)).toBe('soft');
+    expect(routineIntensity(INTENSITY_SOFT_MAX + 1)).toBe('medium');
+    expect(routineIntensity(INTENSITY_MEDIUM_MAX)).toBe('medium');
+    expect(routineIntensity(INTENSITY_MEDIUM_MAX + 1)).toBe('hard');
+  });
+
+  it('cada tramo tiene su etiqueta', () => {
+    expect(intensityLabel('soft')).toBe('Suave');
+    expect(intensityLabel('medium')).toBe('Medio');
+    expect(intensityLabel('hard')).toBe('Intenso');
   });
 });

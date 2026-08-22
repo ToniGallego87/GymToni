@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { HERO_ARROW_INSET } from './HeroCarousel';
+import { HERO_CARD_HEIGHT } from './HeroCard';
 
 export interface HeroStat {
   value: string;
@@ -133,7 +134,7 @@ const makeStyles = () =>
       // extra lo sube en bloque y deja respirar la fila de datos frente a los
       // puntitos del carrusel (que van a 10px del borde inferior de la tarjeta).
       paddingBottom: 24,
-      minHeight: 172,
+      height: HERO_CARD_HEIGHT,
       justifyContent: 'center',
       overflow: 'hidden',
       ...theme.shadow.card,

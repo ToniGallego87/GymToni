@@ -9,6 +9,22 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.2',
+    items: [
+      'Llega Comunidad: un tablón con las rutinas más populares de otras personas, y puedes añadir a las tuyas la que quieras con un toque.',
+      'Ahora puedes ver una rutina entera antes de copiarla: sus días y sus ejercicios, sin tener que añadirla para curiosear.',
+      'Puedes compartir tus propias rutinas para que otros las usen.',
+      'Sigue a otras personas, mira sus perfiles y sus rutinas, busca gente por su nombre y ponte tu foto de perfil (ahora se edita desde la propia Comunidad).',
+      'Cada rutina de la comunidad indica si es Suave, Media o Intensa, y puedes filtrar el tablón para ver solo las que te encajan.',
+      'El porcentaje de mejora de la semana vuelve a ser fiable: cada día se compara con tu último entrenamiento real de ese mismo día. Se acabó ver un +76% cuando tus días suben un 3%.',
+      'Saltarte un ejercicio ya no te penaliza: antes contaba como un -100% y hundía el resultado del día y de la semana. Ahora simplemente no cuenta.',
+      'La app se maneja mejor: puedes cambiar de pestaña arrastrando el dedo, y el cambio es fluido e instantáneo.',
+      'Tus copias de seguridad están todas en un mismo sitio, "Datos y nube", con tres bloques claros: tu cuenta, tus copias y las opciones de restaurar o borrar.',
+      'Detalles que se ven mejor: la tarjeta de "Semana completada" ya no da un salto al pasar de una a otra, los títulos ya no se parten en dos líneas, y las flechitas de peso y repeticiones son más grandes y fáciles de tocar (el peso sube y baja de kilo en kilo).',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.7.1',
     items: [
       'Llega Comunidad: descubre rutinas de otras personas en un tablón de las más populares y añade la que quieras a las tuyas con un toque.',

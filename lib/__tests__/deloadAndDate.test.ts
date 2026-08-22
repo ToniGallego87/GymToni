@@ -2,7 +2,6 @@ import {
   assignmentDuplicatesDayInWeek,
   buildWeekProgress,
   isDeloadBlock,
-  previousLoadBlock,
   groupLogsIntoWeekBlocks,
 } from '../weeks';
 import { combineDateWithTime } from '../utils';
@@ -80,23 +79,6 @@ describe('isDeloadBlock', () => {
   it('marca el bloque si algún log lleva isDeload', () => {
     expect(isDeloadBlock([makeLog('a', 1, 0)])).toBe(false);
     expect(isDeloadBlock([makeLog('a', 1, 0, { isDeload: true })])).toBe(true);
-  });
-});
-
-describe('previousLoadBlock', () => {
-  it('salta las semanas de descarga al elegir la anterior', () => {
-    // Semana 1 (carga), semana 2 (descarga), semana 3 (carga).
-    const logs = [
-      makeLog('a', 1, 0),
-      makeLog('b', 1, 7, { isDeload: true }),
-      makeLog('c', 1, 14),
-    ];
-    const blocks = groupLogsIntoWeekBlocks(logs, dayNumberOf);
-    // Para la semana 3, la anterior de carga es la 1 (no la 2, que es deload).
-    expect(previousLoadBlock(blocks, 3)).toBe(1);
-    // Para la semana 2 (deload), la anterior de carga es la 1.
-    expect(previousLoadBlock(blocks, 2)).toBe(1);
-    expect(previousLoadBlock(blocks, 1)).toBeNull();
   });
 });
 

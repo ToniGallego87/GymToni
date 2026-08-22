@@ -1,13 +1,13 @@
 // Backup automático local: escritura silenciosa y periódica del JSON de la app
 // en una carpeta persistente del dispositivo, sin cloud ni diálogo de compartir.
-// La app es local-only, así que esto es la única red de seguridad frente a un
-// móvil perdido sin depender de que el usuario exporte a mano.
+// Es la red de seguridad que NO depende de tener cuenta: la nube (opcional,
+// desde 0.7.0) cubre la sincronización entre móviles, pero sin sesión esto es lo
+// único que salva los datos de un móvil perdido sin exportar a mano.
 //
 // El payload es EL MISMO que el export manual (lo arma App.tsx): aquí solo se
 // orquesta el "cada cuánto" y el "dónde", reutilizando lib/fileIO.ts.
 import {
   canWriteLocalBackup,
-  listLocalBackups,
   pruneLocalBackups,
   writeLocalBackup,
 } from './fileIO';
@@ -45,9 +45,4 @@ export async function runAutoBackup(
   await pruneLocalBackups(AUTO_BACKUP_DIR, MAX_AUTO_BACKUPS);
   setLastAutoBackupAt(now);
   return uri;
-}
-
-/** Número de backups automáticos guardados en el dispositivo. */
-export async function countLocalBackups(): Promise<number> {
-  return (await listLocalBackups(AUTO_BACKUP_DIR)).length;
 }

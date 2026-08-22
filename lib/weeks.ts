@@ -1,6 +1,7 @@
 import { WorkoutDay, WorkoutLog } from '../types';
 import {
   buildImprovementFromStrengthScores,
+  getComparableWorkoutScores,
   getWorkoutStrengthScore,
   ImprovementResult,
 } from './progress';
@@ -75,24 +76,6 @@ export function orderedBlockNumbers(blocks: WeekBlocks): number[] {
  */
 export function isDeloadBlock(weekLogs: WorkoutLog[]): boolean {
   return weekLogs.some((log) => log.isDeload);
-}
-
-/**
- * Bloque de carga (no descarga) inmediatamente anterior a `block`, o `null` si
- * no hay ninguno. Al comparar, una semana de carga se mide contra la última de
- * carga, saltándose las de descarga (que quedan al margen de las estadísticas).
- */
-export function previousLoadBlock(
-  blocks: WeekBlocks,
-  block: number
-): number | null {
-  const earlier = orderedBlockNumbers(blocks)
-    .filter((candidate) => candidate < block)
-    .reverse();
-  for (const candidate of earlier) {
-    if (!isDeloadBlock(blocks[candidate] || [])) return candidate;
-  }
-  return null;
 }
 
 /** Identifica el día de un log para agrupar/mover (undefined si no se conoce). */
@@ -341,6 +324,22 @@ interface WeekScoreOptions {
   applyMissingPenalty?: boolean;
 }
 
+/** Último log de cada día de una semana, indexado por `dayId`. */
+export function latestLogsByDayId(
+  weekLogs: WorkoutLog[]
+): Record<string, WorkoutLog> {
+  const latestByDayId: Record<string, WorkoutLog> = {};
+  [...weekLogs]
+    .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
+    .forEach((log) => {
+      if (!log.dayId) return;
+      if (!latestByDayId[log.dayId]) {
+        latestByDayId[log.dayId] = log;
+      }
+    });
+  return latestByDayId;
+}
+
 /**
  * Suma la puntuación de fuerza de una semana usando el último log de cada día.
  * Penaliza (10% por día) los días esperados que no se hayan entrenado.
@@ -356,15 +355,7 @@ export function getWeekStrengthScore(
   if (weekLogs.length === 0) return 0;
 
   // Quedarse solo con el log más reciente de cada día.
-  const latestByDayId: Record<string, WorkoutLog> = {};
-  [...weekLogs]
-    .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
-    .forEach((log) => {
-      if (!log.dayId) return;
-      if (!latestByDayId[log.dayId]) {
-        latestByDayId[log.dayId] = log;
-      }
-    });
+  const latestByDayId = latestLogsByDayId(weekLogs);
 
   const selectedLogs = Object.values(latestByDayId).filter(
     (log) => !restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1
@@ -394,30 +385,84 @@ function trainedDayIds(weekLogs: WorkoutLog[]): Set<string> {
 }
 
 /**
- * Mejora de una semana respecto a otra. Solo se comparan los días entrenados en
- * la semana actual, contra esos mismos días de la de referencia (sin penalizar
- * los que falten): pera con pera.
+ * Log de referencia de cada día: la ÚLTIMA sesión de ese día (que no sea de
+ * descarga) anterior a la semana que se mide. Si la semana anterior no tiene
+ * ese día entrenado se retrocede hasta la última en la que sí se hizo, en vez
+ * de contarlo como un cero —eso disparaba el % de la semana: una semana
+ * completa contra otra a la que le faltaban dos días salía en +70% aunque cada
+ * día hubiera subido un 3%—. Es el mismo criterio que el % de cada día en
+ * Inicio, así que el porcentaje de la semana es coherente con sus tarjetas.
+ *
+ * @param priorLogs Logs anteriores a la semana medida (histórico de la rutina).
+ */
+export function referenceLogsByDay(
+  priorLogs: WorkoutLog[],
+  dayIds: string[]
+): Record<string, WorkoutLog> {
+  const wanted = new Set(dayIds);
+  const latestByDayId: Record<string, WorkoutLog> = {};
+
+  [...priorLogs]
+    .filter((log) => !!log.dayId && !log.isDeload && wanted.has(log.dayId))
+    .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a))
+    .forEach((log) => {
+      if (!latestByDayId[log.dayId]) {
+        latestByDayId[log.dayId] = log;
+      }
+    });
+
+  return latestByDayId;
+}
+
+/**
+ * Mejora de una semana respecto al histórico. Cada día entrenado esta semana se
+ * mide contra su propia sesión anterior (ver `referenceLogsByDay`), y los días
+ * sin ninguna sesión previa quedan FUERA de los dos lados de la comparación:
+ * pera con pera. Si ningún día tiene referencia, no hay nada que comparar.
+ *
+ * @param priorLogs Logs anteriores a esta semana. Basta con los de la semana
+ *   previa, pero pasando el histórico completo los días que faltaron en ella se
+ *   comparan contra la última vez que se hicieron.
  */
 export function getWeekImprovement(
   currentWeekLogs: WorkoutLog[],
-  previousWeekLogs: WorkoutLog[],
+  priorLogs: WorkoutLog[],
   activeDays: WorkoutDay[]
 ): ImprovementResult | null {
   if (activeDays.length === 0) return null;
+  return improvementAgainstHistory(currentWeekLogs, priorLogs);
+}
 
-  const currentDayIds = Array.from(trainedDayIds(currentWeekLogs));
+/**
+ * Igual que `getWeekImprovement` pero sin depender de la rutina activa: lo usa
+ * el póster de logros, que trabaja solo con logs. Es la ÚNICA implementación del
+ * porcentaje de una semana, para que tarjeta y póster no puedan divergir.
+ */
+export function improvementAgainstHistory(
+  currentWeekLogs: WorkoutLog[],
+  priorLogs: WorkoutLog[]
+): ImprovementResult | null {
+  const currentByDayId = latestLogsByDayId(currentWeekLogs);
+  const currentDayIds = Object.keys(currentByDayId);
   if (currentDayIds.length === 0) return null;
 
-  const scoreOptions = {
-    activeDaysCount: activeDays.length,
-    restrictToDayIds: currentDayIds,
-    applyMissingPenalty: false,
-  };
+  const references = referenceLogsByDay(priorLogs, currentDayIds);
 
-  return buildImprovementFromStrengthScores(
-    getWeekStrengthScore(currentWeekLogs, scoreOptions),
-    getWeekStrengthScore(previousWeekLogs, scoreOptions)
-  );
+  // Dentro de cada día solo cuentan los ejercicios que están en las DOS
+  // sesiones: uno que hoy no se hizo no vale cero (ver
+  // `getComparableWorkoutScores`).
+  let currentScore = 0;
+  let previousScore = 0;
+  currentDayIds.forEach((dayId) => {
+    const reference = references[dayId];
+    if (!reference) return;
+    const scores = getComparableWorkoutScores(currentByDayId[dayId], reference);
+    currentScore += scores.current;
+    previousScore += scores.previous;
+  });
+
+  if (currentScore <= 0 && previousScore <= 0) return null;
+  return buildImprovementFromStrengthScores(currentScore, previousScore);
 }
 
 export interface StreakSummary {
@@ -532,8 +577,19 @@ export function buildWeekProgress(
   const firstLoadBlock = ordered.find(
     (blockNumber) => !isDeloadBlock(blocks[blockNumber] || [])
   );
-  const firstWeekLogs =
-    firstLoadBlock != null ? blocks[firstLoadBlock] || [] : [];
+
+  // Base POR DÍA: la primera vez que se entrenó ese día (sin contar descargas).
+  // No basta con los días de la primera semana: si un día debutó más tarde (o
+  // faltó esa semana), contarlo como cero en la base disparaba el porcentaje.
+  const baseLogByDayId: Record<string, WorkoutLog> = {};
+  [...routineLogs]
+    .filter((log) => !!log.dayId && !log.isDeload)
+    .sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b))
+    .forEach((log) => {
+      if (!baseLogByDayId[log.dayId]) {
+        baseLogByDayId[log.dayId] = log;
+      }
+    });
 
   const points: WeekProgressPoint[] = ordered.map((blockNumber, index) => {
     const weekLogs = blocks[blockNumber] || [];
@@ -556,7 +612,7 @@ export function buildWeekProgress(
       return { week, improvement: 0, isIncomplete };
     }
 
-    if (!weekLogs.length || !firstWeekLogs.length) {
+    if (!weekLogs.length) {
       return { week, improvement: 0, isIncomplete };
     }
     // Con filtro activo, las semanas que no entrenaron ese día no puntúan.
@@ -564,21 +620,29 @@ export function buildWeekProgress(
       return { week, improvement: 0, isIncomplete };
     }
 
-    // Una semana incompleta NO se penaliza por los días que faltan: se comparan
-    // solo los entrenados (o el día filtrado) contra esos mismos días de la
-    // semana base, igual que el porcentaje del listado.
+    // Una semana incompleta NO se penaliza por los días que faltan: cada día
+    // entrenado (o el filtrado) se compara contra su PROPIA base, y los que aún
+    // no tienen base quedan fuera de los dos lados. Pera con pera, igual que el
+    // porcentaje del listado.
+    const currentByDayId = latestLogsByDayId(weekLogs);
     const currentDayIds = dayFilter
       ? [dayFilter]
-      : Array.from(trainedDayIds(weekLogs));
-    const scoreOptions = {
-      activeDaysCount: activeDays.length,
-      restrictToDayIds: currentDayIds,
-      applyMissingPenalty: false,
-    };
-    const improvement = buildImprovementFromStrengthScores(
-      getWeekStrengthScore(weekLogs, scoreOptions),
-      getWeekStrengthScore(firstWeekLogs, scoreOptions)
-    );
+      : Object.keys(currentByDayId);
+
+    let currentScore = 0;
+    let baseScore = 0;
+    currentDayIds.forEach((dayId) => {
+      const base = baseLogByDayId[dayId];
+      if (!base || !currentByDayId[dayId]) return;
+      const scores = getComparableWorkoutScores(currentByDayId[dayId], base);
+      currentScore += scores.current;
+      baseScore += scores.previous;
+    });
+
+    const improvement =
+      currentScore <= 0 && baseScore <= 0
+        ? null
+        : buildImprovementFromStrengthScores(currentScore, baseScore);
 
     const signedDelta = improvement
       ? improvement.isImproved

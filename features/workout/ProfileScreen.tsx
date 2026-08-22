@@ -3,10 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
@@ -14,7 +12,7 @@ import {
   StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
-import { hasAnyCardio, cardioSessionFromLog } from '@lib/cardio';
+import { cardioSessionFromLog } from '@lib/cardio';
 import { theme } from '@lib/theme';
 import { t, formatAgo } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
@@ -24,13 +22,7 @@ interface ProfileScreenProps {
   onOpenRoutines?: () => void;
   onOpenExerciseProgress?: () => void;
   onOpenData?: () => void;
-  onOpenCloud?: () => void;
   onOpenSettings?: () => void;
-  onNavigateHome?: () => void;
-  onNavigateCardio?: () => void;
-  onNavigateCalendar?: () => void;
-  onNavigateCommunity?: () => void;
-  onNavigateProfile?: () => void;
 }
 
 type MenuEntry = {
@@ -46,13 +38,7 @@ export function ProfileScreen({
   onOpenRoutines,
   onOpenExerciseProgress,
   onOpenData,
-  onOpenCloud,
   onOpenSettings,
-  onNavigateHome,
-  onNavigateCardio,
-  onNavigateCalendar,
-  onNavigateCommunity,
-  onNavigateProfile,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -75,17 +61,16 @@ export function ProfileScreen({
   }, [user?.id]);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const { bottom: floatingNavBottom, scrollBottomPadding } =
-    getFloatingPrimaryNavMetrics(insets.bottom);
+  const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
 
   const cardioSessionsCount = state.logs.filter(
     (l) => cardioSessionFromLog(l) != null
   ).length;
 
-  // Hint dinámico de "Cuenta y nube": refleja sesión y última sincronización, de
+  // Hint dinámico de "Datos y nube": refleja sesión y última sincronización, de
   // modo que "mis datos están a salvo" se vea de un vistazo desde el menú.
   const cloudHint = !user
-    ? t('Guarda tus datos en la nube y sincroniza')
+    ? t('Copias, exportar/importar y cuenta en la nube')
     : lastSync
     ? `${t('Sincronizado')} · ${formatAgo(lastSync)}`
     : t('Sesión iniciada');
@@ -103,17 +88,13 @@ export function ProfileScreen({
       hint: t('Tu evolución y tus récords, ejercicio a ejercicio'),
       onPress: onOpenExerciseProgress,
     },
+    // Datos y nube van juntos: son la misma pregunta ("¿dónde están mis datos
+    // y cómo los muevo?") y antes estaban partidos en dos entradas.
     {
       icon: 'folder-cog-outline',
-      label: t('Datos'),
-      hint: t('Exporta, importa o borra (copia local)'),
-      onPress: onOpenData,
-    },
-    {
-      icon: 'cloud-outline',
-      label: t('Cuenta y nube'),
+      label: t('Datos y nube'),
       hint: cloudHint,
-      onPress: onOpenCloud,
+      onPress: onOpenData,
       statusDot: !!user,
     },
     {
@@ -199,10 +180,6 @@ export function ProfileScreen({
             />
           </Pressable>
         ))}
-
-        <Text style={styles.versionText}>
-          GymBro · {t('Versión')} {Constants.expoConfig?.version ?? '—'}
-        </Text>
       </StretchScrollView>
 
       <GlassTopBar
@@ -327,12 +304,6 @@ const makeStyles = () =>
       fontSize: 12,
       color: theme.colors.textSecondary,
       lineHeight: 16,
-    },
-    versionText: {
-      marginTop: 8,
-      textAlign: 'center',
-      fontSize: 12,
-      color: theme.colors.textMuted,
     },
   });
 

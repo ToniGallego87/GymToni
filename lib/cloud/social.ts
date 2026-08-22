@@ -412,8 +412,9 @@ export async function unlikeRoutine(
 // WorkoutRoutine del dominio, con sus ids ORIGINALES. El llamante la pasa por
 // `duplicateRoutine` (lib/routines.ts) para asignar ids nuevos antes de
 // añadirla al espacio del usuario (ADD_ROUTINE), como al duplicar una propia.
-// Uso interno: lo envuelve cloneablePublicRoutine (fetch + duplicate).
-async function fetchPublicRoutine(
+// La consume la vista de consulta (PublicRoutineScreen), que muestra el plan
+// SIN clonarlo, y cloneablePublicRoutine, que lo duplica antes de adoptarlo.
+export async function fetchPublicRoutine(
   routineId: string
 ): Promise<WorkoutRoutine | null> {
   const coerce = (r: Record<string, unknown>): Record<string, unknown> => ({
@@ -472,4 +473,52 @@ export async function cloneablePublicRoutine(
 ): Promise<WorkoutRoutine | null> {
   const routine = await fetchPublicRoutine(routineId);
   return routine ? duplicateRoutine(routine, existingNames) : null;
+}
+
+// ─────────────────── Volumen de una rutina pública (intensidad) ───────────────────
+
+// Series planificadas de cada rutina pública, en DOS consultas por lote (nunca
+// una por rutina): días de esas rutinas y, con sus ids, la suma de `target_sets`
+// de sus ejercicios. La RLS de social-schema.sql ya deja leer días y ejercicios
+// de una rutina pública, así que no hace falta tocar el backend.
+//
+// El resultado alimenta el distintivo Suave/Medio/Intenso del tablón
+// (`routineIntensity` en lib/routines.ts). Se pide en segundo plano, después de
+// pintar la lista: es un adorno, no debe retrasar el tablón.
+export async function getRoutineSetTotals(
+  routineIds: string[]
+): Promise<Map<string, number>> {
+  const totals = new Map<string, number>();
+  const ids = Array.from(new Set(routineIds)).filter(Boolean);
+  if (!ids.length) return totals;
+
+  const { data: days, error: dErr } = await supabase
+    .from('workout_days')
+    .select('id, routines_id')
+    .in('routines_id', ids)
+    .eq('deleted', false);
+  if (dErr) throw new Error(`workout_days: ${dErr.message}`);
+
+  // día → rutina, para repartir las series de cada ejercicio en su rutina.
+  const dayToRoutine = new Map<string, string>();
+  for (const row of days ?? []) {
+    const d = row as { id: string; routines_id: string };
+    dayToRoutine.set(d.id, d.routines_id);
+  }
+  if (!dayToRoutine.size) return totals;
+
+  const { data: exercises, error: eErr } = await supabase
+    .from('exercises')
+    .select('workout_days_id, target_sets')
+    .in('workout_days_id', Array.from(dayToRoutine.keys()))
+    .eq('deleted', false);
+  if (eErr) throw new Error(`exercises: ${eErr.message}`);
+
+  for (const row of exercises ?? []) {
+    const ex = row as { workout_days_id: string; target_sets: number | null };
+    const routineId = dayToRoutine.get(ex.workout_days_id);
+    if (!routineId) continue;
+    totals.set(routineId, (totals.get(routineId) ?? 0) + (ex.target_sets ?? 0));
+  }
+  return totals;
 }

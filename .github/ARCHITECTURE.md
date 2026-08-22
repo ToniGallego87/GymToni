@@ -8,7 +8,8 @@
 | Lenguaje      | TypeScript strict                                                |
 | Estado global | Context API + useReducer                                         |
 | Persistencia  | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web |
-| Navegación    | State-based (sin react-navigation)                               |
+| Navegación    | State-based (sin react-navigation); pager de pestañas nativo (`react-native-pager-view`) |
+| Backend        | Supabase (cuentas, sync incremental, social) — opcional, offline-first |
 | UI            | Componentes custom + sistema glass                               |
 
 ## Flujo de datos
@@ -116,28 +117,58 @@ data/                   → Seed data (rutinas iniciales + logs demo) y changelo
 
 ## Pantallas y navegación
 
-```
-HomeScreen
-  ├─→ DaySelectorScreen (elegir día)
-  │     └─→ WorkoutLogScreen (registrar)
-  ├─→ RoutineSelectorScreen (elegir/borrar rutina; se abre desde Inicio o Perfil)
-  │     └─→ RoutineDetailScreen (ver/editar rutina, compartir QR)
-  ├─→ NewRoutineScreen (crear rutina)
-  │     └─→ QRScannerScreen (importar rutina por QR/texto)
-  ├─→ WeekAchievementScreen (imagen/vídeo de logros semanales)
-  └─→ DetailScreen (ver log guardado)
+La navegación es **por estado**, no por rutas: `app/App.tsx` mantiene un
+`screen: Screen` (unión discriminada) y hace `setScreen(...)`. `TAB_ORDER` define
+las 5 pestañas principales; el resto son **subpantallas** que se pintan encima.
 
-FloatingPrimaryNav (barra inferior, desde cualquier pantalla principal)
-  ├─→ HomeScreen
-  ├─→ CardioScreen (semanas de cardio, kcal, peso corporal)
-  ├─→ CalendarScreen (vista calendario)
-  └─→ ProfileScreen (resumen y menú)
-        ├─→ RoutineSelectorScreen
-        ├─→ DataScreen (exportar/importar/limpiar)
-        └─→ SettingsScreen (tema, idioma, novedades)
-
-DetailScreen recuerda su origen (home / calendar / cardio) para volver a él.
 ```
+Pestañas principales (TAB_ORDER, en un pager nativo — ver abajo)
+  HomeScreen · CardioScreen · CalendarScreen · CommunityScreen · ProfileScreen
+
+Subpantallas (setScreen; se renderizan opacas encima del pager)
+  HomeScreen
+    ├─→ DaySelectorScreen → WorkoutLogScreen (registrar)
+    ├─→ RoutineSelectorScreen → RoutineDetailScreen (ver/editar, compartir QR)
+    ├─→ NewRoutineScreen → QRScannerScreen (importar por QR/texto)
+    ├─→ WeekAchievementScreen (imagen/vídeo de logros)
+    └─→ DetailScreen (ver log; recuerda origen home/calendar/cardio para volver)
+  ProfileScreen
+    ├─→ RoutineSelectorScreen · ExerciseProgressScreen
+    ├─→ SettingsScreen (tema, idioma, novedades)
+    └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
+  CommunityScreen (tablón de rutinas públicas)
+    ├─→ PublicRoutineScreen (rutina ajena en SOLO lectura + "Añadir a mis rutinas")
+    ├─→ UserProfileScreen (perfil ajeno + sus rutinas públicas) →  PublicRoutineScreen
+    ├─→ ProfileEditScreen (perfil público propio: foto, bio, público/privado)
+    └─→ FollowingScreen (a quién sigo / quién me sigue)
+
+FloatingPrimaryNav = barra inferior fija (las 5 pestañas); cardio se oculta si no
+hay ningún cardio registrado. FloatingBackButton = volver en subpantallas.
+```
+
+### Pager de pestañas (nativo)
+
+Las 5 pestañas principales viven en un **`PagerView`** (react-native-pager-view /
+ViewPager2 nativo) en `app/App.tsx`. Se pasa de una a otra **arrastrando** (sigue
+el dedo, estilo Telegram) o tocando la barra.
+
+- **Por qué nativo:** una implementación casera con `react-native-gesture-handler`
+  + `reanimated` se descartó porque en MIUI/HyperOS el gesto Pan se quedaba
+  "colgado" tras soltar, emitiendo eventos fantasma y dejando la vista a medias.
+  El pager nativo gestiona arrastre y asentamiento fuera del hilo JS y es inmune.
+- **Sincronización estado ↔ pager:** `onPageSelected` (swipe del usuario) →
+  `setScreen`. Cambio de `screen` desde otra fuente (barra, volver de subpantalla)
+  → `pagerRef.setPage(tabIndex)` en un efecto. Un guard (`navTargetRef` +
+  `pagerPageRef`) ignora los `onPageSelected` de navegaciones programáticas para no
+  entrar en bucle pager↔estado con toques rápidos.
+- **Transición de barra de duración constante:** como `setPage` va a velocidad
+  fija, en saltos de más de una pestaña se salta sin animación a la contigua y se
+  anima solo el último tramo.
+- **Convivencia con scroll:** `StretchScrollView` (el scroll con rubber-band de
+  casi todas las vistas) declara su gesto **solo vertical** (`activeOffsetY` +
+  `failOffsetX`) para ceder el arrastre horizontal al pager.
+- **Subpantallas:** se renderizan después del pager (encima); opacas a pantalla
+  completa, lo tapan. El swipe se desactiva fuera de pestañas (`scrollEnabled`).
 
 ## Sistema visual (Glass UI)
 
@@ -154,8 +185,10 @@ DetailScreen recuerda su origen (home / calendar / cardio) para volver a él.
   `ConfirmModal` es su especialización para confirmar/cancelar
 - Gráfica de barras única: `BarChart` (progreso semanal de Inicio y métricas
   mensuales de Cardio); cada pantalla aporta sus barras ya coloreadas y su dominio
-- Filtro segmentado único: `SegmentedFilter` (filtro por día de Inicio y métrica
-  de Cardio)
+- Filtro segmentado único: `SegmentedFilter` (filtro por día de Inicio, métrica
+  de Cardio y, en Comunidad, origen del tablón + intensidad de la rutina)
+- Foto de perfil única: `Avatar` (tablón, perfil ajeno, perfil propio y listas de
+  seguir); solo cambia el diámetro
 - Popup de novedades tras actualizar: `WhatsNewModal` (lee `data/changelog.ts`,
   se controla desde `App.tsx` comparando con la última versión vista)
 - Diseño edge-to-edge en todas las pantallas

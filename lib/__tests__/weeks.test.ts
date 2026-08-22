@@ -224,6 +224,52 @@ describe('getWeekImprovement', () => {
     expect(improvement?.percent).toBeCloseTo(9.090909, 5);
   });
 
+  it('un día que faltó la semana pasada se compara con la última vez que se hizo', () => {
+    // d2 no se entrenó la semana pasada: su referencia es la de dos semanas
+    // atrás, no un cero (que disparaba el % de la semana entera).
+    const prior = [
+      makeScoredLog('v2', 2, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('v1', 1, 1, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('p1', 1, 7, [{ weight: 100, reps: 10 }]),
+    ];
+    const current = [
+      makeScoredLog('c1', 1, 14, [{ weight: 110, reps: 10 }]),
+      makeScoredLog('c2', 2, 15, [{ weight: 110, reps: 10 }]),
+    ];
+
+    const improvement = getWeekImprovement(current, prior, makeDays(2));
+    expect(improvement?.isImproved).toBe(true);
+    expect(improvement?.percent).toBeCloseTo(9.090909, 5);
+  });
+
+  it('un día estrenado esta semana queda fuera de la comparación', () => {
+    const prior = [makeScoredLog('p1', 1, 0, [{ weight: 100, reps: 10 }])];
+    const current = [
+      makeScoredLog('c1', 1, 7, [{ weight: 110, reps: 10 }]),
+      // Sin sesión previa: si contara, su puntuación entera pasaría por mejora.
+      makeScoredLog('c2', 2, 8, [{ weight: 200, reps: 10 }]),
+    ];
+
+    const improvement = getWeekImprovement(current, prior, makeDays(2));
+    expect(improvement?.percent).toBeCloseTo(9.090909, 5);
+  });
+
+  it('la referencia salta las sesiones de descarga', () => {
+    const prior = [
+      makeScoredLog('p1', 1, 0, [{ weight: 100, reps: 10 }]),
+      { ...makeScoredLog('d1', 1, 7, [{ weight: 50, reps: 10 }]), isDeload: true },
+    ];
+    const current = [makeScoredLog('c1', 1, 14, [{ weight: 110, reps: 10 }])];
+
+    const improvement = getWeekImprovement(current, prior, makeDays(1));
+    expect(improvement?.percent).toBeCloseTo(9.090909, 5);
+  });
+
+  it('sin ninguna referencia previa no hay porcentaje', () => {
+    const current = [makeScoredLog('c1', 1, 7, [{ weight: 110, reps: 10 }])];
+    expect(getWeekImprovement(current, [], makeDays(1))).toBeNull();
+  });
+
   it('sin días entrenados no hay nada que comparar', () => {
     expect(getWeekImprovement([], [makeLog('a', 1, 0)], days)).toBeNull();
     expect(getWeekImprovement([makeLog('a', 1, 0)], [], [])).toBeNull();
@@ -252,6 +298,22 @@ describe('buildWeekProgress', () => {
     expect(points[1].week).toBe(2);
     // 9,0909% con la carga virtual de progress.ts (ver test de getWeekImprovement).
     expect(points[1].improvement).toBeCloseTo(9.1, 1);
+  });
+
+  it('cada día se compara con su propia base, aunque debutara más tarde', () => {
+    // La semana 1 solo tiene el día 1: el día 2 debuta en la semana 2 y su base
+    // es él mismo (0%), no un cero que dispararía el % de la semana.
+    const logs = [
+      makeScoredLog('a', 1, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('c', 1, 7, [{ weight: 110, reps: 10 }]),
+      makeScoredLog('d', 2, 8, [{ weight: 100, reps: 10 }]),
+    ];
+
+    const points = buildWeekProgress(logs, 'r1', days);
+    expect(points).toHaveLength(2);
+    expect(points[0].improvement).toBe(0);
+    // (120+110)/(110+110) − 1 = 4,5454%: solo sube lo que subió el día 1.
+    expect(points[1].improvement).toBeCloseTo(4.5, 1);
   });
 
   it('marca en curso la última semana solo si le faltan días', () => {

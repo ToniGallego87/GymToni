@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Avatar,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
@@ -41,8 +42,10 @@ export function FollowingScreen({
   const [loading, setLoading] = useState(true);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const backButtonSpace =
-    FLOATING_BACK_BUTTON_HEIGHT + FLOATING_BACK_BUTTON_MARGIN + insets.bottom;
+  // Misma altura del "Volver" que el resto de pantallas.
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
 
   const load = useCallback(async () => {
     if (!user) {
@@ -104,17 +107,7 @@ export function FollowingScreen({
                 onOpenProfile?.(p.id, p.display_name || t('Anónimo'))
               }
             >
-              {p.avatar_url ? (
-                <Image source={{ uri: p.avatar_url }} style={styles.avatar} />
-              ) : (
-                <View style={[styles.avatar, styles.avatarPlaceholder]}>
-                  <MaterialCommunityIcons
-                    name="account"
-                    size={24}
-                    color={theme.colors.textMuted}
-                  />
-                </View>
-              )}
+              <Avatar uri={p.avatar_url} size={44} />
               <Text style={styles.name} numberOfLines={1}>
                 {p.display_name || t('Anónimo')}
               </Text>
@@ -134,7 +127,7 @@ export function FollowingScreen({
         topInset={insets.top}
       />
 
-      <FloatingBackButton onPress={onBack} bottom={insets.bottom} />
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
     </View>
   );
 }
@@ -154,13 +147,6 @@ const makeStyles = () =>
       borderWidth: 1,
       borderColor: theme.colors.border,
     },
-    avatar: {
-      width: 44,
-      height: 44,
-      borderRadius: 22,
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    avatarPlaceholder: { alignItems: 'center', justifyContent: 'center' },
     name: {
       flex: 1,
       color: theme.colors.text,

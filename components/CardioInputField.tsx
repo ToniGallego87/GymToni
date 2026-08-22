@@ -404,7 +404,7 @@ const makeStyles = () =>
       padding: 16,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      borderLeftWidth: 3,
+      borderLeftWidth: 5,
       borderLeftColor: theme.colors.primaryLine,
       ...theme.shadow.soft,
     },
@@ -435,7 +435,7 @@ const makeStyles = () =>
       gap: 12,
       paddingTop: 12,
       marginTop: 12,
-      borderTopWidth: 1,
+      borderTopWidth: 2,
       borderTopColor: theme.colors.border,
     },
     cardioEntryInfo: {

@@ -42,7 +42,6 @@ import {
   BarChartPoint,
   Button,
   Collapsible,
-  FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
@@ -60,11 +59,6 @@ import {
 import { WorkoutDay, WorkoutLog } from '../../types';
 
 interface CardioScreenProps {
-  onNavigateHome?: () => void;
-  onNavigateCardio?: () => void;
-  onNavigateCalendar?: () => void;
-  onNavigateCommunity?: () => void;
-  onNavigateProfile?: () => void;
   // Abre la vista de resultados (DetailScreen) del día de cardio pulsado.
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   // Abre la vista de registro del cardio (la usan el hero y el día de hoy, que
@@ -204,11 +198,6 @@ function buildMetricChart(
 }
 
 export function CardioScreen({
-  onNavigateHome,
-  onNavigateCardio,
-  onNavigateCalendar,
-  onNavigateCommunity,
-  onNavigateProfile,
   onSelectLog,
   onInsertCardioOnly,
 }: CardioScreenProps) {
@@ -389,8 +378,7 @@ export function CardioScreen({
   const hasMore = orderedWeeks.length > visibleCount;
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const { bottom: floatingNavBottom, scrollBottomPadding } =
-    getFloatingPrimaryNavMetrics(insets.bottom);
+  const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
   const chartWidth = Math.max(
     250,
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)

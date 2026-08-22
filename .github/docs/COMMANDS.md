@@ -8,7 +8,7 @@
 ## Reconstruye la apk
 
 ```powershell
-cd "c:\Users\toni_\Desktop\Proyectos Visual Studio Code\GymToni"
+cd "c:\Users\toni_\Desktop\Projects\GymToni"
 npm run postinstall
 cd android
 ./gradlew.bat --stop

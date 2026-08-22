@@ -43,6 +43,11 @@ export const StretchScrollView = forwardRef<
   const nativeGesture = Gesture.Native();
 
   const panGesture = Gesture.Pan()
+    // Solo vertical: se activa con movimiento en Y y CEDE el horizontal. Así el
+    // arrastre horizontal llega al pager nativo (react-native-pager-view) en vez
+    // de que este gesto lo capture y bloquee el cambio de pestaña.
+    .activeOffsetY([-10, 10])
+    .failOffsetX([-12, 12])
     .onChange((e) => {
       'worklet';
       const maxOffset = Math.max(

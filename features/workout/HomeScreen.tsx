@@ -26,8 +26,7 @@ import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale } from '@lib/i18n';
 import {
-  buildImprovementFromStrengthScores,
-  getWorkoutStrengthScore,
+  buildWorkoutImprovement,
   ImprovementResult,
 } from '@lib/progress';
 import {
@@ -36,7 +35,7 @@ import {
   getLogTimestamp,
   getToday,
 } from '@lib/utils';
-import { hasAnyCardio, toCardioOnlyLog } from '@lib/cardio';
+import { toCardioOnlyLog } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import {
   buildWeekProgress,
@@ -47,7 +46,6 @@ import {
   isWeekCompleted,
   logsBeforeBlock,
   orderedBlockNumbers,
-  previousLoadBlock,
   workoutsUpToBlock,
   WeekProgressPoint,
 } from '@lib/weeks';
@@ -59,7 +57,6 @@ import {
   ConfirmModal,
   DayAccentIcon,
   getFloatingPrimaryNavMetrics,
-  FloatingPrimaryNav,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   HeroCard,
@@ -82,11 +79,6 @@ interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
   onSelectLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onEditLog?: (log: WorkoutLog, day: WorkoutDay) => void;
-  onNavigateHome?: () => void;
-  onNavigateCardio?: () => void;
-  onNavigateCalendar?: () => void;
-  onNavigateCommunity?: () => void;
-  onNavigateProfile?: () => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
   onCreateRoutine?: () => void;
@@ -184,11 +176,6 @@ export function HomeScreen({
   onSelectDay,
   onSelectLog,
   onEditLog,
-  onNavigateHome,
-  onNavigateCardio,
-  onNavigateCalendar,
-  onNavigateCommunity,
-  onNavigateProfile,
   onOpenDaySelector,
   onOpenRoutineSelector,
   onCreateRoutine,
@@ -199,7 +186,6 @@ export function HomeScreen({
   // La cabecera (hero + barra) se pinta al instante; el historial de semanas y
   // demás secciones pesadas se difieren un frame para que abrir Inicio sea ágil.
   const ready = useDeferredReady();
-  const showCardioTab = hasAnyCardio(state.logs);
   const [showWeeklyProgressChart, setShowWeeklyProgressChart] = useState(false);
   const [chartDayFilter, setChartDayFilter] = useState<string | undefined>(
     undefined
@@ -352,10 +338,8 @@ export function HomeScreen({
   );
   const hasNoRoutines = activeDays.length === 0;
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const {
-    bottom: floatingNavBottom,
-    scrollBottomPadding: homeScrollBottomPadding,
-  } = getFloatingPrimaryNavMetrics(insets.bottom);
+  const { scrollBottomPadding: homeScrollBottomPadding } =
+    getFloatingPrimaryNavMetrics(insets.bottom);
   const appVersion = Constants.expoConfig?.version ?? '';
 
   const handleStartPress = () => {
@@ -418,6 +402,10 @@ export function HomeScreen({
           (log: WorkoutLog) =>
             log.dayId === currentLog.dayId && log.id !== currentLog.id
         )
+        // La comparación salta las descargas: si la sesión anterior del mismo día
+        // cae en una semana de deload no sirve de referencia (pesos rebajados a
+        // propósito), así que se busca la anterior de carga.
+        .filter((log: WorkoutLog) => !log.isDeload)
         .filter((log: WorkoutLog) => getLogTimestamp(log) < currentTs)
         .sort(
           (a: WorkoutLog, b: WorkoutLog) =>
@@ -426,18 +414,13 @@ export function HomeScreen({
     );
   };
 
-  // Mejora entre dos sesiones: se agrega el volumen de carga total de cada una
-  // y se saca UN solo porcentaje (mismo criterio que Detail y la gráfica).
+  // Mejora entre dos sesiones: se agregan los ejercicios que tienen las DOS y
+  // se saca UN solo porcentaje (mismo criterio que Detail y la gráfica). Los
+  // ejercicios que hoy no se hicieron quedan fuera, no cuentan como cero.
   const computeImprovementBetweenLogs = (
     currentLog: WorkoutLog,
     previousLog: WorkoutLog | null
-  ): ImprovementResult | null => {
-    if (!previousLog) return null;
-    return buildImprovementFromStrengthScores(
-      getWorkoutStrengthScore(currentLog),
-      getWorkoutStrengthScore(previousLog)
-    );
-  };
+  ): ImprovementResult | null => buildWorkoutImprovement(currentLog, previousLog);
 
   // Mejora de una sesión respecto a la anterior del mismo día (independiente de la semana).
   const getLogImprovement = (currentLog: WorkoutLog) =>
@@ -1071,20 +1054,17 @@ export function HomeScreen({
                 // Semana de descarga: al margen de las estadísticas. En la
                 // cabecera, donde va el %, aparece "Descarga" en azul.
                 const isDeloadWeek = isDeloadBlock(groupedByBlock[block] || []);
-                // La comparación salta las descargas: una semana de carga se
-                // mide contra la última de carga, no contra un deload.
-                const prevLoad = previousLoadBlock(
-                  completionGroupedByBlock,
-                  block
-                );
-                const weekImprovement =
-                  isDeloadWeek || prevLoad == null
-                    ? null
-                    : getWeekImprovement(
-                        completionGroupedByBlock[block] || [],
-                        completionGroupedByBlock[prevLoad] || [],
-                        activeDays
-                      );
+                // Cada día se compara contra su sesión anterior (saltando
+                // descargas), no contra el mismo hueco de la semana previa: si
+                // esa semana no tuvo ese día, se retrocede hasta la última en
+                // que se hizo. Por eso se pasa TODO el histórico anterior.
+                const weekImprovement = isDeloadWeek
+                  ? null
+                  : getWeekImprovement(
+                      completionGroupedByBlock[block] || [],
+                      logsBeforeBlock(completionGroupedByBlock, block),
+                      activeDays
+                    );
                 const isCurrentWeek =
                   isDisplayedRoutineActive && block === currentWeekBlock;
                 // Tarjeta: acento estructural salvo la semana en curso

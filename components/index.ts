@@ -10,6 +10,7 @@ export {
   POSTER_HEIGHT,
 } from './AchievementPoster';
 export { GradientFill } from './GradientFill';
+export { Avatar } from './Avatar';
 // AnimatedCounter no se re-exporta: solo lo consume TrendDelta por ruta relativa.
 export { TrendDelta } from './TrendDelta';
 export { BarChart } from './BarChart';

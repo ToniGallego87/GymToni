@@ -143,15 +143,16 @@ export function ExerciseInputField({
   };
   const sanitizeIntInput = (txt: string): string => txt.replace(/[^0-9]/g, '');
 
-  // Sube/baja el peso en cuartos de kilo desde el valor actual (o el sugerido si
-  // el campo está vacío), sin bajar de 0.
+  // Sube/baja el peso en kilos enteros desde el valor actual (o el sugerido si el
+  // campo está vacío), sin bajar de 0. Si el valor tenía decimales, la flecha lo
+  // lleva al entero contiguo en el sentido pulsado (61,5 → arriba 62 / abajo 61).
   const stepWeight = (dir: 1 | -1) => {
     const base = parseTypedNumber(
       weightValue.trim() || getWeightPlaceholder() || '0'
     );
     const safe = isNaN(base) ? 0 : base;
-    const next = Math.max(0, roundToQuarter(safe + dir * 0.25));
-    setWeightValue(localizeDecimals(String(next)));
+    const next = dir > 0 ? Math.floor(safe) + 1 : Math.ceil(safe) - 1;
+    setWeightValue(localizeDecimals(String(Math.max(0, next))));
   };
   // Sube/baja reps o segundos en unidades enteras, sin bajar de 0.
   const stepReps = (dir: 1 | -1) => {
@@ -892,7 +893,6 @@ export function ExerciseInputField({
           {restTimer}
         </Animated.View>
       )}
-
     </Animated.View>
   );
 }
@@ -919,7 +919,7 @@ function StepButton({
         pressed && styles.stepBtnPressed,
       ]}
     >
-      <MaterialCommunityIcons name={icon} size={18} color={accent} />
+      <MaterialCommunityIcons name={icon} size={22} color={accent} />
     </Pressable>
   );
 }
@@ -1124,7 +1124,9 @@ const makeStyles = () =>
     inputWithStepper: {
       flexDirection: 'row',
       alignItems: 'stretch',
-      gap: 6,
+      // Separación mínima: el hueco que sobraba entre la caja y las flechas se
+      // lo quedan las flechas, que son el objetivo táctil a agrandar.
+      gap: 4,
     },
     bigInput: {
       flex: 1,
@@ -1133,16 +1135,21 @@ const makeStyles = () =>
       borderColor: theme.colors.border,
       borderRadius: theme.borderRadius.md,
       minHeight: 66,
-      paddingHorizontal: 12,
+      // Menos padding lateral para devolverle al número el ancho que se llevan
+      // las flechas: siguen cabiendo los mismos dígitos que antes.
+      paddingHorizontal: 8,
       fontSize: 30,
       textAlign: 'center',
       textAlignVertical: 'center',
       color: theme.colors.text,
       fontWeight: '800',
     },
+    // Flechas +/-: 44 de ancho (objetivo táctil recomendado) y separación corta
+    // entre ellas, así cada una queda alta y fácil de acertar con el pulgar sin
+    // mirar.
     stepperCol: {
-      width: 34,
-      gap: 6,
+      width: 44,
+      gap: 4,
     },
     stepBtn: {
       flex: 1,

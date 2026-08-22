@@ -92,6 +92,85 @@ export function getWorkoutStrengthScore(workoutLog: WorkoutLog | null): number {
   }, 0);
 }
 
+/** Nombre normalizado, para emparejar el mismo ejercicio entre dos sesiones. */
+function normalizedExerciseName(name?: string): string {
+  return (name || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * ¿Se hizo realmente este ejercicio? Un ejercicio saltado puede existir en el
+ * log con series vacías o a guiones: sin ninguna serie válida no puntúa.
+ */
+export function hasScoringSets(exerciseLog: ExerciseLog | null): boolean {
+  return !!exerciseLog?.parsedSets?.some(isValidSet);
+}
+
+/**
+ * Puntuaciones de dos sesiones contando SOLO los ejercicios registrados en
+ * AMBAS. Un ejercicio que hoy no se hizo NO vale cero (salía un −100% que además
+ * hundía el % de la sesión y el de la semana), y uno que se estrena tampoco
+ * cuenta como mejora infinita: los dos casos quedan fuera de los dos lados.
+ * El emparejado es por `exerciseId` y, si no cuadra, por nombre normalizado
+ * (el mismo ejercicio cambia de id entre rutinas).
+ */
+export function getComparableWorkoutScores(
+  currentLog: WorkoutLog | null,
+  previousLog: WorkoutLog | null
+): { current: number; previous: number } {
+  if (!currentLog || !previousLog) return { current: 0, previous: 0 };
+
+  const previousById = new Map<string, ExerciseLog>();
+  const previousByName = new Map<string, ExerciseLog>();
+  (previousLog.exercises || []).filter(hasScoringSets).forEach((exerciseLog) => {
+    if (exerciseLog.exerciseId && !previousById.has(exerciseLog.exerciseId)) {
+      previousById.set(exerciseLog.exerciseId, exerciseLog);
+    }
+    const nameKey = normalizedExerciseName(exerciseLog.exerciseName);
+    if (nameKey && !previousByName.has(nameKey)) {
+      previousByName.set(nameKey, exerciseLog);
+    }
+  });
+
+  const matched = new Set<ExerciseLog>();
+  let current = 0;
+  let previous = 0;
+
+  (currentLog.exercises || []).filter(hasScoringSets).forEach((exerciseLog) => {
+    const match =
+      (exerciseLog.exerciseId
+        ? previousById.get(exerciseLog.exerciseId)
+        : undefined) ||
+      previousByName.get(normalizedExerciseName(exerciseLog.exerciseName));
+    if (!match || matched.has(match)) return;
+
+    matched.add(match);
+    current += getExerciseStrengthScore(exerciseLog);
+    previous += getExerciseStrengthScore(match);
+  });
+
+  return { current, previous };
+}
+
+/**
+ * Mejora de una sesión respecto a otra, comparando solo los ejercicios que
+ * tienen las dos (ver `getComparableWorkoutScores`). `null` si no hay ninguno
+ * en común: no hay nada que comparar.
+ */
+export function buildWorkoutImprovement(
+  currentLog: WorkoutLog | null,
+  previousLog: WorkoutLog | null
+): ImprovementResult | null {
+  const { current, previous } = getComparableWorkoutScores(
+    currentLog,
+    previousLog
+  );
+  if (current <= 0 && previous <= 0) return null;
+  return buildImprovementFromStrengthScores(current, previous);
+}
+
 export function buildImprovementFromStrengthScores(
   currentScore: number,
   previousScore: number

@@ -3,7 +3,7 @@ import {
   buildImprovementFromStrengthScores,
   getTotalSetsStrengthScore,
 } from './progress';
-import { getWeekStrengthScore } from './weeks';
+import { improvementAgainstHistory } from './weeks';
 import { getLogTimestamp } from './utils';
 import { localizeDecimals, t } from './i18n';
 
@@ -340,24 +340,15 @@ export function computeWeekAchievements({
     new Set(currentLatest.map((log) => log.dayId).filter(Boolean))
   );
 
+  // Mismo cálculo que la tarjeta de la semana en Inicio: cada día contra su
+  // sesión anterior dentro del histórico (los días que faltaron en la semana
+  // previa no cuentan como cero, se busca la última vez que se hicieron).
   let weekImprovementPercent: number | null = null;
-  if (previousLatest.length > 0 && currentDayIds.length > 0) {
-    const scoreOptions = {
-      activeDaysCount: currentDayIds.length,
-      restrictToDayIds: currentDayIds,
-      applyMissingPenalty: false,
-    };
-    const currentStrength = getWeekStrengthScore(currentLatest, scoreOptions);
-    const previousStrength = getWeekStrengthScore(previousLatest, scoreOptions);
-    const improvement = buildImprovementFromStrengthScores(
-      currentStrength,
-      previousStrength
-    );
-    if (improvement) {
-      weekImprovementPercent = improvement.isImproved
-        ? improvement.percent
-        : -improvement.percent;
-    }
+  const improvement = improvementAgainstHistory(currentLatest, history);
+  if (improvement) {
+    weekImprovementPercent = improvement.isImproved
+      ? improvement.percent
+      : -improvement.percent;
   }
 
   const topImprovement = findTopImprovement(currentLatest, previousLatest);

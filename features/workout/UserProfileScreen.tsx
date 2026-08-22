@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Avatar,
   Button,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
@@ -35,6 +35,8 @@ interface UserProfileScreenProps {
   userId: string;
   name: string;
   onBack: () => void;
+  // Abre una rutina pública en solo lectura (mismo destino que el tablón).
+  onOpenRoutine?: (routineId: string, name: string, authorName: string) => void;
 }
 
 // Perfil público de otro usuario (Fase 4): nombre, bio, seguidores, botón de
@@ -43,6 +45,7 @@ export function UserProfileScreen({
   userId,
   name,
   onBack,
+  onOpenRoutine,
 }: UserProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
@@ -62,8 +65,10 @@ export function UserProfileScreen({
   } | null>(null);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const backButtonSpace =
-    FLOATING_BACK_BUTTON_HEIGHT + FLOATING_BACK_BUTTON_MARGIN + insets.bottom;
+  // Misma altura del "Volver" que el resto de pantallas.
+  const floatingBackBottom =
+    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
 
   const notify = (message: string, type: 'success' | 'error') =>
     setToast({ message, type });
@@ -159,20 +164,7 @@ export function UserProfileScreen({
         <View style={styles.card}>
           <GradientFill accent={theme.colors.primaryLine} />
           <View style={styles.headerRow}>
-            {profile?.avatar_url ? (
-              <Image
-                source={{ uri: profile.avatar_url }}
-                style={styles.avatarPhoto}
-              />
-            ) : (
-              <View style={styles.avatar}>
-                <MaterialCommunityIcons
-                  name="account"
-                  size={28}
-                  color={theme.colors.onGold}
-                />
-              </View>
-            )}
+            <Avatar uri={profile?.avatar_url} size={52} />
             <View style={styles.headerInfo}>
               <Text style={styles.name} numberOfLines={1}>
                 {displayName}
@@ -213,7 +205,17 @@ export function UserProfileScreen({
           </Text>
         ) : (
           routines.map((r) => (
-            <View key={r.id} style={styles.card}>
+            <Pressable
+              key={r.id}
+              style={({ pressed }) => [
+                styles.card,
+                pressed && styles.cardPressed,
+              ]}
+              onPress={() => onOpenRoutine?.(r.id, r.name, displayName)}
+              disabled={!onOpenRoutine}
+              accessibilityRole="button"
+              accessibilityLabel={t('Ver rutina')}
+            >
               <GradientFill accent={theme.colors.primaryLine} />
               <Text style={styles.routineName} numberOfLines={1}>
                 {r.name}
@@ -233,7 +235,7 @@ export function UserProfileScreen({
                 variant="secondary"
                 disabled={cloningId !== null}
               />
-            </View>
+            </Pressable>
           ))
         )}
       </StretchScrollView>
@@ -244,7 +246,7 @@ export function UserProfileScreen({
         topInset={insets.top}
       />
 
-      <FloatingBackButton onPress={onBack} bottom={insets.bottom} />
+      <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
       {toast && (
         <Toast
@@ -263,7 +265,7 @@ const makeStyles = () =>
     scroll: { flex: 1 },
     content: { paddingHorizontal: 16, gap: 12 },
     card: {
-      borderRadius: 20,
+      borderRadius: theme.borderRadius.lg,
       overflow: 'hidden',
       padding: 20,
       backgroundColor: theme.colors.surface,
@@ -271,21 +273,8 @@ const makeStyles = () =>
       borderColor: theme.colors.border,
       gap: 12,
     },
+    cardPressed: { opacity: 0.85 },
     headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    avatar: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primaryFill,
-    },
-    avatarPhoto: {
-      width: 52,
-      height: 52,
-      borderRadius: 26,
-      backgroundColor: theme.colors.surfaceAlt,
-    },
     headerInfo: { flex: 1, minWidth: 0 },
     name: {
       color: theme.colors.text,
