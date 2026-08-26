@@ -109,13 +109,13 @@ Tres piezas con roles distintos:
 
 - **Supabase** = el backend en la nube (base de datos central y cuentas).
 
-  | Pieza | Para qué |
-  | --- | --- |
-  | **Postgres** | Base de datos central. El modelo de GymBro es muy relacional (rutina → días → ejercicios → series; follows, likes), encaja de forma natural. |
-  | **Auth** | Login email + Google + Apple. Perfiles. |
-  | **Row Level Security (RLS)** | Reglas SQL de quién ve/escribe qué. Base de toda la parte social **sin servidor propio**. |
-  | **Storage** | Avatares e imágenes. |
-  | **Realtime** | Tablón de populares, notificaciones de seguidores. |
+  | Pieza                        | Para qué                                                                                                                                     |
+  | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+  | **Postgres**                 | Base de datos central. El modelo de GymBro es muy relacional (rutina → días → ejercicios → series; follows, likes), encaja de forma natural. |
+  | **Auth**                     | Login email + Google + Apple. Perfiles.                                                                                                      |
+  | **Row Level Security (RLS)** | Reglas SQL de quién ve/escribe qué. Base de toda la parte social **sin servidor propio**.                                                    |
+  | **Storage**                  | Avatares e imágenes.                                                                                                                         |
+  | **Realtime**                 | Tablón de populares, notificaciones de seguidores.                                                                                           |
 
 - **expo-sqlite** = la base local que YA usa la app (`lib/db`). No se sustituye.
   Se le añaden metadatos de sincronización (Fase 1).
@@ -131,7 +131,7 @@ nativa** (op-sqlite ^17) que **exige New Architecture**. Migrar esta app a New
 Architecture (SDK 51→57) rompió el manejo de toques de su UI (ver §14). El coste
 de pelear eso por todo el stack superó con creces el de escribir un motor de sync
 modesto. Para datos de gimnasio (poco volumen, un usuario por dispositivo, sin
-edición colaborativa) un outbox con *last-write-wins* es más que suficiente.
+edición colaborativa) un outbox con _last-write-wins_ es más que suficiente.
 
 Alternativas también descartadas: **WatermelonDB** (misma pega: DB propia + New
 Arch), **Firebase** (NoSQL, peor encaje relacional), **backend propio**
@@ -185,11 +185,11 @@ por sí solo (de cara al usuario no cambia nada visible). Detalle de ejecución 
   `log_sets`, `cardio_logs`); `workout_logs` ya lo tiene. Se actualiza en cada
   escritura granular.
 - **Borrado lógico (tombstones).** Hoy el borrado es físico con `ON DELETE
-  CASCADE`. Un borrado físico no se puede propagar. Registrar el borrado (en el
+CASCADE`. Un borrado físico no se puede propagar. Registrar el borrado (en el
   outbox como operación `delete`) para poder replicarlo a la nube y a otros
   dispositivos.
 - **Tabla `sync_outbox`**: `{ id, entity, entity_id, op ('upsert'|'delete'),
-  payload, updated_at, attempts }`. `lib/persistence.ts` ya traduce cada acción a
+payload, updated_at, attempts }`. `lib/persistence.ts` ya traduce cada acción a
   su escritura mínima → el mismo sitio encola en el outbox. **Cero cambios en
   pantallas y reducer.**
 - **Migración**: `SCHEMA_VERSION` 3 → 4 en `lib/db/schema.ts` (por
@@ -204,8 +204,8 @@ Objetivo: cuentas y **backup/restore completo** contra Supabase. Todavía sin sy
 incremental fino: subir/bajar el snapshot entero ya da multi-dispositivo y "no
 perder los datos si cambio de móvil". Entregable por sí solo.
 
-- **Auth** con Supabase (`@supabase/supabase-js`): email + Google + Apple (*Apple
-  obligatorio en la App Store* si hay otro login social).
+- **Auth** con Supabase (`@supabase/supabase-js`): email + Google + Apple (_Apple
+  obligatorio en la App Store_ si hay otro login social).
 - Tabla `profiles` (1:1 con Auth): `display_name`, `avatar_url`, `bio`, `is_public`.
 - **Cuenta opcional**: la app arranca anónima (como hoy) y ofrece "Crear cuenta /
   Iniciar sesión" desde Perfil.
@@ -274,13 +274,13 @@ Objetivo: perfiles públicos, seguir usuarios, rutinas públicas y tablón.
 
 ### 7.1. Modelo de datos (nube)
 
-| Tabla | Contenido |
-| --- | --- |
-| `profiles` | Perfil público (ya creado en Fase 2). |
-| `follows` | `follower_id` → `following_id`. |
-| Visibilidad de rutina | Flag `is_public` + `owner_id` sobre la rutina. |
-| `routine_likes` | Likes/guardados; alimentan el ranking. |
-| `reports` | Moderación mínima (reportar contenido público). |
+| Tabla                 | Contenido                                       |
+| --------------------- | ----------------------------------------------- |
+| `profiles`            | Perfil público (ya creado en Fase 2).           |
+| `follows`             | `follower_id` → `following_id`.                 |
+| Visibilidad de rutina | Flag `is_public` + `owner_id` sobre la rutina.  |
+| `routine_likes`       | Likes/guardados; alimentan el ranking.          |
+| `reports`             | Moderación mínima (reportar contenido público). |
 
 - **Tablón de populares** = consulta/vista ordenada por likes recientes.
 - **Clonar rutina pública**: copiar una rutina de otro a tu espacio. Reutiliza
@@ -303,7 +303,7 @@ Objetivo: perfiles públicos, seguir usuarios, rutinas públicas y tablón.
 - **RGPD (España/UE)**: los datos de entrenamiento pueden considerarse datos de
   salud. Obligan a: política de privacidad, consentimiento y **borrado de cuenta
   y datos** desde la propia app (derecho al olvido).
-- **Apple**: exige *Sign in with Apple* si hay login social, y **eliminación de
+- **Apple**: exige _Sign in with Apple_ si hay login social, y **eliminación de
   cuenta in-app**. Sin esto, rechazo en revisión.
 - **RLS** es el control de acceso primario; ninguna lógica de permisos vive solo
   en el cliente.
@@ -329,12 +329,12 @@ del alcance de la primera versión de sync. Decisión abierta (ver §12).
 
 ## 11. Resumen por fases
 
-| Fase | Entrega | Nube | Esfuerzo |
-| --- | --- | --- | --- |
-| **1 — Fundaciones locales** | `updated_at` + tombstones + `sync_outbox` en expo-sqlite | No | Medio |
-| **2 — Auth + backup** | Login, perfiles, backup/restore completo, multi-dispositivo básico | Sí | Alto |
-| **3 — Sync incremental** | Push/pull delta + conflictos (motor propio) | Sí | Alto |
-| **4 — Social** | Perfiles públicos, follows, rutinas públicas, tablón, clonar | Sí | Alto |
+| Fase                        | Entrega                                                            | Nube | Esfuerzo |
+| --------------------------- | ------------------------------------------------------------------ | ---- | -------- |
+| **1 — Fundaciones locales** | `updated_at` + tombstones + `sync_outbox` en expo-sqlite           | No   | Medio    |
+| **2 — Auth + backup**       | Login, perfiles, backup/restore completo, multi-dispositivo básico | Sí   | Alto     |
+| **3 — Sync incremental**    | Push/pull delta + conflictos (motor propio)                        | Sí   | Alto     |
+| **4 — Social**              | Perfiles públicos, follows, rutinas públicas, tablón, clonar       | Sí   | Alto     |
 
 Cada fase es entregable por sí sola y aporta valor sin depender de la siguiente.
 

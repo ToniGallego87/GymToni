@@ -207,7 +207,7 @@ const makeStyles = () =>
       marginTop: 4,
       paddingTop: 4,
       borderTopWidth: 1,
-      borderTopColor: 'rgba(16, 19, 24, 0.16)',
+      borderTopColor: theme.colors.onGoldVeil,
       // Encogida a los lados: es el contenido más ancho de la tarjeta y sus
       // columnas exteriores llegaban a meterse bajo las flechas del carrusel.
       marginHorizontal: HERO_ARROW_INSET,
@@ -219,7 +219,7 @@ const makeStyles = () =>
     heroStatDivider: {
       width: 1,
       height: 32,
-      backgroundColor: 'rgba(16, 19, 24, 0.16)',
+      backgroundColor: theme.colors.onGoldVeil,
     },
     heroStatValue: {
       fontSize: 16,

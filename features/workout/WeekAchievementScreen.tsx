@@ -30,8 +30,7 @@ import {
 } from '@components/AchievementPoster';
 import {
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   Toast,
@@ -195,10 +194,8 @@ export function WeekAchievementScreen({
   }, []);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding =
-    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: floatingBackBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   const previewWidth = Math.min(windowWidth - theme.spacing.md * 2, 460);
   const previewHeight = (previewWidth * POSTER_HEIGHT) / POSTER_WIDTH;

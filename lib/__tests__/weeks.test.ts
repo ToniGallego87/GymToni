@@ -257,7 +257,10 @@ describe('getWeekImprovement', () => {
   it('la referencia salta las sesiones de descarga', () => {
     const prior = [
       makeScoredLog('p1', 1, 0, [{ weight: 100, reps: 10 }]),
-      { ...makeScoredLog('d1', 1, 7, [{ weight: 50, reps: 10 }]), isDeload: true },
+      {
+        ...makeScoredLog('d1', 1, 7, [{ weight: 50, reps: 10 }]),
+        isDeload: true,
+      },
     ];
     const current = [makeScoredLog('c1', 1, 14, [{ weight: 110, reps: 10 }])];
 

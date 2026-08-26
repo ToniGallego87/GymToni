@@ -9,7 +9,7 @@ import {
   Button,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
@@ -21,6 +21,7 @@ import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
+import { loadMyProfile } from '@hooks/useMyProfile';
 import {
   getProfile,
   updateProfile,
@@ -61,8 +62,9 @@ export function ProfileEditScreen({
   } | null>(null);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const { bottom: floatingBackBottom } = getFloatingBackButtonMetrics(
+    insets.bottom
+  );
   const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
 
   const notify = (message: string, type: 'success' | 'error') =>
@@ -143,6 +145,9 @@ export function ProfileEditScreen({
         is_public: profilePublic,
         avatar_url: profileAvatar,
       });
+      // La barra de navegación y Perfil leen el mismo store: recargarlo aquí
+      // es lo que hace que la foto nueva aparezca sin reiniciar la app.
+      await loadMyProfile(user.id, true);
       notify(t('Perfil guardado'), 'success');
     } catch (e) {
       notify((e as Error).message, 'error');
@@ -242,10 +247,17 @@ export function ProfileEditScreen({
               ? t('Otros pueden ver tu perfil y seguirte.')
               : t('Tu perfil no aparece para otros.')}
           </Text>
+          {!user && (
+            <Text style={styles.hint}>
+              {t(
+                'El perfil público vive en tu cuenta: créala en Datos y nube para poder guardarlo.'
+              )}
+            </Text>
+          )}
           <Button
             title={savingProfile ? t('Guardando…') : t('Guardar perfil')}
             onPress={handleSaveProfile}
-            disabled={savingProfile}
+            disabled={savingProfile || !user}
           />
         </View>
       </StretchScrollView>

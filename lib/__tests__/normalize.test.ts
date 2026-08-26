@@ -1,5 +1,6 @@
 import {
   dedupeExerciseLogs,
+  mergeDuplicateDayLogs,
   mergeSameDayCardio,
   repairDuplicatedSets,
 } from '../normalize';
@@ -149,7 +150,10 @@ describe('repairDuplicatedSets', () => {
 
   it('no toca un ejercicio sano aunque sus series sean idénticas', () => {
     const logs = withExercises([
-      makeExerciseLog('20x15, 20x15, 20x15', sets([20, 15], [20, 15], [20, 15])),
+      makeExerciseLog(
+        '20x15, 20x15, 20x15',
+        sets([20, 15], [20, 15], [20, 15])
+      ),
     ]);
     expect(repairDuplicatedSets(logs)).toBe(logs);
   });
@@ -212,8 +216,99 @@ describe('dedupeExerciseLogs', () => {
   it('no toca un entreno con ejercicios distintos', () => {
     const logs = withExercises([
       makeExerciseLog('60x8', sets([60, 8]), { exerciseId: 'ex1' }),
-      makeExerciseLog('30x10', sets([30, 10]), { id: 'el2', exerciseId: 'ex2' }),
+      makeExerciseLog('30x10', sets([30, 10]), {
+        id: 'el2',
+        exerciseId: 'ex2',
+      }),
     ]);
     expect(dedupeExerciseLogs(logs)).toBe(logs);
+  });
+});
+
+// Días duplicados: el autoguardado antiguo borraba el log y lo recreaba con un
+// id nuevo en cada serie, así que un borrado perdido dejaba dos entrenos del
+// mismo día y la misma fecha (y el día repetido abría semana nueva).
+
+const makeDayLog = (
+  id: string,
+  exercises: ExerciseLog[],
+  opts: { createdAt?: number; dayId?: string } = {}
+): WorkoutLog => ({
+  id,
+  routineId: 'r1',
+  dayId: opts.dayId ?? 'd1',
+  date: '2026-08-25',
+  exercises,
+  createdAt: opts.createdAt ?? 1,
+  updatedAt: opts.createdAt ?? 1,
+});
+
+describe('mergeDuplicateDayLogs', () => {
+  it('fusiona dos entrenos del mismo día y fecha en el más reciente', () => {
+    const logs = mergeDuplicateDayLogs([
+      makeDayLog('huerfano', [makeExerciseLog('60x8', sets([60, 8]))], {
+        createdAt: 100,
+      }),
+      makeDayLog(
+        'vivo',
+        [makeExerciseLog('60x8, 65x6', sets([60, 8], [65, 6]))],
+        { createdAt: 200 }
+      ),
+    ]);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].id).toBe('vivo');
+    expect(logs[0].exercises[0].parsedSets).toEqual(sets([60, 8], [65, 6]));
+  });
+
+  it('conserva de cada ejercicio la copia con más series', () => {
+    const logs = mergeDuplicateDayLogs([
+      makeDayLog(
+        'huerfano',
+        [
+          makeExerciseLog('60x8, 65x6, 65x4', sets([60, 8], [65, 6], [65, 4]), {
+            exerciseId: 'ex1',
+          }),
+        ],
+        { createdAt: 100 }
+      ),
+      makeDayLog(
+        'vivo',
+        [
+          makeExerciseLog('60x8', sets([60, 8]), { exerciseId: 'ex1' }),
+          makeExerciseLog('30x10', sets([30, 10]), {
+            id: 'el2',
+            exerciseId: 'ex2',
+          }),
+        ],
+        { createdAt: 200 }
+      ),
+    ]);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].id).toBe('vivo');
+    expect(logs[0].exercises).toHaveLength(2);
+    expect(logs[0].exercises[0].parsedSets).toEqual(
+      sets([60, 8], [65, 6], [65, 4])
+    );
+    expect(logs[0].exercises[1].parsedSets).toEqual(sets([30, 10]));
+  });
+
+  it('no toca días distintos ni fechas distintas', () => {
+    const logs = [
+      makeDayLog('a', [makeExerciseLog('60x8', sets([60, 8]))]),
+      makeDayLog('b', [makeExerciseLog('60x8', sets([60, 8]))], {
+        dayId: 'd2',
+      }),
+    ];
+    expect(mergeDuplicateDayLogs(logs)).toBe(logs);
+  });
+
+  it('deja en paz las sesiones de solo cardio (las fusiona mergeSameDayCardio)', () => {
+    const logs = [
+      makeLog('cardio1', '2026-08-25', 'Correr: 10min', { cardioOnly: true }),
+      makeLog('cardio2', '2026-08-25', 'Bici: 20min', { cardioOnly: true }),
+    ];
+    expect(mergeDuplicateDayLogs(logs)).toBe(logs);
   });
 });

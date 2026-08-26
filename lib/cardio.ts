@@ -1,5 +1,5 @@
 import { WorkoutDay, WorkoutLog } from '../types';
-import { localizeDecimals } from './i18n';
+import { fmtNum } from './i18n';
 
 /**
  * Lógica pura del cardio "de primera clase".
@@ -117,16 +117,6 @@ export function weightForTimestamp(
   }
   return weight;
 }
-
-/**
- * Redondea a 1 decimal, quita el ".0" innecesario y pinta el decimal con el
- * separador del idioma (coma en español). Es formato de PINTADO: los datos se
- * guardan siempre con punto (ver i18n.ts).
- */
-export const fmtNum = (n: number): string => {
-  const r = Math.round(n * 10) / 10;
-  return localizeDecimals(Number.isInteger(r) ? String(r) : r.toFixed(1));
-};
 
 /** "12" o "12-12.6" según coincidan mín y máx. */
 export const rangeStr = (min: number, max: number): string =>

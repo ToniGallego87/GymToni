@@ -740,6 +740,43 @@ export async function getOutboxBatch(limit = 500): Promise<OutboxRow[]> {
   );
 }
 
+/** Ids por entidad con un cambio local aún sin subir (ver `dropPendingLocal`). */
+export interface PendingLocalIds {
+  routines: string[];
+  days: string[];
+  logs: string[];
+}
+
+// Qué tiene el outbox pendiente de subir ahora mismo. El pull lo consulta para
+// no pisar cambios locales que la nube todavía no conoce.
+export async function getPendingOutboxIds(): Promise<PendingLocalIds> {
+  const db = await getDb();
+  const rows = await db.getAllAsync<{ entity: SyncEntity; entity_id: string }>(
+    'SELECT DISTINCT entity, entity_id FROM sync_outbox'
+  );
+  const pending: PendingLocalIds = { routines: [], days: [], logs: [] };
+  for (const row of rows) {
+    if (row.entity === 'routine') pending.routines.push(row.entity_id);
+    else if (row.entity === 'workout_day') pending.days.push(row.entity_id);
+    else if (row.entity === 'workout_log') pending.logs.push(row.entity_id);
+  }
+  return pending;
+}
+
+// Encola el borrado de unos entrenos SIN tocar la BD (ya no están: los ha
+// quitado la reparación al cargar, ver storage.ts). `saveAppDataToDb` reescribe
+// la base entera pero no pasa por el outbox, así que sin esto el entreno
+// duplicado seguiría vivo en la nube y el siguiente pull lo devolvería.
+export async function dbEnqueueLogDeletes(logIds: string[]): Promise<void> {
+  if (!logIds.length) return;
+  const db = await getDb();
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    for (const logId of logIds) {
+      await enqueueOutbox(txn, 'workout_log', logId, 'delete', null);
+    }
+  });
+}
+
 export async function deleteOutboxEntries(ids: string[]): Promise<void> {
   if (!ids.length) return;
   const db = await getDb();

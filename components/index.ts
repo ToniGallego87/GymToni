@@ -36,6 +36,7 @@ export { ExerciseFormRow, ExerciseSummaryRow } from './ExerciseFormRow';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
 export { WhatsNewModal } from './WhatsNewModal';
+export { UpdateAvailableModal } from './UpdateAvailableModal';
 export { ThemeRevealOverlay } from './ThemeRevealOverlay';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
@@ -46,6 +47,7 @@ export {
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
 } from './FloatingBackButton';
 export { getFloatingPrimaryNavMetrics } from './FloatingGlassBar';
 export { FloatingPrimaryNav } from './FloatingPrimaryNav';

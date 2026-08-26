@@ -2,7 +2,6 @@ import { WorkoutDay, WorkoutLog } from '../types';
 import {
   buildImprovementFromStrengthScores,
   getComparableWorkoutScores,
-  getWorkoutStrengthScore,
   ImprovementResult,
 } from './progress';
 import { getLogTimestamp } from './utils';
@@ -315,15 +314,6 @@ export function isWeekCompleted(
   return activeDays.every((day) => daysWithLogs.has(day.id));
 }
 
-interface WeekScoreOptions {
-  /** Número de días esperados en la semana, usado para penalizar días no entrenados. */
-  activeDaysCount: number;
-  /** Si se indica, solo se cuentan los días incluidos en esta lista. */
-  restrictToDayIds?: string[];
-  /** Resta un 10% de puntuación por cada día esperado que falte (por defecto, true). */
-  applyMissingPenalty?: boolean;
-}
-
 /** Último log de cada día de una semana, indexado por `dayId`. */
 export function latestLogsByDayId(
   weekLogs: WorkoutLog[]
@@ -338,45 +328,6 @@ export function latestLogsByDayId(
       }
     });
   return latestByDayId;
-}
-
-/**
- * Suma la puntuación de fuerza de una semana usando el último log de cada día.
- * Penaliza (10% por día) los días esperados que no se hayan entrenado.
- */
-export function getWeekStrengthScore(
-  weekLogs: WorkoutLog[],
-  {
-    activeDaysCount,
-    restrictToDayIds,
-    applyMissingPenalty = true,
-  }: WeekScoreOptions
-): number {
-  if (weekLogs.length === 0) return 0;
-
-  // Quedarse solo con el log más reciente de cada día.
-  const latestByDayId = latestLogsByDayId(weekLogs);
-
-  const selectedLogs = Object.values(latestByDayId).filter(
-    (log) => !restrictToDayIds || restrictToDayIds.indexOf(log.dayId) !== -1
-  );
-
-  const rawStrength = selectedLogs.reduce(
-    (sum, log) => sum + getWorkoutStrengthScore(log),
-    0
-  );
-
-  if (!applyMissingPenalty) {
-    return rawStrength;
-  }
-
-  const expectedCount = restrictToDayIds
-    ? restrictToDayIds.length
-    : Math.max(1, activeDaysCount || 5);
-  const missingDays = Math.max(0, expectedCount - selectedLogs.length);
-  const penaltyFactor = Math.max(0, 1 - missingDays * 0.1);
-
-  return rawStrength * penaltyFactor;
 }
 
 /** Días distintos entrenados en una semana. */
@@ -625,9 +576,7 @@ export function buildWeekProgress(
     // no tienen base quedan fuera de los dos lados. Pera con pera, igual que el
     // porcentaje del listado.
     const currentByDayId = latestLogsByDayId(weekLogs);
-    const currentDayIds = dayFilter
-      ? [dayFilter]
-      : Object.keys(currentByDayId);
+    const currentDayIds = dayFilter ? [dayFilter] : Object.keys(currentByDayId);
 
     let currentScore = 0;
     let baseScore = 0;

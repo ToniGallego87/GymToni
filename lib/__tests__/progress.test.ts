@@ -104,7 +104,7 @@ describe('buildImprovementFromStrengthScores', () => {
 });
 
 describe('buildWorkoutImprovement', () => {
-  const set = (weight: number) => ({ weight, reps: 10 } as ParsedSet);
+  const set = (weight: number) => ({ weight, reps: 10 }) as ParsedSet;
 
   const makeLog = (
     id: string,
@@ -126,7 +126,7 @@ describe('buildWorkoutImprovement', () => {
         parsedSets: exercise.sets,
         timestamp: 1,
       })),
-    } as WorkoutLog);
+    }) as WorkoutLog;
 
   it('un ejercicio que hoy no se hizo no cuenta como −100%', () => {
     const previous = makeLog('p', [
@@ -159,7 +159,9 @@ describe('buildWorkoutImprovement', () => {
 
   it('sin ejercicios en común no hay porcentaje', () => {
     const previous = makeLog('p', [{ exerciseId: 'press', sets: [set(100)] }]);
-    const current = makeLog('c', [{ exerciseId: 'sentadilla', sets: [set(100)] }]);
+    const current = makeLog('c', [
+      { exerciseId: 'sentadilla', sets: [set(100)] },
+    ]);
 
     expect(buildWorkoutImprovement(current, previous)).toBeNull();
     expect(buildWorkoutImprovement(current, null)).toBeNull();

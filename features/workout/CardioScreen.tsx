@@ -20,14 +20,19 @@ import { getToday } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
-import { t, dateLocale, localizeDecimals, parseTypedNumber } from '@lib/i18n';
+import {
+  t,
+  dateLocale,
+  fmtNum,
+  localizeDecimals,
+  parseTypedNumber,
+} from '@lib/i18n';
 import {
   buildCardioDays,
   buildCardioWeeks,
   buildCardioMonths,
   disciplineIconName,
   formatMergedResults,
-  fmtNum,
   hasIncline,
   CardioDay,
   CardioMonth,

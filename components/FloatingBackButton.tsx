@@ -5,16 +5,41 @@ import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import {
+  GLASS_BACK_BUTTON_BG,
+  GLASS_BACK_BUTTON_BORDER,
+  GLASS_BACK_BUTTON_OVERLAY,
+  GLASS_BACK_BUTTON_TEXT,
   GLASS_BLUR_INTENSITY,
-  GLASS_FLOATING_BG,
-  GLASS_FLOATING_BORDER,
-  GLASS_FLOATING_TEXT,
 } from './glassTokens';
 
 const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
 
 export const FLOATING_BACK_BUTTON_HEIGHT = 58;
 export const FLOATING_BACK_BUTTON_MARGIN = 16;
+// Suelo del inset inferior: en móviles sin barra de gestos `insets.bottom` es 0
+// y el botón quedaría pegado al canto.
+export const FLOATING_BACK_BUTTON_MIN_INSET = 10;
+// Aire entre el final del scroll y el botón, para que el último elemento de la
+// lista no quede debajo del cristal.
+export const FLOATING_BACK_BUTTON_SCROLL_EXTRA_PADDING = 28;
+
+/**
+ * Posición del botón "Volver" y padding inferior que necesita el scroll de la
+ * pantalla que lo lleva. Espejo de `getFloatingPrimaryNavMetrics` (barra de
+ * pestañas) para las pantallas que NO son pestaña: antes cada una repetía la
+ * misma fórmula a mano.
+ */
+export function getFloatingBackButtonMetrics(bottomInset: number) {
+  const bottom =
+    Math.max(bottomInset, FLOATING_BACK_BUTTON_MIN_INSET) +
+    FLOATING_BACK_BUTTON_MARGIN;
+  const scrollBottomPadding =
+    bottom +
+    FLOATING_BACK_BUTTON_HEIGHT +
+    FLOATING_BACK_BUTTON_SCROLL_EXTRA_PADDING;
+
+  return { bottom, scrollBottomPadding };
+}
 
 interface FloatingBackButtonProps {
   onPress: () => void;
@@ -27,17 +52,14 @@ export function FloatingBackButton({
   bottom,
   label = `← ${t('Volver')}`,
 }: FloatingBackButtonProps) {
-  // En ambos temas el botón es cristal oscuro TRANSLÚCIDO con texto blanco: el
+  // En ambos temas el botón es cristal oscuro TRANSLÚCIDO con texto claro: el
   // blur de tinte oscuro sobre el fondo claro deja un ahumado que se lee sin
   // opacar el contenido de detrás (antes en día era una píldora oscura sólida).
-  // Se lee en render (no a nivel de módulo) para que el cambio de tema en
-  // caliente aplique la variante correcta.
-  const isLight = theme.mode === 'light';
+  // La variante de cada tema vive en los tokens `GLASS_BACK_BUTTON_*`.
   return (
     <Pressable
       style={[
         styles.floatingBackButton,
-        isLight && styles.floatingBackButtonLight,
         {
           left: FLOATING_BACK_BUTTON_MARGIN,
           right: FLOATING_BACK_BUTTON_MARGIN,
@@ -53,17 +75,8 @@ export function FloatingBackButton({
         experimentalBlurMethod="dimezisBlurView"
         style={styles.floatingBackBlur}
       />
-      <View
-        style={[
-          styles.floatingBackGlassOverlay,
-          isLight && styles.floatingBackGlassOverlayLight,
-        ]}
-      />
-      <Text
-        style={[styles.backButtonText, isLight && styles.backButtonTextLight]}
-      >
-        {label}
-      </Text>
+      <View style={styles.floatingBackGlassOverlay} />
+      <Text style={styles.backButtonText}>{label}</Text>
     </Pressable>
   );
 }
@@ -76,36 +89,26 @@ const makeStyles = () =>
       borderRadius: 22,
       justifyContent: 'center',
       alignItems: 'center',
-      backgroundColor: GLASS_FLOATING_BG,
+      backgroundColor: GLASS_BACK_BUTTON_BG,
       borderWidth: 1,
-      borderColor: GLASS_FLOATING_BORDER,
+      borderColor: GLASS_BACK_BUTTON_BORDER,
       overflow: 'hidden',
       ...theme.shadow.card,
-    },
-    floatingBackButtonLight: {
-      backgroundColor: 'rgba(18, 22, 30, 0.30)',
-      borderColor: 'rgba(255, 255, 255, 0.16)',
     },
     floatingBackBlur: {
       ...StyleSheet.absoluteFillObject,
     },
     floatingBackGlassOverlay: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: 'rgba(8, 12, 16, 0.05)',
+      backgroundColor: GLASS_BACK_BUTTON_OVERLAY,
       pointerEvents: 'none',
     },
-    floatingBackGlassOverlayLight: {
-      backgroundColor: 'rgba(8, 12, 16, 0.06)',
-    },
     backButtonText: {
-      color: theme.colors.white,
+      color: GLASS_BACK_BUTTON_TEXT,
       fontWeight: '800',
       fontSize: 16,
       lineHeight: 20,
       letterSpacing: 0.2,
-    },
-    backButtonTextLight: {
-      color: GLASS_FLOATING_TEXT,
     },
   });
 

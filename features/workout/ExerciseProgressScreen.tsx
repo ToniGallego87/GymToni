@@ -23,14 +23,13 @@ import {
 } from '@lib/exerciseProgress';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
-import { dateLocale, localizeDecimals, t } from '@lib/i18n';
+import { dateLocale, fmtNum, t } from '@lib/i18n';
 import {
   BarChart,
   BarChartPoint,
   Button,
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
@@ -62,10 +61,6 @@ const SORT_OPTIONS: SegmentedOption<ExerciseSort>[] = [
   { id: 'sessions', label: t('Sesiones') },
   { id: 'best', label: t('1RM') },
 ];
-
-/** Redondea a un decimal y lo pinta con el separador del idioma ("82,5"). */
-const fmtNum = (value: number) =>
-  localizeDecimals(String(Math.round(value * 10) / 10));
 
 /** "12 jul" a partir de una fecha YYYY-MM-DD. */
 const shortDate = (date: string) =>
@@ -241,8 +236,8 @@ export function ExerciseProgressScreen({
   );
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const backBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = backBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: backBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
   const chartWidth = Math.max(
     250,
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)

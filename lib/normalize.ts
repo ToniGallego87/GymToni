@@ -150,6 +150,85 @@ export function repairDuplicatedSets(logs: WorkoutLog[]): WorkoutLog[] {
 }
 
 /**
+ * Un día de la rutina solo puede entrenarse una vez por fecha: la pantalla de
+ * registro reabre el entreno de hoy en vez de crear otro. Si aun así aparecen
+ * dos, es basura del autoguardado antiguo, que borraba el log y lo reinsertaba
+ * con un id NUEVO en cada serie: un borrado que no llegaba (o una versión vieja
+ * devuelta por el pull) dejaba un huérfano con lo insertado hasta ese momento.
+ * Como el día repetido abre bloque nuevo en `weeks.ts`, el entreno salía clonado
+ * "en la semana siguiente".
+ *
+ * Se fusionan en uno solo. Base: la copia más reciente (la que el registro
+ * estaba escribiendo, y la que la pantalla vuelve a elegir al reabrir el día).
+ * De cada ejercicio se conserva la versión con MÁS series, así que ninguna de
+ * las dos pierde datos. Los `cardioOnly` no entran: de esos se ocupa
+ * `mergeSameDayCardio`.
+ */
+export function mergeDuplicateDayLogs(logs: WorkoutLog[]): WorkoutLog[] {
+  const byDay = new Map<string, WorkoutLog[]>();
+  for (const log of logs) {
+    if (isCardioOnlyLog(log)) continue;
+    const key = `${log.routineId}|${log.dayId}|${log.date}`;
+    const group = byDay.get(key);
+    if (group) group.push(log);
+    else byDay.set(key, [log]);
+  }
+
+  const mergedById = new Map<string, WorkoutLog>();
+  const dropped = new Set<string>();
+
+  for (const group of byDay.values()) {
+    if (group.length < 2) continue;
+
+    // Más reciente primero: mismo criterio que usa la pantalla de registro para
+    // reabrir el entreno del día (el de `createdAt` más alto).
+    const sorted = [...group].sort(
+      (a, b) =>
+        (b.createdAt ?? 0) - (a.createdAt ?? 0) ||
+        (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+    );
+    const [base, ...rest] = sorted;
+
+    const byExercise = new Map<string, ExerciseLog>();
+    for (const log of sorted) {
+      for (const exerciseLog of log.exercises || []) {
+        const key =
+          exerciseLog.exerciseId ||
+          `${exerciseLog.exerciseName}|${exerciseLog.order}`;
+        const previous = byExercise.get(key);
+        // El primero en llegar es el de la copia más reciente; una copia vieja
+        // solo lo sustituye si trae más series (datos que se habrían perdido).
+        if (
+          !previous ||
+          (exerciseLog.parsedSets?.length ?? 0) >
+            (previous.parsedSets?.length ?? 0)
+        ) {
+          byExercise.set(key, exerciseLog);
+        }
+      }
+    }
+
+    mergedById.set(base.id, {
+      ...base,
+      exercises: [...byExercise.values()].sort((a, b) => a.order - b.order),
+      cardio: base.cardio ?? rest.find((log) => log.cardio)?.cardio,
+      startsNewWeek:
+        base.startsNewWeek ||
+        rest.some((log) => log.startsNewWeek) ||
+        undefined,
+      isDeload: base.isDeload || rest.some((log) => log.isDeload) || undefined,
+      updatedAt: Date.now(),
+    });
+    for (const log of rest) dropped.add(log.id);
+  }
+
+  if (!dropped.size) return logs;
+  return logs
+    .filter((log) => !dropped.has(log.id))
+    .map((log) => mergedById.get(log.id) ?? log);
+}
+
+/**
  * Un día = un cardio: el cardio de una fecha vive dentro del log de fuerza de
  * ese día, y las sesiones de "solo cardio" son para los días que no tienen
  * fuerza. Si una fecha tiene las dos cosas (se metió cardio en el día de fuerza
@@ -226,8 +305,9 @@ export function resolveActiveRoutineId(
 /**
  * Normalizes raw/partial app data into a consistent WorkoutAppData shape.
  * Ensures parsedSets are populated, isActive flags are coherent, el cardio
- * de cada fecha vive en un único log (ver mergeSameDayCardio) y el historial no
- * arrastra duplicados del restore (ver repairDuplicatedSets).
+ * de cada fecha vive en un único log (ver mergeSameDayCardio), un día de la
+ * rutina no sale entrenado dos veces la misma fecha (ver mergeDuplicateDayLogs)
+ * y el historial no arrastra duplicados del restore (ver repairDuplicatedSets).
  */
 export function normalizeAppData(
   payload: Partial<WorkoutAppData> | null | undefined,
@@ -252,8 +332,13 @@ export function normalizeAppData(
     routines: syncActiveRoutine(routines, activeRoutineId),
     activeRoutineId,
     selectedRoutineId,
+    // El orden importa: primero se limpia cada entreno (series y ejercicios),
+    // luego se fusionan los días repetidos y por último el cardio suelto, que
+    // debe aterrizar en el log de fuerza ya fusionado.
     logs: mergeSameDayCardio(
-      repairDuplicatedSets(dedupeExerciseLogs(ensureParsedSets(rawLogs)))
+      mergeDuplicateDayLogs(
+        repairDuplicatedSets(dedupeExerciseLogs(ensureParsedSets(rawLogs)))
+      )
     ),
   };
 }

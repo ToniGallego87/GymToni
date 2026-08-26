@@ -4,7 +4,12 @@ import { DEFAULT_ACTIVE_ROUTINE_ID, INITIAL_LOGS } from '@data/seedData';
 import { WORKOUT_ROUTINES } from '@data/workoutDays';
 import { WorkoutAppData } from '../types';
 import { WeightSegment } from './cardio';
-import { clearAppDataInDb, loadAppDataFromDb, saveAppDataToDb } from './db';
+import {
+  clearAppDataInDb,
+  dbEnqueueLogDeletes,
+  loadAppDataFromDb,
+  saveAppDataToDb,
+} from './db';
 import { normalizeAppData } from './normalize';
 import devWebSeed from '@data/devWebSeed.json';
 
@@ -14,6 +19,7 @@ import devWebSeed from '@data/devWebSeed.json';
 const APP_STORAGE_KEY = 'gymbro_app_data';
 const LOGS_STORAGE_KEY = 'gymbro_logs';
 const LAST_SEEN_VERSION_KEY = 'gymbro_last_seen_version';
+const LAST_UPDATE_PROMPT_KEY = 'gymbro_last_update_prompt_version';
 
 const isWeb = Platform.OS === 'web';
 
@@ -142,11 +148,22 @@ export async function loadAppData(): Promise<WorkoutAppData | null> {
     const fromDb = await loadAppDataFromDb();
     if (fromDb) {
       const normalized = normalizeAppData(fromDb, fallback);
-      // Autorreparación: si al normalizar han desaparecido series o ejercicios,
-      // eran duplicados del restore de la nube (ver normalize.ts). Hay que
-      // reescribir la BD o la basura seguiría ahí y volvería a subir a la nube.
-      if (countLogEntries(normalized.logs) < countLogEntries(fromDb.logs)) {
+      // Autorreparación: si al normalizar han desaparecido entrenos enteros
+      // (días duplicados, cardio suelto absorbido) o series y ejercicios
+      // (duplicados del restore de la nube), hay que reescribir la BD o la
+      // basura seguiría ahí y volvería a subir a la nube (ver normalize.ts).
+      const removedLogIds = fromDb.logs
+        .filter((log) => !normalized.logs.some((kept) => kept.id === log.id))
+        .map((log) => log.id);
+      if (
+        removedLogIds.length > 0 ||
+        countLogEntries(normalized.logs) < countLogEntries(fromDb.logs)
+      ) {
         await saveAppDataToDb(normalized);
+        // `saveAppDataToDb` reescribe la BD pero no pasa por el outbox: sin esto
+        // el entreno eliminado seguiría vivo en la nube y volvería en el
+        // siguiente pull.
+        await dbEnqueueLogDeletes(removedLogIds);
       }
       return normalized;
     }
@@ -228,6 +245,20 @@ export async function getLastSeenVersion(): Promise<string | null> {
 
 export async function setLastSeenVersion(version: string): Promise<void> {
   await setStorageItem(LAST_SEEN_VERSION_KEY, version);
+}
+
+// Última versión publicada de la que ya se avisó al usuario (popup "Hay una
+// versión nueva", components/UpdateAvailableModal.tsx). Se guarda al cerrar el
+// aviso para no repetirlo en cada arranque; cuando se publique una versión más
+// nueva volverá a salir, porque el valor guardado ya no coincidirá.
+export async function getLastUpdatePromptVersion(): Promise<string | null> {
+  return getStorageItem(LAST_UPDATE_PROMPT_KEY);
+}
+
+export async function setLastUpdatePromptVersion(
+  version: string
+): Promise<void> {
+  await setStorageItem(LAST_UPDATE_PROMPT_KEY, version);
 }
 
 export async function clearAppData(): Promise<void> {

@@ -5,8 +5,7 @@ import {
   Button,
   ConfirmModal,
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
@@ -93,8 +92,8 @@ export function DataScreen({
   } | null>(null);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const backBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = backBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: backBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   const hasNoData = state.routines.length === 0 && state.logs.length === 0;
   const canBackup = canWriteLocalBackup();

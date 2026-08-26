@@ -1,12 +1,16 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
-import { StyleSheet, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Animated, { ZoomIn } from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
+import { Avatar } from './Avatar';
 import { FloatingGlassBar } from './FloatingGlassBar';
 import { GLASS_ACTIVE_ITEM_BG, GLASS_ACTIVE_ITEM_BORDER } from './glassTokens';
+
+// Diámetro de la foto en la barra: ocupa lo mismo que el icono al que sustituye.
+const NAV_AVATAR_SIZE = 22;
 
 type FloatingPrimaryNavKey =
   | 'home'
@@ -20,6 +24,12 @@ interface FloatingPrimaryNavProps {
   activeTab: FloatingPrimaryNavKey;
   /** Oculta el botón de Cardio cuando no hay ningún registro de cardio. */
   showCardio?: boolean;
+  /**
+   * Foto del perfil público. Si la hay, la pestaña de Perfil la pinta en lugar
+   * del icono genérico: la cara propia se reconoce antes que una silueta, y de
+   * paso la barra dice de un vistazo con qué cuenta estás.
+   */
+  profileAvatarUri?: string | null;
   onPressHome?: () => void;
   onPressCardio?: () => void;
   onPressCalendar?: () => void;
@@ -38,6 +48,7 @@ export function FloatingPrimaryNav({
   bottom,
   activeTab,
   showCardio = true,
+  profileAvatarUri,
   onPressHome,
   onPressCardio,
   onPressCalendar,
@@ -46,8 +57,11 @@ export function FloatingPrimaryNav({
 }: FloatingPrimaryNavProps) {
   const items: NavItem[] = [
     {
+      // "Inicio", no "Fuerza": es como se llama la pantalla en su propia barra
+      // superior, en la documentación y en el resto del código. El icono de
+      // mancuerna ya dice que es la vista de fuerza.
       key: 'home',
-      label: t('Fuerza'),
+      label: t('Inicio'),
       icon: 'dumbbell',
       onPress: onPressHome,
     },
@@ -109,11 +123,22 @@ export function FloatingPrimaryNav({
                 pointerEvents="none"
               />
             )}
-            <MaterialCommunityIcons
-              name={item.icon}
-              size={22}
-              style={[styles.icon, isActive && styles.iconActive]}
-            />
+            {item.key === 'profile' && profileAvatarUri ? (
+              // La foto sustituye al icono: mismo hueco (22 + su margen) para
+              // que la fila no se descuadre. Activa lleva aro, que es como se
+              // marca aquí lo seleccionado (el tinte no vale sobre una foto).
+              <View
+                style={[styles.avatarWrap, isActive && styles.avatarWrapActive]}
+              >
+                <Avatar uri={profileAvatarUri} size={NAV_AVATAR_SIZE} />
+              </View>
+            ) : (
+              <MaterialCommunityIcons
+                name={item.icon}
+                size={22}
+                style={[styles.icon, isActive && styles.iconActive]}
+              />
+            )}
             <Text
               style={[styles.label, isActive && styles.labelActive]}
               numberOfLines={1}
@@ -156,6 +181,19 @@ const makeStyles = () =>
     icon: {
       color: theme.colors.textSecondary,
       marginBottom: 3,
+    },
+    // El aro se pinta por fuera de la foto (borde + padding), así la cara no
+    // encoge al pasar a activa ni se recorta contra el borde.
+    avatarWrap: {
+      marginBottom: 3,
+      borderRadius: NAV_AVATAR_SIZE,
+      borderWidth: 1.5,
+      borderColor: 'transparent',
+      opacity: 0.7,
+    },
+    avatarWrapActive: {
+      borderColor: theme.colors.white,
+      opacity: 1,
     },
     iconActive: {
       color: theme.colors.white,

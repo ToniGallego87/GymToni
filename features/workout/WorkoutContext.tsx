@@ -134,13 +134,20 @@ function workoutReducer(
           : state.routines,
       };
     }
-    case 'UPDATE_WORKOUT_LOG':
+    case 'UPDATE_WORKOUT_LOG': {
+      // Upsert: el registro autoguarda siempre sobre el mismo id, así que si el
+      // log ya no está (p. ej. lo quitó un SET_APP_DATA venido de la nube en
+      // mitad de la sesión) se reinserta en vez de perder lo insertado.
+      const exists = state.logs.some((log) => log.id === action.payload.id);
       return {
         ...state,
-        logs: state.logs.map((log) =>
-          log.id === action.payload.id ? action.payload : log
-        ),
+        logs: exists
+          ? state.logs.map((log) =>
+              log.id === action.payload.id ? action.payload : log
+            )
+          : [...state.logs, action.payload],
       };
+    }
     case 'DELETE_WORKOUT_LOG':
       return {
         ...state,

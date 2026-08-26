@@ -10,6 +10,8 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  OptionToggle,
+  OptionToggleOption,
   StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
@@ -33,6 +35,11 @@ import { findDayInRoutines, getToday } from '@lib/utils';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 type CalendarMode = 'fuerza' | 'cardio';
+
+const MODE_OPTIONS: OptionToggleOption<CalendarMode>[] = [
+  { value: 'fuerza', label: t('Fuerza'), icon: 'dumbbell' },
+  { value: 'cardio', label: t('Cardio'), icon: 'run-fast' },
+];
 
 // Icono de la celda de cardio: la disciplina que más kcal quemó ese día (cuesta
 // arriba si la hizo con pendiente).
@@ -189,6 +196,29 @@ export function CalendarScreen({
     );
   }, [state.logs, state.routines]);
 
+  // Rutinas que aparecen en el mes visible. Las celdas de fuerza rotulan la suya
+  // como "R1", "R2"… (su posición en la lista de rutinas), un código que sin
+  // leyenda no dice nada: aquí se resuelve a su nombre real.
+  const monthRoutines = useMemo(() => {
+    const prefix = `${currentYear}-${String(currentMonth + 1).padStart(
+      2,
+      '0'
+    )}-`;
+    const found = new Map<string, { index: number; name: string }>();
+    state.logs.forEach((log: WorkoutLog) => {
+      if (!log.date?.startsWith(prefix)) return;
+      // Solo los logs de fuerza: son los únicos que pintan el chip.
+      if (!getDayById(log.dayId)) return;
+      if (found.has(log.routineId)) return;
+      const index = state.routines.findIndex(
+        (routine: WorkoutRoutine) => routine.id === log.routineId
+      );
+      if (index < 0) return;
+      found.set(log.routineId, { index, name: state.routines[index].name });
+    });
+    return [...found.values()].sort((a, b) => a.index - b.index);
+  }, [state.logs, state.routines, currentYear, currentMonth]);
+
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
   const firstWeekDay = (firstDayOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -299,38 +329,20 @@ export function CalendarScreen({
           </Pressable>
         </View>
 
+        {/* Elegir una de dos = `OptionToggle`, el mismo componente (y el mismo
+            estado activo translúcido) que Configuración y Datos. Antes esto era
+            un par de botones a mano con relleno dorado sólido: otra piel para la
+            misma tarea. */}
         {cardioAvailable && (
-          <View style={styles.modeToggle}>
-            {(['fuerza', 'cardio'] as CalendarMode[]).map((m) => {
-              const active = mode === m;
-              // Activo = relleno dorado, así que la tinta es la del oro. Iba con
-              // `background`, que en día es casi blanco y sobre el oro vivo no se
-              // leía (en noche coinciden, así que allí no cambia nada).
-              const color = active
-                ? theme.colors.onGold
-                : theme.colors.textSecondary;
-              return (
-                <Pressable
-                  key={m}
-                  style={[styles.modeButton, active && styles.modeButtonActive]}
-                  onPress={() => {
-                    if (m === mode) return;
-                    animateLayout();
-                    setMode(m);
-                  }}
-                >
-                  <MaterialCommunityIcons
-                    name={m === 'fuerza' ? 'dumbbell' : 'run-fast'}
-                    size={16}
-                    color={color}
-                  />
-                  <Text style={[styles.modeButtonText, { color }]}>
-                    {m === 'fuerza' ? t('Fuerza') : t('Cardio')}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+          <OptionToggle
+            style={styles.modeToggle}
+            options={MODE_OPTIONS}
+            value={mode}
+            onChange={(next) => {
+              animateLayout();
+              setMode(next);
+            }}
+          />
         )}
 
         <View style={styles.weekHeader}>
@@ -540,6 +552,28 @@ export function CalendarScreen({
             );
           })}
         </View>
+
+        {/* Leyenda de los códigos de la celda. "R1" y "S3" eran crípticos: no
+            había en toda la pantalla nada que dijera qué significaban. Solo en
+            modo fuerza, que es donde se pintan. */}
+        {mode === 'fuerza' && monthRoutines.length > 0 && (
+          <View style={styles.legend}>
+            {monthRoutines.map((routine) => (
+              <View key={routine.index} style={styles.legendRow}>
+                <Text style={styles.legendCode}>R{routine.index + 1}</Text>
+                <Text style={styles.legendText} numberOfLines={1}>
+                  {routine.name}
+                </Text>
+              </View>
+            ))}
+            <View style={styles.legendRow}>
+              <Text style={[styles.legendCode, styles.legendCodeMuted]}>
+                S#
+              </Text>
+              <Text style={styles.legendText}>{t('Semana de la rutina')}</Text>
+            </View>
+          </View>
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -687,34 +721,44 @@ const makeStyles = () =>
     dayWeekSpacer: {
       height: 19,
     },
-    // Toggle Fuerza/Cardio junto a la cabecera de mes: dos segmentos; el activo se
-    // rellena de amarillo (primary) con texto oscuro, el inactivo va gris sobre surface.
+    // Toggle Fuerza/Cardio bajo la cabecera de mes. La piel la pone
+    // `OptionToggle`; aquí solo su hueco.
     modeToggle: {
-      flexDirection: 'row',
-      gap: 8,
       marginBottom: 14,
-      padding: 4,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
     },
-    modeButton: {
-      flex: 1,
+    // Leyenda de los códigos de la celda (R# = rutina, S# = semana).
+    legend: {
+      marginTop: 14,
+      gap: 6,
+    },
+    legendRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 10,
+      gap: 8,
+    },
+    legendCode: {
+      minWidth: 26,
+      textAlign: 'center',
+      color: theme.colors.primary,
+      backgroundColor: theme.colors.primaryMuted,
       borderRadius: theme.borderRadius.sm,
-    },
-    modeButtonActive: {
-      backgroundColor: theme.colors.primaryFill,
-    },
-    modeButtonText: {
-      fontSize: 14,
+      paddingHorizontal: 6,
+      paddingVertical: 2,
+      overflow: 'hidden',
+      fontSize: 11,
       fontWeight: '800',
-      letterSpacing: 0.3,
+      letterSpacing: 0.2,
+      lineHeight: 15,
+    },
+    legendCodeMuted: {
+      color: theme.colors.textSecondary,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    legendText: {
+      flex: 1,
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
     },
     emptyState: {
       flex: 1,

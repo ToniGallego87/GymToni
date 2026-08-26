@@ -33,6 +33,15 @@ export let GLASS_FLOATING_INNER_STROKE = 'rgba(255, 255, 255, 0.04)';
 export let GLASS_ACTIVE_ITEM_BG = 'rgba(255, 255, 255, 0.12)';
 export let GLASS_ACTIVE_ITEM_BORDER = 'rgba(255, 255, 255, 0.14)';
 
+// Botón "Volver". No reutiliza los tokens de la barra flotante: en día esa
+// barra es cristal CLARO, mientras el "Volver" sigue siendo cristal OSCURO
+// translúcido (un ahumado que se lee sobre el lienzo claro sin opacarlo). Por
+// eso lleva su propia terna, y su tinta es clara en ambos temas.
+export let GLASS_BACK_BUTTON_BG = 'rgba(28, 32, 42, 0.24)';
+export let GLASS_BACK_BUTTON_BORDER = 'rgba(255, 255, 255, 0.12)';
+export let GLASS_BACK_BUTTON_OVERLAY = 'rgba(8, 12, 16, 0.05)';
+export let GLASS_BACK_BUTTON_TEXT = '#ffffff';
+
 function recomputeGlassTokens() {
   const isLight = theme.mode === 'light';
 
@@ -70,6 +79,17 @@ function recomputeGlassTokens() {
   GLASS_ACTIVE_ITEM_BORDER = isLight
     ? 'rgba(21, 25, 34, 0.14)'
     : 'rgba(255, 255, 255, 0.14)';
+
+  GLASS_BACK_BUTTON_BG = isLight
+    ? 'rgba(18, 22, 30, 0.30)'
+    : 'rgba(28, 32, 42, 0.24)';
+  GLASS_BACK_BUTTON_BORDER = isLight
+    ? 'rgba(255, 255, 255, 0.16)'
+    : 'rgba(255, 255, 255, 0.12)';
+  GLASS_BACK_BUTTON_OVERLAY = isLight
+    ? 'rgba(8, 12, 16, 0.06)'
+    : 'rgba(8, 12, 16, 0.05)';
+  GLASS_BACK_BUTTON_TEXT = isLight ? GLASS_FLOATING_TEXT : '#ffffff';
 }
 
 // Valor inicial acorde al tema guardado, y recálculo en cada cambio de tema.

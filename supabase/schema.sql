@@ -177,3 +177,31 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- ─────────────────── app_releases (aviso de actualización) ───────────────────
+-- Una fila por plataforma con la última versión publicada en la tienda. La app
+-- la consulta al arrancar (lib/cloud/release.ts) y, si es mayor que la
+-- instalada (app.json → expo.version), avisa con un popup y un enlace a Google
+-- Play. Hace falta porque la app se distribuye por Play con expo-updates
+-- deshabilitado: el dispositivo no tiene otra forma de saber que hay versión
+-- nueva.
+--
+-- Se publica a mano al cerrar cada versión (SQL Editor de Supabase):
+--   insert into public.app_releases (platform, version, updated_at)
+--   values ('android', '0.7.3', extract(epoch from now()) * 1000)
+--   on conflict (platform) do update
+--     set version = excluded.version, updated_at = excluded.updated_at;
+create table if not exists public.app_releases (
+  platform   text primary key,
+  version    text not null,
+  store_url  text,
+  updated_at bigint not null default 0
+);
+
+-- Lectura para todo el mundo, también sin sesión: el aviso tiene que funcionar
+-- sin haber iniciado sesión. No hay policy de escritura a propósito, así que
+-- desde el cliente nadie puede publicar una versión (solo el service_role).
+alter table public.app_releases enable row level security;
+
+create policy "read releases" on public.app_releases
+  for select using (true);

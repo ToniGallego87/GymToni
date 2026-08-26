@@ -9,8 +9,7 @@ import {
   DatePickerModal,
   DayAccentIcon,
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
@@ -32,7 +31,6 @@ import {
   toCardioOnlyLog,
   disciplineIconName,
   estimateEntryKcal,
-  fmtNum,
   hasIncline,
   weightForTimestamp,
   WeightSegment,
@@ -50,7 +48,7 @@ import {
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
-import { t, dateLocale } from '@lib/i18n';
+import { t, dateLocale, fmtNum } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   buildWorkoutImprovement,
@@ -255,10 +253,8 @@ export function DetailScreen({
   }
   const dayAccent = getTrainingAccent({ emoji: day.emoji, name: day.name });
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding =
-    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: floatingBackBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   // Tramos de peso: las kcal de cada entrada se estiman con el peso vigente
   // cuando se registró el cardio (mismo criterio que la pantalla de Cardio).

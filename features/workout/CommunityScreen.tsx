@@ -116,6 +116,8 @@ export function CommunityScreen({
 
   const [tab, setTab] = useState<Tab>('popular');
   const [intensity, setIntensity] = useState<IntensityFilter>('all');
+  // Raíl de intensidad desplegado (lo abre su botón del raíl de pestañas).
+  const [intensityOpen, setIntensityOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ProfileLite[]>([]);
   const [items, setItems] = useState<RoutineItem[]>(
@@ -482,16 +484,19 @@ export function CommunityScreen({
         </Pressable>
       )}
 
+      {/* El buscador busca PERSONAS, no las rutinas de la lista de abajo. La
+          lupa genérica sobre un listado hace pensar que lo filtra, así que el
+          icono y el rótulo dicen a quién se busca. */}
       <View style={styles.searchRow}>
         <View style={styles.searchBox}>
           <MaterialCommunityIcons
-            name="magnify"
+            name="account-search-outline"
             size={20}
             color={theme.colors.textMuted}
           />
           <TextInput
             style={styles.searchInput}
-            placeholder={t('Buscar usuarios')}
+            placeholder={t('Buscar personas')}
             placeholderTextColor={theme.colors.textMuted}
             value={query}
             onChangeText={setQuery}
@@ -546,27 +551,55 @@ export function CommunityScreen({
 
       {!showingSearch && (
         <>
-          <SegmentedFilter
-            options={[
-              { id: 'popular', label: t('Populares') },
-              { id: 'following', label: t('Siguiendo') },
-            ]}
-            value={tab}
-            onChange={(id) => setTab(id as Tab)}
-          />
-          {/* Segundo raíl: de dónde salen las rutinas lo decide el de arriba,
-              cuánta caña llevan lo decide este. Los iconos lo separan a simple
-              vista del raíl de pestañas. */}
-          <SegmentedFilter
-            options={[
-              { id: 'all', label: t('Todas') },
-              { id: 'soft', label: t('Suave'), icon: 'speedometer-slow' },
-              { id: 'medium', label: t('Medio'), icon: 'speedometer-medium' },
-              { id: 'hard', label: t('Intenso'), icon: 'speedometer' },
-            ]}
-            value={intensity}
-            onChange={(id) => setIntensity(id as IntensityFilter)}
-          />
+          {/* Un solo raíl por defecto: de dónde salen las rutinas. La intensidad
+              es un segundo eje que casi nadie toca, así que vive tras su botón
+              (visible, con su icono y su estado) y solo baja el raíl cuando se
+              abre —o cuando hay un filtro puesto, para que nunca quede un filtro
+              activo escondido. */}
+          <View style={styles.railRow}>
+            <SegmentedFilter
+              style={styles.railFilter}
+              options={[
+                { id: 'popular', label: t('Populares') },
+                { id: 'following', label: t('Siguiendo') },
+              ]}
+              value={tab}
+              onChange={(id) => setTab(id as Tab)}
+            />
+            <Pressable
+              style={({ pressed }) => [
+                styles.intensityButton,
+                intensityOpen && styles.intensityButtonActive,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => setIntensityOpen((open) => !open)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: intensityOpen }}
+              accessibilityLabel={t('Filtrar por intensidad')}
+            >
+              <MaterialCommunityIcons
+                name="speedometer"
+                size={20}
+                color={
+                  intensity === 'all' ? theme.colors.text : theme.colors.primary
+                }
+              />
+              {intensity !== 'all' && <View style={styles.intensityDot} />}
+            </Pressable>
+          </View>
+
+          {(intensityOpen || intensity !== 'all') && (
+            <SegmentedFilter
+              options={[
+                { id: 'all', label: t('Todas') },
+                { id: 'soft', label: t('Suave'), icon: 'speedometer-slow' },
+                { id: 'medium', label: t('Medio'), icon: 'speedometer-medium' },
+                { id: 'hard', label: t('Intenso'), icon: 'speedometer' },
+              ]}
+              value={intensity}
+              onChange={(id) => setIntensity(id as IntensityFilter)}
+            />
+          )}
         </>
       )}
     </View>
@@ -759,6 +792,39 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
+    },
+    // Raíl de pestañas + botón de intensidad en la misma línea.
+    railRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    railFilter: {
+      flex: 1,
+    },
+    intensityButton: {
+      width: 42,
+      height: 42,
+      borderRadius: theme.borderRadius.md,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    intensityButtonActive: {
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.primaryMuted,
+    },
+    // Punto de "hay un filtro puesto" sobre el icono.
+    intensityDot: {
+      position: 'absolute',
+      top: 6,
+      right: 6,
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: theme.colors.primaryFill,
     },
     card: {
       borderRadius: theme.borderRadius.lg,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -17,17 +17,52 @@ import {
 } from '@components';
 import { theme, setThemeMode } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
-import { t, language, setLanguage } from '@lib/i18n';
+import { t, formatAgo, language, setLanguage } from '@lib/i18n';
 import { Language, ThemeMode } from '@lib/appSettings';
 import { CHANGELOG } from '@data/changelog';
+import { useSession } from '@lib/cloud/auth';
+import { getLastSync } from '@lib/cloud/sync';
 
 interface SettingsScreenProps {
   onBack: () => void;
+  onOpenData?: () => void;
 }
 
-export function SettingsScreen({ onBack }: SettingsScreenProps) {
+/**
+ * Configuración: los ajustes de la app arriba (tema e idioma, lo que se toca
+ * de verdad), luego "Datos y nube" y al pie las novedades de la versión.
+ *
+ * Ese orden es el de la pregunta que trae aquí a la gente: primero "quiero
+ * cambiar algo", después "dónde están mis datos", y por último "qué ha cambiado",
+ * que es lectura y no ajuste.
+ */
+export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const { user } = useSession();
+  const [lastSync, setLastSync] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user) {
+      setLastSync(null);
+      return;
+    }
+    let active = true;
+    getLastSync(user.id).then((ts) => {
+      if (active) setLastSync(ts);
+    });
+    return () => {
+      active = false;
+    };
+  }, [user?.id]);
+
+  // Hint dinámico: refleja sesión y última sincronización, para que "mis datos
+  // están a salvo" se vea sin entrar.
+  const cloudHint = !user
+    ? t('Copias, exportar/importar y cuenta en la nube')
+    : lastSync
+    ? `${t('Sincronizado')} · ${formatAgo(lastSync)}`
+    : t('Sesión iniciada');
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const floatingBackBottom =
@@ -106,16 +141,42 @@ export function SettingsScreen({ onBack }: SettingsScreenProps) {
           />
         </View>
 
+        <Pressable
+          style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
+          onPress={onOpenData}
+        >
+          <View style={styles.linkIconWrap}>
+            <MaterialCommunityIcons
+              name="folder-cog-outline"
+              size={20}
+              color={theme.colors.text}
+            />
+            {/* Punto verde: hay sesión de nube activa. */}
+            {!!user && <View style={styles.statusDot} />}
+          </View>
+          <View style={styles.linkTextWrap}>
+            <Text style={styles.linkLabel}>{t('Datos y nube')}</Text>
+            <Text style={styles.linkHint}>{cloudHint}</Text>
+          </View>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={22}
+            color={theme.colors.textSecondary}
+          />
+        </Pressable>
+
         {latestChangelog && (
           <Pressable
             style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
             onPress={() => setShowWhatsNew(true)}
           >
-            <MaterialCommunityIcons
-              name="bullhorn-outline"
-              size={20}
-              color={theme.colors.text}
-            />
+            <View style={styles.linkIconWrap}>
+              <MaterialCommunityIcons
+                name="bullhorn-outline"
+                size={20}
+                color={theme.colors.text}
+              />
+            </View>
             <View style={styles.linkTextWrap}>
               <Text style={styles.linkLabel}>{t('Novedades')}</Text>
               <Text style={styles.linkHint}>
@@ -203,6 +264,24 @@ const makeStyles = () =>
       borderColor: theme.colors.border,
       padding: theme.spacing.md,
       ...theme.shadow.soft,
+    },
+    // Hueco fijo del icono: las dos filas (nube y novedades) alinean su texto
+    // aunque una lleve el punto de estado encima.
+    linkIconWrap: {
+      width: 20,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    statusDot: {
+      position: 'absolute',
+      top: -3,
+      right: -3,
+      width: 9,
+      height: 9,
+      borderRadius: 5,
+      backgroundColor: theme.colors.success,
+      borderWidth: 1.5,
+      borderColor: theme.colors.surface,
     },
     linkTextWrap: {
       flex: 1,

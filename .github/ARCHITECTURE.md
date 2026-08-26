@@ -2,15 +2,15 @@
 
 ## Stack
 
-| Capa          | Tecnología                                                       |
-| ------------- | ---------------------------------------------------------------- |
-| Framework     | React Native + Expo (SDK 51)                                     |
-| Lenguaje      | TypeScript strict                                                |
-| Estado global | Context API + useReducer                                         |
-| Persistencia  | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web |
+| Capa          | Tecnología                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------- |
+| Framework     | React Native + Expo (SDK 51)                                                             |
+| Lenguaje      | TypeScript strict                                                                        |
+| Estado global | Context API + useReducer                                                                 |
+| Persistencia  | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web                         |
 | Navegación    | State-based (sin react-navigation); pager de pestañas nativo (`react-native-pager-view`) |
-| Backend        | Supabase (cuentas, sync incremental, social) — opcional, offline-first |
-| UI            | Componentes custom + sistema glass                               |
+| Backend       | Supabase (cuentas, sync incremental, social) — opcional, offline-first                   |
+| UI            | Componentes custom + sistema glass                                                       |
 
 ## Flujo de datos
 
@@ -82,15 +82,22 @@ WorkoutState          // Estado global del reducer (= WorkoutAppData)
 ## Estructura de carpetas
 
 ```
-app/                    → Entry point (index.tsx, App.tsx)
+app/                    → Entry point (index.tsx, _layout.tsx, App.tsx, +native-intent.ts)
 components/             → UI reutilizable (Button, Cards, Inputs, Glass system)
 features/workout/       → Pantallas y lógica de negocio
-hooks/                  → useWorkout (consumer del context)
+hooks/                  → useWorkout (consumer del context), useCloudSync (sync de
+                          fondo) y useDeferredReady (difiere el contenido pesado)
 lib/                    → Lógica compartida
   ├── normalize.ts      → Fuente única: syncActiveRoutine, ensureParsedSets, normalizeAppData
   ├── storage.ts        → Persistencia (load/save/clear): SQLite en nativo, JSON en web
   ├── persistence.ts    → Mapea cada acción del reducer a su escritura granular (cola serie; debounce en web)
   ├── db/               → Capa SQLite: schema.ts (DDL+migraciones), mappers.ts (AppData↔filas + por entidad), index.ts (repositorio + escrituras granulares)
+  ├── cloud/            → Nube (opcional): auth.ts (sesión Supabase), backup.ts
+  │                       (copia/restauración completa), sync.ts (motor push/pull
+  │                       incremental sobre sync_outbox), social.ts (perfiles,
+  │                       seguir, tablón de rutinas públicas)
+  ├── i18n.ts           → Idioma en caliente: t(), dateLocale, decimalSeparator y
+  │                       el formato de pintado de números (localizeDecimals, fmtNum)
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
   ├── parsers.ts        → Parsers de series y cardio
   ├── progress.ts       → Cálculos de progreso y 1RM estimado (Epley)
@@ -132,9 +139,8 @@ Subpantallas (setScreen; se renderizan opacas encima del pager)
     ├─→ NewRoutineScreen → QRScannerScreen (importar por QR/texto)
     ├─→ WeekAchievementScreen (imagen/vídeo de logros)
     └─→ DetailScreen (ver log; recuerda origen home/calendar/cardio para volver)
-  ProfileScreen
+  ProfileScreen (resumen + menú + ajustes al pie: tema, idioma, novedades)
     ├─→ RoutineSelectorScreen · ExerciseProgressScreen
-    ├─→ SettingsScreen (tema, idioma, novedades)
     └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
   CommunityScreen (tablón de rutinas públicas)
     ├─→ PublicRoutineScreen (rutina ajena en SOLO lectura + "Añadir a mis rutinas")
@@ -153,9 +159,9 @@ ViewPager2 nativo) en `app/App.tsx`. Se pasa de una a otra **arrastrando** (sigu
 el dedo, estilo Telegram) o tocando la barra.
 
 - **Por qué nativo:** una implementación casera con `react-native-gesture-handler`
-  + `reanimated` se descartó porque en MIUI/HyperOS el gesto Pan se quedaba
-  "colgado" tras soltar, emitiendo eventos fantasma y dejando la vista a medias.
-  El pager nativo gestiona arrastre y asentamiento fuera del hilo JS y es inmune.
+  - `reanimated` se descartó porque en MIUI/HyperOS el gesto Pan se quedaba
+    "colgado" tras soltar, emitiendo eventos fantasma y dejando la vista a medias.
+    El pager nativo gestiona arrastre y asentamiento fuera del hilo JS y es inmune.
 - **Sincronización estado ↔ pager:** `onPageSelected` (swipe del usuario) →
   `setScreen`. Cambio de `screen` desde otra fuente (barra, volver de subpantalla)
   → `pagerRef.setPage(tabIndex)` en un efecto. Un guard (`navTargetRef` +

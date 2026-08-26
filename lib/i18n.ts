@@ -84,6 +84,16 @@ export function localizeDecimals(text: string): string {
   return text.replace(/(\d)\.(\d)/g, `$1${decimalSeparator}$2`);
 }
 
+/**
+ * Redondea a 1 decimal, quita el ".0" innecesario y pinta el decimal con el
+ * separador del idioma (coma en español). Es formato de PINTADO: los datos se
+ * guardan siempre con punto (ver `canonicalDecimals`).
+ */
+export function fmtNum(n: number): string {
+  const r = Math.round(n * 10) / 10;
+  return localizeDecimals(Number.isInteger(r) ? String(r) : r.toFixed(1));
+}
+
 /** Pasa a punto lo tecleado por el usuario, que puede venir con coma. */
 export function canonicalDecimals(text: string): string {
   return text.replace(',', '.');
@@ -135,6 +145,17 @@ register({
   'Tu evolución y tus récords, ejercicio a ejercicio':
     'Your progress and records, exercise by exercise',
   'Datos y nube': 'Data & cloud',
+  'Sin perfil': 'No profile',
+  'Editar perfil': 'Edit profile',
+  'Completar perfil': 'Complete profile',
+  'Sin biografía: cuéntale a la gente qué entrenas.':
+    'No bio yet: tell people what you train.',
+  'Tu foto y tu nombre son lo que ve la gente en Comunidad.':
+    'Your photo and name are what people see in Community.',
+  'Tema, idioma, tus datos en la nube y novedades':
+    'Theme, language, your cloud data and news',
+  'El perfil público vive en tu cuenta: créala en Datos y nube para poder guardarlo.':
+    'Your public profile lives in your account: create one in Data & cloud to save it.',
   'Copias, exportar/importar y cuenta en la nube':
     'Backups, export/import and cloud account',
   Sincronizado: 'Synced',
@@ -158,6 +179,15 @@ register({
   'Novedades de la versión': "What's new in version",
   'Ajusta la app a tu gusto': 'Make the app yours',
   Entendido: 'Got it',
+
+  // Aviso de actualización disponible
+  'Hay una versión nueva': 'A new version is available',
+  'Ya está disponible en Google Play. Actualiza para tenerlo todo al día.':
+    "It's already on Google Play. Update to get the latest.",
+  Actualizar: 'Update',
+  'Ahora no': 'Not now',
+  Tienes: 'You have',
+  Disponible: 'Available',
 
   // Inicio / hero
   'Añade una rutina': 'Add a routine',
@@ -259,11 +289,12 @@ register({
   'Completado · {a}/{b} series': 'Completed · {a}/{b} sets',
   Iniciar: 'Start',
   Parar: 'Stop',
-  'Tiempo hasta la siguiente serie': 'Time until your next set',
-  Saltar: 'Skip',
   'Saltar descanso': 'Skip rest',
   'Añadir 30 segundos': 'Add 30 seconds',
   'Usar {n}s': 'Use {n}s',
+  'Borrar serie {n}': 'Delete set {n}',
+  'Plegar ejercicio': 'Collapse exercise',
+  'Desplegar ejercicio': 'Expand exercise',
   '¡Ánimo con tu nueva rutina!': 'Good luck with your new routine!',
 
   // Cardio

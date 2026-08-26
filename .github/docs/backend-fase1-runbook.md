@@ -1,8 +1,8 @@
 # Fase 1 — Runbook (fundaciones locales de sync sobre expo-sqlite)
 
-> **Estado: entregada en 0.7.0.** Se conserva como referencia del *cómo* se
+> **Estado: entregada en 0.7.0.** Se conserva como referencia del _cómo_ se
 > montaron las fundaciones de sync. Complementa a
-> [backend-design.md](backend-design.md) (el *qué/por qué*). Sin subir SDK, sin
+> [backend-design.md](backend-design.md) (el _qué/por qué_). Sin subir SDK, sin
 > New Architecture, sobre RN 0.74.
 > Última revisión: 2026-08-13.
 
@@ -46,7 +46,7 @@ La UI no cambia. `WorkoutContext`, `useWorkout`, las pantallas y los tipos de
 ### 2. `updated_at` en las escrituras (`lib/db/index.ts` + `lib/db/mappers.ts`)
 
 - Cada upsert (rutina, día, ejercicio, log, sets, cardio) escribe `updated_at =
-  Date.now()`.
+Date.now()`.
 - `mappers.ts`: mapear la columna nueva en las filas (`RoutineRow`, etc.).
 - `loadAppDataFromDb` puede ignorar `updated_at` al construir `WorkoutAppData`
   (los tipos de dominio no lo exponen; es metadato de persistencia).

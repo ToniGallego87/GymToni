@@ -94,10 +94,7 @@ export function getWorkoutStrengthScore(workoutLog: WorkoutLog | null): number {
 
 /** Nombre normalizado, para emparejar el mismo ejercicio entre dos sesiones. */
 function normalizedExerciseName(name?: string): string {
-  return (name || '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, ' ');
+  return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 /**
@@ -124,15 +121,17 @@ export function getComparableWorkoutScores(
 
   const previousById = new Map<string, ExerciseLog>();
   const previousByName = new Map<string, ExerciseLog>();
-  (previousLog.exercises || []).filter(hasScoringSets).forEach((exerciseLog) => {
-    if (exerciseLog.exerciseId && !previousById.has(exerciseLog.exerciseId)) {
-      previousById.set(exerciseLog.exerciseId, exerciseLog);
-    }
-    const nameKey = normalizedExerciseName(exerciseLog.exerciseName);
-    if (nameKey && !previousByName.has(nameKey)) {
-      previousByName.set(nameKey, exerciseLog);
-    }
-  });
+  (previousLog.exercises || [])
+    .filter(hasScoringSets)
+    .forEach((exerciseLog) => {
+      if (exerciseLog.exerciseId && !previousById.has(exerciseLog.exerciseId)) {
+        previousById.set(exerciseLog.exerciseId, exerciseLog);
+      }
+      const nameKey = normalizedExerciseName(exerciseLog.exerciseName);
+      if (nameKey && !previousByName.has(nameKey)) {
+        previousByName.set(nameKey, exerciseLog);
+      }
+    });
 
   const matched = new Set<ExerciseLog>();
   let current = 0;

@@ -7,7 +7,7 @@ import {
   Avatar,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   StretchScrollView,
@@ -43,8 +43,9 @@ export function FollowingScreen({
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   // Misma altura del "Volver" que el resto de pantallas.
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
+  const { bottom: floatingBackBottom } = getFloatingBackButtonMetrics(
+    insets.bottom
+  );
   const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
 
   const load = useCallback(async () => {

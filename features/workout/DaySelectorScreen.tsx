@@ -7,8 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   DayAccentIcon,
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   StretchScrollView,
@@ -20,7 +19,7 @@ import { t } from '@lib/i18n';
 
 interface DaySelectorScreenProps {
   routine?: WorkoutRoutine;
-  onSelectDay: (day: WorkoutDay, startsNewWeek?: boolean) => void;
+  onSelectDay: (day: WorkoutDay) => void;
   // Registrar una sesión de solo cardio (sin ejercicios de fuerza).
   onSelectCardioOnly?: () => void;
   onBack: () => void;
@@ -35,10 +34,8 @@ export function DaySelectorScreen({
   const insets = useSafeAreaInsets();
   const days = routine?.days || [];
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding =
-    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: floatingBackBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   return (
     <View style={styles.container}>
@@ -59,9 +56,9 @@ export function DaySelectorScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Tocar el día arranca la sesión y continúa la semana en curso. Forzar
-            el inicio de una semana nueva vive ahora en la inserción de
-            ejercicios, no aquí: en el selector solo se elige el día. */}
+        {/* Tocar el día arranca la sesión y continúa la semana en curso. Aquí
+            solo se elige el día; mover un entreno a otra semana se hace desde
+            su detalle ("Mover a la semana anterior/siguiente"). */}
         {days.map((day) => (
           <Pressable
             key={day.id}
@@ -69,7 +66,7 @@ export function DaySelectorScreen({
               styles.dayCard,
               pressed && styles.dayCardPressed,
             ]}
-            onPress={() => onSelectDay(day, false)}
+            onPress={() => onSelectDay(day)}
           >
             <View style={styles.dayLeading}>
               <DayAccentIcon emoji={day.emoji} name={day.name} size={40} />

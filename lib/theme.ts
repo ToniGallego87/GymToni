@@ -56,6 +56,10 @@ export const darkColors = {
   // Tinta sobre el oro de superficie (`primaryFill` / `gradients.primary`). El
   // oro es vivo en AMBOS temas, así que la tinta es oscura en ambos.
   onGold: '#101318',
+  // Velo oscuro SOBRE el oro: filetes separadores y fondos de icono dentro de
+  // las hero cards doradas. Mismo valor en los dos temas (el oro es vivo en
+  // ambos), por eso no es el translúcido de `onGold` de cada paleta.
+  onGoldVeil: 'rgba(16, 19, 24, 0.16)',
   // Tinta sobre los rellenos sólidos de estado (rojo `error`, verde `success`).
   // Iba con `onGold`, pero al separar el oro de día los dos roles dejaron de
   // coincidir: sobre el rojo profundo de día la tinta tiene que ser blanca.
@@ -140,6 +144,9 @@ const lightColors: typeof darkColors = {
   // Tinta oscura cálida sobre el oro vivo (≈7:1). El blanco de antes solo se
   // sostenía porque el oro era un bronce oscuro.
   onGold: '#3A2B04',
+  // El oro de relleno es vivo también en día, así que el velo de las heros es
+  // el mismo que en noche (ver darkColors).
+  onGoldVeil: 'rgba(16, 19, 24, 0.16)',
   // Sobre los rojos/verdes profundos de día el blanco es la tinta que contrasta.
   onDanger: '#FFFFFF',
   success: '#1F8A49',

@@ -17,6 +17,7 @@ import Animated, {
   LinearTransition,
 } from 'react-native-reanimated';
 import { ParsedSet, ExerciseLog } from '../types';
+import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '@lib/theme';
 import { localizeDecimals, parseTypedNumber, t } from '@lib/i18n';
 import {
@@ -27,6 +28,8 @@ import {
 import { getImprovementDisplay } from '@lib/utils';
 import { GradientFill } from './GradientFill';
 import { ExerciseGifButton } from './ExerciseGifButton';
+import { AppModal } from './AppModal';
+import { Button } from './Button';
 
 // Transiciones reutilizables para recolocar y mostrar/ocultar contenido
 const layoutTransition = LinearTransition.duration(220).easing(
@@ -34,6 +37,16 @@ const layoutTransition = LinearTransition.duration(220).easing(
 );
 const fadeIn = FadeIn.duration(180);
 const fadeOut = FadeOut.duration(140);
+
+// Sombreado del "peldaño" del pliegue al pie de la tarjeta: misma tinta y mismos
+// cortes que las flechas laterales de la hero card (ver HeroCarousel), pero en
+// vertical: intensa en el borde inferior y desvanecida a nada hacia el centro,
+// para que la barra se lea como un escalón tallado en la tarjeta y no como un
+// botón pegado encima.
+const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
+
+// × de borrado de una serie: diámetro del aspa en la esquina de la burbuja.
+const SERIE_REMOVE_SIZE = 16;
 
 // Motivo por el que "Añadir serie" no se pudo completar, para que el padre
 // muestre el aviso correcto en vez de un "rellena los datos" genérico.
@@ -48,7 +61,6 @@ const roundToQuarter = (n: number): number => Math.round(n * 4) / 4;
 const DELOAD_WEIGHT_FACTOR = 0.75;
 
 interface ExerciseInputFieldProps {
-  order: number;
   exerciseName: string;
   // Id del catálogo del ejercicio (si viene de ahí), para la lupa de consulta.
   catalogId?: string;
@@ -64,9 +76,14 @@ interface ExerciseInputFieldProps {
   // anterior que rellene los placeholders, un valor negativo o uno disparatado).
   // El padre muestra el aviso según el motivo.
   onInvalidAdd?: (reason: InvalidAddReason) => void;
-  onRemoveLastSet: () => void;
+  // Borra la serie del índice dado (la × de su burbuja). Sustituye al antiguo
+  // "Borrar última serie": cualquier serie mal metida se quita desde su propio
+  // registro, sin arrastrar las de después.
+  onRemoveSet: (index: number) => void;
   onFinishExercise: () => void;
-  onNotesPress: (event: GestureResponderEvent) => void;
+  // El evento solo llega cuando lo dispara un toque directo (el bloque de nota);
+  // desde el menú de acciones se invoca sin él.
+  onNotesPress: (event?: GestureResponderEvent) => void;
   notes?: string;
   previousLog?: ExerciseLog | null;
   improvement?: { isImproved: boolean; percent: number } | null;
@@ -85,7 +102,6 @@ interface ExerciseInputFieldProps {
 }
 
 export function ExerciseInputField({
-  order,
   exerciseName,
   catalogId,
   onAssignGif,
@@ -93,7 +109,7 @@ export function ExerciseInputField({
   addedSets,
   onAddSet,
   onInvalidAdd,
-  onRemoveLastSet,
+  onRemoveSet,
   onFinishExercise,
   onNotesPress,
   notes,
@@ -180,9 +196,18 @@ export function ExerciseInputField({
     wasCurrentRef.current = !!isCurrent;
   }, [isCurrent]);
 
+  // Acciones poco frecuentes del ejercicio (saltar, nota, cronómetro): viven en
+  // el ⋯ de la cabecera en vez de en una fila de botones bajo "Añadir serie".
+  // Es un botón VISIBLE con su icono, el mismo patrón del ⋯ de `GlassTopBar` y
+  // del historial de Inicio; nada queda tras un gesto oculto.
+  const [showActions, setShowActions] = useState(false);
+
   // Cronómetro para ejercicios medidos en tiempo
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
+  // El panel del cronómetro se despliega desde el ⋯. Una vez en marcha (o con
+  // una medida sin usar) se queda a la vista solo, para no esconder la cuenta.
+  const [showStopwatch, setShowStopwatch] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
@@ -194,6 +219,10 @@ export function ExerciseInputField({
   const isTimeBased = !!(
     target?.reps && /\d+\s*(s\b|seg|sec|min)/i.test(target.reps)
   );
+
+  // El panel del cronómetro está a la vista si se ha abierto desde el ⋯, si está
+  // corriendo o si dejó una medida aún sin volcar a las repeticiones.
+  const stopwatchVisible = showStopwatch || timerRunning || timerSeconds > 0;
 
   const startTimer = () => {
     setTimerSeconds(0);
@@ -386,15 +415,75 @@ export function ExerciseInputField({
             entering={fadeIn}
             exiting={fadeOut}
             layout={layoutTransition}
-            style={[styles.serieTag, { backgroundColor: cardAccent + '2E' }]}
+            style={styles.serieTagWrap}
           >
-            <Text style={[styles.serieTagText, { color: cardAccent }]}>
-              {set.weight === -1 || set.reps === -1
-                ? '—'
-                : localizeDecimals(`${set.weight}×${set.reps}`)}
-            </Text>
+            <View
+              style={[
+                styles.serieTag,
+                expanded && styles.serieTagEditable,
+                { backgroundColor: cardAccent + '2E' },
+              ]}
+            >
+              <Text style={[styles.serieTagText, { color: cardAccent }]}>
+                {set.weight === -1 || set.reps === -1
+                  ? '—'
+                  : localizeDecimals(`${set.weight}×${set.reps}`)}
+              </Text>
+            </View>
+            {/* Borrado por registro: la × quita ESA serie. Va DENTRO de la
+                burbuja, en su esquina superior derecha (el dato se lee de
+                izquierda a derecha, así que la acción cierra por el final y no
+                tapa el número). Solo con la tarjeta desplegada: plegada las
+                burbujas son resumen y no hay nada que editar. */}
+            {expanded && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.serieTagRemove,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => onRemoveSet(idx)}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('Borrar serie {n}', { n: idx + 1 })}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={11}
+                  color={theme.colors.white}
+                />
+              </Pressable>
+            )}
           </Animated.View>
         ))}
+        {/* Añadir serie, encogido al tamaño de una burbuja y a la derecha de la
+            última: con series ya metidas el CTA no necesita explicarse, así que
+            se queda en el "+". No aparece con la tarjeta plegada (no se puede
+            teclear) ni con el ejercicio completado (no hay nada que añadir). */}
+        {expanded && !isMaxSetsReached && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+          >
+            <Pressable
+              style={({ pressed }) => [
+                styles.addChip,
+                { backgroundColor: theme.colors.primaryFill },
+                pressed && styles.addButtonPressed,
+              ]}
+              onPress={handleAddSet}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('Añadir serie')}
+            >
+              <MaterialCommunityIcons
+                name="plus"
+                size={20}
+                color={theme.colors.onGold}
+              />
+            </Pressable>
+          </Animated.View>
+        )}
         {renderImprovementBadge()}
       </View>
     );
@@ -407,8 +496,11 @@ export function ExerciseInputField({
     >
       <GradientFill accent={cardAccent} />
 
-      {/* Cabecera: título + lupa de consulta + flecha. El título y la flecha
-          despliegan; la lupa va aparte para no anidar Pressables. */}
+      {/* Cabecera: GIF + título + ⋯. El GIF ocupa el sitio que tenía el número
+          de orden, y grande: la miniatura en movimiento dice QUÉ ejercicio es,
+          que es lo que se busca al mirar la tarjeta; el "3" solo decía cuántas
+          van. Cada control es su propio Pressable (nada anidado) y el plegado
+          vive en la barra del pie (styles.collapseBar). */}
       <View
         style={[
           styles.header,
@@ -417,34 +509,41 @@ export function ExerciseInputField({
           !expanded && styles.headerCollapsedEmpty,
         ]}
       >
-        <Pressable style={styles.titleSection} onPress={toggleExpanded}>
-          <View style={[styles.orderBadge, { backgroundColor: cardAccent }]}>
-            <Text style={styles.orderBadgeText}>{order}</Text>
-          </View>
-          {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta a
-              dos líneas; al desplegar se ve entero (sin límite de líneas), así el
-              mismo gesto hace siempre lo mismo y el nombre largo sigue accesible. */}
-          <Pressable style={styles.nameWrap} onPress={toggleExpanded}>
-            <Text
-              style={styles.exerciseName}
-              numberOfLines={expanded ? undefined : 2}
-            >
-              {exerciseName}
-            </Text>
-          </Pressable>
-        </Pressable>
         <ExerciseGifButton
           name={exerciseName}
           catalogId={catalogId}
           onAssign={onAssignGif}
+          size={26}
+          style={styles.headerGif}
         />
+        {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta a
+            dos líneas; al desplegar se ve entero (sin límite de líneas), así el
+            mismo gesto hace siempre lo mismo y el nombre largo sigue accesible. */}
+        <Pressable style={styles.nameWrap} onPress={toggleExpanded}>
+          <Text
+            style={styles.exerciseName}
+            numberOfLines={expanded ? undefined : 2}
+          >
+            {exerciseName}
+          </Text>
+        </Pressable>
+        {/* Acciones del ejercicio (saltar, nota, cronómetro). En la cabecera y
+            no bajo el CTA: son raras, y aquí siguen accesibles incluso con la
+            tarjeta plegada (antes había que desplegarla para tocar la nota). */}
         <Pressable
-          style={[styles.headerRight, { borderColor: cardAccent + '40' }]}
-          onPress={toggleExpanded}
+          style={({ pressed }) => [
+            styles.headerAction,
+            { borderColor: cardAccent + '40' },
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => setShowActions(true)}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={t('Más acciones')}
         >
           <MaterialCommunityIcons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={24}
+            name="dots-horizontal"
+            size={20}
             color={cardAccent}
           />
         </Pressable>
@@ -537,41 +636,22 @@ export function ExerciseInputField({
         )}
       </View>
 
-      {/* Resultados insertados (peso × reps). Posición fija; con `layout` se
-          desliza de forma transicional cuando las secciones de arriba y abajo
-          se despliegan o colapsan. */}
-      {hasAddedSets && (
-        <Animated.View
-          entering={fadeIn}
-          exiting={fadeOut}
-          layout={layoutTransition}
-          style={[
-            styles.resultsBlock,
-            !expanded && styles.resultsBlockCollapsed,
-          ]}
-        >
-          {renderSeriesRow()}
-        </Animated.View>
-      )}
-
-      {/* Sección inferior desplegable: inputs / completado. Wrapper persistente
-          (igual que la superior) para que `exiting` se reproduzca al colapsar. */}
+      {/* Sección inferior desplegable: inputs, series insertadas y estado.
+          Wrapper persistente (igual que la superior) para que `exiting` se
+          reproduzca al colapsar. */}
       <View
         style={[
           styles.bottomSection,
           !expanded && styles.bottomSectionCollapsed,
         ]}
       >
-        {/* Estado: en progreso */}
+        {/* Estado: en progreso — las cajas de peso × reps */}
         {expanded && !isMaxSetsReached && (
           <Animated.View
             entering={fadeIn}
             exiting={fadeOut}
             layout={layoutTransition}
-            style={[
-              styles.inputBlock,
-              !hasAddedSets && styles.inputBlockSpaced,
-            ]}
+            style={styles.inputBlock}
           >
             {/* Inputs peso / reps: dos campos grandes con flechas +/- al lado */}
             <View style={styles.inputRow}>
@@ -640,169 +720,126 @@ export function ExerciseInputField({
               </View>
             </View>
 
-            {/* Botón principal: añadir serie */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.addButton,
-                { backgroundColor: theme.colors.primaryFill },
-                pressed && styles.addButtonPressed,
-              ]}
-              onPress={handleAddSet}
-            >
-              <MaterialCommunityIcons
-                name="plus-circle"
-                size={22}
-                color={theme.colors.onGold}
-              />
-              <Text style={styles.addButtonText}>{t('Añadir serie')}</Text>
-            </Pressable>
-
-            {/* Acciones secundarias */}
-            <View style={styles.secondaryRow}>
-              {hasAddedSets && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.secondaryButton,
-                    styles.deleteButton,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={onRemoveLastSet}
-                >
-                  <MaterialCommunityIcons
-                    name="minus"
-                    size={15}
-                    color={theme.colors.error}
-                  />
-                  <Text
-                    style={[
-                      styles.secondaryButtonText,
-                      { color: theme.colors.error },
-                    ]}
-                  >
-                    {t('Borrar')}
-                  </Text>
-                </Pressable>
-              )}
+            {/* Botón principal: añadir serie. Solo mientras la tarjeta está
+                vacía, que es cuando hay que decir qué hace; en cuanto entra la
+                primera serie se encoge al "+" que acompaña a las burbujas (ver
+                renderSeriesRow), y así el CTA deja de comerse una fila entera. */}
+            {!hasAddedSets && (
               <Pressable
                 style={({ pressed }) => [
-                  styles.secondaryButton,
-                  styles.finishButton,
-                  pressed && styles.buttonPressed,
+                  styles.addButton,
+                  { backgroundColor: theme.colors.primaryFill },
+                  pressed && styles.addButtonPressed,
                 ]}
-                onPress={onFinishExercise}
+                onPress={handleAddSet}
               >
                 <MaterialCommunityIcons
-                  name="skip-forward"
-                  size={15}
-                  color={theme.colors.accent}
+                  name="plus-circle"
+                  size={22}
+                  color={theme.colors.onGold}
                 />
-                {/* Cierra el ejercicio rellenando con guiones (series omitidas)
-                    las que falten hasta el objetivo. Si aún no se ha metido
-                    ninguna serie no hay "resto" que saltar: es el ejercicio
-                    entero, y la etiqueta lo dice. */}
-                <Text
-                  style={[
-                    styles.secondaryButtonText,
-                    { color: theme.colors.accent },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {hasAddedSets ? t('Saltar resto') : t('Saltar ejercicio')}
-                </Text>
+                <Text style={styles.addButtonText}>{t('Añadir serie')}</Text>
               </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  styles.notesButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={onNotesPress}
-              >
-                <MaterialCommunityIcons
-                  name="pencil-outline"
-                  size={15}
-                  color={theme.colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.secondaryButtonText,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  {t('Nota')}
-                </Text>
-              </Pressable>
-            </View>
+            )}
+          </Animated.View>
+        )}
 
-            {/* Cronómetro (ejercicios basados en tiempo) */}
-            {isTimeBased && (
-              <View style={styles.stopwatchContainer}>
-                {/* Título propio: distingue este cronómetro (cuenta hacia
+        {/* Series insertadas (peso × reps), justo BAJO las cajas: lo que acabas
+            de meter aparece donde ya estás mirando al teclear. Se pinta también
+            con la tarjeta plegada o completada, que es cuando resume el
+            ejercicio entero; con `layout` se desliza al desplegar y colapsar. */}
+        {hasAddedSets && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+            style={[
+              styles.resultsBlock,
+              !expanded && styles.resultsBlockCollapsed,
+            ]}
+          >
+            {renderSeriesRow()}
+          </Animated.View>
+        )}
+
+        {/* Cronómetro del ejercicio, bajo las series. Borrar ya no vive aquí:
+            cada burbuja lleva su × y esta fila desaparece si no hay cronómetro. */}
+        {expanded && !isMaxSetsReached && isTimeBased && stopwatchVisible && (
+          <Animated.View
+            entering={fadeIn}
+            exiting={fadeOut}
+            layout={layoutTransition}
+            style={styles.afterSeriesBlock}
+          >
+            {/* Cronómetro (ejercicios basados en tiempo). Se despliega desde el
+                ⋯, y se queda a la vista mientras corre o mientras haya una
+                medida sin usar. */}
+            <View style={styles.stopwatchContainer}>
+              {/* Título propio: distingue este cronómetro (cuenta hacia
                     ARRIBA, mide el ejercicio) del temporizador de descanso
                     (dorado, cuenta hacia ABAJO) que aparece al pie tras
                     completar una serie. */}
-                <View style={styles.stopwatchLabelRow}>
-                  <MaterialCommunityIcons
-                    name="timer-outline"
-                    size={14}
-                    color={theme.colors.textSecondary}
-                  />
-                  <Text style={styles.stopwatchLabel}>
-                    {t('Cronómetro del ejercicio')}
-                  </Text>
-                </View>
-                <Text style={styles.stopwatchDisplay}>
-                  {formatTimerDisplay(timerSeconds)}
+              <View style={styles.stopwatchLabelRow}>
+                <MaterialCommunityIcons
+                  name="timer-outline"
+                  size={14}
+                  color={theme.colors.textSecondary}
+                />
+                <Text style={styles.stopwatchLabel}>
+                  {t('Cronómetro del ejercicio')}
                 </Text>
-                <View style={styles.stopwatchButtons}>
+              </View>
+              <Text style={styles.stopwatchDisplay}>
+                {formatTimerDisplay(timerSeconds)}
+              </Text>
+              <View style={styles.stopwatchButtons}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.stopwatchBtn,
+                    timerRunning
+                      ? styles.stopwatchBtnStop
+                      : styles.stopwatchBtnStart,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={timerRunning ? stopTimer : startTimer}
+                >
+                  <MaterialCommunityIcons
+                    name={timerRunning ? 'stop' : 'play'}
+                    size={16}
+                    color={theme.colors.onDanger}
+                  />
+                  {/* Iniciar/Parar van sobre verde/rojo, no sobre el oro: su
+                        tinta es la de estado, no la del oro (ver theme.ts). */}
+                  <Text
+                    style={[
+                      styles.stopwatchButtonText,
+                      { color: theme.colors.onDanger },
+                    ]}
+                  >
+                    {timerRunning ? t('Parar') : t('Iniciar')}
+                  </Text>
+                </Pressable>
+                {timerSeconds > 0 && !timerRunning && (
                   <Pressable
                     style={({ pressed }) => [
                       styles.stopwatchBtn,
-                      timerRunning
-                        ? styles.stopwatchBtnStop
-                        : styles.stopwatchBtnStart,
+                      styles.stopwatchBtnUse,
                       pressed && styles.buttonPressed,
                     ]}
-                    onPress={timerRunning ? stopTimer : startTimer}
+                    onPress={useTimerAsReps}
                   >
                     <MaterialCommunityIcons
-                      name={timerRunning ? 'stop' : 'play'}
+                      name="check"
                       size={16}
-                      color={theme.colors.onDanger}
+                      color={theme.colors.onGold}
                     />
-                    {/* Iniciar/Parar van sobre verde/rojo, no sobre el oro: su
-                        tinta es la de estado, no la del oro (ver theme.ts). */}
-                    <Text
-                      style={[
-                        styles.stopwatchButtonText,
-                        { color: theme.colors.onDanger },
-                      ]}
-                    >
-                      {timerRunning ? t('Parar') : t('Iniciar')}
+                    <Text style={styles.stopwatchButtonText}>
+                      {t('Usar {n}s', { n: timerSeconds })}
                     </Text>
                   </Pressable>
-                  {timerSeconds > 0 && !timerRunning && (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.stopwatchBtn,
-                        styles.stopwatchBtnUse,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={useTimerAsReps}
-                    >
-                      <MaterialCommunityIcons
-                        name="check"
-                        size={16}
-                        color={theme.colors.onGold}
-                      />
-                      <Text style={styles.stopwatchButtonText}>
-                        {t('Usar {n}s', { n: timerSeconds })}
-                      </Text>
-                    </Pressable>
-                  )}
-                </View>
+                )}
               </View>
-            )}
+            </View>
           </Animated.View>
         )}
 
@@ -827,55 +864,6 @@ export function ExerciseInputField({
                 })}
               </Text>
             </View>
-            {/* Acciones del ejercicio ya completado: deshacer la última serie y
-                editar la nota. La nota debe seguir accesible aquí (antes solo
-                salía su botón mientras el ejercicio estaba en progreso). */}
-            <View style={styles.secondaryRow}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  styles.deleteButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={onRemoveLastSet}
-              >
-                <MaterialCommunityIcons
-                  name="minus"
-                  size={15}
-                  color={theme.colors.error}
-                />
-                <Text
-                  style={[
-                    styles.secondaryButtonText,
-                    { color: theme.colors.error },
-                  ]}
-                >
-                  {t('Borrar')}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.secondaryButton,
-                  styles.notesButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={onNotesPress}
-              >
-                <MaterialCommunityIcons
-                  name="pencil-outline"
-                  size={15}
-                  color={theme.colors.textSecondary}
-                />
-                <Text
-                  style={[
-                    styles.secondaryButtonText,
-                    { color: theme.colors.textSecondary },
-                  ]}
-                >
-                  {t('Nota')}
-                </Text>
-              </Pressable>
-            </View>
           </Animated.View>
         )}
       </View>
@@ -893,6 +881,127 @@ export function ExerciseInputField({
           {restTimer}
         </Animated.View>
       )}
+
+      {/* Pliegue de la tarjeta: barra ancha y baja al pie, con el mismo peldaño
+          sombreado que las flechas laterales de la hero card. Antes era un aro de
+          38 en la cabecera, que le comía el ancho al nombre del ejercicio (los
+          títulos largos caían a tres líneas). Va la última, incluso bajo el
+          descanso, porque es el borde inferior de la tarjeta. */}
+      <Pressable
+        style={({ pressed }) => [
+          styles.collapseBar,
+          pressed && styles.collapseBarPressed,
+        ]}
+        onPress={toggleExpanded}
+        accessibilityRole="button"
+        accessibilityLabel={
+          expanded ? t('Plegar ejercicio') : t('Desplegar ejercicio')
+        }
+      >
+        <LinearGradient
+          colors={theme.gradients.heroStep}
+          locations={STEP_SHADE_STOPS}
+          start={{ x: 0, y: 1 }}
+          end={{ x: 0, y: 0 }}
+          style={StyleSheet.absoluteFill}
+          pointerEvents="none"
+        />
+        <MaterialCommunityIcons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={24}
+          color={cardAccent}
+        />
+      </Pressable>
+
+      {/* Acciones raras del ejercicio. Mismo formato que el selector de
+          disciplina de "Añadir" en Cardio: las opciones van en el cuerpo, con
+          su color y su borde propios, y el pie queda solo para "Volver" (gris,
+          secundario). Antes las cuatro se pintaban como `Button` secundario y
+          salir parecía una acción más de la lista. */}
+      <AppModal
+        visible={showActions}
+        onRequestClose={() => setShowActions(false)}
+        title={exerciseName}
+        icon="dots-horizontal-circle-outline"
+        footer={
+          <Button
+            title={t('Volver')}
+            variant="secondary"
+            size="medium"
+            onPress={() => setShowActions(false)}
+          />
+        }
+      >
+        <View style={styles.actionsList}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.optionButton,
+              pressed && styles.optionButtonPressed,
+            ]}
+            onPress={() => {
+              setShowActions(false);
+              onNotesPress();
+            }}
+          >
+            <MaterialCommunityIcons
+              name="note-text-outline"
+              size={20}
+              color={theme.colors.white}
+            />
+            <Text style={styles.optionButtonText}>
+              {notes ? t('Editar nota') : t('Añadir nota')}
+            </Text>
+          </Pressable>
+
+          {/* Cronómetro solo en ejercicios medidos en tiempo (plancha, etc.). */}
+          {isTimeBased && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.optionButton,
+                pressed && styles.optionButtonPressed,
+              ]}
+              onPress={() => {
+                setShowActions(false);
+                setShowStopwatch(true);
+              }}
+            >
+              <MaterialCommunityIcons
+                name="timer-outline"
+                size={20}
+                color={theme.colors.white}
+              />
+              <Text style={styles.optionButtonText}>
+                {t('Cronómetro del ejercicio')}
+              </Text>
+            </Pressable>
+          )}
+
+          {/* Cierra el ejercicio rellenando con guiones (series omitidas) las
+              que falten hasta el objetivo. Ya completado no hay nada que
+              saltar, así que no se ofrece. */}
+          {!isMaxSetsReached && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.optionButton,
+                pressed && styles.optionButtonPressed,
+              ]}
+              onPress={() => {
+                setShowActions(false);
+                onFinishExercise();
+              }}
+            >
+              <MaterialCommunityIcons
+                name="skip-forward"
+                size={20}
+                color={theme.colors.white}
+              />
+              <Text style={styles.optionButtonText}>
+                {hasAddedSets ? t('Saltar resto') : t('Saltar ejercicio')}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      </AppModal>
     </Animated.View>
   );
 }
@@ -940,7 +1049,7 @@ const makeStyles = () =>
       gap: 10,
     },
     bottomSection: {
-      paddingBottom: 4,
+      paddingBottom: 0,
     },
     bottomSectionCollapsed: {
       paddingBottom: 0,
@@ -957,33 +1066,19 @@ const makeStyles = () =>
     headerCollapsedEmpty: {
       marginBottom: 0,
     },
-    titleSection: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
+    // El GIF hereda el hueco del número de orden, pero más grande: a 34 px la
+    // figura no se distinguía, y aquí es la señal principal de la cabecera.
+    headerGif: {
+      width: 52,
+      height: 52,
+      borderRadius: 14,
     },
-    orderBadge: {
-      width: 38,
-      height: 38,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    orderBadgeText: {
-      fontSize: 19,
-      fontFamily: theme.fonts.display,
-      // El fondo del badge es el acento (blanco en noche, tinta oscura en día);
-      // el número usa el color de fondo del tema para contrastar en ambos: oscuro
-      // sobre el badge claro de noche, claro sobre el badge oscuro de día.
-      color: theme.colors.background,
-      includeFontPadding: false,
-      textAlignVertical: 'center',
-    },
-    headerRight: {
-      width: 38,
-      height: 38,
-      borderRadius: 19,
+    // ⋯ de acciones del ejercicio. Mismo tamaño que la lupa del GIF, con la
+    // que comparte fila.
+    headerAction: {
+      width: 34,
+      height: 34,
+      borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -992,17 +1087,19 @@ const makeStyles = () =>
       flex: 1,
     },
     exerciseName: {
-      fontSize: 19,
+      fontSize: 20,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
       lineHeight: 27,
     },
 
-    // Resultados insertados (bloque único, posición fija)
+    // Resultados insertados (bloque único, bajo las cajas de peso × reps).
+    // Solo margen superior: la separación con lo que venga debajo la pone ese
+    // bloque (afterSeriesBlock / completedBlock), porque en React Native los
+    // márgenes no se colapsan y si no se sumarían.
     resultsBlock: {
       marginTop: 16,
-      marginBottom: 16,
     },
     resultsBlockCollapsed: {
       marginTop: 12,
@@ -1014,6 +1111,29 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: 6,
     },
+    // Envoltorio de cada burbuja: solo da el marco de posición a la ×, que va
+    // absoluta DENTRO de sus límites (fuera, con offsets negativos, Android la
+    // recorta). Sin padding propio, así la fila no se descuadra y el badge de
+    // mejora se centra solo con las burbujas.
+    serieTagWrap: {
+      position: 'relative',
+    },
+    // × de borrar la serie: aro sin relleno en la esquina superior derecha de su
+    // burbuja, con borde y aspa de la tinta de contraste. Sin fondo no compite
+    // con el dato, que es lo que hay que leer. El área de toque real la agranda
+    // su `hitSlop`.
+    serieTagRemove: {
+      position: 'absolute',
+      top: 2,
+      right: 2,
+      width: SERIE_REMOVE_SIZE,
+      height: SERIE_REMOVE_SIZE,
+      borderRadius: SERIE_REMOVE_SIZE / 2,
+      borderWidth: 1,
+      borderColor: theme.colors.white,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     serieTag: {
       paddingHorizontal: 13,
       paddingVertical: 9,
@@ -1021,10 +1141,28 @@ const makeStyles = () =>
       minWidth: 56,
       alignItems: 'center',
     },
+    // Con la × dentro, el dato se aparta de ella por la derecha en vez de
+    // quedar debajo.
+    serieTagEditable: {
+      paddingRight: 22,
+    },
     serieTagText: {
       fontWeight: '800',
       fontSize: 15,
       letterSpacing: 0.2,
+    },
+    // "+" compacto que sustituye al CTA ancho en cuanto hay series: mismo alto
+    // que una burbuja (padding vertical de `serieTag` + su línea de texto) para
+    // que la fila quede pareja, pero cuadrado, porque solo lleva el icono.
+    addChip: {
+      width: 46,
+      // Alto de una burbuja: su padding vertical (9+9) más la línea de su
+      // texto de 15. Así la fila queda pareja aunque el chip no lleve texto.
+      height: 38,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...theme.shadow.soft,
     },
     improvementBadge: {
       paddingHorizontal: 12,
@@ -1095,13 +1233,15 @@ const makeStyles = () =>
       flex: 1,
     },
 
-    // Bloque de inputs
+    // Bloque de inputs. Encabeza siempre la mitad inferior de la tarjeta (las
+    // series van ahora debajo), así que se separa él mismo del contexto.
     inputBlock: {
       gap: 16,
+      marginTop: 16,
     },
-    // Cuando no hay series arriba, el bloque de inputs necesita su propia
-    // separación respecto al contexto (con series la aporta resultsBlock).
-    inputBlockSpaced: {
+    // Acciones bajo las series (deshacer, cronómetro).
+    afterSeriesBlock: {
+      gap: 16,
       marginTop: 16,
     },
     inputRow: {
@@ -1191,35 +1331,6 @@ const makeStyles = () =>
       letterSpacing: 0.3,
     },
 
-    // Botones secundarios: acciones de bajo peso frente al héroe dorado
-    // "Añadir serie". Sin relleno ni borde (nada de tarjetas que compitan);
-    // solo icono + texto tintado, para que la jerarquía sea inequívoca sin
-    // esconder ninguna acción (todas siguen visibles con su icono).
-    secondaryRow: {
-      flexDirection: 'row',
-      gap: 4,
-    },
-    secondaryButton: {
-      flex: 1,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 5,
-      paddingVertical: 8,
-      borderRadius: theme.borderRadius.sm,
-      backgroundColor: 'transparent',
-    },
-    // "Terminar" es la única secundaria con relieve (cierra el ejercicio):
-    // un tinte muy leve de acento la diferencia de las otras dos.
-    deleteButton: {},
-    finishButton: {
-      backgroundColor: theme.colors.accent + '12',
-    },
-    notesButton: {},
-    secondaryButtonText: {
-      fontWeight: '700',
-      fontSize: 12,
-    },
     buttonPressed: {
       opacity: 0.75,
     },
@@ -1227,6 +1338,34 @@ const makeStyles = () =>
     // Completado
     completedBlock: {
       gap: 8,
+      // Separación con las series, que ahora quedan justo encima.
+      marginTop: 16,
+    },
+
+    // Opciones del ⋯ dentro del modal. Copia del selector de disciplina de
+    // Cardio (components/CardioInputField.tsx): si se toca uno, tocar el otro.
+    actionsList: {
+      marginTop: 12,
+    },
+    optionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.colors.primaryMuted,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      marginBottom: 8,
+    },
+    optionButtonPressed: {
+      opacity: 0.8,
+    },
+    optionButtonText: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.colors.white,
     },
     completedRow: {
       flexDirection: 'row',
@@ -1239,14 +1378,34 @@ const makeStyles = () =>
       fontSize: 14,
     },
 
+    // Barra de pliegue al pie: ancha y baja, a sangre (anula el padding de 16
+    // de la tarjeta) y con las esquinas inferiores de la propia tarjeta, para
+    // que se lea como su base y no como un botón apoyado encima.
+    collapseBar: {
+      // Pegada a lo que tiene encima: la flecha es el cierre de la tarjeta, y el
+      // hueco que había antes hacía la tarjeta más alta sin decir nada.
+      marginTop: 4,
+      marginHorizontal: -16,
+      marginBottom: -16,
+      height: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
+      borderBottomLeftRadius: theme.borderRadius.md,
+      borderBottomRightRadius: theme.borderRadius.md,
+    },
+    collapseBarPressed: {
+      opacity: 0.7,
+    },
+
     // Temporizador de descanso (al pie de la tarjeta). Bloque dorado; el contenido
     // (label + cuenta atrás + acciones) lo aporta el padre con sus propios estilos.
     restTimerInside: {
       marginTop: 12,
       backgroundColor: theme.colors.primaryFill,
       borderRadius: theme.borderRadius.md,
-      padding: 15,
-      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 14,
       justifyContent: 'center',
     },
 

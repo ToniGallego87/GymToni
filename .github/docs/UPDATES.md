@@ -1,5 +1,222 @@
 # UPDATES
 
+## Version 0.7.3 - 2026-08-26
+
+Revisión completa del 2026-08-24 (`/revision-app`), las tareas del ROADMAP
+aplicadas después y el rediseño de la tarjeta de registro y de Perfil.
+`npm run type-check` y `npm test` (16 suites, 212 tests) en verde.
+`versionCode` 24 → 25.
+
+### Nuevas funcionalidades
+
+- **Perfil enseña quién eres, y tu foto llega a la barra de navegación**
+  (`features/workout/ProfileScreen.tsx`, `hooks/useMyProfile.ts`,
+  `components/FloatingPrimaryNav.tsx`, `features/workout/ProfileEditScreen.tsx`,
+  `app/App.tsx`): el perfil público —foto, nombre y bio, lo que ve la gente en
+  Comunidad— solo existía dentro de Comunidad, así que la pantalla llamada
+  "Perfil" abría en un recuento de rutinas y no había dónde verse a uno mismo.
+  Ahora la encabeza una **tarjeta de identidad** (foto de 72, nombre y bio) con
+  un botón que dice lo que toca: **"Editar perfil"** si ya está relleno,
+  **"Completar perfil"** si no, y los dos llevan al editor. La **foto sustituye
+  al icono de la pestaña de Perfil** en la barra inferior (con aro cuando está
+  activa), así que de un vistazo se ve con qué cuenta estás. Foto, nombre y bio
+  salen de un store compartido (`useMyProfile`) que el editor recarga al
+  guardar: barra y Perfil no pueden discrepar. Guardar sin cuenta ya no falla en
+  silencio: lo dice y desactiva el botón.
+- **Aviso al arrancar de que hay una versión nueva** (`lib/appUpdate.ts` nuevo,
+  `lib/cloud/release.ts` nuevo, `components/UpdateAvailableModal.tsx` nuevo,
+  `app/App.tsx`, `lib/storage.ts`, `supabase/schema.sql`): la app se distribuye
+  por Google Play con `expo-updates` deshabilitado, así que no tenía forma de
+  saber que existía una versión posterior. Ahora consulta al arrancar la fila de
+  la nueva tabla `app_releases` y, si la publicada es mayor que la instalada,
+  muestra un popup con las dos versiones y un botón que abre la ficha de Play
+  (`market://`, con respaldo por navegador). Cede el paso al popup de novedades
+  si ambos caen en el mismo arranque, y no se repite hasta que se publique otra
+  versión. Silencioso ante cualquier fallo (sin red, tabla vacía, dato
+  corrupto): antes molestar, no avisar. **La tabla hay que alimentarla a mano**
+  al publicar cada versión (la sentencia está comentada en `schema.sql`).
+- **Leyenda en el calendario** (`features/workout/CalendarScreen.tsx`): las
+  celdas rotulan la rutina como `R1`, `R2`… y la semana como `S3`, códigos que no
+  se explicaban en ninguna parte. Bajo la rejilla, en modo fuerza, se listan
+  ahora las rutinas que aparecen en el mes con su **nombre real** y qué significa
+  `S#`.
+
+### Arquitectura
+
+- **`getFloatingBackButtonMetrics()`** (`components/FloatingBackButton.tsx`,
+  exportado en `components/index.ts`): **14 pantallas** repetían a mano la misma
+  fórmula del botón "Volver" (`Math.max(insets.bottom, 10) + MARGIN` y
+  `bottom + HEIGHT + 28`). Ahora la calcula un helper, espejo del
+  `getFloatingPrimaryNavMetrics` que ya existía para la barra de pestañas, con
+  los dos números mágicos como constantes con nombre
+  (`FLOATING_BACK_BUTTON_MIN_INSET`, `FLOATING_BACK_BUTTON_SCROLL_EXTRA_PADDING`).
+- **`fmtNum` unificado en `lib/i18n.ts`**: existían dos implementaciones con el
+  mismo nombre y la misma salida, una en `lib/cardio.ts` y otra local en
+  `features/workout/ExerciseProgressScreen.tsx`. Se queda una sola, junto a
+  `localizeDecimals` / `canonicalDecimals` (su sitio natural: es formato de
+  pintado, no lógica de cardio). Consumidores actualizados: `lib/cardio.ts`,
+  `CardioScreen`, `DetailScreen`, `ExerciseProgressScreen`, `HeroWeightCard`.
+- **Código muerto**: se borra `getWeekStrengthScore` y su `WeekScoreOptions` de
+  `lib/weeks.ts` (49 líneas sin una sola referencia en la app ni en los tests) y
+  el import de `getWorkoutStrengthScore` que solo usaba esa función.
+- **Prop `startsNewWeek` muerta en la UI**: `DaySelectorScreen` siempre la pasaba
+  como `false` desde que forzar semana nueva se hace desde el detalle del día
+  ("Mover a una semana nueva"), así que el hilo
+  `DaySelectorScreen` → `app/App.tsx` → `WorkoutLogScreen` no decidía nada. Se
+  retira el hilo; el campo `WorkoutLog.startsNewWeek` sigue intacto (lo ponen y
+  lo quitan los movimientos entre semanas de `lib/weeks.ts`). Corregido de paso
+  el comentario de `DaySelectorScreen`, que apuntaba a un sitio equivocado.
+
+### Cambios
+
+- **La tarjeta de ejercicio del registro, rehecha de arriba abajo**
+  (`components/ExerciseInputField.tsx`, `components/ExerciseGifButton.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`): con un ejercicio desplegado competían
+  hasta 13 controles alrededor de la acción más frecuente de la app.
+  - El **botón del GIF es el GIF, y encabeza la tarjeta**: con uno asignado, el
+    botón muestra la miniatura en movimiento —ampliada un 35 % para recortar el
+    aire que el catálogo deja alrededor de la figura—, así que el ejercicio se
+    reconoce sin abrir nada; el toque sigue llevando al visor completo. Sin GIF
+    (o si la miniatura no carga) se queda el icono de siempre. Ese GIF pasa
+    además a ocupar, a 52 px, el hueco del **número de orden**, que desaparece:
+    decía cuántas van, no cuál es, y era lo primero que se leía de cada tarjeta.
+  - Las tres acciones raras —**Saltar resto/ejercicio**, **Nota** y el
+    **cronómetro** del ejercicio— viven en un **⋯ en la cabecera** (`AppModal` +
+    `Button`, el mismo patrón del "¿Qué deseas hacer?" del historial), que
+    funciona también con la tarjeta plegada (antes había que desplegarla para
+    llegar a la nota). El panel del cronómetro deja de estar siempre desplegado
+    en los ejercicios por tiempo: se abre desde el ⋯ y se queda a la vista
+    mientras corre o mientras haya una medida sin usar. Las opciones van en el
+    cuerpo del modal con su fondo y su borde propios (`primaryMuted` /
+    `primaryLine`) y el pie queda solo para "Volver", en vez de cuatro `Button`
+    grises idénticos donde salir parecía una acción más.
+  - **Las series insertadas pasan a debajo de las cajas de texto**: las burbujas
+    de peso × reps se pintaban encima de los campos y "Añadir serie" se comía
+    una fila entera debajo. Ahora las burbujas ocupan ese hueco —lo que acabas
+    de meter aparece donde ya estás mirando al teclear— y el CTA solo va ancho y
+    con texto mientras la tarjeta está vacía: en cuanto entra la primera serie se
+    encoge a un `+` del tamaño de una burbuja, a la derecha de la última.
+  - **Cada serie insertada lleva su ×** —dentro de la burbuja, en su esquina
+    superior derecha y con el aspa en blanco— y borra ESA serie, así que
+    desaparece "Borrar última serie" (obligaba a deshacer en orden inverso para
+    corregir la primera). La × solo aparece con la tarjeta desplegada; plegada,
+    las burbujas siguen siendo resumen. `onRemoveLastSet` pasa a
+    `onRemoveSet(index)`.
+  - El **chevron de plegado sale de la cabecera** —donde el aro de 38 px le
+    robaba ancho al nombre y lo partía en tres líneas— y baja a una **barra
+    ancha y baja al pie de la tarjeta**, con el mismo peldaño sombreado
+    (`theme.gradients.heroStep`) que las flechas laterales del héroe: se lee
+    como el borde inferior de la tarjeta, no como un botón encima. El nombre del
+    ejercicio recupera ~50 px y sube a 20 px.
+  - El **temporizador de descanso cabe en una fila**: fuera el título "Tiempo
+    hasta la siguiente serie" y el reloj de arena a la izquierda de la cuenta
+    atrás (48 → 34 px), con "+30s" al lado y una **×** pequeña en la esquina
+    superior derecha del bloque, en vez de la fila de botones aparte. El bloque
+    dorado deja de comerse media pantalla del ejercicio en curso.
+- **Perfil deja de ser un cajón: números pequeños y tres destinos**
+  (`features/workout/ProfileScreen.tsx`, `features/workout/SettingsScreen.tsx`,
+  `app/App.tsx`): bajo la identidad quedan las tres cifras (rutinas,
+  entrenamientos, cardio) **sin el título "Resumen"** —tres números rotulados no
+  necesitan que los presenten— y a **24 px en vez de 32**: son contexto, no el
+  héroe de la pantalla. Debajo, tres filas: **Mis rutinas**, **Progreso por
+  ejercicio** y **Configuración**. Los ajustes vuelven a su propia pantalla
+  —tras un intento de bajarlos al pie de Perfil que estiraba la vista con dos
+  selectores que se tocan una vez al año—, y de ella cuelga también **Datos y
+  nube**, en el orden de la pregunta que trae a la gente hasta ahí: **Ajustes**
+  (tema e idioma) → **Datos y nube** → **Novedades**. El botón físico de atrás
+  sigue las rutas nuevas (Datos → Configuración → Perfil).
+- **Una sola línea dice en qué estado está cada rutina**
+  (`features/workout/RoutineSelectorScreen.tsx`): la tarjeta usaba tres señales
+  de color a la vez —insignia dorada "Activa", insignia azul "Preparada" y un
+  botón-casa dorado que hacía de indicador de "en Inicio"—, más un cuarto estado
+  ("Rutina cerrada") que solo se nombraba en el héroe de Inicio. Ahora hay una
+  línea de texto por tarjeta: "La que entrenas" / "Sin estrenar" / "Cerrada",
+  con "· En Inicio" cuando toca, y solo la rutina que se entrena se tiñe de oro.
+  "Ver en Inicio" pasa a ser un botón **rotulado** y solo aparece cuando hace
+  algo (antes salía siempre, deshabilitado, haciendo de estado). El modelo no se
+  toca: `activeRoutineId` y `selectedRoutineId` siguen igual.
+- **Los puntos del héroe son botones, no decoración**
+  (`components/HeroCarousel.tsx`): iban con `pointerEvents="none"` y, siendo el
+  indicador típico de "arrastra para ver más", prometían un gesto que se queda el
+  pager de pestañas (arrastrar el héroe cambiaba de pestaña). Ahora cada punto
+  salta a su tarjeta y las flechas laterales se ensanchan (34 → 42 px). El
+  arrastre queda descartado a propósito: ver el ROADMAP.
+- **El campo de cardio ya no ocupa sitio en todos los días de fuerza**
+  (`features/workout/WorkoutLogScreen.tsx`): se pinta desplegado si la sesión ya
+  trae cardio o si el usuario ha registrado cardio alguna vez (`hasAnyCardio`, el
+  criterio con el que la barra decide enseñar la pestaña); si no, queda como un
+  botón "Añadir cardio". Sin pescadilla: siempre se puede empezar a registrarlo.
+- **La cabecera de Comunidad baja de cuatro raíles a dos**
+  (`features/workout/CommunityScreen.tsx`): el filtro de intensidad pasa a un
+  botón con su icono en la misma línea que las pestañas, y su raíl solo baja al
+  abrirlo —o si hay un filtro puesto, para que nunca quede activo y escondido. El
+  buscador, que busca personas y no las rutinas de la lista, lo dice ahora en su
+  icono y su rótulo ("Buscar personas").
+- **Rótulos y controles que ya no discrepan**: la pestaña de Inicio **se llama
+  "Inicio"** (`components/FloatingPrimaryNav.tsx`) —la barra rotulaba "Fuerza"
+  mientras la pantalla, los docs y el código la llaman Inicio, y el icono de
+  mancuerna ya la distingue de Cardio—, y el **selector Fuerza/Cardio del
+  calendario usa `OptionToggle`** (`features/workout/CalendarScreen.tsx`), que
+  estaba montado a mano y marcaba el activo con relleno dorado sólido mientras el
+  componente compartido —el de tema, idioma y copia automática— lo marca con
+  fondo translúcido. Dos pieles para la misma tarea; se quedan 25 líneas de
+  estilos menos.
+- **Ni un color suelto fuera de los tokens**, como manda `frontend-design.md`:
+  - `theme.colors.onGoldVeil` (nuevo, en las dos paletas): el velo oscuro sobre
+    el oro de las hero cards (filetes separadores y fondo del icono). Estaba
+    escrito a pelo como `rgba(16, 19, 24, 0.16)` en cuatro sitios de
+    `HeroCard`, `HeroStatsCard` y `HeroWeightCard`.
+  - `GLASS_BACK_BUTTON_BG` / `_BORDER` / `_OVERLAY` / `_TEXT` (nuevos, en
+    `components/glassTokens.ts`): las cuatro variantes de día del botón
+    "Volver" vivían como literales dentro del componente. Con los tokens,
+    `FloatingBackButton` deja de leer `theme.mode` en render y de arrastrar
+    cuatro estilos `*Light`.
+
+### Correcciones
+
+- **Un entreno ya no se duplica en "la semana siguiente"**
+  (`features/workout/WorkoutLogScreen.tsx`, `features/workout/WorkoutContext.tsx`,
+  `lib/cloud/sync.ts`, `lib/db/index.ts`, `lib/normalize.ts`, `lib/storage.ts`):
+  el autoguardado del registro **borraba el log y lo reinsertaba con un id nuevo
+  en cada serie**. Si ese borrado no llegaba —fecha distinta de hoy (donde ni
+  siquiera se intentaba), dos guardados en el mismo tick (el `state` del render
+  aún no veía el anterior) o el pull devolviendo la versión que la sesión ya
+  había borrado— quedaba un segundo entreno del mismo día con todo lo insertado
+  hasta ese momento; como un día repetido abre bloque nuevo en `lib/weeks.ts`,
+  salía clonado en la semana siguiente. Cuatro frentes:
+  - La sesión fija su `id` y su `createdAt` al montar y el autoguardado
+    **actualiza siempre el mismo log** (no hay nada que borrar). Un ref
+    —síncrono, a diferencia del `state`— decide crear o actualizar, así que dos
+    guardados seguidos no pueden crear dos logs.
+  - `UPDATE_WORKOUT_LOG` pasa a ser un upsert: si el log desapareció en mitad de
+    la sesión (p. ej. por un `SET_APP_DATA` venido de la nube) se reinserta en
+    vez de perder lo insertado.
+  - El **pull ya no pisa cambios locales pendientes de subir**
+    (`dropPendingLocal`): el dispositivo se bajaba de vuelta las filas que él
+    mismo acababa de subir y resucitaba lo que la sesión había borrado mientras
+    tanto. Los hijos de un padre saltado se saltan también.
+  - **Reparación al cargar** (`mergeDuplicateDayLogs`): los días duplicados ya
+    guardados se fusionan en uno, conservando de cada ejercicio la copia con más
+    series. La BD se reescribe limpia y el borrado se encola en el outbox para
+    que también llegue a la nube.
+- **El atrás del sistema vuelve a la pantalla anterior en vez de cerrar la app**
+  (`android/app/src/main/java/com/tonigallego/gymbro/MainActivity.kt`,
+  `android/app/src/main/AndroidManifest.xml`): con `targetSdk 36` el atrás
+  predictivo de Android es obligatorio y el sistema deja de llamar a
+  `onBackPressed()`; React Native 0.74 solo escucha ese camino, así que el
+  `BackHandler` de `app/App.tsx` —que ya resolvía el destino de cada pantalla—
+  nunca recibía el evento y Android cerraba la Activity directamente. La
+  Activity registra ahora un `OnBackInvokedCallback` (API 33+) y lo reenvía a
+  `onBackPressed()`, que es la puerta de entrada del delegate de RN: el evento
+  llega a JS y solo si nadie lo gestiona (Inicio) se cierra de verdad. El
+  manifiesto declara `enableOnBackInvokedCallback="true"` para que el
+  comportamiento sea el mismo también en Android 13-15.
+- **El botón atrás físico ya no cierra la app al salir de una rutina pública**
+  (`app/App.tsx`): el caso `public-routine` del manejador hacía `break` en vez de
+  `return true`, así que navegaba hacia atrás **y además** devolvía `undefined`,
+  que Android interpreta como "nadie ha gestionado el gesto" y remata con su
+  acción por defecto.
+
 ## Version 0.7.2 - 2026-08-22
 
 ### Nuevas funcionalidades

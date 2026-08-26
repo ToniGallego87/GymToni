@@ -25,10 +25,7 @@ import {
 import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale } from '@lib/i18n';
-import {
-  buildWorkoutImprovement,
-  ImprovementResult,
-} from '@lib/progress';
+import { buildWorkoutImprovement, ImprovementResult } from '@lib/progress';
 import {
   findDayInRoutines,
   getImprovementDisplay,
@@ -420,7 +417,8 @@ export function HomeScreen({
   const computeImprovementBetweenLogs = (
     currentLog: WorkoutLog,
     previousLog: WorkoutLog | null
-  ): ImprovementResult | null => buildWorkoutImprovement(currentLog, previousLog);
+  ): ImprovementResult | null =>
+    buildWorkoutImprovement(currentLog, previousLog);
 
   // Mejora de una sesión respecto a la anterior del mismo día (independiente de la semana).
   const getLogImprovement = (currentLog: WorkoutLog) =>

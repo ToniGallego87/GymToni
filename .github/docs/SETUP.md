@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (15 suites, 190 tests)
+npm test           # Jest sobre lib/ (15 suites, 201 tests)
 npm run format     # Prettier
 ```
 
@@ -36,6 +36,7 @@ GymToni/
 ├── app.json                  ← Config Expo (nombre, versión, iconos, scheme gymbro://)
 ├── app/
 │   ├── index.tsx             ← Entry point (expo-router)
+│   ├── _layout.tsx           ← Layout raíz mínimo (`<Slot/>`, sin Stack ni header: edge-to-edge)
 │   ├── App.tsx               ← Raíz: hidratación, navegación por estado, deep links
 │   └── +native-intent.ts     ← Redirección de deep links nativos
 ├── components/               ← UI reutilizable
@@ -66,8 +67,7 @@ GymToni/
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
-│   ├── ProfileScreen.tsx     ← Perfil (pestaña): resumen + menú (rutinas, progreso, datos, ajustes)
-│   ├── SettingsScreen.tsx    ← Configuración: tema, idioma y novedades
+│   ├── ProfileScreen.tsx     ← Perfil (pestaña): resumen, menú (rutinas, progreso, datos) y ajustes (tema, idioma, novedades)
 │   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
 │   ├── PublicRoutineScreen.tsx ← Rutina ajena en solo lectura (antes de copiarla)
 │   ├── ProfileEditScreen.tsx ← Perfil público propio (se abre desde Comunidad)

@@ -6,6 +6,9 @@ import android.graphics.Color
 import android.view.View
 import android.view.WindowInsetsController
 import android.view.WindowManager
+import android.window.OnBackInvokedCallback
+import android.window.OnBackInvokedDispatcher
+import androidx.annotation.RequiresApi
 import androidx.core.graphics.toColorInt
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -61,6 +64,41 @@ class MainActivity : ReactActivity() {
     }
   }
 
+  // ─────────────────────── Atrás del sistema (Android 13+) ───────────────────────
+  // Desde targetSdk 36 el atrás predictivo es obligatorio: el sistema deja de
+  // llamar a onBackPressed() y entrega el evento por OnBackInvokedCallback.
+  // React Native 0.74 solo escucha el camino clásico, así que sin este puente
+  // BackHandler (app/App.tsx, que resuelve el destino de cada pantalla) nunca se
+  // entera y Android cierra la Activity: el atrás salía de la app desde
+  // cualquier pantalla en vez de comportarse como el "Volver" de la barra.
+  //
+  // El callback se reenvía a onBackPressed(), que es la puerta de entrada del
+  // delegate de RN: de ahí el evento llega a JS y, solo si nadie lo gestiona
+  // (Inicio), vuelve por invokeDefaultOnBackPressed() para cerrar de verdad.
+  // Se guarda como Any? a propósito: un campo tipado con la clase de API 33 se
+  // cargaría también en dispositivos antiguos (minSdk 23).
+  private var backInvokedCallback: Any? = null
+
+  @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+  private fun registerOnBackInvokedCallback() {
+    if (backInvokedCallback != null) return
+    @Suppress("DEPRECATION")
+    val callback = OnBackInvokedCallback { onBackPressed() }
+    onBackInvokedDispatcher.registerOnBackInvokedCallback(
+      OnBackInvokedDispatcher.PRIORITY_DEFAULT,
+      callback
+    )
+    backInvokedCallback = callback
+  }
+
+  @RequiresApi(Build.VERSION_CODES.TIRAMISU)
+  private fun unregisterOnBackInvokedCallback() {
+    (backInvokedCallback as? OnBackInvokedCallback)?.let {
+      onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it)
+    }
+    backInvokedCallback = null
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     // Set the theme to AppTheme BEFORE onCreate to support
     // coloring the background, status bar, and navigation bar.
@@ -68,6 +106,16 @@ class MainActivity : ReactActivity() {
     setTheme(R.style.AppTheme);
     super.onCreate(null)
     applySystemBarStyle()
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      registerOnBackInvokedCallback()
+    }
+  }
+
+  override fun onDestroy() {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+      unregisterOnBackInvokedCallback()
+    }
+    super.onDestroy()
   }
 
   override fun onResume() {

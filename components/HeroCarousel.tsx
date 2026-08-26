@@ -10,6 +10,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 // Sombreado del "escalón" (`theme.gradients.heroStep`): tinta oscura translúcida
 // más intensa en el borde exterior de la tarjeta y desvanecida a nada hacia el
@@ -19,8 +20,10 @@ import { theme } from '@lib/theme';
 // difumina la transición al dorado, en vez de cortarla en seco.
 const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
 
-// Ancho del peldaño lateral.
-export const HERO_ARROW_WIDTH = 34;
+// Ancho del peldaño lateral. Es el camino principal para cambiar de tarjeta (el
+// arrastre horizontal lo gobierna el pager de pestañas de la raíz), así que va
+// ancho: tiene que leerse como botón y ser cómodo con el pulgar.
+export const HERO_ARROW_WIDTH = 42;
 
 // Cuánto tiene que apartar de cada lado una tarjeta su contenido ancho (filas de
 // datos, gráficas) para que no quede bajo las flechas: lo que el peldaño invade
@@ -53,10 +56,16 @@ function Dot({ active, color }: { active: boolean; color: string }) {
 
 /**
  * Envoltorio de la hero card que alterna entre varios "estados" (slides) con
- * flechas a izquierda/derecha. El FRAME de la tarjeta no se mueve: al cambiar
- * de estado solo el contenido (icono + texto) entra deslizándose desde el lado
- * de avance con un fundido (lo anima cada tarjeta según la prop `enterFrom`).
- * Los puntos indicadores animan su cambio. La navegación es cíclica.
+ * flechas a izquierda/derecha y puntos pulsables. El FRAME de la tarjeta no se
+ * mueve: al cambiar de estado solo el contenido (icono + texto) entra
+ * deslizándose desde el lado de avance con un fundido (lo anima cada tarjeta
+ * según la prop `enterFrom`). Con las flechas la navegación es cíclica; los
+ * puntos saltan directos a su tarjeta.
+ *
+ * **No hay arrastre horizontal, y por eso los controles son explícitos.** El
+ * gesto horizontal se lo queda el `PagerView` de la raíz (cambia de pestaña),
+ * así que el carrusel no puede prometerlo: los puntos no son un indicador
+ * decorativo de swipe, son botones.
  *
  * La escala de pulsación la lleva este envoltorio, no la tarjeta: flechas y
  * puntos son hermanos de la tarjeta y, si se escalara ella sola, se quedarían
@@ -81,6 +90,14 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
   const go = (delta: 1 | -1) => {
     setDir(delta);
     setIndex((i) => (i + delta + count) % count);
+  };
+
+  // Salto directo desde los puntos. Entra por el lado que corresponde al sentido
+  // del salto, igual que con las flechas.
+  const goTo = (next: number) => {
+    if (next === safeIndex) return;
+    setDir(next > safeIndex ? 1 : -1);
+    setIndex(next);
   };
 
   // El contenido entra desde la derecha al avanzar y desde la izquierda al
@@ -135,9 +152,27 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
         </View>
       </Pressable>
 
-      <View style={styles.dots} pointerEvents="none">
+      {/* Puntos PULSABLES: cada uno salta a su tarjeta. Antes iban con
+          `pointerEvents="none"`, así que prometían el arrastre típico de un
+          carrusel (que aquí se lo queda el pager de pestañas) y encima no se
+          podían tocar. El contenedor es `box-none` para no robarle el toque a la
+          tarjeta, que sigue siendo pulsable en todo su ancho. */}
+      <View style={styles.dots} pointerEvents="box-none">
         {slides.map((_, i) => (
-          <Dot key={i} active={i === safeIndex} color={color} />
+          <Pressable
+            key={i}
+            style={styles.dotHit}
+            hitSlop={6}
+            onPress={() => goTo(i)}
+            accessibilityRole="button"
+            accessibilityState={{ selected: i === safeIndex }}
+            accessibilityLabel={t('Ver tarjeta {n} de {total}', {
+              n: i + 1,
+              total: count,
+            })}
+          >
+            <Dot active={i === safeIndex} color={color} />
+          </Pressable>
         ))}
       </View>
     </Animated.View>
@@ -188,15 +223,24 @@ const makeStyles = () =>
       borderTopLeftRadius: theme.borderRadius.sm,
       borderBottomLeftRadius: theme.borderRadius.sm,
     },
+    // `bottom` compensa el `paddingVertical` del área de toque de cada punto
+    // (spacing.md + 10 - 8) para que el punto siga cayendo donde caía.
     dots: {
       position: 'absolute',
       left: 0,
       right: 0,
-      bottom: theme.spacing.md + 10,
+      bottom: theme.spacing.md + 2,
       flexDirection: 'row',
       justifyContent: 'center',
       alignItems: 'center',
-      gap: 6,
+      gap: 0,
+    },
+    // Área de toque de cada punto: el punto mide 6 px, así que el dedo necesita
+    // el padding (+ hitSlop). El padding horizontal reproduce el hueco de 6 px
+    // que antes daba el `gap`.
+    dotHit: {
+      paddingVertical: 8,
+      paddingHorizontal: 3,
     },
     dot: {
       height: 6,

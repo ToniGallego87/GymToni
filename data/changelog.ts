@@ -9,6 +9,24 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.3',
+    items: [
+      'Al registrar, cada ejercicio se ve mucho mejor: el botón del dibujo ahora enseña el GIF en movimiento, así reconoces el ejercicio de un vistazo, y el número de orden deja sitio libre para que el nombre se lea entero.',
+      'Ahora puedes borrar una serie concreta: cada serie que metes lleva su propia × y quitas justo la que te has equivocado, sin tener que deshacer todas las de después.',
+      'El cronómetro de descanso ocupa ahora una sola línea y ya no se come media pantalla, y el botón para plegar el ejercicio baja al final de la tarjeta.',
+      'Se acabaron los entrenamientos duplicados: si un entreno se te había clonado en la semana siguiente, la app lo detecta y lo une solo al abrirla.',
+      'El botón de atrás del móvil vuelve a funcionar: antes cerraba la app de golpe en vez de llevarte a la pantalla anterior.',
+      'Perfil ahora eres tú: tu foto, tu nombre y tu descripción arriba del todo, y tu foto también aparece en la barra de abajo. Desde ahí llegas a Mis rutinas, Progreso por ejercicio y Configuración (tema, idioma, tus copias de seguridad y las novedades).',
+      'La app te avisa al abrirla cuando hay una versión nueva disponible, con un botón para ir a descargarla.',
+      'Tus rutinas dicen en una línea cómo están: "La que entrenas", "Sin estrenar" o "Cerrada", en vez de varias etiquetas de colores que se pisaban.',
+      'El calendario explica ahora sus códigos: debajo del mes se listan las rutinas con su nombre real y qué significa cada número de semana.',
+      'Si nunca haces cardio, el hueco para apuntarlo ya no ocupa sitio en cada día de fuerza: queda como un botón "Añadir cardio" por si algún día te apetece.',
+      'Comunidad se ve más despejada: el filtro de intensidad se abre solo cuando lo pides y el buscador deja claro que busca personas.',
+      'Los puntitos del carrusel de Inicio ya se pueden tocar para saltar directamente a la tarjeta que quieras.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.7.2',
     items: [
       'Llega Comunidad: un tablón con las rutinas más populares de otras personas, y puedes añadir a las tuyas la que quieras con un toque.',

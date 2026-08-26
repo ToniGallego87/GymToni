@@ -59,7 +59,10 @@ Reglas de color:
   - Ojo con los colores compartidos entre una barra y su etiqueta (gráficas): la
     barra es `primaryLine` y la etiqueta `primary`, no el mismo valor.
 - **Texto/iconos sobre dorado siempre `colors.onGold`** (tinta oscura en ambos
-  temas) — nunca un blanco/negro suelto.
+  temas) — nunca un blanco/negro suelto. Para los **filetes y fondos de icono
+  dentro del dorado** (separadores de la fila de datos de las heros, círculo del
+  icono) el token es `colors.onGoldVeil`: mismo valor en los dos temas, porque el
+  oro de relleno es vivo en ambos.
 - **Texto/iconos sobre rellenos sólidos de estado (rojo/verde): `colors.onDanger`**
   (blanca en día, oscura en noche). No reutilizar `onGold` ahí: sobre el rojo
   profundo de día la tinta oscura no contrasta.
@@ -100,11 +103,17 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
 - `GlassTopBar`: barra superior fija con blur. Título estándar = prop `icon`
   (MaterialCommunityIcons 18px + texto 20/800). `titleElement` **solo** para
   casos especiales: logo de Inicio, `DayAccentIcon` del día en registro/detalle.
-- `FloatingPrimaryNav` / `FloatingBackButton`: navegación flotante inferior.
+- `FloatingPrimaryNav` / `FloatingBackButton`: navegación flotante inferior. El
+  "Volver" es cristal **oscuro** translúcido en los dos temas (la barra de
+  pestañas, en cambio, es cristal claro en día): su terna propia son los tokens
+  `GLASS_BACK_BUTTON_BG` / `_BORDER` / `_OVERLAY` / `_TEXT`.
 - Tokens de blur/opacidad/bordes en `components/glassTokens.ts`.
 - Todas las pantallas son edge-to-edge; el scroll se compensa con
-  `GLASS_TOP_BAR_BASE_HEIGHT + insets.top` arriba y
-  `getFloatingPrimaryNavMetrics(insets.bottom)` abajo.
+  `GLASS_TOP_BAR_BASE_HEIGHT + insets.top` arriba y, abajo, con las métricas de
+  la pieza flotante que lleve: `getFloatingPrimaryNavMetrics(insets.bottom)` en
+  las pestañas y `getFloatingBackButtonMetrics(insets.bottom)` en las
+  subpantallas (ambas devuelven `{ bottom, scrollBottomPadding }`). No recalcular
+  la fórmula a mano en cada pantalla.
 
 ## Patrones de componentes
 

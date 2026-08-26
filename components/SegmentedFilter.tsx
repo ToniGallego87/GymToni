@@ -41,7 +41,11 @@ interface SegmentedFilterProps<T extends string | undefined> {
  * Filtro segmentado: todas las opciones a la vista, la activa rellena de oro.
  * Sustituye a los botones que rotaban entre opciones a cada pulsación (había
  * que dar la vuelta entera para volver a la anterior y no se veía qué más
- * había). Mismo lenguaje que el toggle Fuerza/Cardio del calendario.
+ * había).
+ *
+ * Es el componente de FILTRAR una lista (gráficas, tablón). Para elegir entre
+ * dos modos o ajustes —tema, idioma, Fuerza/Cardio del calendario— el
+ * componente es `OptionToggle`.
  *
  * El raíl scrollea en horizontal cuando las opciones no caben, pero scrollear
  * esconde opciones: los chips van apretados a propósito (4 métricas de "Tu

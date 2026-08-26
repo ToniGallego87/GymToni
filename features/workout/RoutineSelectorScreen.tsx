@@ -13,7 +13,7 @@ import {
   ConfirmModal,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientCtaButton,
@@ -51,8 +51,8 @@ export function RoutineSelectorScreen({
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   // Esta vista no es una pestaña de navegación: lleva botón Volver abajo en vez
   // de la barra flotante, así que su padding se calcula con la altura del botón.
-  const backBottom = Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding = backBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: backBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   // La rutina marcada; si ya no existe, la activa (misma regla que Inicio).
   const displayedRoutineId = state.routines.some(
@@ -109,12 +109,17 @@ export function RoutineSelectorScreen({
               key={routine.id}
               routine={routine}
               isViewed={routine.id === displayedRoutineId}
-              isActive={isActive}
-              // "Preparada": creada pero aún no entrenada. Se activará al
-              // registrar su primer día.
-              isPrepared={!isActive && !routineHasLogs}
+              // Un ÚNICO estado por rutina, dicho con palabras:
+              //  - 'active'   la que se entrena ahora mismo.
+              //  - 'prepared' creada pero aún sin estrenar (se activará al
+              //               registrar su primer día).
+              //  - 'closed'   tiene historial pero ya no es la activa (es lo
+              //               que Inicio llama "Rutina cerrada").
+              status={
+                isActive ? 'active' : routineHasLogs ? 'closed' : 'prepared'
+              }
               // Toque en la tarjeta: abre sus detalles (sin adoptarla como la de
-              // Inicio). El botón "Mostrar en Inicio" es el que la marca.
+              // Inicio). El botón "Ver en Inicio" es el que la marca.
               onOpenDetails={
                 onOpenRoutineDetails
                   ? () => onOpenRoutineDetails(routine)
@@ -174,30 +179,48 @@ export function RoutineSelectorScreen({
   );
 }
 
+/** Situación de una rutina, dicha con una sola palabra. */
+type RoutineStatus = 'active' | 'prepared' | 'closed';
+
 interface RoutineCardProps {
   routine: WorkoutRoutine;
-  isViewed: boolean; // Para el borde grueso + el control "En Inicio"
-  isActive: boolean; // Para el check "Activa"
-  isPrepared: boolean; // Para la etiqueta "Preparada"
+  isViewed: boolean; // Es la rutina que se muestra en Inicio
+  status: RoutineStatus;
   // Toque en la tarjeta: abre sus detalles (mirar sin adoptarla).
   onOpenDetails?: () => void;
-  // Botón "Mostrar en Inicio": marca esta rutina como la que se ve en Inicio.
+  // Botón "Ver en Inicio": marca esta rutina como la que se ve en Inicio.
   onSelect: () => void;
   onDuplicate: () => void;
   // Sin este handler no se pinta el botón de eliminar.
   onDelete?: () => void;
 }
 
+/**
+ * Tarjeta de rutina.
+ *
+ * La situación se lee en UNA línea de texto en vez de en tres señales de color
+ * (insignia dorada "Activa", insignia azul "Preparada" y botón-casa dorado "en
+ * Inicio"), que obligaban a aprenderse un código para responder algo tan simple
+ * como "¿en qué rutina estoy?". Ninguna capacidad cambia de sitio: "ver en
+ * Inicio" sigue siendo un botón propio —ahora rotulado— y el estado "cerrada",
+ * que solo se nombraba en el héroe de Inicio, por fin se dice también aquí.
+ */
 function RoutineCard({
   routine,
   isViewed,
-  isActive,
-  isPrepared,
+  status,
   onOpenDetails,
   onSelect,
   onDuplicate,
   onDelete,
 }: RoutineCardProps) {
+  const statusLabel =
+    status === 'active'
+      ? t('La que entrenas')
+      : status === 'prepared'
+      ? t('Sin estrenar')
+      : t('Cerrada');
+
   return (
     <TouchableOpacity
       style={[styles.routineCard, isViewed && styles.routineCardViewed]}
@@ -212,52 +235,45 @@ function RoutineCard({
         <Text style={styles.routineCardDays}>
           {t('{n} días de entrenamiento', { n: routine.days.length })}
         </Text>
+
+        <View style={styles.routineCardStatusRow}>
+          <Text
+            style={[
+              styles.routineCardStatus,
+              status === 'active' && styles.routineCardStatusActive,
+            ]}
+            numberOfLines={1}
+          >
+            {isViewed ? `${statusLabel} · ${t('En Inicio')}` : statusLabel}
+          </Text>
+          {/* Solo cuando NO es la de Inicio: si ya lo es, lo dice la línea de
+              arriba y el botón sobraba (estaba ahí solo como estado, deshabilitado). */}
+          {!isViewed && (
+            <Pressable
+              style={({ pressed }: { pressed: boolean }) => [
+                styles.routineCardHomeButton,
+                pressed && styles.routineCardIconButtonPressed,
+              ]}
+              onPress={onSelect}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('Ver en Inicio')}
+            >
+              <MaterialCommunityIcons
+                name="home-outline"
+                size={15}
+                color={theme.colors.primary}
+              />
+              <Text style={styles.routineCardHomeText}>
+                {t('Ver en Inicio')}
+              </Text>
+            </Pressable>
+          )}
+        </View>
       </View>
       <View style={styles.routineCardRight}>
-        {isActive ? (
-          <View style={styles.routineCardActiveIndicator}>
-            <MaterialCommunityIcons
-              name="check-bold"
-              size={13}
-              color={theme.colors.onGold}
-            />
-            <Text style={styles.routineCardActiveText}>{t('Activa')}</Text>
-          </View>
-        ) : isPrepared ? (
-          <View style={styles.routineCardPreparedIndicator}>
-            <MaterialCommunityIcons
-              name="progress-clock"
-              size={13}
-              color={theme.colors.emoji_blue}
-            />
-            <Text style={styles.routineCardPreparedText}>{t('Preparada')}</Text>
-          </View>
-        ) : null}
-        {/* Mostrar en Inicio: hace explícito el marcar cuál se ve en Inicio, que
-            antes era el toque en la tarjeta (ahora abre detalles). Relleno dorado
-            cuando ya es la de Inicio (estado), contorno cuando se puede marcar. */}
-        <Pressable
-          style={({ pressed }: { pressed: boolean }) => [
-            styles.routineCardHomeButton,
-            isViewed && styles.routineCardHomeButtonActive,
-            pressed && styles.routineCardIconButtonPressed,
-          ]}
-          onPress={isViewed ? undefined : onSelect}
-          disabled={isViewed}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={
-            isViewed ? t('En Inicio') : t('Mostrar en Inicio')
-          }
-        >
-          <MaterialCommunityIcons
-            name={isViewed ? 'home' : 'home-outline'}
-            size={18}
-            color={isViewed ? theme.colors.onGold : theme.colors.textSecondary}
-          />
-        </Pressable>
         {/* Duplicar: se parte de una rutina que ya funciona para hacer la
-            siguiente (la copia queda "preparada", no toca a la activa). */}
+            siguiente (la copia queda sin estrenar, no toca a la que entrenas). */}
         <Pressable
           style={({ pressed }: { pressed: boolean }) => [
             styles.routineCardIconButton,
@@ -342,17 +358,41 @@ const makeStyles = () =>
     routineCardIconButtonPressed: {
       opacity: 0.6,
     },
-    // "Mostrar en Inicio": contorno cuando se puede marcar; relleno dorado
-    // cuando ya es la rutina de Inicio (estado, no acción).
-    routineCardHomeButton: {
-      padding: 4,
-      borderRadius: theme.borderRadius.sm,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+    // Línea de situación de la rutina + la acción de traerla a Inicio.
+    routineCardStatusRow: {
+      marginTop: 8,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      flexWrap: 'wrap',
     },
-    routineCardHomeButtonActive: {
-      backgroundColor: theme.colors.primaryFill,
-      borderColor: theme.colors.primaryFill,
+    routineCardStatus: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      lineHeight: 17,
+    },
+    // La rutina que se entrena es la única que se tiñe: un acento, no tres.
+    routineCardStatusActive: {
+      color: theme.colors.primary,
+    },
+    // "Ver en Inicio": acción rotulada (antes era un icono-casa sin texto que
+    // además hacía de indicador de estado).
+    routineCardHomeButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+    },
+    routineCardHomeText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      lineHeight: 16,
     },
     routineCardName: {
       fontSize: 21,
@@ -370,36 +410,6 @@ const makeStyles = () =>
     routineCardDays: {
       fontSize: 14,
       color: theme.colors.lightGray,
-    },
-    routineCardActiveIndicator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: theme.colors.primaryFill,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: theme.borderRadius.pill,
-      overflow: 'hidden',
-    },
-    routineCardActiveText: {
-      fontSize: 13,
-      color: theme.colors.onGold,
-      fontWeight: '800',
-    },
-    routineCardPreparedIndicator: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: theme.colors.emoji_blueMuted,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: theme.borderRadius.pill,
-      overflow: 'hidden',
-    },
-    routineCardPreparedText: {
-      fontSize: 13,
-      color: theme.colors.emoji_blue,
-      fontWeight: '800',
     },
     // "Nueva rutina": único CTA primario de la vista (GradientCtaButton dorado,
     // como "Crear rutina"/"Guardar"). Antes había además un segundo botón dorado

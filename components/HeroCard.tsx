@@ -126,7 +126,9 @@ export function HeroCard({
         />
 
         <Animated.View style={[styles.content, contentStyle]}>
-          <View style={[styles.iconWrap, hasSubtitle && styles.iconWrapCompact]}>
+          <View
+            style={[styles.iconWrap, hasSubtitle && styles.iconWrapCompact]}
+          >
             <MaterialCommunityIcons
               name={icon as any}
               size={hasSubtitle ? 38 : 44}
@@ -197,7 +199,7 @@ const makeStyles = () =>
       width: 68,
       height: 68,
       borderRadius: 34,
-      backgroundColor: 'rgba(16, 19, 24, 0.16)',
+      backgroundColor: theme.colors.onGoldVeil,
       alignItems: 'center',
       justifyContent: 'center',
       marginBottom: 10,

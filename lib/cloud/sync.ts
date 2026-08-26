@@ -6,8 +6,10 @@ import {
   applyRemoteChanges,
   deleteOutboxEntries,
   getOutboxBatch,
+  getPendingOutboxIds,
   incrementOutboxAttempts,
   type OutboxRow,
+  type PendingLocalIds,
   type RemoteChanges,
   type RemoteTableChange,
 } from '../db';
@@ -470,6 +472,115 @@ async function pullTable(
   return { change: { upserts, deletes }, maxUpdated };
 }
 
+/**
+ * Quita de lo bajado todo lo que tenga un cambio local pendiente de subir.
+ *
+ * El pull se baja de vuelta las filas que este mismo dispositivo acaba de subir
+ * (llevan `updated_at = ahora`, por encima del cursor). Si entre el push y el
+ * pull la sesión ha seguido escribiendo —el registro autoguarda serie a serie—,
+ * la fila de la nube ya está obsoleta y aplicarla RESUCITA lo que en local ya
+ * no está: era el origen de los entrenos duplicados (el día repetido abre semana
+ * nueva, ver lib/weeks.ts). Lo mismo si el push corta a medias por falta de red.
+ *
+ * No se pierde nada: el cambio local sigue en el outbox y el siguiente push lo
+ * sube, que es exactamente el last-write-wins de este motor ("gana el último en
+ * subir"). Los hijos de un padre saltado se saltan también: si no, el pull
+ * reinsertaría los ejercicios y series de la versión vieja del entreno.
+ */
+export function dropPendingLocal(
+  changes: RemoteChanges,
+  pending: PendingLocalIds
+): RemoteChanges {
+  const routineIds = new Set(pending.routines);
+  const dayIds = new Set(pending.days);
+  const logIds = new Set(pending.logs);
+  if (!routineIds.size && !dayIds.size && !logIds.size) return changes;
+
+  const idOf = (row: Row): string => String(row.id ?? '');
+  const parentOf = (row: Row, col: string): string => String(row[col] ?? '');
+
+  const skippedDays = new Set<string>();
+  const skippedExerciseLogs = new Set<string>();
+
+  const routines: RemoteTableChange = {
+    upserts: changes.routines.upserts.filter((r) => !routineIds.has(idOf(r))),
+    deletes: changes.routines.deletes.filter((id) => !routineIds.has(id)),
+  };
+
+  const workoutDays: RemoteTableChange = {
+    upserts: changes.workoutDays.upserts.filter((r) => {
+      const skip =
+        dayIds.has(idOf(r)) || routineIds.has(parentOf(r, 'routines_id'));
+      if (skip) skippedDays.add(idOf(r));
+      return !skip;
+    }),
+    deletes: changes.workoutDays.deletes.filter((id) => !dayIds.has(id)),
+  };
+
+  const exercises: RemoteTableChange = {
+    upserts: changes.exercises.upserts.filter((r) => {
+      const day = parentOf(r, 'workout_days_id');
+      return !dayIds.has(day) && !skippedDays.has(day);
+    }),
+    deletes: changes.exercises.deletes,
+  };
+
+  const workoutLogs: RemoteTableChange = {
+    upserts: changes.workoutLogs.upserts.filter((r) => !logIds.has(idOf(r))),
+    deletes: changes.workoutLogs.deletes.filter((id) => !logIds.has(id)),
+  };
+
+  const exerciseLogs: RemoteTableChange = {
+    upserts: changes.exerciseLogs.upserts.filter((r) => {
+      const skip = logIds.has(parentOf(r, 'workout_logs_id'));
+      if (skip) skippedExerciseLogs.add(idOf(r));
+      return !skip;
+    }),
+    deletes: changes.exerciseLogs.deletes,
+  };
+
+  const logSets: RemoteTableChange = {
+    upserts: changes.logSets.upserts.filter(
+      (r) => !skippedExerciseLogs.has(parentOf(r, 'exercise_logs_id'))
+    ),
+    deletes: changes.logSets.deletes,
+  };
+
+  const cardioLogs: RemoteTableChange = {
+    upserts: changes.cardioLogs.upserts.filter(
+      (r) => !logIds.has(parentOf(r, 'workout_logs_id'))
+    ),
+    deletes: changes.cardioLogs.deletes,
+  };
+
+  return {
+    routines,
+    workoutDays,
+    exercises,
+    workoutLogs,
+    exerciseLogs,
+    logSets,
+    cardioLogs,
+    settings: changes.settings,
+  };
+}
+
+function countChanges(changes: RemoteChanges): number {
+  const tables: RemoteTableChange[] = [
+    changes.routines,
+    changes.workoutDays,
+    changes.exercises,
+    changes.workoutLogs,
+    changes.exerciseLogs,
+    changes.logSets,
+    changes.cardioLogs,
+  ];
+  return (
+    tables.reduce((n, t) => n + t.upserts.length + t.deletes.length, 0) +
+    (changes.settings ? 1 : 0)
+  );
+}
+
 async function pullDelta(
   userId: string,
   cursor: number
@@ -518,14 +629,10 @@ async function pullDelta(
     logSets,
     cardioLogs,
   ];
-  const pulled =
-    tables.reduce(
-      (n, t) => n + t.change.upserts.length + t.change.deletes.length,
-      0
-    ) + (settings ? 1 : 0);
 
-  if (pulled > 0) {
-    const changes: RemoteChanges = {
+  // Lo que el outbox aún no ha subido manda sobre lo que baja la nube.
+  const changes = dropPendingLocal(
+    {
       routines: routines.change,
       workoutDays: workoutDays.change,
       exercises: exercises.change,
@@ -534,7 +641,14 @@ async function pullDelta(
       logSets: logSets.change,
       cardioLogs: cardioLogs.change,
       settings,
-    };
+    },
+    await getPendingOutboxIds()
+  );
+
+  // Se cuenta DESPUÉS de filtrar: `pulled` decide si la app recarga el estado,
+  // y las filas descartadas no cambian nada en local.
+  const pulled = countChanges(changes);
+  if (pulled > 0) {
     await applyRemoteChanges(changes);
   }
 

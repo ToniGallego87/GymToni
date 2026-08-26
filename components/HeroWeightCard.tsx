@@ -12,8 +12,7 @@ import Svg, { Circle, Polyline } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
-import { fmtNum } from '@lib/cardio';
-import { t } from '@lib/i18n';
+import { fmtNum, t } from '@lib/i18n';
 import { HERO_ARROW_INSET } from './HeroCarousel';
 import { HERO_CARD_HEIGHT } from './HeroCard';
 
@@ -278,7 +277,7 @@ const makeStyles = () =>
       marginTop: 4,
       paddingTop: 4,
       borderTopWidth: 1,
-      borderTopColor: 'rgba(16, 19, 24, 0.16)',
+      borderTopColor: theme.colors.onGoldVeil,
       // Deja hueco a las flechas del carrusel, pegadas a los lados de la tarjeta.
       marginHorizontal: HERO_ARROW_INSET,
     },

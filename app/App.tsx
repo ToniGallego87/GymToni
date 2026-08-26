@@ -32,10 +32,10 @@ import {
   HomeScreen,
   NewRoutineScreen,
   ProfileScreen,
+  SettingsScreen,
   QRScannerScreen,
   RoutineDetailScreen,
   RoutineSelectorScreen,
-  SettingsScreen,
   WeekAchievementScreen,
   WorkoutProvider,
   WorkoutLogScreen,
@@ -43,6 +43,7 @@ import {
 } from '@features/workout';
 import {
   WhatsNewModal,
+  UpdateAvailableModal,
   ThemeRevealOverlay,
   FloatingPrimaryNav,
   getFloatingPrimaryNavMetrics,
@@ -54,6 +55,7 @@ import {
   clearAppData,
   getCardioWeightHistory,
   getLastSeenVersion,
+  getLastUpdatePromptVersion,
   getSeedAppData,
   getSeedCardioWeightHistory,
   isValidWeightSegments,
@@ -61,9 +63,14 @@ import {
   saveAppData,
   setCardioWeightHistory,
   setLastSeenVersion,
+  setLastUpdatePromptVersion,
 } from '@lib/storage';
+import { useMyProfile } from '@hooks/useMyProfile';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { isAutoBackupDue, runAutoBackup } from '@lib/backup';
+import { isNewerVersion, playStoreUrls } from '@lib/appUpdate';
+import { fetchLatestRelease } from '@lib/cloud/release';
+import type { AppRelease } from '@lib/cloud/release';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
 import { theme, useThemeVersion } from '@lib/theme';
@@ -87,7 +94,6 @@ type Screen =
       type: 'workout-log';
       day: WorkoutDay;
       log?: WorkoutLog;
-      startsNewWeek?: boolean;
       cardioOnly?: boolean;
       origin?: 'home' | 'calendar' | 'cardio';
     }
@@ -99,9 +105,9 @@ type Screen =
     }
   | { type: 'calendar' }
   | { type: 'profile' }
-  | { type: 'settings' }
   | { type: 'data' }
-  | { type: 'profile-edit' }
+  | { type: 'settings' }
+  | { type: 'profile-edit'; back?: 'community' | 'profile' }
   | { type: 'community' }
   | { type: 'following'; back: 'community' | 'profile-edit' }
   | { type: 'followers'; back: 'community' | 'profile-edit' }
@@ -153,6 +159,8 @@ type TabType = (typeof TAB_ORDER)[number];
 
 function AppContent() {
   const { dispatch, state } = useWorkout();
+  // Foto del perfil público para la pestaña de Perfil de la barra.
+  const { profile: myProfile } = useMyProfile();
   // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
   // plano. Refresca el estado si el pull trae cambios de otro dispositivo.
   useCloudSync(dispatch);
@@ -181,6 +189,7 @@ function AppContent() {
   const [whatsNewEntry, setWhatsNewEntry] = useState<ChangelogEntry | null>(
     null
   );
+  const [updateRelease, setUpdateRelease] = useState<AppRelease | null>(null);
 
   // Hidratación: carga desde almacenamiento (o migra el JSON legacy). La
   // persistencia de cada cambio la hace el wrapper de dispatch de forma
@@ -268,6 +277,70 @@ function AppContent() {
       setLastSeenVersion(currentVersion).catch((error) =>
         console.error('Error guardando versión vista:', error)
       );
+    }
+  };
+
+  // Aviso de versión nueva: la app se distribuye por Google Play con
+  // expo-updates deshabilitado, así que la versión publicada se lee de la nube
+  // (tabla `app_releases`) y se compara con la instalada. Silencioso ante
+  // cualquier fallo (sin red, tabla vacía): no avisar es siempre preferible a
+  // molestar en el arranque. En web no aplica: no hay ficha de Play.
+  useEffect(() => {
+    if (!hydrated || Platform.OS === 'web') return;
+
+    let isMounted = true;
+
+    const checkAppUpdate = async () => {
+      const currentVersion = Constants.expoConfig?.version;
+      if (!currentVersion) return;
+
+      try {
+        const release = await fetchLatestRelease();
+        if (!isMounted || !release) return;
+        if (!isNewerVersion(currentVersion, release.version)) return;
+
+        // Ya se avisó de ESTA versión: no repetir en cada arranque (volverá a
+        // salir cuando se publique una posterior).
+        const promptedVersion = await getLastUpdatePromptVersion();
+        if (!isMounted || promptedVersion === release.version) return;
+
+        setUpdateRelease(release);
+      } catch (error) {
+        console.error('Error comprobando actualizaciones:', error);
+      }
+    };
+
+    checkAppUpdate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [hydrated]);
+
+  // Cerrar el aviso lo da por visto para esa versión, se haya ido a Play o no:
+  // quien ya lo ha leído no necesita verlo otra vez mañana.
+  const dismissUpdate = (release: AppRelease) => {
+    setUpdateRelease(null);
+    setLastUpdatePromptVersion(release.version).catch((error) =>
+      console.error('Error guardando aviso de actualización:', error)
+    );
+  };
+
+  const handleOpenStore = async (release: AppRelease) => {
+    dismissUpdate(release);
+    const packageName =
+      Constants.expoConfig?.android?.package ?? 'com.tonigallego.gymbro';
+    const { app, web } = playStoreUrls(packageName);
+    // Primero el enlace publicado (si lo hay) o el esquema market://, que abre
+    // la app de Play directamente; si falla (sin Play instalado), el navegador.
+    try {
+      await Linking.openURL(release.storeUrl ?? app);
+    } catch {
+      try {
+        await Linking.openURL(web);
+      } catch (error) {
+        console.error('Error abriendo Google Play:', error);
+      }
     }
   };
 
@@ -406,20 +479,27 @@ function AppContent() {
             case 'detail':
               backFromDetail(screen.origin);
               return true;
-            case 'settings':
             case 'data':
+              setScreen({ type: 'settings' });
+              return true;
+            case 'settings':
               goProfile();
               return true;
             case 'profile-edit':
-              setScreen({ type: 'community' });
+              setScreen({
+                type: screen.back === 'profile' ? 'profile' : 'community',
+              });
               return true;
             case 'following':
             case 'followers':
               setScreen({ type: screen.back });
               return true;
             case 'public-routine':
+              // `return true` (no `break`): devolver undefined equivale a "nadie
+              // ha gestionado el gesto" y Android ejecutaba además su acción por
+              // defecto, cerrando la app tras navegar hacia atrás.
               setScreen(screen.back);
-              break;
+              return true;
             case 'user-profile':
               setScreen({ type: 'community' });
               return true;
@@ -693,6 +773,18 @@ function AppContent() {
         onClose={handleCloseWhatsNew}
       />
 
+      {/* Aviso de versión nueva. Cede el paso a las novedades si ambos caen en
+          el mismo arranque (primero qué ha cambiado, después que hay más). */}
+      {updateRelease && (
+        <UpdateAvailableModal
+          visible={whatsNewEntry === null}
+          currentVersion={Constants.expoConfig?.version ?? ''}
+          latestVersion={updateRelease.version}
+          onUpdate={() => handleOpenStore(updateRelease)}
+          onDismiss={() => dismissUpdate(updateRelease)}
+        />
+      )}
+
       {/* Pager de pestañas NATIVO (react-native-pager-view): las 5 vistas
           principales. El arrastre y el asentamiento los gestiona ViewPager2 de
           forma nativa. Va lo PRIMERO del árbol: cualquier subpantalla se renderiza
@@ -818,8 +910,10 @@ function AppContent() {
             onOpenExerciseProgress={() =>
               setScreen({ type: 'exercise-progress' })
             }
-            onOpenData={() => setScreen({ type: 'data' })}
             onOpenSettings={() => setScreen({ type: 'settings' })}
+            onOpenProfileEdit={() =>
+              setScreen({ type: 'profile-edit', back: 'profile' })
+            }
           />
         )}
       </PagerView>
@@ -842,12 +936,12 @@ function AppContent() {
       {screen.type === 'day-selector' && (
         <DaySelectorScreen
           routine={displayedRoutine}
-          onSelectDay={(day, startsNewWeek) => {
+          onSelectDay={(day) => {
             // Si el día ya tiene un log de hoy, WorkoutLogScreen lo detecta solo
             // (getLatestTodayLog) y abre ese registro para seguir metiendo series,
             // igual que la hero "Continúa tu entrenamiento": no hay que volver a
             // Inicio en silencio, eso solo confunde ("¿no ha funcionado el toque?").
-            setScreen({ type: 'workout-log', day, startsNewWeek });
+            setScreen({ type: 'workout-log', day });
           }}
           onSelectCardioOnly={() =>
             setScreen({
@@ -864,7 +958,6 @@ function AppContent() {
         <WorkoutLogScreen
           day={screen.day}
           log={screen.log}
-          startsNewWeek={screen.startsNewWeek}
           cardioOnly={screen.cardioOnly}
           onSave={() => backFromWorkoutLog(screen.origin)}
           onBack={() => backFromWorkoutLog(screen.origin)}
@@ -903,11 +996,20 @@ function AppContent() {
         />
       )}
 
-      {screen.type === 'settings' && <SettingsScreen onBack={goProfile} />}
+      {screen.type === 'settings' && (
+        <SettingsScreen
+          onBack={goProfile}
+          onOpenData={() => setScreen({ type: 'data' })}
+        />
+      )}
 
       {screen.type === 'profile-edit' && (
         <ProfileEditScreen
-          onBack={() => setScreen({ type: 'community' })}
+          onBack={() =>
+            setScreen({
+              type: screen.back === 'profile' ? 'profile' : 'community',
+            })
+          }
           onOpenFollowing={() =>
             setScreen({ type: 'following', back: 'profile-edit' })
           }
@@ -984,7 +1086,7 @@ function AppContent() {
           onExportData={handleExportData}
           onBackupNow={handleAutoBackup}
           onClearData={handleClearData}
-          onBack={goProfile}
+          onBack={() => setScreen({ type: 'settings' })}
         />
       )}
 
@@ -1041,6 +1143,7 @@ function AppContent() {
           onPressCalendar={() => setScreen({ type: 'calendar' })}
           onPressCommunity={() => setScreen({ type: 'community' })}
           onPressProfile={() => setScreen({ type: 'profile' })}
+          profileAvatarUri={myProfile?.avatar_url}
         />
       )}
 

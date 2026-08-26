@@ -10,8 +10,7 @@ import {
   ExerciseFormRow,
   ExerciseSummaryRow,
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GradientCtaButton,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
@@ -147,10 +146,8 @@ export function NewRoutineScreen({
     });
   };
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding =
-    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { bottom: floatingBackBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   const isDayComplete = (day: NewRoutineDayForm) =>
     !!day.title.trim() && day.exercises.some((ex) => ex.name.trim());
