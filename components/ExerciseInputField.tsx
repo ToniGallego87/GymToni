@@ -446,9 +446,12 @@ export function ExerciseInputField({
                 accessibilityRole="button"
                 accessibilityLabel={t('Borrar serie {n}', { n: idx + 1 })}
               >
+                {/* Disco lleno con la × recortada (transparente), no un aro con
+                    la × dibujada: sobre la burbuja de color la marca se lee de
+                    lejos y no compite con el número. */}
                 <MaterialCommunityIcons
-                  name="close"
-                  size={11}
+                  name="close-circle"
+                  size={SERIE_REMOVE_SIZE}
                   color={theme.colors.white}
                 />
               </Pressable>
@@ -527,6 +530,28 @@ export function ExerciseInputField({
             {exerciseName}
           </Text>
         </Pressable>
+        {/* Marca de nota: plegada la tarjeta el bloque de la nota no se pinta,
+            así que un ejercicio ya completado escondía por completo lo que
+            hubieras apuntado. El icono va pegado al título para que se vea que
+            hay algo escrito, y pulsarlo abre la nota sin desplegar nada. */}
+        {!expanded && !!notes && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.headerNote,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={onNotesPress}
+            hitSlop={6}
+            accessibilityRole="button"
+            accessibilityLabel={t('Ver la nota del ejercicio')}
+          >
+            <MaterialCommunityIcons
+              name="note-text"
+              size={18}
+              color={cardAccent}
+            />
+          </Pressable>
+        )}
         {/* Acciones del ejercicio (saltar, nota, cronómetro). En la cabecera y
             no bajo el CTA: son raras, y aquí siguen accesibles incluso con la
             tarjeta plegada (antes había que desplegarla para tocar la nota). */}
@@ -1075,6 +1100,14 @@ const makeStyles = () =>
     },
     // ⋯ de acciones del ejercicio. Mismo tamaño que la lupa del GIF, con la
     // que comparte fila.
+    // Marca de nota junto al título (solo plegada): icono suelto, sin marco,
+    // para que el ⋯ siga siendo el único botón "con caja" de la cabecera.
+    headerNote: {
+      width: 28,
+      height: 28,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     headerAction: {
       width: 34,
       height: 34,
@@ -1122,15 +1155,14 @@ const makeStyles = () =>
     // burbuja, con borde y aspa de la tinta de contraste. Sin fondo no compite
     // con el dato, que es lo que hay que leer. El área de toque real la agranda
     // su `hitSlop`.
+    // Sin borde ni fondo propios: la forma la pone el icono `close-circle`,
+    // que ya es el disco lleno con la × en negativo.
     serieTagRemove: {
       position: 'absolute',
       top: 2,
       right: 2,
       width: SERIE_REMOVE_SIZE,
       height: SERIE_REMOVE_SIZE,
-      borderRadius: SERIE_REMOVE_SIZE / 2,
-      borderWidth: 1,
-      borderColor: theme.colors.white,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -1398,11 +1430,12 @@ const makeStyles = () =>
       opacity: 0.7,
     },
 
-    // Temporizador de descanso (al pie de la tarjeta). Bloque dorado; el contenido
-    // (label + cuenta atrás + acciones) lo aporta el padre con sus propios estilos.
+    // Temporizador de descanso (al pie de la tarjeta). Mismo patrón que las
+    // burbujas de serie: relleno del acento al 18% y tinta del acento (ver
+    // `serieTag`). El contenido lo aporta el padre con sus propios estilos.
     restTimerInside: {
       marginTop: 12,
-      backgroundColor: theme.colors.primaryFill,
+      backgroundColor: theme.colors.accentLine + '2E',
       borderRadius: theme.borderRadius.md,
       paddingVertical: 10,
       paddingHorizontal: 14,

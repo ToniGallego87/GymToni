@@ -12,7 +12,6 @@ import {
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
-import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
@@ -26,17 +25,13 @@ import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale } from '@lib/i18n';
 import { buildWorkoutImprovement, ImprovementResult } from '@lib/progress';
-import {
-  findDayInRoutines,
-  getImprovementDisplay,
-  getLogTimestamp,
-  getToday,
-} from '@lib/utils';
+import { findDayInRoutines, getLogTimestamp, getToday } from '@lib/utils';
 import { toCardioOnlyLog } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import {
   buildWeekProgress,
   computeStreak,
+  currentWeekDayState,
   getWeekImprovement,
   groupLogsIntoWeekBlocks,
   isDeloadBlock,
@@ -66,6 +61,7 @@ import {
   BarChart,
   BarChartPoint,
   resolveDayIcon,
+  SEGMENTED_FILTER_CHART_GAP,
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
@@ -92,7 +88,18 @@ function buildProgressChart(points: WeekProgressPoint[]): {
   domain: { min: number; max: number };
 } {
   // Semana 1 es siempre la base (mejora 0), no se muestra.
-  const weeks = points.slice(1);
+  //
+  // Fuera también lo que no mide progreso: las semanas de DESCARGA (bajan la
+  // intensidad a propósito; antes heredaban el % de la carga anterior y
+  // dibujaban una meseta azul que no era ningún dato) y las semanas SIN DATO
+  // (`isMissing`: con la gráfica filtrada por día, las semanas que no
+  // entrenaron ese día pintaban un 0% que se leía como estancamiento).
+  //
+  // Una semana INCOMPLETA sí se queda: entrenó lo que la serie mide y cada día
+  // compara contra su propia base, así que es comparable con el resto.
+  const weeks = points
+    .slice(1)
+    .filter((point) => !point.isDeload && !point.isMissing);
 
   const values = weeks.map((point) => point.improvement);
   const minValue = Math.min(...values, 0);
@@ -100,27 +107,8 @@ function buildProgressChart(points: WeekProgressPoint[]): {
   const domainPadding =
     minValue === maxValue ? 10 : Math.max((maxValue - minValue) * 0.15, 5);
 
-  // Última semana de CARGA vista: la descarga hereda su % para no dibujar un
-  // hueco vacío (no retrocede, solo baja la intensidad).
-  let lastLoadValue = 0;
   const bars = weeks.map((point) => {
     const isCurrentWeek = !!point.isCurrent;
-    // Semana de descarga: mantiene el porcentaje de la semana de carga anterior,
-    // pero en azul (barra y etiqueta) para distinguirla del progreso real.
-    if (point.isDeload) {
-      return {
-        key: `week-${point.week}`,
-        value: lastLoadValue,
-        label: `S${point.week}`,
-        valueLabel: `${lastLoadValue > 0 ? '+' : ''}${Math.round(
-          lastLoadValue
-        )}%`,
-        color: theme.colors.emoji_blue,
-        valueColor: theme.colors.emoji_blue,
-        highlighted: false,
-      };
-    }
-    lastLoadValue = point.improvement;
     // Amarillo solo para la semana en curso; azul para una semana anterior
     // (no en curso) que quedó incompleta en días.
     const isPrevIncomplete = !isCurrentWeek && !!point.isIncomplete;
@@ -334,10 +322,17 @@ export function HomeScreen({
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
   );
   const hasNoRoutines = activeDays.length === 0;
+  // El día que toca en la semana en curso (el primero que aún no se ha
+  // entrenado). La hero lo NOMBRA y lleva directa a él, en vez de mandar
+  // siempre a "Elige la sesión" para responder algo que la app ya sabe. Misma
+  // fuente que esa pantalla, que lo marca en su lista.
+  const { nextDay: suggestedDay } = useMemo(
+    () => currentWeekDayState(displayedRoutine, state.logs),
+    [displayedRoutine, state.logs]
+  );
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { scrollBottomPadding: homeScrollBottomPadding } =
     getFloatingPrimaryNavMetrics(insets.bottom);
-  const appVersion = Constants.expoConfig?.version ?? '';
 
   const handleStartPress = () => {
     if (hasNoRoutines) {
@@ -377,15 +372,17 @@ export function HomeScreen({
       }
     }
 
-    if (onOpenDaySelector) {
-      onOpenDaySelector();
+    // Directo al día que toca (el primero que falta esta semana): es lo que la
+    // hero anuncia en su subtítulo, así que pulsarla hace exactamente eso. El
+    // caso común baja de tres pantallas a dos; entrenar OTRO día sigue a un
+    // toque, en "Elegir otro día" justo debajo.
+    const dayToStart = suggestedDay ?? activeDays[0];
+    if (dayToStart) {
+      onSelectDay(dayToStart);
       return;
     }
 
-    const firstDay = activeDays[0];
-    if (firstDay) {
-      onSelectDay(firstDay);
-    }
+    onOpenDaySelector?.();
   };
 
   const getDay = (dayId: string): WorkoutDay | undefined =>
@@ -583,6 +580,11 @@ export function HomeScreen({
     title: string;
     titleIcon?: string;
     subtitle?: string;
+    // El subtítulo NOMBRA el día que toca, así que puede llevar a cambiarlo.
+    // Solo en ese estado: los otros subtítulos de la hero dicen otra cosa
+    // ("Pulsa para compartir resultados", "Pulsa para cambiar la rutina") y
+    // hacerlos abrir el selector de día contradiría su propio texto.
+    subtitleIsDay?: boolean;
   } => {
     if (hasNoRoutines) {
       return {
@@ -625,9 +627,20 @@ export function HomeScreen({
       variant: 'start',
       icon: 'weight-lifter',
       title: t('Empezar entrenamiento'),
+      // Qué día toca. Antes la hero no lo decía y mandaba a "Elige la sesión" a
+      // responderlo de memoria; ahora lo nombra y lleva directa a él.
+      subtitle: suggestedDay
+        ? `${t('Día')} ${suggestedDay.dayNumber} · ${getDisplayDayName(
+            suggestedDay.name
+          )}`
+        : undefined,
+      subtitleIsDay: !!suggestedDay,
     };
   };
   const hero = getHeroState();
+  // Elegir otro día cuelga del subtítulo de la hero, y solo cuando ese
+  // subtítulo es el nombre del día que toca.
+  const canPickAnotherDay = !!hero.subtitleIsDay && !!onOpenDaySelector;
 
   // Estadísticas de fuerza para el estado "estadísticas" de la hero card
   // (carrusel). Espejo de la hero de Cardio pero con volumen (kg levantados)
@@ -885,6 +898,15 @@ export function HomeScreen({
                 titleIcon={hero.titleIcon}
                 subtitle={hero.subtitle}
                 onPress={handleStartPress}
+                // El subtítulo nombra el día que toca, así que es él quien
+                // lleva a cambiarlo: la tarjeta entra a ese día y su subtítulo
+                // abre "Elige la sesión". Antes era una pastilla bajo la hero
+                // que empujaba racha, progreso e historial hacia abajo por una
+                // opción de uso raro.
+                onSubtitlePress={
+                  canPickAnotherDay ? onOpenDaySelector : undefined
+                }
+                subtitleAccessibilityLabel={t('Elegir otro día')}
               />,
               <HeroStatsCard
                 key="stats"
@@ -933,6 +955,10 @@ export function HomeScreen({
             // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
             // sin flecha ni porcentaje, solo un mensaje de ánimo.
             const isFirstWeek = filteredWeeklyProgress.length <= 1;
+            // Puede haber varias semanas y aun así ninguna barra: si todas las
+            // posteriores a la base son de descarga o no entrenaron el día
+            // filtrado, no hay nada que dibujar y la tarjeta no se despliega.
+            const canOpenChart = !isFirstWeek && progressChart.bars.length > 0;
             // El borde de la tarjeta de la gráfica es siempre el acento
             // estructural. El verde/rojo solo aparece en el dato de
             // subida/bajada de dentro.
@@ -945,14 +971,14 @@ export function HomeScreen({
                 <TouchableOpacity
                   style={styles.progressToggleButton}
                   onPress={
-                    isFirstWeek
+                    !canOpenChart
                       ? undefined
                       : () => {
                           animateLayout();
                           setShowWeeklyProgressChart((prev: boolean) => !prev);
                         }
                   }
-                  disabled={isFirstWeek}
+                  disabled={!canOpenChart}
                   activeOpacity={0.85}
                 >
                   <View style={styles.progressHeaderRow}>
@@ -967,7 +993,7 @@ export function HomeScreen({
                       <Text style={styles.progressTitle} numberOfLines={1}>
                         {displayedRoutine?.name ?? t('Rutina')}
                       </Text>
-                      {!isFirstWeek && (
+                      {canOpenChart && (
                         <MaterialCommunityIcons
                           name={
                             showWeeklyProgressChart
@@ -995,17 +1021,15 @@ export function HomeScreen({
                           latestIsDeload ? theme.colors.emoji_blue : undefined
                         }
                       />
-                    ) : (
-                      <Text
-                        style={[styles.progressLatest, styles.progressLatestUp]}
-                      >
-                        0%
-                      </Text>
-                    )}
+                    ) : // Sin punto que mostrar no se inventa un dato: antes caía a
+                    // un "0%" verde en texto plano —una TERCERA forma de pintar
+                    // la mejora— que además decía "no has progresado" donde en
+                    // realidad no había nada que comparar.
+                    null}
                   </View>
                 </TouchableOpacity>
 
-                {!isFirstWeek && showWeeklyProgressChart && (
+                {canOpenChart && showWeeklyProgressChart && (
                   <>
                     <BarChart
                       points={progressChart.bars}
@@ -1015,7 +1039,10 @@ export function HomeScreen({
                       signed
                     />
                     <SegmentedFilter
-                      style={{ width: chartWidth }}
+                      style={{
+                        width: chartWidth,
+                        marginTop: SEGMENTED_FILTER_CHART_GAP,
+                      }}
                       options={dayFilterOptions}
                       labelMode="below"
                       value={chartDayFilter}
@@ -1146,128 +1173,12 @@ export function HomeScreen({
                     </Pressable>
 
                     <Collapsible open={isExpanded}>
-                      {weekLogs.map((log: WorkoutLog) => {
-                        const day = getDay(log.dayId);
-                        const improvement = getLogImprovement(log);
-                        const improvementFmt = improvement
-                          ? getImprovementDisplay(improvement)
-                          : null;
-                        const isToday = isLogFromToday(log);
-                        if (!day) return null;
-
-                        return (
-                          <View key={log.id}>
-                            <Pressable
-                              style={({ pressed }: { pressed: boolean }) => [
-                                styles.historyLogCard,
-                                isToday && styles.historyLogCardToday,
-                                pressed && styles.historyLogCardPressed,
-                              ]}
-                              onPress={() => {
-                                if (isToday) {
-                                  // Hoy: toque directo continúa/edita el registro
-                                  // (lo que se quiere el 95% de las veces). El
-                                  // ⋯ sigue dando acceso a eliminar.
-                                  onEditLog?.(log, day);
-                                } else {
-                                  // Días pasados: ir directamente a la vista de detalle
-                                  onSelectLog?.(log, day);
-                                }
-                              }}
-                            >
-                              {isToday && (
-                                <GradientFill
-                                  accent={theme.colors.primaryLine}
-                                />
-                              )}
-                              <View style={styles.historyLogHeader}>
-                                <View style={styles.historyLogLeft}>
-                                  <View style={styles.historyLogAccent}>
-                                    <DayAccentIcon
-                                      emoji={day.emoji}
-                                      name={day.name}
-                                      size={36}
-                                    />
-                                  </View>
-                                  <View style={styles.historyLogInfo}>
-                                    <View style={styles.historyLogNameRow}>
-                                      <Text
-                                        style={styles.historyLogDayName}
-                                        numberOfLines={1}
-                                      >
-                                        {getDisplayDayName(day.name)}
-                                      </Text>
-                                    </View>
-                                    <Text style={styles.historyLogDate}>
-                                      {getExecutionDateLabel(log)}
-                                    </Text>
-                                  </View>
-                                </View>
-                                {/* El % por sesión (badge) solo en la semana en
-                                    curso y en hoy, donde es accionable ("¿voy
-                                    mejor que la última vez?"). En semanas cerradas
-                                    el % de la cabecera ya resume y el detalle de la
-                                    sesión conserva su %. Las semanas de descarga no
-                                    llevan badge: la cabecera ya rotula "Descarga",
-                                    así que sus días se ven como el resto. */}
-                                {(isCurrentWeek || isToday) &&
-                                  !isDeloadWeek && (
-                                    <Text
-                                      style={[
-                                        styles.historyLogBadge,
-                                        improvementFmt &&
-                                          (improvementFmt.kind === 'up'
-                                            ? styles.historyLogBadgeUp
-                                            : improvementFmt.kind === 'down'
-                                            ? styles.historyLogBadgeDown
-                                            : styles.historyLogBadgeNeutral),
-                                      ]}
-                                    >
-                                      {!improvementFmt
-                                        ? '—'
-                                        : `${
-                                            improvementFmt.kind === 'up'
-                                              ? '+'
-                                              : improvementFmt.kind === 'down'
-                                              ? '-'
-                                              : ''
-                                          }${improvementFmt.display}%`}
-                                    </Text>
-                                  )}
-                                {/* Solo el día de HOY lleva el ⋯ aquí (Continuar/
-                                    Eliminar): un toque en un día pasado ya abre el
-                                    Detalle, la única superficie de acciones del log
-                                    (editar, fecha, mover semana, borrar). */}
-                                {isToday && (
-                                  <Pressable
-                                    style={({
-                                      pressed,
-                                    }: {
-                                      pressed: boolean;
-                                    }) => [
-                                      styles.logOptionsButton,
-                                      pressed && styles.logOptionsButtonPressed,
-                                    ]}
-                                    onPress={() => {
-                                      setLogWithOptionsId(log.id);
-                                      setSelectedLogDayForOptions(day);
-                                    }}
-                                    hitSlop={8}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={t('Más opciones')}
-                                  >
-                                    <MaterialCommunityIcons
-                                      name="dots-horizontal"
-                                      size={20}
-                                      color={theme.colors.textSecondary}
-                                    />
-                                  </Pressable>
-                                )}
-                              </View>
-                            </Pressable>
-                          </View>
-                        );
-                      })}
+                      {/* Las acciones son de la SEMANA, no de su último día: van nada
+                          más abrir, bajo la cabecera. Al final del cuerpo quedaban
+                          detrás de todas las tarjetas de día (350-450 px de scroll con
+                          una rutina de 4-5 días), y "Ver logros" es la ÚNICA puerta a
+                          compartir los de una semana pasada: la hero solo los ofrece el
+                          día en que la semana se cierra. */}
                       {(isCurrentWeek || canShowWeekAchievement) && (
                         <View style={styles.weekActionsRow}>
                           {isCurrentWeek && (
@@ -1338,6 +1249,117 @@ export function HomeScreen({
                           )}
                         </View>
                       )}
+                      {weekLogs.map((log: WorkoutLog) => {
+                        const day = getDay(log.dayId);
+                        const improvement = getLogImprovement(log);
+                        const isToday = isLogFromToday(log);
+                        if (!day) return null;
+
+                        return (
+                          <View key={log.id}>
+                            <Pressable
+                              style={({ pressed }: { pressed: boolean }) => [
+                                styles.historyLogCard,
+                                isToday && styles.historyLogCardToday,
+                                pressed && styles.historyLogCardPressed,
+                              ]}
+                              onPress={() => {
+                                if (isToday) {
+                                  // Hoy: toque directo continúa/edita el registro
+                                  // (lo que se quiere el 95% de las veces). El
+                                  // ⋯ sigue dando acceso a eliminar.
+                                  onEditLog?.(log, day);
+                                } else {
+                                  // Días pasados: ir directamente a la vista de detalle
+                                  onSelectLog?.(log, day);
+                                }
+                              }}
+                            >
+                              {isToday && (
+                                <GradientFill
+                                  accent={theme.colors.primaryLine}
+                                />
+                              )}
+                              <View style={styles.historyLogHeader}>
+                                <View style={styles.historyLogLeft}>
+                                  <View style={styles.historyLogAccent}>
+                                    <DayAccentIcon
+                                      emoji={day.emoji}
+                                      name={day.name}
+                                      size={36}
+                                    />
+                                  </View>
+                                  <View style={styles.historyLogInfo}>
+                                    <View style={styles.historyLogNameRow}>
+                                      <Text
+                                        style={styles.historyLogDayName}
+                                        numberOfLines={1}
+                                      >
+                                        {getDisplayDayName(day.name)}
+                                      </Text>
+                                    </View>
+                                    <Text style={styles.historyLogDate}>
+                                      {getExecutionDateLabel(log)}
+                                    </Text>
+                                  </View>
+                                </View>
+                                {/* El % por sesión solo en la semana en curso y en hoy,
+                                    donde es accionable ("¿voy mejor que la última vez?").
+                                    En semanas cerradas el % de la cabecera ya resume y el
+                                    detalle de la sesión conserva su %. Las semanas de
+                                    descarga no lo llevan: la cabecera ya rotula "Descarga",
+                                    así que sus días se ven como el resto.
+
+                                    Es el MISMO dato que el de la cabecera de la semana y el
+                                    de la tarjeta de progreso, así que se pinta con el mismo
+                                    TrendDelta. Antes era una píldora con fondo de color y el
+                                    número en Anton, con cuatro paletas: nadie podía saber
+                                    que medía lo mismo que la flecha de la semana. El "igual"
+                                    (el "=" en ámbar) lo cubre ya el propio TrendDelta, y
+                                    cuando no hay con qué comparar no se pinta nada en vez
+                                    de un "—" suelto. */}
+                                {(isCurrentWeek || isToday) &&
+                                  !isDeloadWeek &&
+                                  !!improvement && (
+                                    <TrendDelta
+                                      value={improvement.percent}
+                                      improved={improvement.isImproved}
+                                    />
+                                  )}
+                                {/* Solo el día de HOY lleva el ⋯ aquí (Continuar/
+                                    Eliminar): un toque en un día pasado ya abre el
+                                    Detalle, la única superficie de acciones del log
+                                    (editar, fecha, mover semana, borrar). */}
+                                {isToday && (
+                                  <Pressable
+                                    style={({
+                                      pressed,
+                                    }: {
+                                      pressed: boolean;
+                                    }) => [
+                                      styles.logOptionsButton,
+                                      pressed && styles.logOptionsButtonPressed,
+                                    ]}
+                                    onPress={() => {
+                                      setLogWithOptionsId(log.id);
+                                      setSelectedLogDayForOptions(day);
+                                    }}
+                                    hitSlop={8}
+                                    accessibilityRole="button"
+                                    accessibilityLabel={t('Más opciones')}
+                                  >
+                                    <MaterialCommunityIcons
+                                      name="dots-horizontal"
+                                      size={20}
+                                      color={theme.colors.textSecondary}
+                                    />
+                                  </Pressable>
+                                )}
+                              </View>
+                            </Pressable>
+                          </View>
+                        );
+                      })}
                     </Collapsible>
                   </View>
                 );
@@ -1461,7 +1483,11 @@ export function HomeScreen({
             resizeMode="contain"
           />
         }
-        subtitle={`${t('Versión')} ${appVersion}`}
+        // El hueco del subtítulo orienta, como en el resto de pantallas: qué
+        // rutina estás viendo (Inicio muestra la SELECCIONADA, que no siempre
+        // es la activa). Antes gastaba el sitio más visto de la app en el
+        // número de versión, que ya vive al pie de Configuración.
+        subtitle={displayedRoutine?.name ?? t('Añade tu primera rutina')}
         topInset={insets.top}
       />
     </View>
@@ -1557,11 +1583,6 @@ const makeStyles = () =>
       flexShrink: 1,
       transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
     },
-    progressLatest: {
-      fontSize: 17,
-      fontWeight: '800',
-      lineHeight: 20,
-    },
     progressEncourage: {
       flexShrink: 1,
       marginLeft: 12,
@@ -1570,9 +1591,6 @@ const makeStyles = () =>
       color: theme.colors.primary,
       lineHeight: 17,
       textAlign: 'right',
-    },
-    progressLatestUp: {
-      color: theme.colors.success,
     },
     weeksSection: {
       marginHorizontal: theme.spacing.md,
@@ -1629,9 +1647,10 @@ const makeStyles = () =>
     weekAchievementButtonPressed: {
       opacity: 0.6,
     },
-    // Acciones de la semana (descarga / ver logros): botones etiquetados que
-    // viven en el cuerpo desplegado de la semana, no en la cabecera colapsada
-    // (antes eran iconos sueltos amontonados junto al chevron).
+    // Acciones de la semana (descarga / ver logros): botones etiquetados al
+    // PRINCIPIO del cuerpo desplegado, no en la cabecera colapsada (antes eran
+    // iconos sueltos amontonados junto al chevron) ni al final del todo (antes
+    // había que pasar todas las tarjetas de día para llegar a ellos).
     weekActionsRow: {
       flexDirection: 'row',
       gap: 8,
@@ -1661,14 +1680,19 @@ const makeStyles = () =>
       fontSize: 13,
       fontWeight: '800',
     },
+    // Padding vertical menor que el horizontal y SIN `minHeight`: dentro solo
+    // hay un icono de 36 y dos renglones, así que el alto lo fijaba el mínimo y
+    // no el contenido, y sobraba aire arriba y abajo en la lista que más se
+    // recorre. Con el icono (36) + 10 arriba y abajo la tarjeta mide lo que
+    // pesa. Misma medida que su gemela de Cardio (`dailyCard`).
     historyLogCard: {
       backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.md,
-      padding: theme.spacing.md,
-      marginTop: 12,
+      paddingVertical: 10,
+      paddingHorizontal: theme.spacing.md,
+      marginTop: 10,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      minHeight: 72,
       justifyContent: 'center',
       overflow: 'hidden',
       ...theme.shadow.soft,
@@ -1714,31 +1738,6 @@ const makeStyles = () =>
       marginTop: 2,
       lineHeight: 16,
       fontWeight: '500',
-    },
-    historyLogBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 5,
-      borderRadius: theme.borderRadius.pill,
-      fontSize: 15,
-      fontFamily: theme.fonts.display,
-      fontWeight: '800',
-      overflow: 'hidden',
-      lineHeight: 21,
-      textAlign: 'center',
-      color: theme.colors.primaryLight,
-      backgroundColor: theme.colors.primaryMuted,
-    },
-    historyLogBadgeUp: {
-      color: theme.colors.success,
-      backgroundColor: theme.colors.successMuted,
-    },
-    historyLogBadgeDown: {
-      color: theme.colors.error,
-      backgroundColor: theme.colors.errorMuted,
-    },
-    historyLogBadgeNeutral: {
-      color: theme.colors.warning,
-      backgroundColor: theme.colors.warningMuted,
     },
     logOptionsButton: {
       padding: 2,

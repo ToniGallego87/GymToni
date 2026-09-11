@@ -32,6 +32,7 @@ import {
   HomeScreen,
   NewRoutineScreen,
   ProfileScreen,
+  BodyWeightScreen,
   SettingsScreen,
   QRScannerScreen,
   RoutineDetailScreen,
@@ -46,6 +47,11 @@ import {
   UpdateAvailableModal,
   ThemeRevealOverlay,
   FloatingPrimaryNav,
+  FLOATING_GLASS_BAR_HEIGHT,
+  FLOATING_BACK_BUTTON_HEIGHT,
+  getFloatingBackButtonMetrics,
+  PipRestTimer,
+  RestTimerBar,
   getFloatingPrimaryNavMetrics,
 } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
@@ -68,11 +74,15 @@ import {
 import { useMyProfile } from '@hooks/useMyProfile';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { isAutoBackupDue, runAutoBackup } from '@lib/backup';
+import { loadBodyWeight, maybeNotifyStaleWeight } from '@lib/bodyWeight';
 import { isNewerVersion, playStoreUrls } from '@lib/appUpdate';
 import { fetchLatestRelease } from '@lib/cloud/release';
 import type { AppRelease } from '@lib/cloud/release';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import type { SharedRoutine } from '@lib/routineShare';
+import { subscribePipMode } from '@lib/pipTimer';
+import { useRestTimer } from '@lib/restTimerStore';
+import { findDayInRoutines } from '@lib/utils';
 import { theme, useThemeVersion } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t, useLanguageVersion } from '@lib/i18n';
@@ -107,17 +117,31 @@ type Screen =
   | { type: 'profile' }
   | { type: 'data' }
   | { type: 'settings' }
-  | { type: 'profile-edit'; back?: 'community' | 'profile' }
+  // Peso corporal: se edita desde Perfil, no en el carrusel de Cardio.
+  | { type: 'body-weight' }
+  // El perfil público se edita desde Perfil (su tarjeta de identidad), que es
+  // el único sitio desde el que se llega: Comunidad habla de otra gente.
+  | { type: 'profile-edit' }
   | { type: 'community' }
-  | { type: 'following'; back: 'community' | 'profile-edit' }
-  | { type: 'followers'; back: 'community' | 'profile-edit' }
-  | { type: 'user-profile'; userId: string; name: string }
+  | { type: 'following'; back: 'community' }
+  | { type: 'followers'; back: 'community' }
   | {
-      // Consulta de una rutina PÚBLICA (solo lectura) antes de copiarla.
+      type: 'user-profile';
+      userId: string;
+      name: string;
+      // Vista desde la que se abrió, para volver a ella y no siempre al tablón:
+      // al perfil del autor también se llega desde tus propias rutinas (la marca
+      // "de {autor}" de una rutina traída de la comunidad).
+      back?: Screen;
+    }
+  | {
+      // Consulta de una rutina PÚBLICA (solo lectura) antes de adoptarla.
       type: 'public-routine';
       routineId: string;
       name: string;
       authorName?: string;
+      // Dueño de la rutina: hace falta para enlazarla y para abrir su perfil.
+      ownerId?: string;
       // Vista desde la que se abrió, para volver a ella y no siempre al tablón.
       back:
         | { type: 'community' }
@@ -125,8 +149,16 @@ type Screen =
     }
   | {
       type: 'exercise-progress';
-      // Ejercicio preseleccionado al abrir la evolución desde el detalle de un día.
+      // Ejercicio preseleccionado al abrir la evolución desde el detalle de un
+      // día. Marca además que se entró ENFOCADO: no hay lista detrás, así que
+      // "Volver" sale de la pantalla en vez de subir a ella.
       initialExerciseKey?: string;
+      // Ejercicio abierto ahora mismo (la ficha con su gráfica y sus récords).
+      // Vive aquí, con el resto de la navegación, y no dentro de la pantalla:
+      // así el "Volver" en pantalla y el atrás del móvil recorren los mismos
+      // pasos. Cuando estaba dentro, el atrás físico no sabía de la selección y
+      // se saltaba la lista.
+      selectedKey?: string;
       // Detalle al que volver si se llegó desde ahí (si no, se vuelve a Perfil).
       detailReturn?: {
         log: WorkoutLog;
@@ -344,6 +376,17 @@ function AppContent() {
     }
   };
 
+  // Peso corporal: se carga al arrancar (lo consume Cardio para estimar las
+  // kcal de cada sesión) y, si lleva más de dos semanas sin tocarse, se programa
+  // el recordatorio. El aviso salta unas horas después, no ahora: con la app
+  // abierta sería avisar de algo que el usuario tiene delante.
+  useEffect(() => {
+    if (!hydrated || isFirstInstall) return;
+    loadBodyWeight()
+      .then(() => maybeNotifyStaleWeight())
+      .catch((error) => console.error('Error revisando el peso:', error));
+  }, [hydrated, isFirstInstall]);
+
   // Backup automático local: al abrir la app, si está activado y ha pasado el
   // intervalo (un día), se escribe un backup silencioso en el dispositivo. Sin
   // cloud; solo protege frente a perder el móvil sin haber exportado a mano.
@@ -443,6 +486,23 @@ function AppContent() {
   const backFromRoutineDetails = (origin?: 'home' | 'profile') =>
     setScreen({ type: 'routine-selector', origin });
   const backToNewRoutine = () => setScreen({ type: 'new-routine' });
+  // "Progreso por ejercicio" son dos pasos en una pantalla (lista → ficha del
+  // ejercicio), así que su vuelta atrás también: primero se cierra la ficha y
+  // solo desde la lista se sale. Salvo que se entrara ENFOCADO desde el detalle
+  // de un día, donde no hay lista que enseñar y se vuelve directo.
+  const backFromExerciseProgress = (
+    screen: Extract<Screen, { type: 'exercise-progress' }>
+  ) => {
+    if (screen.selectedKey && !screen.initialExerciseKey) {
+      setScreen({ ...screen, selectedKey: undefined });
+      return;
+    }
+    if (screen.detailReturn) {
+      setScreen({ type: 'detail', ...screen.detailReturn });
+      return;
+    }
+    goProfile();
+  };
 
   // Manejar botón atrás físico en móvil: debe reproducir el mismo destino que
   // el "Volver" en pantalla (arriba), no saltar siempre a Inicio. Antes
@@ -485,10 +545,11 @@ function AppContent() {
             case 'settings':
               goProfile();
               return true;
+            case 'body-weight':
+              goProfile();
+              return true;
             case 'profile-edit':
-              setScreen({
-                type: screen.back === 'profile' ? 'profile' : 'community',
-              });
+              goProfile();
               return true;
             case 'following':
             case 'followers':
@@ -501,15 +562,12 @@ function AppContent() {
               setScreen(screen.back);
               return true;
             case 'user-profile':
-              setScreen({ type: 'community' });
+              // Al perfil ajeno se llega desde el tablón, pero también desde
+              // tus rutinas: se vuelve a donde se abrió.
+              setScreen(screen.back ?? { type: 'community' });
               return true;
             case 'exercise-progress':
-              // Vuelve al detalle si se abrió desde ahí; si no, a Perfil.
-              if (screen.detailReturn) {
-                setScreen({ type: 'detail', ...screen.detailReturn });
-              } else {
-                goProfile();
-              }
+              backFromExerciseProgress(screen);
               return true;
             case 'routine-details':
               backFromRoutineDetails(screen.origin);
@@ -527,6 +585,21 @@ function AppContent() {
       return () => backHandler.remove();
     }
   }, [screen]);
+
+  // Descanso en curso. Se pinta como barra flotante en TODA la app menos en el
+  // registro del día que lo lanzó, donde ya lo enmarca su propia tarjeta.
+  const restTimer = useRestTimer();
+  const isRestTimerScreen =
+    screen.type === 'workout-log' && screen.day.id === restTimer?.dayId;
+  // Va justo encima de lo que ya flote abajo: la barra de pestañas en las
+  // pestañas, el botón "Volver" en las subpantallas.
+  const restBarBottom = isTab
+    ? getFloatingPrimaryNavMetrics(insets.bottom).bottom +
+      FLOATING_GLASS_BAR_HEIGHT +
+      10
+    : getFloatingBackButtonMetrics(insets.bottom).bottom +
+      FLOATING_BACK_BUTTON_HEIGHT +
+      10;
 
   const activeRoutine = useMemo(
     () =>
@@ -882,22 +955,23 @@ function AppContent() {
             onOpenProfile={(userId, name) =>
               setScreen({ type: 'user-profile', userId, name })
             }
-            onOpenRoutine={(routineId, name, authorName) =>
+            onOpenRoutine={(routineId, name, authorName, ownerId) =>
               setScreen({
                 type: 'public-routine',
                 routineId,
                 name,
                 authorName,
+                ownerId,
                 back: { type: 'community' },
               })
             }
-            onOpenProfileEdit={() => setScreen({ type: 'profile-edit' })}
             onOpenFollowing={() =>
               setScreen({ type: 'following', back: 'community' })
             }
             onOpenFollowers={() =>
               setScreen({ type: 'followers', back: 'community' })
             }
+            onOpenAccount={() => setScreen({ type: 'data' })}
           />
         )}
 
@@ -910,10 +984,9 @@ function AppContent() {
             onOpenExerciseProgress={() =>
               setScreen({ type: 'exercise-progress' })
             }
+            onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
             onOpenSettings={() => setScreen({ type: 'settings' })}
-            onOpenProfileEdit={() =>
-              setScreen({ type: 'profile-edit', back: 'profile' })
-            }
+            onOpenProfileEdit={() => setScreen({ type: 'profile-edit' })}
           />
         )}
       </PagerView>
@@ -928,6 +1001,16 @@ function AppContent() {
             })
           }
           onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+          // Perfil del autor de una rutina traída de la comunidad. Se vuelve
+          // aquí, no al tablón: a Rutinas no se llega desde Comunidad.
+          onOpenProfile={(userId, name) =>
+            setScreen({
+              type: 'user-profile',
+              userId,
+              name,
+              back: { type: 'routine-selector', origin: screen.origin },
+            })
+          }
           // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
           onBack={() => backFromRoutineSelector(screen.origin)}
         />
@@ -996,6 +1079,8 @@ function AppContent() {
         />
       )}
 
+      {screen.type === 'body-weight' && <BodyWeightScreen onBack={goProfile} />}
+
       {screen.type === 'settings' && (
         <SettingsScreen
           onBack={goProfile}
@@ -1004,19 +1089,7 @@ function AppContent() {
       )}
 
       {screen.type === 'profile-edit' && (
-        <ProfileEditScreen
-          onBack={() =>
-            setScreen({
-              type: screen.back === 'profile' ? 'profile' : 'community',
-            })
-          }
-          onOpenFollowing={() =>
-            setScreen({ type: 'following', back: 'profile-edit' })
-          }
-          onOpenFollowers={() =>
-            setScreen({ type: 'followers', back: 'profile-edit' })
-          }
-        />
+        <ProfileEditScreen onBack={goProfile} />
       )}
 
       {screen.type === 'following' && (
@@ -1043,13 +1116,14 @@ function AppContent() {
         <UserProfileScreen
           userId={screen.userId}
           name={screen.name}
-          onBack={() => setScreen({ type: 'community' })}
+          onBack={() => setScreen(screen.back ?? { type: 'community' })}
           onOpenRoutine={(routineId, name, authorName) =>
             setScreen({
               type: 'public-routine',
               routineId,
               name,
               authorName,
+              ownerId: screen.userId,
               back: {
                 type: 'user-profile',
                 userId: screen.userId,
@@ -1057,6 +1131,7 @@ function AppContent() {
               },
             })
           }
+          onOpenAccount={() => setScreen({ type: 'data' })}
         />
       )}
 
@@ -1065,18 +1140,25 @@ function AppContent() {
           routineId={screen.routineId}
           name={screen.name}
           authorName={screen.authorName}
+          ownerId={screen.ownerId}
           onBack={() => setScreen(screen.back)}
+          onOpenProfile={(userId, name) =>
+            setScreen({ type: 'user-profile', userId, name })
+          }
+          onOpenAccount={() => setScreen({ type: 'data' })}
         />
       )}
 
       {screen.type === 'exercise-progress' && (
         <ExerciseProgressScreen
-          initialExerciseKey={screen.initialExerciseKey}
-          onBack={() =>
-            screen.detailReturn
-              ? setScreen({ type: 'detail', ...screen.detailReturn })
-              : goProfile()
+          selectedKey={screen.selectedKey ?? screen.initialExerciseKey}
+          focused={!!screen.initialExerciseKey}
+          onSelectExercise={(exerciseKey) =>
+            setScreen({ ...screen, selectedKey: exerciseKey })
           }
+          // El mismo camino que recorre el atrás del móvil (ver
+          // `backFromExerciseProgress`): una sola función para los dos gestos.
+          onBack={() => backFromExerciseProgress(screen)}
         />
       )}
 
@@ -1111,6 +1193,30 @@ function AppContent() {
         <RoutineDetailScreen
           routine={screen.routine}
           onBack={() => backFromRoutineDetails(screen.origin)}
+          // Al copiar una rutina ajena se abre la copia: es la que ya se puede
+          // tocar, y dejar al usuario en la de solo lectura sería un callejón.
+          onForked={(copy) =>
+            setScreen({
+              type: 'routine-details',
+              routine: copy,
+              origin: screen.origin,
+            })
+          }
+          onOpenAccount={() => setScreen({ type: 'data' })}
+          // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
+          // vuelve a esta misma ficha.
+          onOpenProfile={(userId, name) =>
+            setScreen({
+              type: 'user-profile',
+              userId,
+              name,
+              back: {
+                type: 'routine-details',
+                routine: screen.routine,
+                origin: screen.origin,
+              },
+            })
+          }
         />
       )}
 
@@ -1147,6 +1253,20 @@ function AppContent() {
         />
       )}
 
+      {/* El descanso en curso, cuando NO se está en el registro que lo lanzó.
+          Antes salir de esa pantalla lo mataba (vivía en su estado); ahora vive
+          en el store y sigue contando mientras miras el calendario o el
+          histórico, con esta barra para volver al entreno de un toque. */}
+      {!!restTimer && !isRestTimerScreen && (
+        <RestTimerBar
+          bottom={restBarBottom}
+          onPress={() => {
+            const day = findDayInRoutines(state.routines, restTimer.dayId);
+            if (day) setScreen({ type: 'workout-log', day, origin: 'home' });
+          }}
+        />
+      )}
+
       {/* Encima de todo (incluidas las barras flotantes): el círculo del cambio
           de tema en caliente. */}
       <ThemeRevealOverlay />
@@ -1168,6 +1288,12 @@ export default function App() {
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });
 
+  // ¿Está la app encogida en la ventanita del descanso? Lo dice el sistema
+  // (modules/pip-timer), no la app: también se sale de ella tocándola o
+  // cerrándola desde la propia ventana.
+  const [inPip, setInPip] = useState(false);
+  useEffect(() => subscribePipMode(setInPip), []);
+
   // El splash nativo se mantiene (preventAutoHide) hasta que AppContent termina
   // de hidratar los datos; allí se llama a SplashScreen.hideAsync(). Así no se
   // oculta solo con las fuentes cargadas, evitando el parpadeo de datos semilla.
@@ -1187,6 +1313,11 @@ export default function App() {
         />
         <View style={styles.container}>
           <AppContent />
+          {/* Ventanita flotante del descanso: el sistema encoge la app entera a
+              un recuadro movible (Picture-in-Picture), donde la pantalla de
+              registro no se lee. Se tapa con la cuenta atrás a tamaño grande y
+              se destapa al volver, con el árbol intacto por debajo. */}
+          {inPip && <PipRestTimer />}
         </View>
       </WorkoutProvider>
     </GestureHandlerRootView>

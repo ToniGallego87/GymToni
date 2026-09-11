@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -17,6 +18,7 @@ import {
   ExerciseSession,
   ExerciseSort,
   ExerciseSummary,
+  exerciseKey,
   getExerciseRecords,
   listExercises,
   sortExercises,
@@ -27,22 +29,32 @@ import { dateLocale, fmtNum, t } from '@lib/i18n';
 import {
   BarChart,
   BarChartPoint,
-  Button,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  ExerciseGifButton,
   GradientFill,
+  LoadMoreButton,
+  SEGMENTED_FILTER_CHART_GAP,
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
 } from '../../components';
 
 interface ExerciseProgressScreenProps {
+  // Sube un paso: de la ficha a la lista, o de la lista fuera de la pantalla.
+  // Lo decide `app/App.tsx`, que es también quien atiende el atrás del móvil,
+  // para que los dos gestos recorran lo mismo.
   onBack: () => void;
-  // Si se abre desde el detalle de un día, arranca ya en ese ejercicio y el
-  // botón "Volver" regresa directo (sin pasar por la lista).
-  initialExerciseKey?: string;
+  // Ejercicio abierto ahora mismo. La selección vive en la navegación (App), no
+  // aquí: cuando era estado local, el atrás del móvil no la veía y se saltaba
+  // la lista.
+  selectedKey?: string;
+  onSelectExercise: (exerciseKey: string) => void;
+  // Se abrió desde el detalle de un día, ya enfocado en un ejercicio: no hay
+  // lista detrás, así que "Volver" sale de la pantalla en vez de subir a ella.
+  focused?: boolean;
 }
 
 // Sesiones que caben en la gráfica sin que las barras se conviertan en rayas.
@@ -124,12 +136,17 @@ const METRIC_OPTIONS: SegmentedOption<string>[] = CHART_METRICS.map(
  * Traduce las sesiones a barras: color por tendencia (sesión vs anterior) y la
  * última en amarillo. El dibujo lo hace <BarChart/> (el mismo de Inicio y
  * Cardio); aquí solo se decide qué mide cada barra y de qué color va.
+ *
+ * Las sesiones de DESCARGA no entran: bajar la carga es el plan, no un
+ * retroceso, y dibujarlas metía un bache rojo en mitad de la progresión y
+ * ensanchaba el dominio hasta aplanar el resto de barras.
  */
 function buildSessionChart(
   sessions: ExerciseSession[],
   metric: ChartMetric
 ): { bars: BarChartPoint[]; domain: { min: number; max: number } } | null {
   const points = sessions
+    .filter((session) => !session.isDeload)
     .map((session) => ({ session, value: metric.get(session) }))
     .filter((point) => point.value > 0)
     .slice(-MAX_CHART_SESSIONS);
@@ -186,18 +203,18 @@ function buildSessionChart(
  */
 export function ExerciseProgressScreen({
   onBack,
-  initialExerciseKey,
+  selectedKey,
+  onSelectExercise,
+  focused,
 }: ExerciseProgressScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const { width: windowWidth } = useWindowDimensions();
 
-  const [selectedKey, setSelectedKey] = useState<string | null>(
-    initialExerciseKey ?? null
-  );
   const [metricId, setMetricId] = useState(CHART_METRICS[0].id);
   const [sort, setSort] = useState<ExerciseSort>('recent');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [query, setQuery] = useState('');
 
   // Las semanas de descarga quedan fuera de la evolución y los récords: se
   // entrenan con menos series y peso a propósito, así que no reflejan progreso ni
@@ -211,13 +228,42 @@ export function ExerciseProgressScreen({
     () => listExercises(evolutionLogs),
     [evolutionLogs]
   );
+
+  // GIF asignado a cada ejercicio. La lista agrupa por NOMBRE (el mismo press de
+  // banca tiene otro id en cada rutina), así que el `catalogId` se busca igual:
+  // por nombre, en los ejercicios de todas las rutinas. El primero que lo tenga
+  // manda — es el mismo movimiento, así que el dibujo es el mismo.
+  const catalogIdByKey = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const routine of state.routines) {
+      for (const day of routine.days) {
+        for (const exercise of day.exercises) {
+          if (!exercise.catalogId) continue;
+          const key = exerciseKey(exercise.name);
+          if (!map.has(key)) map.set(key, exercise.catalogId);
+        }
+      }
+    }
+    return map;
+  }, [state.routines]);
   const sorted = useMemo(
     () => sortExercises(exercises, sort),
     [exercises, sort]
   );
+  // Filtro por nombre. Con una rutina de 5 días son 30-40 ejercicios y la
+  // pregunta real es "¿cómo voy en press banca?": buscarlo a mano era recorrer
+  // la lista de 20 en 20. Mismo criterio que el buscador del catálogo: sin
+  // acentos ni mayúsculas y por trozo de palabra.
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return sorted;
+    return sorted.filter((exercise) =>
+      exercise.name.toLowerCase().includes(needle)
+    );
+  }, [sorted, query]);
   const visible = useMemo(
-    () => sorted.slice(0, visibleCount),
-    [sorted, visibleCount]
+    () => filtered.slice(0, visibleCount),
+    [filtered, visibleCount]
   );
   const selected = exercises.find((exercise) => exercise.key === selectedKey);
 
@@ -243,18 +289,12 @@ export function ExerciseProgressScreen({
     Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
   );
 
-  // Volver: primero deshace la selección (de la ficha a la lista) y solo desde
-  // la lista sale de la pantalla. Si se llegó enfocado desde el detalle de un
-  // día, "Volver" regresa directo a ese detalle (no tiene sentido caer en la
-  // lista de ejercicios que el usuario nunca pidió).
-  const handleBack = () => {
-    if (selected && !initialExerciseKey) {
-      animateLayout();
-      setSelectedKey(null);
-    } else {
-      onBack();
-    }
-  };
+  // "Volver" sube un paso: de la ficha a la lista, o de la lista fuera. Si se
+  // entró enfocado desde el detalle de un día no hay lista que enseñar y se
+  // vuelve directo. El destino lo resuelve `onBack` (App), y aquí solo se
+  // decide cómo ROTULARLO: era el mismo botón para dos sitios distintos sin
+  // decir a cuál iba.
+  const backGoesToList = !!selected && !focused;
 
   return (
     <View style={styles.container}>
@@ -286,9 +326,44 @@ export function ExerciseProgressScreen({
           </View>
         )}
 
+        {/* Buscar por nombre, encima del orden: con 30-40 ejercicios encontrar
+            uno concreto era scroll y "Ver más". Mismo patrón que el buscador
+            del catálogo de ejercicios. */}
+        {!selected && exercises.length > 1 && (
+          <View style={styles.searchBox}>
+            <MaterialCommunityIcons
+              name="magnify"
+              size={20}
+              color={theme.colors.textMuted}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder={t('Buscar ejercicio…')}
+              placeholderTextColor={theme.colors.textMuted}
+              value={query}
+              onChangeText={(text) => {
+                setQuery(text);
+                // Otra búsqueda, otra lista: la paginación vuelve al principio.
+                setVisibleCount(PAGE_SIZE);
+              }}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            {!!query && (
+              <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+              </Pressable>
+            )}
+          </View>
+        )}
+
         {!selected && exercises.length > 1 && (
           <SegmentedFilter
-            style={styles.sortFilter}
+            // Sin margen: encabeza la lista, no cuelga de ninguna gráfica.
             options={SORT_OPTIONS}
             value={sort}
             onChange={(id) => {
@@ -301,22 +376,30 @@ export function ExerciseProgressScreen({
           />
         )}
 
+        {!selected && !!query.trim() && filtered.length === 0 && (
+          <Text style={styles.emptyText}>{t('Sin resultados')}</Text>
+        )}
+
         {!selected &&
           visible.map((exercise) => (
             <ExerciseRow
               key={exercise.key}
               exercise={exercise}
+              catalogId={catalogIdByKey.get(exercise.key)}
               onPress={() => {
                 animateLayout();
-                setSelectedKey(exercise.key);
+                onSelectExercise(exercise.key);
               }}
             />
           ))}
 
-        {!selected && visibleCount < sorted.length && (
-          <Button
-            title={t('Ver más ({n})', { n: sorted.length - visibleCount })}
-            variant="secondary"
+        {/* Mismo botón de paginar que el historial de Inicio y el de Cardio:
+            antes era un `Button` secundario con otras palabras ("Ver más"). El
+            recuento de los que faltan sobrevive como prop del componente
+            compartido, no como una copia con otra piel. */}
+        {!selected && visibleCount < filtered.length && (
+          <LoadMoreButton
+            remaining={filtered.length - visibleCount}
             onPress={() => {
               animateLayout();
               setVisibleCount((count) => count + PAGE_SIZE);
@@ -329,11 +412,13 @@ export function ExerciseProgressScreen({
             <View style={styles.chartCard}>
               <GradientFill accent={theme.colors.accentLine} />
               <View style={styles.cardTitleRow}>
-                <MaterialCommunityIcons
-                  name="chart-line"
-                  size={18}
-                  color={theme.colors.text}
-                  style={styles.cardTitleIcon}
+                {/* El GIF del ejercicio en lugar del icono de gráfica, que era
+                    el mismo para todos y no decía cuál estabas mirando. */}
+                <ExerciseGifButton
+                  name={selected.name}
+                  catalogId={catalogIdByKey.get(selected.key)}
+                  size={20}
+                  style={styles.cardTitleGif}
                 />
                 <Text style={styles.cardTitle} numberOfLines={2}>
                   {selected.name}
@@ -360,7 +445,10 @@ export function ExerciseProgressScreen({
               )}
 
               <SegmentedFilter
-                style={{ width: chartWidth }}
+                style={{
+                  width: chartWidth,
+                  marginTop: SEGMENTED_FILTER_CHART_GAP,
+                }}
                 options={METRIC_OPTIONS}
                 value={metricId}
                 onChange={(id) => {
@@ -386,16 +474,24 @@ export function ExerciseProgressScreen({
         topInset={insets.top}
       />
 
-      <FloatingBackButton onPress={handleBack} bottom={backBottom} />
+      <FloatingBackButton
+        onPress={onBack}
+        bottom={backBottom}
+        label={
+          backGoesToList ? `← ${t('Todos los ejercicios')}` : `← ${t('Volver')}`
+        }
+      />
     </View>
   );
 }
 
 function ExerciseRow({
   exercise,
+  catalogId,
   onPress,
 }: {
   exercise: ExerciseSummary;
+  catalogId?: string;
   onPress: () => void;
 }) {
   return (
@@ -404,6 +500,18 @@ function ExerciseRow({
       onPress={onPress}
     >
       <GradientFill accent={theme.colors.accentLine} />
+      {/* El mismo elemento que en el registro y en el Detalle: con GIF asignado
+          el botón ES el GIF en miniatura (a un vistazo se reconoce el ejercicio
+          antes por el dibujo que por el nombre, que es lo que se busca en una
+          lista de 30-40); sin él, la lupa abre el catálogo buscando por su
+          nombre. Va fuera del `Pressable` de texto para que su toque no arrastre
+          a abrir la ficha. */}
+      <ExerciseGifButton
+        name={exercise.name}
+        catalogId={catalogId}
+        size={20}
+        style={styles.exerciseGif}
+      />
       <View style={styles.exerciseTextWrap}>
         <Text style={styles.exerciseName} numberOfLines={2}>
           {exercise.name}
@@ -516,10 +624,25 @@ const makeStyles = () =>
     pressed: {
       opacity: 0.8,
     },
-    // El raíl nace con hueco arriba para separarse de la gráfica; aquí encabeza
-    // la lista y el scroll ya trae su propio padding.
-    sortFilter: {
-      marginTop: 0,
+    // Buscador de la lista de ejercicios, con la misma caja que el resto de
+    // buscadores de la app (catálogo y Comunidad).
+    searchBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      height: 46,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    searchInput: {
+      flex: 1,
+      minWidth: 0,
+      color: theme.colors.text,
+      fontSize: 16,
+      padding: 0,
     },
     emptyCard: {
       alignItems: 'center',
@@ -547,6 +670,13 @@ const makeStyles = () =>
       padding: theme.spacing.md,
       overflow: 'hidden',
       ...theme.shadow.soft,
+    },
+    // El GIF de la fila, algo mayor que el de 34 del Detalle: aquí es lo que
+    // identifica la fila de un vistazo, como el icono del día en las listas de
+    // Inicio y Cardio (36-40).
+    exerciseGif: {
+      width: 40,
+      height: 40,
     },
     exerciseTextWrap: {
       flex: 1,
@@ -595,9 +725,16 @@ const makeStyles = () =>
       alignSelf: 'stretch',
       gap: 8,
     },
-    // Centra el icono (18) en la primera línea del título (lineHeight 26).
+    // Centra el icono (18) en la primera línea del título (lineHeight 26). Lo
+    // usa la tarjeta de Récords.
     cardTitleIcon: {
       marginTop: 4,
+    },
+    // El GIF del ejercicio en la cabecera de la ficha. La fila alinea arriba
+    // (el nombre puede ocupar dos líneas), así que el botón —más alto que el
+    // icono de 18 que había— se queda a la altura de la primera.
+    cardTitleGif: {
+      marginTop: 1,
     },
     cardTitle: {
       flex: 1,

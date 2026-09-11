@@ -5,7 +5,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   Pressable,
   useWindowDimensions,
@@ -20,13 +19,7 @@ import { getToday } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
-import {
-  t,
-  dateLocale,
-  fmtNum,
-  localizeDecimals,
-  parseTypedNumber,
-} from '@lib/i18n';
+import { t, dateLocale, fmtNum } from '@lib/i18n';
 import {
   buildCardioDays,
   buildCardioWeeks,
@@ -38,14 +31,11 @@ import {
   CardioMonth,
   CARDIO_ONLY_DAY,
   isCardioOnlyLog,
-  WeightSegment,
 } from '@lib/cardio';
-import { getCardioWeightHistory, setCardioWeightHistory } from '@lib/storage';
+import { loadBodyWeight, useBodyWeight } from '@lib/bodyWeight';
 import {
-  AppModal,
   BarChart,
   BarChartPoint,
-  Button,
   Collapsible,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -54,7 +44,7 @@ import {
   HeroCard,
   HeroCarousel,
   HeroStatsCard,
-  HeroWeightCard,
+  SEGMENTED_FILTER_CHART_GAP,
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
@@ -218,18 +208,15 @@ export function CardioScreen({
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>(
     {}
   );
-  // Historial de tramos de peso. Cada peso nuevo recalcula el tramo anterior si
-  // se mete <1 día después, o abre un tramo nuevo (sin recalcular) si es más.
-  const [weightHistory, setWeightHistory] = useState<WeightSegment[]>([]);
-  const [showWeightModal, setShowWeightModal] = useState(false);
-  const [weightInput, setWeightInput] = useState('');
+  // Tramos de peso: Cardio los CONSUME (las kcal de cada sesión se estiman con
+  // el peso vigente entonces) pero ya no los edita — eso vive en Perfil → Peso
+  // corporal. Por eso el dato viene del store y no de un estado local: así la
+  // pestaña refleja al instante un peso actualizado desde allí, en vez de
+  // quedarse con el viejo hasta reiniciar la app.
+  const weightHistory = useBodyWeight();
 
   useEffect(() => {
-    getCardioWeightHistory()
-      .then((history) => {
-        if (history.length) setWeightHistory(history);
-      })
-      .catch(() => {});
+    void loadBodyWeight();
   }, []);
 
   // Recuperar la métrica de la gráfica guardada.
@@ -241,49 +228,6 @@ export function CardioScreen({
       })
       .catch(() => {});
   }, []);
-
-  const currentWeight = weightHistory.length
-    ? weightHistory[weightHistory.length - 1].weight
-    : null;
-
-  const openWeightModal = () => {
-    // Se edita en el separador del idioma; parseTypedNumber lo lee igual.
-    setWeightInput(
-      currentWeight != null ? localizeDecimals(String(currentWeight)) : ''
-    );
-    setShowWeightModal(true);
-  };
-
-  const handleSaveWeight = async () => {
-    const w = parseTypedNumber(weightInput);
-    if (!Number.isFinite(w) || w <= 0) return;
-
-    const now = Date.now();
-    const DAY_MS = 24 * 3600 * 1000;
-    let next: WeightSegment[];
-    if (weightHistory.length === 0) {
-      // Primer peso: cubre todo lo anterior (appliesFrom 0).
-      next = [{ weight: w, appliesFrom: 0, setAt: now }];
-    } else {
-      const last = weightHistory[weightHistory.length - 1];
-      if (now - last.setAt < DAY_MS) {
-        // <1 día: recalcula el tramo anterior (mismo appliesFrom, nuevo peso).
-        next = [
-          ...weightHistory.slice(0, -1),
-          { ...last, weight: w, setAt: now },
-        ];
-      } else {
-        // ≥1 día: tramo nuevo desde ahora, sin tocar lo anterior.
-        next = [...weightHistory, { weight: w, appliesFrom: now, setAt: now }];
-      }
-    }
-
-    setWeightHistory(next);
-    setShowWeightModal(false);
-    try {
-      await setCardioWeightHistory(next);
-    } catch {}
-  };
 
   const weeks = useMemo(
     () => buildCardioWeeks(state.logs, weightHistory),
@@ -413,14 +357,23 @@ export function CardioScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Hero con tres estados (carrusel con flechas): estadísticas de la
-            semana, peso corporal (editable, con su evolución) e "Insertar nuevo
-            cardio" (día de solo cardio, sin fuerza).
+        {/* Carrusel con la ACCIÓN primero y la consulta después, igual que la
+            hero de Inicio: apuntar cardio es a lo que se entra, así que no vive
+            tras un toque de flecha. El peso corporal salió de aquí a Perfil →
+            Peso corporal: se toca una vez cada varias semanas y ocupaba media
+            hero, y allí además le cabe el histórico entero.
             Mismo aspecto que la HeroCard de Fuerza: el scroll no lleva padding
             horizontal y la tarjeta se posiciona con el margen propio de la
             HeroCard (misma estrategia de márgenes que Inicio, sin heroBleed). */}
         <HeroCarousel
           slides={[
+            <HeroCard
+              key="insert"
+              variant="start"
+              icon="run-fast"
+              title={t('Insertar cardio')}
+              onPress={() => onInsertCardioOnly?.()}
+            />,
             <HeroStatsCard
               key="stats"
               isEmpty={!hasCardio}
@@ -460,19 +413,6 @@ export function CardioScreen({
                   label: t('mejor día'),
                 },
               ]}
-            />,
-            <HeroWeightCard
-              key="weight"
-              weight={currentWeight}
-              history={weightHistory.map((s) => s.weight)}
-              onPress={openWeightModal}
-            />,
-            <HeroCard
-              key="insert"
-              variant="start"
-              icon="run-fast"
-              title={t('Insertar cardio')}
-              onPress={() => onInsertCardioOnly?.()}
             />,
           ]}
         />
@@ -527,7 +467,10 @@ export function CardioScreen({
                   />
                 )}
                 <SegmentedFilter
-                  style={{ width: chartWidth }}
+                  style={{
+                    width: chartWidth,
+                    marginTop: SEGMENTED_FILTER_CHART_GAP,
+                  }}
                   options={METRIC_OPTIONS}
                   labelMode="below"
                   value={metric.id}
@@ -710,48 +653,6 @@ export function CardioScreen({
         subtitle={t('Consulta tus resultados')}
         topInset={insets.top}
       />
-
-      <AppModal
-        visible={showWeightModal}
-        onRequestClose={() => setShowWeightModal(false)}
-        title={t('Tu peso')}
-        icon="scale-bathroom"
-        message={t(
-          'Se usa para estimar las kcalorías del cardio. Se aplica a los próximos; los cardios ya registrados mantienen el peso que tenías entonces.'
-        )}
-        footer={
-          <View style={styles.modalButtonRow}>
-            <Button
-              title={t('Cancelar')}
-              onPress={() => setShowWeightModal(false)}
-              variant="secondary"
-              size="medium"
-              style={styles.modalButton}
-            />
-            <Button
-              title={t('Guardar')}
-              onPress={handleSaveWeight}
-              variant="primary"
-              size="medium"
-              style={styles.modalButton}
-            />
-          </View>
-        }
-      >
-        <View style={styles.weightInputRow}>
-          <TextInput
-            style={styles.weightInput}
-            value={weightInput}
-            onChangeText={setWeightInput}
-            keyboardType="decimal-pad"
-            placeholder="70"
-            placeholderTextColor={theme.colors.textSecondary}
-            maxLength={5}
-            autoFocus
-          />
-          <Text style={styles.weightUnit}>kg</Text>
-        </View>
-      </AppModal>
     </View>
   );
 }
@@ -855,14 +756,17 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
     },
     // Tarjeta diaria con el mismo formato/tamaño que las de Inicio (Fuerza).
+    // Mismo ajuste (y mismas medidas) que la tarjeta de día de Inicio: padding
+    // vertical menor que el horizontal y sin `minHeight`, que era quien fijaba
+    // el alto por encima de lo que pide el contenido.
     dailyCard: {
       backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.md,
-      padding: theme.spacing.md,
-      marginTop: 12,
+      paddingVertical: 10,
+      paddingHorizontal: theme.spacing.md,
+      marginTop: 10,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      minHeight: 72,
       justifyContent: 'center',
       overflow: 'hidden',
       ...theme.shadow.soft,
@@ -935,38 +839,6 @@ const makeStyles = () =>
     // vive en el componente compartido LoadMoreButton.
     showMore: {
       marginHorizontal: theme.spacing.md,
-    },
-    modalButtonRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    modalButton: {
-      flex: 1,
-    },
-    weightInputRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      marginTop: 16,
-    },
-    weightInput: {
-      backgroundColor: theme.colors.inputBg,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.md,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      fontSize: 20,
-      fontWeight: '800',
-      color: theme.colors.text,
-      textAlign: 'center',
-      minWidth: 120,
-    },
-    weightUnit: {
-      fontSize: 16,
-      fontWeight: '700',
-      color: theme.colors.textSecondary,
     },
   });
 

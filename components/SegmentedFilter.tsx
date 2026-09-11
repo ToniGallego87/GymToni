@@ -14,6 +14,14 @@ import { theme } from '@lib/theme';
 import { GymIconName } from '@lib/gymIcons';
 import { GymIcon } from './GymIcon';
 
+/**
+ * Aire entre una gráfica y el raíl que la filtra justo debajo. Lo ponen las
+ * pantallas que lo usan así (Inicio, Cardio y Progreso); el componente NO lo
+ * trae de serie, porque el mismo raíl también vive dentro de una fila —en
+ * Comunidad, junto al botón de intensidad— y allí lo dejaba descolgado.
+ */
+export const SEGMENTED_FILTER_CHART_GAP = 18;
+
 export interface SegmentedOption<T extends string | undefined> {
   id: T;
   label: string;
@@ -141,9 +149,11 @@ export function SegmentedFilter<T extends string | undefined>({
 
 const makeStyles = () =>
   StyleSheet.create({
-    wrap: {
-      marginTop: 18,
-    },
+    // Sin margen propio: el raíl vive tanto BAJO una gráfica (donde hace falta
+    // separarlo, ver SEGMENTED_FILTER_CHART_GAP) como dentro de una FILA junto a
+    // otro control (Comunidad), y ahí un margen superior de fábrica lo
+    // descolgaba de sus vecinos aunque la fila alineara al centro.
+    wrap: {},
     track: {
       padding: 4,
       borderRadius: theme.borderRadius.md,

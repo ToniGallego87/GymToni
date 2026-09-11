@@ -9,6 +9,30 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.4',
+    items: [
+      'El descanso ya no se pierde: sigue contando aunque salgas del registro para mirar el calendario, y una barra flotante te enseña los segundos que quedan y te devuelve al entreno de un toque. Y si minimizas la app, el descanso se queda en una ventanita encima de lo que estés usando, como los vídeos de YouTube.',
+      'La app ya te dice qué día te toca entrenar y te lleva directo: pulsas la tarjeta de Inicio y entras en ese día, sin pasar por la lista. Los días que ya has hecho esta semana salen marcados.',
+      'Tu peso corporal tiene su propia pantalla en Perfil, con el histórico completo: cada anotación con su fecha y cuánto subiste o bajaste. Y si llevas más de dos semanas sin actualizarlo te avisa, porque las calorías del cardio se calculan con tu peso.',
+      'Ahora puedes comentar las rutinas de la comunidad: preguntar al autor, responder y borrar lo tuyo. Y al abrir Comunidad, un aviso te resume lo nuevo en tus rutinas: seguidores, me gusta y comentarios.',
+      'Puedes reportar una rutina, un perfil o un comentario que no te parezca bien. Lo que reportas desaparece de tu móvil al momento.',
+      'Quedarte una rutina de otra persona ya no te llena la lista de copias: se guarda tal cual, con el crédito de su autor, y tocando su nombre llegas a su perfil. Si quieres cambiarla, tienes "Hacer copia".',
+      'Las rutinas se leen mejor: nacen con los días plegados, así ves de un vistazo cuántos días tiene y cuántos ejercicios trae cada uno. Vale para las tuyas y para las de la comunidad.',
+      'La lista de Rutinas ocupa la mitad y se ordena por lo que te interesa: primero la que entrenas, luego las que no has estrenado y al final las cerradas, con la fecha en que las dejaste.',
+      'Editar una rutina es ahora directo: cambias los ejercicios en el propio día, sin entrar en un segundo editor, puedes cambiarle el nombre a un día, y los nombres largos se leen enteros.',
+      'El dato "Anterior" vuelve a salir aunque la semana pasada te saltaras ese ejercicio, y saltarse un ejercicio ya no te manda a descansar dos minutos y medio.',
+      'Las notas de un ejercicio ya no se esconden: con la tarjeta plegada verás su icono para abrirla.',
+      'En "Progreso por ejercicio" hay buscador y cada ejercicio enseña su dibujo en movimiento: encontrar el press de banca entre cuarenta ejercicios es ya un momento.',
+      'Tu foto de perfil se guarda sola al elegirla, y Perfil ya no te dice que no tienes perfil cuando lo que falla es internet.',
+      'Un día de solo cardio ya te enseña sus totales (minutos, calorías y kilómetros), y el calendario explica qué significa cada número que pinta.',
+      'Apuntar cardio está lo primero al abrir la pestaña, ya no escondido en la tercera tarjeta del carrusel.',
+      'Las gráficas dejan de dibujar lo que no es progreso: las semanas de descarga ya no meten una línea plana ni un bajón que no existía.',
+      'Comunidad se ve más ordenada: arriba tu propia tarjeta con tus seguidores, el buscador de personas se pliega y las tarjetas ya no se comen el nombre de la rutina.',
+      'La app vuelve a estar entera en inglés, sin frases sueltas en español.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.7.3',
     items: [
       'Al registrar, cada ejercicio se ve mucho mejor: el botón del dibujo ahora enseña el GIF en movimiento, así reconoces el ejercicio de un vistazo, y el número de orden deja sitio libre para que el nombre se lea entero.',

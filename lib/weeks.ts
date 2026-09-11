@@ -1,4 +1,4 @@
-import { WorkoutDay, WorkoutLog } from '../types';
+import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../types';
 import {
   buildImprovementFromStrengthScores,
   getComparableWorkoutScores,
@@ -336,6 +336,51 @@ function trainedDayIds(weekLogs: WorkoutLog[]): Set<string> {
 }
 
 /**
+ * Cómo va la semana EN CURSO de una rutina: qué días lleva entrenados y cuál
+ * toca ahora. Fuente única de "el día que toca", que Inicio nombra en su hero y
+ * "Elige la sesión" marca en la lista; derivarlo por separado en cada pantalla
+ * es la forma segura de que acaben discrepando.
+ *
+ * `nextDay` es una SUGERENCIA, nunca una regla: saltarse un día es normal y
+ * elegir otro sigue estando a un toque. Es el primero de la rutina que aún no
+ * se ha entrenado esta semana.
+ *
+ * Con la semana ya completa el próximo entreno abre semana NUEVA, así que
+ * `trained` vuelve a salir vacío (nada entrenado en la que empieza) y el día
+ * que toca es el primero de la rutina.
+ */
+export function currentWeekDayState(
+  routine: WorkoutRoutine | undefined,
+  logs: WorkoutLog[]
+): { trained: Set<string>; nextDay: WorkoutDay | undefined } {
+  const days = routine?.days ?? [];
+  if (!routine || days.length === 0) {
+    return { trained: new Set<string>(), nextDay: undefined };
+  }
+
+  // Solo la fuerza de ESTA rutina: el cardio suelto no ocupa un día del plan.
+  const routineLogs = logs.filter(
+    (log) => log.routineId === routine.id && !log.cardioOnly
+  );
+  const dayNumberById = new Map(days.map((day) => [day.id, day.dayNumber]));
+  const blocks = groupLogsIntoWeekBlocks(routineLogs, (log) =>
+    dayNumberById.get(log.dayId)
+  );
+  const ordered = orderedBlockNumbers(blocks);
+  const currentWeekLogs = ordered.length
+    ? blocks[ordered[ordered.length - 1]]
+    : [];
+
+  const trained = trainedDayIds(currentWeekLogs);
+  const pending = days.find((day) => !trained.has(day.id));
+
+  return {
+    trained: pending ? trained : new Set<string>(),
+    nextDay: pending ?? days[0],
+  };
+}
+
+/**
  * Log de referencia de cada día: la ÚLTIMA sesión de ese día (que no sea de
  * descarga) anterior a la semana que se mide. Si la semana anterior no tiene
  * ese día entrenado se retrocede hasta la última en la que sí se hizo, en vez
@@ -493,6 +538,18 @@ export interface WeekProgressPoint {
   isIncomplete?: boolean;
   /** Semana de descarga: al margen de las estadísticas (barra en blanco, sin %). */
   isDeload?: boolean;
+  /**
+   * No hay NADA que medir esta semana para lo que pide la serie: sin filtro,
+   * una semana sin sesiones; con filtro por día, una semana en la que ese día
+   * no se entrenó. Su `improvement` es 0 por falta de dato, no por haberse
+   * quedado igual, así que quien dibuja debe omitirla en vez de pintar un cero
+   * que se lee como estancamiento.
+   *
+   * OJO: no es lo mismo que `isIncomplete`. Una semana incompleta (le faltan
+   * días, pero entrenó los que mide la serie) SÍ compara: cada día se enfrenta
+   * a su propia base.
+   */
+  isMissing?: boolean;
 }
 
 /**
@@ -558,16 +615,20 @@ export function buildWeekProgress(
       return { week, improvement: 0, isIncomplete, isDeload: true };
     }
 
-    // La primera semana de carga es la base: 0% por definición.
-    if (blockNumber === firstLoadBlock) {
-      return { week, improvement: 0, isIncomplete };
+    // Sin dato que medir. Va ANTES de la base: con filtro por día, una semana
+    // que no entrenó ese día tampoco puede ser su referencia, ni siquiera
+    // siendo la primera de carga.
+    if (!weekLogs.length) {
+      return { week, improvement: 0, isIncomplete, isMissing: true };
+    }
+    // Con filtro activo, las semanas que no entrenaron ese día no puntúan: no
+    // hay dato, así que la serie las omite (ver `isMissing`).
+    if (dayFilter && !blockHasDay(weekLogs, dayFilter)) {
+      return { week, improvement: 0, isIncomplete, isMissing: true };
     }
 
-    if (!weekLogs.length) {
-      return { week, improvement: 0, isIncomplete };
-    }
-    // Con filtro activo, las semanas que no entrenaron ese día no puntúan.
-    if (dayFilter && !blockHasDay(weekLogs, dayFilter)) {
+    // La primera semana de carga es la base: 0% por definición.
+    if (blockNumber === firstLoadBlock) {
       return { week, improvement: 0, isIncomplete };
     }
 

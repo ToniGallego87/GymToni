@@ -336,10 +336,6 @@ export function computeWeekAchievements({
   const history =
     historyLogs && historyLogs.length > 0 ? historyLogs : previousWeekLogs;
 
-  const currentDayIds = Array.from(
-    new Set(currentLatest.map((log) => log.dayId).filter(Boolean))
-  );
-
   // Mismo cálculo que la tarjeta de la semana en Inicio: cada día contra su
   // sesión anterior dentro del histórico (los días que faltaron en la semana
   // previa no cuentan como cero, se busca la última vez que se hicieron).

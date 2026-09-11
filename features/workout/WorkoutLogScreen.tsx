@@ -7,8 +7,6 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
-  Vibration,
-  AppState,
   Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -32,6 +30,7 @@ import {
   GradientCtaButton,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
+  RestTimerModal,
   Toast,
   StretchScrollView,
 } from '../../components';
@@ -51,6 +50,7 @@ import {
 import {
   combineDateWithTime,
   findDayInRoutines,
+  formatRestTime,
   generateId,
   getLogTimestamp,
   getToday,
@@ -69,6 +69,15 @@ import {
   buildImprovementFromStrengthScores,
   getTotalSetsStrengthScore,
 } from '@lib/progress';
+import { withExerciseCatalogId } from '@lib/routines';
+import {
+  extendRestTimer,
+  REST_TIMER_CHANNEL_ID,
+  startRestTimer,
+  stopRestTimer,
+  useRestSecondsLeft,
+  useRestTimer,
+} from '@lib/restTimerStore';
 
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
@@ -80,7 +89,9 @@ interface WorkoutLogScreenProps {
   onBack: () => void;
 }
 
-const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
+// Lado de la × que salta el descanso. El icono ES el botón (disco lleno con el
+// aspa recortada), así que el tamaño del dibujo y el del control coinciden.
+const TIMER_CLOSE_SIZE = 22;
 
 export function WorkoutLogScreen({
   day,
@@ -326,12 +337,19 @@ export function WorkoutLogScreen({
     type: 'success' | 'error';
     duration?: number;
   } | null>(null);
-  const [activeTimerId, setActiveTimerId] = useState<string | null>(null);
-  const [timerSeconds, setTimerSeconds] = useState(0);
-  const [timerEndAt, setTimerEndAt] = useState<number | null>(null);
-  const [timerNotificationId, setTimerNotificationId] = useState<string | null>(
-    null
-  );
+  // El descanso ya no vive aquí: es un singleton (lib/restTimerStore) que
+  // sobrevive a salir de esta pantalla. Antes era estado local y la navegación
+  // —que desmonta la pantalla— lo mataba junto con su aviso: mirar el
+  // Calendario entre serie y serie dejaba el descanso en nada.
+  const restTimer = useRestTimer();
+  const timerSeconds = useRestSecondsLeft();
+  // Solo se pinta en ESTA sesión el descanso que se lanzó desde ella; si viene
+  // de otro día (se dejó corriendo y se abrió otro registro), lo enseña la
+  // barra flotante y aquí no se mezcla.
+  const activeTimerId =
+    restTimer && restTimer.dayId === selectedDay.id
+      ? restTimer.exerciseId
+      : null;
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
@@ -351,12 +369,6 @@ export function WorkoutLogScreen({
     const routineId = getRoutineIdForDay();
     const routine = state.routines.find((r) => r.id === routineId);
     return routine?.timerDuration || 150;
-  };
-
-  const formatTimerLabel = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const openTimerModal = () => {
@@ -381,91 +393,24 @@ export function WorkoutLogScreen({
     setTimerInput('');
   };
 
-  const clearTimerNotification = async () => {
-    if (!timerNotificationId || !Notifications) return;
-    try {
-      await Notifications.cancelScheduledNotificationAsync(timerNotificationId);
-    } catch (error) {
-      console.error('Error canceling timer notification:', error);
-    } finally {
-      setTimerNotificationId(null);
-    }
+  // Arrancar, alargar y cortar el descanso: la mecánica (cuenta atrás,
+  // notificación y ventanita flotante) vive en el store, que es su dueño. Aquí
+  // solo se dice CUÁNDO, con los datos del día que lo lanza.
+  const stopTimer = () => stopRestTimer();
+
+  const startOrResetTimer = (exerciseId: string, durationSeconds: number) => {
+    const exercise = selectedDay.exercises.find((ex) => ex.id === exerciseId);
+    startRestTimer({
+      seconds: durationSeconds,
+      exerciseId,
+      exerciseName: exercise?.name || '',
+      dayId: selectedDay.id,
+      dayName: getDisplayDayName(selectedDay.name),
+      routineId: getRoutineIdForDay(),
+    });
   };
 
-  const scheduleTimerNotification = async (seconds: number) => {
-    if (!Notifications || seconds <= 0) return;
-
-    try {
-      if (timerNotificationId) {
-        await Notifications.cancelScheduledNotificationAsync(
-          timerNotificationId
-        );
-      }
-
-      const triggerDate = new Date(Date.now() + seconds * 1000);
-
-      const notificationId = await Notifications.scheduleNotificationAsync({
-        content: {
-          title: t('Descanso finalizado'),
-          body: t('Es hora de tu siguiente serie'),
-          icon: 'notification_icon',
-          color: theme.colors.primary,
-          sound: 'default',
-          vibrate: [0, 300, 150, 300, 150, 300],
-          priority: Notifications.AndroidNotificationPriority.MAX,
-          data: {
-            source: 'rest-timer',
-            dayId: selectedDay.id,
-            routineId: getRoutineIdForDay(),
-          },
-        } as any,
-        trigger: {
-          date: triggerDate,
-          allowWhileIdle: true,
-          channelId: REST_TIMER_CHANNEL_ID,
-        } as any,
-      });
-
-      setTimerNotificationId(notificationId);
-    } catch (error) {
-      console.error('Error scheduling timer notification:', error);
-    }
-  };
-
-  const stopTimer = async () => {
-    setActiveTimerId(null);
-    setTimerSeconds(0);
-    setTimerEndAt(null);
-    await clearTimerNotification();
-  };
-
-  const startOrResetTimer = async (
-    exerciseId: string,
-    durationSeconds: number
-  ) => {
-    const safeDuration = Math.max(1, durationSeconds);
-    const endAt = Date.now() + safeDuration * 1000;
-
-    setActiveTimerId(exerciseId);
-    setTimerEndAt(endAt);
-    setTimerSeconds(safeDuration);
-
-    await scheduleTimerNotification(safeDuration);
-  };
-
-  const extendTimerBy = async (extraSeconds: number) => {
-    if (!activeTimerId || !timerEndAt) return;
-
-    const newEndAt = timerEndAt + extraSeconds * 1000;
-    const remainingSeconds = Math.max(
-      1,
-      Math.ceil((newEndAt - Date.now()) / 1000)
-    );
-
-    setTimerEndAt(newEndAt);
-    setTimerSeconds(remainingSeconds);
-    await scheduleTimerNotification(remainingSeconds);
-  };
+  const extendTimerBy = (extraSeconds: number) => extendRestTimer(extraSeconds);
 
   useEffect(() => {
     if (!Notifications) return;
@@ -514,59 +459,11 @@ export function WorkoutLogScreen({
     configureNotifications();
   }, []);
 
-  useEffect(() => {
-    if (!activeTimerId || !timerEndAt) return;
-
-    const updateRemaining = () => {
-      const remainingMs = timerEndAt - Date.now();
-      if (remainingMs <= 0) {
-        setActiveTimerId(null);
-        setTimerEndAt(null);
-        setTimerSeconds(0);
-        setTimerNotificationId(null);
-        void clearTimerNotification();
-        Vibration.vibrate([0, 300, 150, 300, 150, 300]);
-        return;
-      }
-
-      setTimerSeconds(Math.ceil(remainingMs / 1000));
-    };
-
-    updateRemaining();
-    const interval = setInterval(updateRemaining, 1000);
-
-    return () => clearInterval(interval);
-  }, [activeTimerId, timerEndAt]);
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active' || !activeTimerId || !timerEndAt) return;
-
-      const remainingMs = timerEndAt - Date.now();
-      if (remainingMs <= 0) {
-        setActiveTimerId(null);
-        setTimerEndAt(null);
-        setTimerSeconds(0);
-        setTimerNotificationId(null);
-        void clearTimerNotification();
-        return;
-      }
-
-      setTimerSeconds(Math.ceil(remainingMs / 1000));
-    });
-
-    return () => subscription.remove();
-  }, [activeTimerId, timerEndAt]);
-
-  useEffect(() => {
-    return () => {
-      if (timerNotificationId && Notifications) {
-        Notifications.cancelScheduledNotificationAsync(
-          timerNotificationId
-        ).catch(() => undefined);
-      }
-    };
-  }, [timerNotificationId]);
+  // La cuenta atrás, su final (vibración), su notificación y la ventanita
+  // flotante los lleva el store: aquí solo se lee. Y salir de la pantalla YA NO
+  // lo mata — mirar el calendario entre serie y serie no es terminar el
+  // descanso—: muere al llegar a cero o al pulsar "Saltar", desde la tarjeta o
+  // desde la barra flotante que lo acompaña por el resto de la app.
 
   // Mensaje de "Añadir serie" fallido según la causa real, en vez de un único
   // aviso genérico que confunde cuando el dato tecleado no está vacío.
@@ -717,8 +614,24 @@ export function WorkoutLogScreen({
       .sort((a, b) => b.logDate - a.logDate);
   };
 
+  // ¿Ese registro dice algo? Un ejercicio SALTADO se guarda igual que uno hecho
+  // (una fila por serie), pero con todas a (-1, -1) —"-" en el rawInput—: existir
+  // existe y no aporta nada, así que como "anterior" dejaba la comparación y los
+  // placeholders en blanco.
+  const hasLoggedSets = (log: ExerciseLog | null): boolean => {
+    if (!log) return false;
+    if (log.parsedSets?.length) {
+      return log.parsedSets.some((s) => s.weight !== -1 && s.reps !== -1);
+    }
+    return parseSeriesString(log.rawInput || '').length > 0;
+  };
+
+  // "Anterior" es la última vez que este ejercicio se hizo DE VERDAD, no la
+  // última sesión del día: si la semana pasada se saltó (o se saltó varias
+  // seguidas) se retrocede hasta la que sí tiene series. Las semanas de descarga
+  // ya quedaron fuera en getPreviousExerciseRuns.
   const getPreviousExerciseLog = (exerciseId: string) =>
-    getPreviousExerciseRuns(exerciseId)[0] || null;
+    getPreviousExerciseRuns(exerciseId).find(hasLoggedSets) || null;
 
   // ¿Tiene el log algún peso real (>0)? Las series a peso corporal (weight -1)
   // o vacías no sirven para calcular el peso de descarga.
@@ -762,25 +675,22 @@ export function WorkoutLogScreen({
       const currentSets = exerciseSets[exerciseId] || [];
       const setsToAdd = targetSets - currentSets.length;
 
-      let finalSets = exerciseSets;
       if (setsToAdd > 0) {
         const filledSets = [...currentSets];
         for (let i = 0; i < setsToAdd; i++) {
           filledSets.push({ weight: -1, reps: -1 });
         }
-        finalSets = { ...exerciseSets, [exerciseId]: filledSets };
+        const finalSets = { ...exerciseSets, [exerciseId]: filledSets };
         setExerciseSets(finalSets);
         autoSaveWorkout(finalSets);
       }
 
-      // Editando un entreno de otro día: no hay descanso que lanzar.
-      if (isEditingPastLog) return;
-
-      // Igual que al completar la última serie: si quedan ejercicios por hacer,
-      // el descanso se lanza y se pinta BAJO la tarjeta; si no, se detiene.
-      if (countIncompleteExercises(finalSets) > 0) {
-        void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
-      } else {
+      // Saltar NO es descansar: el ejercicio se cierra porque no se va a hacer
+      // (o no se va a terminar), así que no se lanza descanso ninguno y el que
+      // estuviera corriendo por ESTE ejercicio se detiene. Antes, saltar un
+      // ejercicio sin tocarlo dejaba 2:30 de cuenta atrás por un esfuerzo que
+      // nunca existió.
+      if (activeTimerId === exerciseId) {
         void stopTimer();
       }
     }
@@ -1043,15 +953,13 @@ export function WorkoutLogScreen({
     const routine = state.routines.find((r) => r.id === routineId);
     const day = routine?.days.find((d) => d.id === selectedDay.id);
     if (!routine || !day) return;
-    const updatedDay = {
-      ...day,
-      exercises: day.exercises.map((ex) =>
-        ex.id === exerciseId ? { ...ex, catalogId } : ex
-      ),
-    };
     dispatch({
       type: 'UPDATE_DAY',
-      payload: { routineId, dayId: day.id, day: updatedDay },
+      payload: {
+        routineId,
+        dayId: day.id,
+        day: withExerciseCatalogId(day, exerciseId, catalogId),
+      },
     });
     setToast({
       message: t('GIF asignado al ejercicio'),
@@ -1102,23 +1010,25 @@ export function WorkoutLogScreen({
         accessibilityRole="button"
         accessibilityLabel={t('Saltar descanso')}
       >
+        {/* Disco lleno con la × recortada, EXACTAMENTE la de las series
+            metidas (misma tinta `white`): misma marca de "quitar esto" en toda
+            la tarjeta. */}
         <MaterialCommunityIcons
-          name="close"
-          size={13}
-          color={theme.colors.onGold}
+          name="close-circle"
+          size={TIMER_CLOSE_SIZE}
+          color={theme.colors.white}
         />
       </Pressable>
       <View style={styles.timerRow}>
         <MaterialCommunityIcons
           name="timer-sand"
           size={22}
-          color={theme.colors.onGold}
+          color={theme.colors.accentLine}
         />
-        <Text style={styles.timerText}>
-          {Math.floor(timerSeconds / 60)}:
-          {(timerSeconds % 60).toString().padStart(2, '0')}
-        </Text>
-        {/* Acción VISIBLE (nada escondido tras un gesto): alargar el descanso. */}
+        <Text style={styles.timerText}>{formatRestTime(timerSeconds)}</Text>
+        {/* Acción VISIBLE (nada escondido tras un gesto): alargar el descanso.
+            En oro, el color de lo que se pulsa: es el único control del bloque
+            con el que se hace algo (la × solo cierra). */}
         <Pressable
           style={({ pressed }) => [
             styles.timerActionButton,
@@ -1459,44 +1369,13 @@ export function WorkoutLogScreen({
       {/* Editar el descanso por defecto de la rutina sin salir del registro.
           Mismo modal que RoutineDetailScreen; ajusta el valor de las próximas
           series (no el descanso en curso). */}
-      <AppModal
+      <RestTimerModal
         visible={showTimerModal}
-        onRequestClose={() => setShowTimerModal(false)}
-        title={t('Editar Temporizador')}
-        icon="timer-sand"
-        align="left"
-        footer={
-          <View style={styles.modalButtons}>
-            <Button
-              title={t('Cancelar')}
-              onPress={() => setShowTimerModal(false)}
-              variant="secondary"
-              size="medium"
-              style={styles.modalButton}
-            />
-            <Button
-              title={t('Guardar')}
-              onPress={handleSaveTimer}
-              variant="primary"
-              size="medium"
-              style={styles.modalButton}
-            />
-          </View>
-        }
-      >
-        <Text style={styles.timerFieldLabel}>{t('Duración en segundos:')}</Text>
-        <TextInput
-          style={styles.timerInputBox}
-          keyboardType="number-pad"
-          placeholder="150"
-          placeholderTextColor={theme.colors.textSecondary}
-          value={timerInput}
-          onChangeText={setTimerInput}
-        />
-        <Text style={styles.timerModalFormat}>
-          {t('Equivalente:')} {formatTimerLabel(parseInt(timerInput, 10) || 0)}
-        </Text>
-      </AppModal>
+        value={timerInput}
+        onChangeValue={setTimerInput}
+        onSave={handleSaveTimer}
+        onCancel={() => setShowTimerModal(false)}
+      />
     </View>
   );
 }
@@ -1554,29 +1433,6 @@ const makeStyles = () =>
       lineHeight: 22,
       textAlignVertical: 'top',
     },
-    timerFieldLabel: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.colors.text,
-      marginBottom: 8,
-    },
-    timerInputBox: {
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.sm,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.colors.text,
-      backgroundColor: theme.colors.inputBg,
-    },
-    timerModalFormat: {
-      marginTop: 10,
-      fontSize: 13,
-      color: theme.colors.textSecondary,
-      fontStyle: 'italic',
-    },
     modalButtons: {
       flexDirection: 'row',
       gap: 8,
@@ -1588,15 +1444,18 @@ const makeStyles = () =>
       shadowOpacity: 0,
       elevation: 0,
     },
+    // Mismo patrón que las burbujas de serie (`serieTag` de ExerciseInputField):
+    // relleno del acento al 18% y tinta del acento. Sin sombra: un fondo
+    // translúcido con `elevation` pinta en Android un rectángulo de esquinas
+    // vivas dentro del redondeo (ver checklist de frontend-design.md).
     timerContainer: {
       marginVertical: 16,
       marginHorizontal: 20,
-      backgroundColor: theme.colors.primaryFill,
+      backgroundColor: theme.colors.accentLine + '2E',
       borderRadius: theme.borderRadius.lg,
       paddingVertical: 10,
       paddingHorizontal: 14,
       justifyContent: 'center',
-      ...theme.shadow.card,
     },
     // Fila única del descanso, centrada en el bloque. El hueco lateral es
     // simétrico (no solo a la derecha) para que el centrado sea el real y de
@@ -1612,12 +1471,15 @@ const makeStyles = () =>
     timerText: {
       fontSize: 34,
       fontWeight: '800',
-      color: theme.colors.onGold,
+      color: theme.colors.accentLine,
       fontVariant: ['tabular-nums'],
       // Ancho fijo para 0:00: sin él la fila entera se desplazaba al pasar de
       // 1:00 a 0:59 (los dígitos ya son tabulares, el que sobraba era el hueco).
       marginRight: 2,
     },
+    // "+30s" en oro macizo: es lo ÚNICO que se pulsa dentro del bloque (el
+    // descanso corre solo), así que lleva el color de las acciones y destaca
+    // sobre el relleno gris del acento.
     timerActionButton: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1626,24 +1488,20 @@ const makeStyles = () =>
       paddingVertical: 7,
       paddingHorizontal: 11,
       borderRadius: theme.borderRadius.pill,
-      borderWidth: 1.5,
-      borderColor: theme.colors.onGold,
+      backgroundColor: theme.colors.primaryFill,
     },
-    // Cerrar el descanso: aspa pequeña en la esquina superior derecha del
-    // bloque dorado, en aro para que se lea como botón. Su `hitSlop` le da el
-    // área de toque que el dibujo no tiene.
+    // Cerrar el descanso: aspa en la esquina superior derecha del bloque. Sin
+    // borde ni fondo propios (la forma la pone el icono `close-circle`); su
+    // `hitSlop` le da el área de toque que el dibujo no tiene.
     timerCloseButton: {
       position: 'absolute',
       top: 6,
       right: 6,
       zIndex: 1,
-      width: 22,
-      height: 22,
-      borderRadius: 11,
+      width: TIMER_CLOSE_SIZE,
+      height: TIMER_CLOSE_SIZE,
       alignItems: 'center',
       justifyContent: 'center',
-      borderWidth: 1.5,
-      borderColor: theme.colors.onGold,
     },
     timerActionButtonPressed: {
       opacity: 0.6,

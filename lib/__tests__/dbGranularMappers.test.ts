@@ -53,6 +53,11 @@ describe('routineToRows', () => {
       description: 'desc',
       timer_duration: 90,
       created_at: 100,
+      // Rutina propia: sin procedencia de la comunidad.
+      linked_owner_id: null,
+      source_routine_id: null,
+      source_author: null,
+      source_owner_id: null,
     });
     expect(rows.days.map((d) => [d.id, d.routines_id, d.day_number])).toEqual([
       ['d1', 'r1', 1],

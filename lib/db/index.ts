@@ -146,6 +146,19 @@ function getDb(): Promise<SQLiteDatabase> {
             );
           } catch {}
         }
+        // v5 (comunidad) + v6 (`source_owner_id`, el autor de una copia):
+        // procedencia de una rutina traída del tablón. Solo local: la tabla
+        // espejo de la nube no tiene estas columnas.
+        for (const column of [
+          'linked_owner_id TEXT',
+          'source_routine_id TEXT',
+          'source_author TEXT',
+          'source_owner_id TEXT',
+        ]) {
+          try {
+            await db.execAsync(`ALTER TABLE routines ADD COLUMN ${column}`);
+          } catch {}
+        }
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -331,7 +344,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     );
     await bulkInsert(
       txn,
-      'INSERT INTO routines (id, name, description, timer_duration, created_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO routines (id, name, description, timer_duration, created_at, linked_owner_id, source_routine_id, source_author, source_owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       rows.routines,
       (row) => [
         row.id,
@@ -339,6 +352,10 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.description,
         row.timer_duration,
         row.created_at,
+        row.linked_owner_id,
+        row.source_routine_id,
+        row.source_author,
+        row.source_owner_id,
       ]
     );
     await bulkInsert(
@@ -463,14 +480,18 @@ export async function dbUpsertRoutine(routine: WorkoutRoutine): Promise<void> {
 
   await db.withExclusiveTransactionAsync(async (txn) => {
     await txn.runAsync(
-      `INSERT INTO routines (id, name, description, timer_duration, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO routines (id, name, description, timer_duration, created_at, updated_at, linked_owner_id, source_routine_id, source_author, source_owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          description = excluded.description,
          timer_duration = excluded.timer_duration,
          created_at = excluded.created_at,
-         updated_at = excluded.updated_at`,
+         updated_at = excluded.updated_at,
+         linked_owner_id = excluded.linked_owner_id,
+         source_routine_id = excluded.source_routine_id,
+         source_author = excluded.source_author,
+         source_owner_id = excluded.source_owner_id`,
       [
         routineRow.id,
         routineRow.name,
@@ -478,6 +499,10 @@ export async function dbUpsertRoutine(routine: WorkoutRoutine): Promise<void> {
         routineRow.timer_duration,
         routineRow.created_at,
         Date.now(),
+        routineRow.linked_owner_id,
+        routineRow.source_routine_id,
+        routineRow.source_author,
+        routineRow.source_owner_id,
       ]
     );
 
@@ -509,13 +534,19 @@ export async function dbUpsertRoutine(routine: WorkoutRoutine): Promise<void> {
       await upsertDayWithExercises(txn, routine.id, day);
     }
 
-    await enqueueOutbox(
-      txn,
-      'routine',
-      routine.id,
-      'upsert',
-      JSON.stringify(routine)
-    );
+    // Una rutina ENLAZADA es de otra persona: sus ids ya existen en la nube a
+    // nombre de su dueño, así que subirla como propia chocaría contra la RLS.
+    // Vive solo en este dispositivo (los entrenamientos que registres en ella
+    // sí se sincronizan, son tuyos).
+    if (!routine.linkedOwnerId) {
+      await enqueueOutbox(
+        txn,
+        'routine',
+        routine.id,
+        'upsert',
+        JSON.stringify(routine)
+      );
+    }
   });
 }
 

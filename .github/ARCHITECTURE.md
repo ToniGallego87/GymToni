@@ -95,7 +95,8 @@ lib/                    → Lógica compartida
   ├── cloud/            → Nube (opcional): auth.ts (sesión Supabase), backup.ts
   │                       (copia/restauración completa), sync.ts (motor push/pull
   │                       incremental sobre sync_outbox), social.ts (perfiles,
-  │                       seguir, tablón de rutinas públicas)
+  │                       seguir, tablón de rutinas públicas, likes, comentarios
+  │                       y reportes)
   ├── i18n.ts           → Idioma en caliente: t(), dateLocale, decimalSeparator y
   │                       el formato de pintado de números (localizeDecimals, fmtNum)
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
@@ -107,19 +108,34 @@ lib/                    → Lógica compartida
   │                       parseo de texto importado). Conserva ids: el historial los referencia
   ├── exerciseProgress.ts → Historial y récords de UN ejercicio (agrupa por NOMBRE:
   │                       el mismo ejercicio tiene otro id en cada rutina)
-  ├── routines.ts       → Duplicar una rutina (ids nuevos en rutina/días/ejercicios)
+  ├── routines.ts       → Vida de una rutina fuera del reducer: duplicar (ids nuevos
+  │                       en rutina/días/ejercicios), adoptar una pública por
+  │                       referencia (linkPublicRoutine), intensidad por series
+  │                       planificadas, situación (activa/preparada/cerrada) y orden
+  │                       de la lista de Rutinas
+  ├── moderation.ts     → Lo reportado se oculta en local (AsyncStorage) sin esperar
+  │                       a que nadie revise el parte; lo filtran tablón e hilos
   ├── cardio.ts         → Cardio como experiencia propia: sesiones, semanas ISO, kcal
   ├── achievements.ts   → Logros semanales (récords, rachas)
   ├── routineShare.ts   → Compartir rutina (QR / texto plano)
   ├── imageShare.ts     → Compartir imagen de logros
   ├── videoExport.ts    → Vídeo de logros (módulo nativo video-encoder)
+  ├── restTimerStore.ts → Descanso en curso publicado fuera de la pantalla de
+  │                       registro (lo lee la ventanita flotante en la raíz)
+  ├── pipTimer.ts       → Ventana flotante del descanso (módulo nativo pip-timer,
+  │                       Picture-in-Picture de Android; no-op en iOS/web)
   ├── layoutAnimation.ts→ animateLayout compartido (habilita LayoutAnimation en Android)
-  ├── utils.ts          → Utilidades genéricas (generateId, formatDate, getToday)
+  ├── utils.ts          → Utilidades genéricas (generateId, formatDate, getToday,
+  │                       findDayInRoutines, formatRestTime y el formato único del
+  │                       indicador de mejora: getImprovementDisplay/Color)
   └── theme.ts          → Colores, degradados (gradients), tipografía, spacing
 lib/__tests__/          → Tests Jest de la lógica pura (npm test)
 types/                  → Definiciones TypeScript centralizadas
 data/                   → Seed data (rutinas iniciales + logs demo) y changelog.ts
                           (novedades por versión para el popup WhatsNewModal)
+modules/                → Módulos nativos locales (Kotlin/Swift, autolinked por Expo)
+  ├── video-encoder/    → Codifica los fotogramas del vídeo de logros a MP4
+  └── pip-timer/        → Ventana flotante del descanso (Picture-in-Picture)
 ```
 
 ## Pantallas y navegación
@@ -139,13 +155,14 @@ Subpantallas (setScreen; se renderizan opacas encima del pager)
     ├─→ NewRoutineScreen → QRScannerScreen (importar por QR/texto)
     ├─→ WeekAchievementScreen (imagen/vídeo de logros)
     └─→ DetailScreen (ver log; recuerda origen home/calendar/cardio para volver)
-  ProfileScreen (resumen + menú + ajustes al pie: tema, idioma, novedades)
+  ProfileScreen (identidad pública + números + menú)
     ├─→ RoutineSelectorScreen · ExerciseProgressScreen
-    └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
+    ├─→ ProfileEditScreen (perfil público propio: foto, bio, público/privado)
+    └─→ SettingsScreen (tema, idioma, novedades)
+          └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
   CommunityScreen (tablón de rutinas públicas)
     ├─→ PublicRoutineScreen (rutina ajena en SOLO lectura + "Añadir a mis rutinas")
     ├─→ UserProfileScreen (perfil ajeno + sus rutinas públicas) →  PublicRoutineScreen
-    ├─→ ProfileEditScreen (perfil público propio: foto, bio, público/privado)
     └─→ FollowingScreen (a quién sigo / quién me sigue)
 
 FloatingPrimaryNav = barra inferior fija (las 5 pestañas); cardio se oculta si no
@@ -176,6 +193,37 @@ el dedo, estilo Telegram) o tocando la barra.
 - **Subpantallas:** se renderizan después del pager (encima); opacas a pantalla
   completa, lo tapan. El swipe se desactiva fuera de pestañas (`scrollEnabled`).
 
+### Ventana flotante del descanso (Picture-in-Picture)
+
+Con un descanso corriendo, minimizar la app deja la cuenta atrás en una ventanita
+movible encima de lo que estés usando, igual que YouTube con el vídeo. Es el
+**PiP nativo de Android**, no una ventana dibujada por la app.
+
+- **Módulo nativo:** `modules/pip-timer` (`PipTimerModule` + `PipTimerController`).
+  El singleton `PipTimerController` es el puente con `MainActivity`: la Activity no
+  puede depender del módulo por gradle, pero los módulos locales se enlazan con
+  `api`, así que sus clases sí son visibles desde la app.
+- **Quién pide la ventana:** en Android 12+ el sistema entra solo
+  (`setAutoEnterEnabled`); en 8.0-11 hay que pedirlo en `onUserLeaveHint()`
+  (`MainActivity`), el último aviso que llega mientras la Activity sigue visible.
+  Cuando JS se entera de que la app pasa a segundo plano ya es tarde.
+- **Quién enciende el interruptor:** `WorkoutLogScreen` llama a
+  `setPipAutoEnter(hayDescanso)`, así que minimizar sin cuenta atrás no abre nada.
+- **Qué se pinta dentro:** el árbol de React sigue montado y solo se **tapa** con
+  `PipRestTimer` (`absoluteFill` en la raíz, `app/App.tsx`) mientras dura el modo
+  PiP. Nada se desmonta: al volver a pantalla completa el entreno está donde se
+  dejó. El dato viaja por `lib/restTimerStore.ts` (marca de fin absoluta, no
+  segundos: quien pinta resta contra el reloj y no hay dos cuentas que
+  desincronizar).
+- **Sin controles:** el sistema no entrega los toques a la ventana (tocarla
+  restaura la app), así que dentro solo va el dato, tan grande como quepa.
+- **Ojo, RN se pausa en PiP:** entrar en la ventanita PAUSA la Activity, y con
+  el host pausado React Native corta el volcado de cambios a las vistas
+  (`UIManagerModule`) **y** los timers de JS (`JavaTimerManager`) — el
+  temporizador se quedaba congelado. `MainActivity` le devuelve a RN el estado
+  "resumido" mientras dura la ventanita y se lo quita en `onStop()`. Cualquier
+  cosa que se pinte en PiP depende de esa muleta.
+
 ## Sistema visual (Glass UI)
 
 - Top bar fija con efecto blur (`GlassTopBar`); el título estándar se declara con
@@ -187,12 +235,16 @@ el dedo, estilo Telegram) o tocando la barra.
 - Colores y degradados centralizados en `lib/theme.ts` (`theme.colors`,
   `theme.gradients`); ningún hex suelto en pantallas
 - Modal único: `AppModal` (overlay, tarjeta, título con icono, mensaje y pie).
-  El cuerpo y los botones los pone quien lo usa, siempre con `Button`.
-  `ConfirmModal` es su especialización para confirmar/cancelar
+  El cuerpo y los botones los pone quien lo usa, siempre con `Button`. Sus
+  especializaciones: `ConfirmModal` (confirmar/cancelar), `RestTimerModal` (el
+  descanso por defecto de la rutina, que abren la ficha y el registro) y
+  `ReportModal` (reportar rutina, perfil o comentario)
 - Gráfica de barras única: `BarChart` (progreso semanal de Inicio y métricas
   mensuales de Cardio); cada pantalla aporta sus barras ya coloreadas y su dominio
 - Filtro segmentado único: `SegmentedFilter` (filtro por día de Inicio, métrica
-  de Cardio y, en Comunidad, origen del tablón + intensidad de la rutina)
+  de Cardio, orden de Progreso por ejercicio y, en Comunidad, el raíl de origen
+  del tablón). La intensidad de Comunidad **no** lo usa: es un segundo eje sobre
+  la misma lista y va en chips de filtro, para no apilar dos raíles gemelos
 - Foto de perfil única: `Avatar` (tablón, perfil ajeno, perfil propio y listas de
   seguir); solo cambia el diámetro
 - Popup de novedades tras actualizar: `WhatsNewModal` (lee `data/changelog.ts`,

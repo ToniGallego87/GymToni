@@ -36,6 +36,7 @@ import {
   WeightSegment,
 } from '@lib/cardio';
 import { exerciseKey } from '@lib/exerciseProgress';
+import { withExerciseCatalogId } from '@lib/routines';
 import { getCardioWeightHistory } from '@lib/storage';
 import {
   combineDateWithTime,
@@ -146,15 +147,13 @@ export function DetailScreen({
     const routine = state.routines.find((r) => r.id === log.routineId);
     const targetDay = routine?.days.find((d) => d.id === log.dayId);
     if (!routine || !targetDay) return;
-    const updatedDay = {
-      ...targetDay,
-      exercises: targetDay.exercises.map((ex) =>
-        ex.id === exerciseId ? { ...ex, catalogId } : ex
-      ),
-    };
     dispatch({
       type: 'UPDATE_DAY',
-      payload: { routineId: routine.id, dayId: targetDay.id, day: updatedDay },
+      payload: {
+        routineId: routine.id,
+        dayId: targetDay.id,
+        day: withExerciseCatalogId(targetDay, exerciseId, catalogId),
+      },
     });
   };
 
@@ -315,6 +314,73 @@ export function DetailScreen({
     return Math.round((Math.max(...stamps) - Math.min(...stamps)) / 60000);
   })();
 
+  // Celdas de la tira-resumen. Se arma como lista para que la tira exista
+  // SIEMPRE que haya algo que resumir: antes estaba condicionada a que hubiera
+  // ejercicios de fuerza, así que una sesión de solo cardio —la más corta de
+  // leer, y donde una línea bastaba— se quedaba sin ningún total, y una sesión
+  // mixta resumía la fuerza e ignoraba el cardio del pie.
+  const summaryItems: {
+    key: string;
+    value: string;
+    label: string;
+    color?: string;
+  }[] = [];
+
+  if (exerciseCount > 0) {
+    summaryItems.push({
+      key: 'exercises',
+      value: String(exerciseCount),
+      label: t('Ejercicios'),
+    });
+    if (sessionImprovement) {
+      const { symbol, display, kind } =
+        getImprovementDisplay(sessionImprovement);
+      summaryItems.push({
+        key: 'improvement',
+        value: `${symbol} ${display}%`,
+        label: t('Progreso'),
+        color: getImprovementColor(kind),
+      });
+    }
+    if (workoutMinutes > 0) {
+      summaryItems.push({
+        key: 'minutes',
+        value: String(workoutMinutes),
+        label: 'min',
+      });
+    }
+    // Con fuerza, del cardio solo entran las kcal: los minutos ya los ocupa la
+    // duración del entreno y dos celdas "min" se leerían como un error.
+    if (cardioSession && cardioSession.totalKcal > 0) {
+      summaryItems.push({
+        key: 'kcal',
+        value: String(Math.round(cardioSession.totalKcal)),
+        label: 'kcal',
+      });
+    }
+  } else if (cardioSession) {
+    // Solo cardio: la tira ES el total del día.
+    summaryItems.push({
+      key: 'cardio-minutes',
+      value: String(Math.round(cardioSession.totalMinutes)),
+      label: 'min',
+    });
+    if (cardioSession.totalKcal > 0) {
+      summaryItems.push({
+        key: 'kcal',
+        value: String(Math.round(cardioSession.totalKcal)),
+        label: 'kcal',
+      });
+    }
+    if (cardioSession.totalKm > 0) {
+      summaryItems.push({
+        key: 'km',
+        value: fmtNum(cardioSession.totalKm),
+        label: 'km',
+      });
+    }
+  }
+
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
     exerciseId: string,
@@ -386,31 +452,22 @@ export function DetailScreen({
           </View>
         )}
 
-        {exerciseCount > 0 && (
+        {summaryItems.length > 0 && (
           <View style={styles.summaryCard}>
             <GradientFill accent={dayAccent} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{exerciseCount}</Text>
-              <Text style={styles.summaryLabel}>{t('Ejercicios')}</Text>
-            </View>
-            {sessionImprovement &&
-              (() => {
-                const fmt = formatImprovementDisplay(sessionImprovement);
-                return (
-                  <View style={styles.summaryItem}>
-                    <Text style={[styles.summaryValue, { color: fmt.color }]}>
-                      {fmt.symbol} {fmt.display}%
-                    </Text>
-                    <Text style={styles.summaryLabel}>{t('Progreso')}</Text>
-                  </View>
-                );
-              })()}
-            {workoutMinutes > 0 && (
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{workoutMinutes}</Text>
-                <Text style={styles.summaryLabel}>min</Text>
+            {summaryItems.map((item) => (
+              <View key={item.key} style={styles.summaryItem}>
+                <Text
+                  style={[
+                    styles.summaryValue,
+                    !!item.color && { color: item.color },
+                  ]}
+                >
+                  {item.value}
+                </Text>
+                <Text style={styles.summaryLabel}>{item.label}</Text>
               </View>
-            )}
+            ))}
           </View>
         )}
 

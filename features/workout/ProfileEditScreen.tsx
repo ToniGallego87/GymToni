@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
+import { View, Text, StyleSheet, TextInput } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -22,29 +22,17 @@ import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
 import { loadMyProfile } from '@hooks/useMyProfile';
-import {
-  getProfile,
-  updateProfile,
-  uploadAvatar,
-  getFollowingCount,
-  getFollowerCount,
-} from '@lib/cloud/social';
+import { getProfile, updateProfile, uploadAvatar } from '@lib/cloud/social';
 
 interface ProfileEditScreenProps {
   onBack: () => void;
-  onOpenFollowing?: () => void;
-  onOpenFollowers?: () => void;
 }
 
-// Edición del perfil público (Fase 4): foto, nombre visible, bio, visibilidad y
-// contadores de seguir/seguidores. Se abre desde COMUNIDAD, que es donde ese
-// perfil se usa; la gestión de la cuenta y las copias vive aparte, en "Datos y
-// nube".
-export function ProfileEditScreen({
-  onBack,
-  onOpenFollowing,
-  onOpenFollowers,
-}: ProfileEditScreenProps) {
+// Edición del perfil público (Fase 4): foto, nombre visible, bio y visibilidad.
+// Se abre desde PERFIL, que es donde uno se ve a sí mismo; la gestión de la
+// cuenta y las copias vive aparte, en "Datos y nube", y los contadores de
+// seguidores/seguidos están en tu tarjeta de Comunidad, que es donde se usan.
+export function ProfileEditScreen({ onBack }: ProfileEditScreenProps) {
   const insets = useSafeAreaInsets();
   const { user } = useSession();
 
@@ -54,8 +42,6 @@ export function ProfileEditScreen({
   const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
   const [pickingAvatar, setPickingAvatar] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
-  const [followingCount, setFollowingCount] = useState(0);
-  const [followersCount, setFollowersCount] = useState(0);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -81,13 +67,6 @@ export function ProfileEditScreen({
         setProfileBio(p.bio ?? '');
         setProfilePublic(p.is_public);
         setProfileAvatar(p.avatar_url ?? null);
-      })
-      .catch(() => {});
-    Promise.all([getFollowingCount(user.id), getFollowerCount(user.id)])
-      .then(([fg, fr]) => {
-        if (!active) return;
-        setFollowingCount(fg);
-        setFollowersCount(fr);
       })
       .catch(() => {});
     return () => {
@@ -119,15 +98,23 @@ export function ProfileEditScreen({
       );
       if (!manip.base64) return;
       const dataUri = `data:image/jpeg;base64,${manip.base64}`;
-      if (user) {
-        try {
-          setProfileAvatar(await uploadAvatar(user.id, manip.base64));
-        } catch {
-          setProfileAvatar(dataUri);
-        }
-      } else {
+      if (!user) {
         setProfileAvatar(dataUri);
+        return;
       }
+      let avatar = dataUri;
+      try {
+        avatar = await uploadAvatar(user.id, manip.base64);
+      } catch {
+        avatar = dataUri;
+      }
+      setProfileAvatar(avatar);
+      // Elegir la foto YA es la confirmación: has recortado tu cara y le has
+      // dado a aceptar, no hay nada más que decidir. Se guarda sola (el resto
+      // del formulario viaja con ella, tal y como esté) en vez de dejar el
+      // avatar nuevo colgando de un "Guardar perfil" fácil de olvidar.
+      await persistProfile(avatar);
+      notify(t('Foto de perfil actualizada'), 'success');
     } catch (e) {
       notify((e as Error).message, 'error');
     } finally {
@@ -135,19 +122,26 @@ export function ProfileEditScreen({
     }
   };
 
+  // Escritura del perfil. El avatar llega por parámetro porque quien acaba de
+  // elegir foto todavía no lo tiene en el estado del render en curso.
+  const persistProfile = async (avatarUrl: string | null) => {
+    if (!user) return;
+    await updateProfile(user.id, {
+      display_name: profileName.trim() || null,
+      bio: profileBio.trim() || null,
+      is_public: profilePublic,
+      avatar_url: avatarUrl,
+    });
+    // La barra de navegación y Perfil leen el mismo store: recargarlo aquí
+    // es lo que hace que la foto nueva aparezca sin reiniciar la app.
+    await loadMyProfile(user.id, true);
+  };
+
   const handleSaveProfile = async () => {
     if (!user) return;
     setSavingProfile(true);
     try {
-      await updateProfile(user.id, {
-        display_name: profileName.trim() || null,
-        bio: profileBio.trim() || null,
-        is_public: profilePublic,
-        avatar_url: profileAvatar,
-      });
-      // La barra de navegación y Perfil leen el mismo store: recargarlo aquí
-      // es lo que hace que la foto nueva aparezca sin reiniciar la app.
-      await loadMyProfile(user.id, true);
+      await persistProfile(profileAvatar);
       notify(t('Perfil guardado'), 'success');
     } catch (e) {
       notify((e as Error).message, 'error');
@@ -180,33 +174,9 @@ export function ProfileEditScreen({
           <Text style={styles.hint}>
             {t('Así te ven en la comunidad cuando publicas una rutina.')}
           </Text>
-          <View style={styles.countsRow}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.countItem,
-                pressed && styles.countPressed,
-              ]}
-              onPress={onOpenFollowing}
-              disabled={!onOpenFollowing}
-            >
-              <Text style={styles.countValue}>{followingCount}</Text>
-              <Text style={styles.countLabel}>{t('Siguiendo')}</Text>
-            </Pressable>
-            <View style={styles.countDivider} />
-            <Pressable
-              style={({ pressed }) => [
-                styles.countItem,
-                pressed && styles.countPressed,
-              ]}
-              onPress={onOpenFollowers}
-              disabled={!onOpenFollowers}
-            >
-              <Text style={styles.countValue}>{followersCount}</Text>
-              <Text style={styles.countLabel}>
-                {followersCount === 1 ? t('Seguidor') : t('Seguidores')}
-              </Text>
-            </Pressable>
-          </View>
+          {/* Los contadores de seguidores/siguiendo ya NO viven aquí: esto es
+              un formulario de edición, y verse a uno mismo se hace en tu
+              tarjeta de Comunidad, que además lleva a las dos listas. */}
           <View style={styles.avatarRow}>
             <Avatar uri={profileAvatar} size={60} />
             <Button
@@ -296,27 +266,6 @@ const makeStyles = () =>
       gap: 12,
     },
     hint: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
-    countsRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: theme.colors.surfaceAlt,
-      borderRadius: theme.borderRadius.md,
-      paddingVertical: 10,
-    },
-    countItem: { flex: 1, alignItems: 'center' },
-    countPressed: { opacity: 0.6 },
-    countValue: {
-      color: theme.colors.text,
-      fontSize: 20,
-      fontWeight: '800',
-      lineHeight: 24,
-    },
-    countLabel: { color: theme.colors.textMuted, fontSize: 12, marginTop: 2 },
-    countDivider: {
-      width: 1,
-      height: 28,
-      backgroundColor: theme.colors.border,
-    },
     avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     avatarButton: { flex: 1 },
     input: {

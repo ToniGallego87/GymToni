@@ -31,16 +31,25 @@ export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export type { InvalidAddReason } from './ExerciseInputField';
 export { ExerciseFormRow, ExerciseSummaryRow } from './ExerciseFormRow';
-// ExercisePickerModal / GifViewerModal / ExerciseGifButton no se re-exportan:
-// son piezas internas que solo consumen otros componentes por ruta relativa.
+// ExercisePickerModal / GifViewerModal no se re-exportan: son piezas internas
+// que solo consumen otros componentes por ruta relativa. ExerciseGifButton sí,
+// desde que también lo usan pantallas (Progreso por ejercicio) y no solo
+// componentes.
+export { ExerciseGifButton } from './ExerciseGifButton';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
+export { SaveRoutineButton, RoutineOriginPill } from './SaveRoutineButton';
+export { RoutineIntensityPill } from './RoutineIntensityPill';
 export { WhatsNewModal } from './WhatsNewModal';
 export { UpdateAvailableModal } from './UpdateAvailableModal';
 export { ThemeRevealOverlay } from './ThemeRevealOverlay';
+export { PipRestTimer } from './PipRestTimer';
+export { RestTimerBar, REST_TIMER_BAR_HEIGHT } from './RestTimerBar';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';
+export { RestTimerModal } from './RestTimerModal';
+export { ReportModal } from './ReportModal';
 export { DatePickerModal } from './DatePickerModal';
 export { GlassTopBar, GLASS_TOP_BAR_BASE_HEIGHT } from './GlassTopBar';
 export {
@@ -49,12 +58,15 @@ export {
   FLOATING_BACK_BUTTON_MARGIN,
   getFloatingBackButtonMetrics,
 } from './FloatingBackButton';
-export { getFloatingPrimaryNavMetrics } from './FloatingGlassBar';
+export {
+  getFloatingPrimaryNavMetrics,
+  FLOATING_GLASS_BAR_HEIGHT,
+} from './FloatingGlassBar';
 export { FloatingPrimaryNav } from './FloatingPrimaryNav';
 export { StretchScrollView } from './StretchScrollView';
 export { LoadMoreButton } from './LoadMoreButton';
 export { Collapsible } from './Collapsible';
-export { SegmentedFilter } from './SegmentedFilter';
+export { SegmentedFilter, SEGMENTED_FILTER_CHART_GAP } from './SegmentedFilter';
 export type { SegmentedOption } from './SegmentedFilter';
 export { OptionToggle } from './OptionToggle';
 export type { OptionToggleOption } from './OptionToggle';

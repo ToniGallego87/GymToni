@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -11,6 +12,8 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  ReportModal,
+  SaveRoutineButton,
   Toast,
   StretchScrollView,
 } from '@components';
@@ -18,6 +21,8 @@ import { useWorkout } from '@hooks/useWorkout';
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
+import { findSavedRoutine } from '@lib/routines';
+import { hideId } from '@lib/moderation';
 import { useSession } from '@lib/cloud/auth';
 import {
   getProfile,
@@ -26,7 +31,8 @@ import {
   isFollowing,
   followUser,
   unfollowUser,
-  cloneablePublicRoutine,
+  linkablePublicRoutine,
+  reportContent,
   Profile,
   PublicRoutineSummary,
 } from '@lib/cloud/social';
@@ -37,15 +43,18 @@ interface UserProfileScreenProps {
   onBack: () => void;
   // Abre una rutina pública en solo lectura (mismo destino que el tablón).
   onOpenRoutine?: (routineId: string, name: string, authorName: string) => void;
+  // Pantalla de cuenta (Datos y nube): destino del aviso de "inicia sesión".
+  onOpenAccount?: () => void;
 }
 
 // Perfil público de otro usuario (Fase 4): nombre, bio, seguidores, botón de
-// seguir y sus rutinas públicas (clonables). Solo lectura de lo ajeno.
+// seguir y sus rutinas públicas (adoptables). Solo lectura de lo ajeno.
 export function UserProfileScreen({
   userId,
   name,
   onBack,
   onOpenRoutine,
+  onOpenAccount,
 }: UserProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
@@ -58,10 +67,14 @@ export function UserProfileScreen({
   const [following, setFollowing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busyFollow, setBusyFollow] = useState(false);
-  const [cloningId, setCloningId] = useState<string | null>(null);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  // Reportar el perfil: null = cerrado, 'open' = preguntando, 'busy' = enviando.
+  const [reporting, setReporting] = useState<'open' | 'busy' | null>(null);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
+    // Aviso con salida: "inicia sesión para…" lleva a la pantalla de cuenta.
+    action?: 'sign-in';
   } | null>(null);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
@@ -73,6 +86,10 @@ export function UserProfileScreen({
 
   const notify = (message: string, type: 'success' | 'error') =>
     setToast({ message, type });
+
+  // El aviso de sesión no se queda en el reproche: lleva a la cuenta.
+  const notifySignIn = (message: string) =>
+    setToast({ message, type: 'error', action: 'sign-in' });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,7 +119,7 @@ export function UserProfileScreen({
 
   const handleToggleFollow = async () => {
     if (!user) {
-      notify(t('Inicia sesión para seguir'), 'error');
+      notifySignIn(t('Inicia sesión para seguir'));
       return;
     }
     const next = !following;
@@ -121,27 +138,48 @@ export function UserProfileScreen({
     }
   };
 
-  const handleClone = async (routineId: string) => {
-    setCloningId(routineId);
+  const displayName = profile?.display_name || name;
+
+  const handleReport = async (reason: string) => {
+    if (!user) {
+      setReporting(null);
+      notifySignIn(t('Inicia sesión para reportar'));
+      return;
+    }
+    setReporting('busy');
     try {
-      const clone = await cloneablePublicRoutine(
+      await reportContent(user.id, 'profile', userId, reason);
+      await hideId(userId);
+      notify(t('Gracias, lo revisaremos'), 'success');
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setReporting(null);
+    }
+  };
+
+  // Añadir enlaza la rutina de esta persona (no la copia): se entrena tal cual
+  // y sigue siendo suya. La copia se saca luego, al querer editarla.
+  const handleSave = async (routineId: string) => {
+    setSavingId(routineId);
+    try {
+      const linked = await linkablePublicRoutine(
         routineId,
-        state.routines.map((r) => r.name)
+        userId,
+        displayName
       );
-      if (!clone) {
+      if (!linked) {
         notify(t('Esta rutina ya no está disponible'), 'error');
         return;
       }
-      dispatch({ type: 'ADD_ROUTINE', payload: clone });
+      dispatch({ type: 'ADD_ROUTINE', payload: linked });
       notify(t('Añadida a tus rutinas'), 'success');
     } catch (e) {
       notify((e as Error).message, 'error');
     } finally {
-      setCloningId(null);
+      setSavingId(null);
     }
   };
-
-  const displayName = profile?.display_name || name;
 
   return (
     <View style={styles.container}>
@@ -218,28 +256,55 @@ export function UserProfileScreen({
               accessibilityLabel={t('Ver rutina')}
             >
               <GradientFill accent={theme.colors.primaryLine} />
-              <Text style={styles.routineName} numberOfLines={1}>
-                {r.name}
-              </Text>
+              {/* Guardar es una píldora al lado del nombre, no un CTA a fila
+                  completa: así caben más rutinas de un vistazo. */}
+              <View style={styles.routineHeader}>
+                <Text style={styles.routineName} numberOfLines={1}>
+                  {r.name}
+                </Text>
+                <SaveRoutineButton
+                  saved={!!findSavedRoutine(state.routines, r.id)}
+                  busy={savingId === r.id}
+                  onPress={() => handleSave(r.id)}
+                />
+              </View>
               {!!r.description && (
                 <Text style={styles.description} numberOfLines={2}>
                   {r.description}
                 </Text>
               )}
-              <Button
-                title={
-                  cloningId === r.id
-                    ? t('Añadiendo…')
-                    : t('Añadir a mis rutinas')
-                }
-                onPress={() => handleClone(r.id)}
-                variant="secondary"
-                disabled={cloningId !== null}
-              />
             </Pressable>
           ))
         )}
+        {/* Reportar el perfil: discreto pero visible, al pie. Es contenido de
+            otra persona (nombre, bio) y tiene que haber una salida. */}
+        {!isSelf && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.reportRow,
+              pressed && styles.cardPressed,
+            ]}
+            onPress={() => setReporting('open')}
+            accessibilityRole="button"
+            accessibilityLabel={t('Reportar este perfil')}
+          >
+            <MaterialCommunityIcons
+              name="flag-outline"
+              size={16}
+              color={theme.colors.textMuted}
+            />
+            <Text style={styles.reportText}>{t('Reportar este perfil')}</Text>
+          </Pressable>
+        )}
       </StretchScrollView>
+
+      <ReportModal
+        visible={reporting !== null}
+        what={t('este perfil')}
+        busy={reporting === 'busy'}
+        onCancel={() => setReporting(null)}
+        onConfirm={handleReport}
+      />
 
       <GlassTopBar
         title={displayName}
@@ -253,6 +318,16 @@ export function UserProfileScreen({
         <Toast
           message={toast.message}
           type={toast.type}
+          actionLabel={
+            toast.action === 'sign-in' && onOpenAccount
+              ? t('Iniciar sesión')
+              : undefined
+          }
+          onAction={
+            toast.action === 'sign-in' && onOpenAccount
+              ? onOpenAccount
+              : undefined
+          }
           onDismiss={() => setToast(null)}
         />
       )}
@@ -299,7 +374,14 @@ const makeStyles = () =>
       fontWeight: '700',
       marginTop: 4,
     },
+    routineHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
     routineName: {
+      flex: 1,
+      minWidth: 0,
       color: theme.colors.text,
       fontSize: 18,
       fontWeight: '800',
@@ -311,6 +393,15 @@ const makeStyles = () =>
       lineHeight: 19,
     },
     muted: { color: theme.colors.textMuted, fontSize: 14 },
+    // Reportar: visible pero sin peso, al pie del todo.
+    reportRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 12,
+    },
+    reportText: { color: theme.colors.textMuted, fontSize: 13 },
   });
 
 let styles = makeStyles();

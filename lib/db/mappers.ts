@@ -26,6 +26,12 @@ export interface RoutineRow {
   description: string | null;
   timer_duration: number | null;
   created_at: number;
+  // Procedencia (solo local, ver schema.ts): de quién es la rutina enlazada y
+  // de qué rutina pública salió.
+  linked_owner_id: string | null;
+  source_routine_id: string | null;
+  source_author: string | null;
+  source_owner_id: string | null;
 }
 
 export interface WorkoutDayRow {
@@ -161,6 +167,10 @@ export function routineToRows(routine: WorkoutRoutine): RoutineRows {
       description: routine.description ?? null,
       timer_duration: routine.timerDuration ?? null,
       created_at: routine.createdAt,
+      linked_owner_id: routine.linkedOwnerId ?? null,
+      source_routine_id: routine.sourceRoutineId ?? null,
+      source_author: routine.sourceAuthor ?? null,
+      source_owner_id: routine.sourceOwnerId ?? null,
     },
     days,
     exercises,
@@ -365,6 +375,10 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       days: daysByRoutine.get(row.id) ?? [],
       createdAt: row.created_at,
       timerDuration: row.timer_duration ?? undefined,
+      linkedOwnerId: row.linked_owner_id ?? undefined,
+      sourceRoutineId: row.source_routine_id ?? undefined,
+      sourceAuthor: row.source_author ?? undefined,
+      sourceOwnerId: row.source_owner_id ?? undefined,
     }));
 
   const setsByExerciseLog = new Map<string, LogSetRow[]>();

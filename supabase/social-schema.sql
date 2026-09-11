@@ -126,3 +126,75 @@ returns table (
   order by likes desc, r.updated_at desc
   limit limit_count;
 $$;
+
+-- ─────────────────────────── routine_comments ───────────────────────────
+-- Hilo de comentarios de una rutina pública. Es texto libre escrito por
+-- terceros, así que la RLS es la que manda:
+--   · LEER   → si la rutina es pública (o el comentario es tuyo).
+--   · ESCRIBIR → solo con sesión, solo en tu nombre y solo en rutinas públicas.
+--   · BORRAR → el autor del comentario o el DUEÑO de la rutina (moderación
+--     mínima del propio hilo, mientras no exista la tabla `reports`).
+create table if not exists public.routine_comments (
+  id         uuid primary key default gen_random_uuid(),
+  routine_id text not null references public.routines(id) on delete cascade,
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  body       text not null check (char_length(btrim(body)) between 1 and 500),
+  created_at bigint not null default 0
+);
+create index if not exists idx_comments_routine
+  on public.routine_comments(routine_id, created_at);
+
+alter table public.routine_comments enable row level security;
+
+drop policy if exists "read public comments" on public.routine_comments;
+create policy "read public comments" on public.routine_comments
+  for select using (
+    user_id = auth.uid() or routine_id in (
+      select id from public.routines where is_public = true and deleted = false
+    )
+  );
+
+drop policy if exists "insert own comments" on public.routine_comments;
+create policy "insert own comments" on public.routine_comments
+  for insert with check (
+    user_id = auth.uid() and routine_id in (
+      select id from public.routines where is_public = true and deleted = false
+    )
+  );
+
+drop policy if exists "delete own or owned comments" on public.routine_comments;
+create policy "delete own or owned comments" on public.routine_comments
+  for delete using (
+    user_id = auth.uid() or routine_id in (
+      select id from public.routines where user_id = auth.uid()
+    )
+  );
+
+-- ─────────────────────────── reports ───────────────────────────
+-- Moderación mínima: cualquiera con sesión puede reportar una rutina pública,
+-- un perfil o un comentario. Los partes se revisan desde el panel de Supabase
+-- (la service key salta la RLS); la app solo escribe y ve los suyos.
+--
+-- Además, quien reporta deja de ver ese contenido EN SU DISPOSITIVO
+-- (lib/moderation.ts): no hace falta esperar a que alguien revise el parte para
+-- quitarse de delante lo que te ha molestado.
+create table if not exists public.reports (
+  id          uuid primary key default gen_random_uuid(),
+  reporter_id uuid not null references auth.users(id) on delete cascade,
+  target_type text not null check (target_type in ('routine', 'profile', 'comment')),
+  target_id   text not null,
+  reason      text,
+  created_at  bigint not null default 0
+);
+create index if not exists idx_reports_target
+  on public.reports(target_type, target_id);
+
+alter table public.reports enable row level security;
+
+drop policy if exists "insert own reports" on public.reports;
+create policy "insert own reports" on public.reports
+  for insert with check (reporter_id = auth.uid());
+
+drop policy if exists "read own reports" on public.reports;
+create policy "read own reports" on public.reports
+  for select using (reporter_id = auth.uid());

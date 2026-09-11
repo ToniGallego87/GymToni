@@ -2,6 +2,7 @@ export { WorkoutProvider, WorkoutContext } from './WorkoutContext';
 export { useWorkout } from '@hooks/useWorkout';
 export { HomeScreen } from './HomeScreen';
 export { CardioScreen } from './CardioScreen';
+export { BodyWeightScreen } from './BodyWeightScreen';
 export { WorkoutLogScreen } from './WorkoutLogScreen';
 export { DetailScreen } from './DetailScreen';
 export { ExerciseProgressScreen } from './ExerciseProgressScreen';

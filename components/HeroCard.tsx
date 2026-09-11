@@ -25,6 +25,15 @@ interface HeroCardProps {
   title: string;
   titleIcon?: string;
   subtitle?: string;
+  /**
+   * Convierte el subtítulo en un botón propio (con su chevron), independiente
+   * del toque de la tarjeta. Lo usa Inicio: la hero entra al día que toca y el
+   * subtítulo —que es quien lo nombra— abre "Elige la sesión" para coger otro.
+   * Sin esto el subtítulo es texto y solo manda el `onPress` de la tarjeta.
+   */
+  onSubtitlePress?: () => void;
+  /** Rótulo accesible del subtítulo pulsable (por defecto, su propio texto). */
+  subtitleAccessibilityLabel?: string;
   onPress: () => void;
   // Dirección de entrada del contenido cuando la tarjeta forma parte de un
   // carrusel: el frame no se mueve, solo el contenido entra desde este lado.
@@ -51,6 +60,8 @@ export function HeroCard({
   title,
   titleIcon,
   subtitle,
+  onSubtitlePress,
+  subtitleAccessibilityLabel,
   onPress,
   enterFrom,
   pressScale,
@@ -147,11 +158,39 @@ export function HeroCard({
               />
             )}
           </View>
-          {!!subtitle && (
-            <Text style={styles.subtitle} numberOfLines={1}>
-              {subtitle}
-            </Text>
-          )}
+          {!!subtitle &&
+            (onSubtitlePress ? (
+              // El subtítulo como CONTROL: se usa en Inicio, donde nombra el día
+              // que toca y lleva a "Elige la sesión" para coger otro. Va dentro
+              // de la tarjeta a propósito —la alternativa vivía en una pastilla
+              // debajo que empujaba media pantalla por algo que casi no se usa—,
+              // y el chevron es lo que lo delata como pulsable. Mismo patrón que
+              // el subtítulo de `GlassTopBar` (onSubtitlePress).
+              <Pressable
+                style={({ pressed }) => [
+                  styles.subtitleButton,
+                  pressed && styles.subtitlePressed,
+                ]}
+                onPress={onSubtitlePress}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={subtitleAccessibilityLabel ?? subtitle}
+              >
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {subtitle}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={20}
+                  color={theme.colors.onGold}
+                  style={styles.subtitleChevron}
+                />
+              </Pressable>
+            ) : (
+              <Text style={styles.subtitle} numberOfLines={1}>
+                {subtitle}
+              </Text>
+            ))}
         </Animated.View>
       </LinearGradient>
     </AnimatedPressable>
@@ -248,6 +287,23 @@ const makeStyles = () =>
       letterSpacing: 0.6,
       textAlign: 'center',
       opacity: 0.85,
+    },
+    // Subtítulo pulsable: fila con su chevron, centrada bajo el título. Sin
+    // fondo ni borde propios —sobre el oro de la hero cualquier relleno sería
+    // otro bloque de color—: lo que dice que se puede pulsar es el chevron.
+    subtitleButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    subtitlePressed: {
+      opacity: 0.7,
+    },
+    // Compensa el `marginTop` del texto para que el chevron quede centrado con
+    // el glifo de Anton y no con la caja de línea.
+    subtitleChevron: {
+      marginTop: 4,
+      marginLeft: 2,
     },
   });
 

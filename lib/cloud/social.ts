@@ -1,6 +1,6 @@
 import type { WorkoutRoutine } from '../../types';
 import { supabase } from '../supabase';
-import { duplicateRoutine } from '../routines';
+import { linkPublicRoutine } from '../routines';
 import {
   rowsToAppData,
   DbRows,
@@ -406,14 +406,14 @@ export async function unlikeRoutine(
   if (error) throw new Error(`routine_likes: ${error.message}`);
 }
 
-// ─────────────────────── Clonar una rutina pública ───────────────────────
+// ─────────────────────── Adoptar una rutina pública ───────────────────────
 
 // Baja una rutina pública (cabecera + días + ejercicios) y la reconstruye como
-// WorkoutRoutine del dominio, con sus ids ORIGINALES. El llamante la pasa por
-// `duplicateRoutine` (lib/routines.ts) para asignar ids nuevos antes de
-// añadirla al espacio del usuario (ADD_ROUTINE), como al duplicar una propia.
-// La consume la vista de consulta (PublicRoutineScreen), que muestra el plan
-// SIN clonarlo, y cloneablePublicRoutine, que lo duplica antes de adoptarlo.
+// WorkoutRoutine del dominio, con sus ids ORIGINALES. Esos ids son justo lo que
+// permite ENLAZARLA (`linkPublicRoutine` en lib/routines.ts): añadirla a tus
+// rutinas no la copia, apunta a la del autor. La consume la vista de consulta
+// (PublicRoutineScreen), que muestra el plan sin adoptarlo, y
+// linkablePublicRoutine, que la marca con su dueño antes de guardarla.
 export async function fetchPublicRoutine(
   routineId: string
 ): Promise<WorkoutRoutine | null> {
@@ -464,15 +464,17 @@ export async function fetchPublicRoutine(
   return rowsToAppData(rows).routines[0] ?? null;
 }
 
-// Baja una rutina pública y la devuelve YA duplicada (ids nuevos), lista para
-// añadir al espacio del usuario con ADD_ROUTINE. Helper común del tablón y del
-// perfil (evita repetir fetch + duplicate en cada pantalla).
-export async function cloneablePublicRoutine(
+// Baja una rutina pública y la devuelve YA enlazada (ids originales + dueño),
+// lista para añadirla al espacio del usuario con ADD_ROUTINE. Helper común del
+// tablón, del perfil ajeno y de la consulta: añadir NO copia, apunta al
+// original (ver `linkPublicRoutine`). Para editarla hay que copiarla después.
+export async function linkablePublicRoutine(
   routineId: string,
-  existingNames: string[]
+  ownerId: string,
+  authorName?: string
 ): Promise<WorkoutRoutine | null> {
   const routine = await fetchPublicRoutine(routineId);
-  return routine ? duplicateRoutine(routine, existingNames) : null;
+  return routine ? linkPublicRoutine(routine, ownerId, authorName) : null;
 }
 
 // ─────────────────── Volumen de una rutina pública (intensidad) ───────────────────
@@ -521,4 +523,126 @@ export async function getRoutineSetTotals(
     totals.set(routineId, (totals.get(routineId) ?? 0) + (ex.target_sets ?? 0));
   }
   return totals;
+}
+
+// ─────────────────── Comentarios de una rutina pública ───────────────────
+//
+// Un hilo por rutina (tabla `routine_comments`, ver supabase/social-schema.sql).
+// La RLS decide quién lee, escribe y borra; aquí no se comprueba nada de eso a
+// mano: si el servidor lo rechaza, sube el error.
+//
+// Es contenido escrito por otras personas: quien lo pinta debe tratarlo como
+// texto, nunca como marcado.
+
+export interface RoutineComment {
+  id: string;
+  routine_id: string;
+  user_id: string;
+  body: string;
+  created_at: number;
+}
+
+/** Longitud máxima de un comentario (la misma que valida el CHECK de la tabla). */
+export const COMMENT_MAX_LENGTH = 500;
+
+const toComment = (row: Record<string, unknown>): RoutineComment => ({
+  id: row.id as string,
+  routine_id: row.routine_id as string,
+  user_id: row.user_id as string,
+  body: (row.body as string) ?? '',
+  // created_at es bigint → llega como string.
+  created_at: Number(row.created_at ?? 0),
+});
+
+/** Comentarios de una rutina, del más antiguo al más nuevo (orden de lectura). */
+export async function getRoutineComments(
+  routineId: string,
+  limit = 100
+): Promise<RoutineComment[]> {
+  const { data, error } = await supabase
+    .from('routine_comments')
+    .select('id, routine_id, user_id, body, created_at')
+    .eq('routine_id', routineId)
+    .order('created_at', { ascending: true })
+    .limit(limit);
+  if (error) throw new Error(`routine_comments: ${error.message}`);
+  return (data ?? []).map((r) => toComment(r as Record<string, unknown>));
+}
+
+/** Publica un comentario y devuelve la fila creada (para pintarla sin recargar). */
+export async function addRoutineComment(
+  routineId: string,
+  userId: string,
+  body: string
+): Promise<RoutineComment> {
+  const text = body.trim().slice(0, COMMENT_MAX_LENGTH);
+  const { data, error } = await supabase
+    .from('routine_comments')
+    .insert({
+      routine_id: routineId,
+      user_id: userId,
+      body: text,
+      created_at: Date.now(),
+    })
+    .select('id, routine_id, user_id, body, created_at')
+    .single();
+  if (error) throw new Error(`routine_comments: ${error.message}`);
+  return toComment(data as Record<string, unknown>);
+}
+
+/** Borra un comentario. La RLS solo lo permite a su autor o al dueño de la rutina. */
+export async function deleteRoutineComment(commentId: string): Promise<void> {
+  const { error } = await supabase
+    .from('routine_comments')
+    .delete()
+    .eq('id', commentId);
+  if (error) throw new Error(`routine_comments: ${error.message}`);
+}
+
+/**
+ * Cuántos comentarios tiene cada rutina, en UNA consulta por lote (nunca una por
+ * rutina). Alimenta el distintivo del tablón; como el de intensidad, se pide en
+ * segundo plano después de pintar la lista.
+ */
+export async function getCommentCounts(
+  routineIds: string[]
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const ids = Array.from(new Set(routineIds)).filter(Boolean);
+  if (!ids.length) return counts;
+  const { data, error } = await supabase
+    .from('routine_comments')
+    .select('routine_id')
+    .in('routine_id', ids);
+  if (error) throw new Error(`routine_comments: ${error.message}`);
+  for (const row of data ?? []) {
+    const id = (row as { routine_id: string }).routine_id;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+// ─────────────────────── Reportar contenido (moderación) ───────────────────────
+//
+// Contenido público escrito por terceros (nombres y descripciones de rutina,
+// perfiles y comentarios). Reportar escribe un parte en `reports`, que se revisa
+// desde el panel de Supabase. Quien reporta además deja de verlo en su
+// dispositivo (ver lib/moderation.ts): el parte no bloquea el alivio inmediato.
+
+export type ReportTarget = 'routine' | 'profile' | 'comment';
+
+export async function reportContent(
+  reporterId: string,
+  targetType: ReportTarget,
+  targetId: string,
+  reason?: string
+): Promise<void> {
+  const { error } = await supabase.from('reports').insert({
+    reporter_id: reporterId,
+    target_type: targetType,
+    target_id: targetId,
+    reason: reason?.trim() ? reason.trim().slice(0, 300) : null,
+    created_at: Date.now(),
+  });
+  if (error) throw new Error(`reports: ${error.message}`);
 }

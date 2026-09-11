@@ -219,6 +219,16 @@ export function CalendarScreen({
     return [...found.values()].sort((a, b) => a.index - b.index);
   }, [state.logs, state.routines, currentYear, currentMonth]);
 
+  // ¿Hay cardio en el mes visible? Decide si el modo cardio pinta su leyenda,
+  // igual que `monthRoutines` decide la del modo fuerza.
+  const monthHasCardio = useMemo(() => {
+    const prefix = `${currentYear}-${String(currentMonth + 1).padStart(
+      2,
+      '0'
+    )}-`;
+    return Object.keys(cardioByDate).some((date) => date.startsWith(prefix));
+  }, [cardioByDate, currentYear, currentMonth]);
+
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
   const firstWeekDay = (firstDayOfMonth.getDay() + 6) % 7;
   const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -261,10 +271,12 @@ export function CalendarScreen({
           </Text>
         </View>
 
+        {/* Mismo subtítulo que con datos: la pantalla es la misma y el hueco
+            orienta sobre lo que hace, no sobre lo que hay dentro. */}
         <GlassTopBar
           title={t('Calendario')}
           icon="calendar-month-outline"
-          subtitle={t('Tu historial mensual')}
+          subtitle={t('Repasa tus ejercicios mes por mes')}
           topInset={insets.top}
         />
 
@@ -422,7 +434,7 @@ export function CalendarScreen({
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
                       >
-                        {Math.round(cardio.cardioDay.totalMinutes)}'
+                        {Math.round(cardio.cardioDay.totalMinutes)} min
                       </Text>
                     </>
                   ) : (
@@ -574,6 +586,34 @@ export function CalendarScreen({
             </View>
           </View>
         )}
+
+        {/* El modo cardio también tiene su leyenda: antes solo la tenía fuerza,
+            así que el icono de la celda —que NO es "el cardio" sino la
+            disciplina que más quemó ese día— no lo explicaba nada. */}
+        {mode === 'cardio' && monthHasCardio && (
+          <View style={styles.legend}>
+            <View style={styles.legendRow}>
+              <View style={styles.legendIcon}>
+                <MaterialCommunityIcons
+                  name="run-fast"
+                  size={15}
+                  color={theme.colors.textSecondary}
+                />
+              </View>
+              <Text style={styles.legendText}>
+                {t('La disciplina que más calorías quemó ese día')}
+              </Text>
+            </View>
+            <View style={styles.legendRow}>
+              <Text style={[styles.legendCode, styles.legendCodeMuted]}>
+                min
+              </Text>
+              <Text style={styles.legendText}>
+                {t('Minutos de cardio del día')}
+              </Text>
+            </View>
+          </View>
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -709,7 +749,11 @@ const makeStyles = () =>
       textAlignVertical: 'center',
       includeFontPadding: false,
     },
-    // Número de semana (S1, S2...): metadato de pie, discreto y centrado.
+    // Pie de la celda: metadato discreto y centrado. Lo comparten los dos
+    // modos —"S3" (semana de la rutina) en fuerza y "45 min" en cardio—, así
+    // que cada uno tiene que decir su unidad: el mismo hueco con la misma letra
+    // no puede significar dos magnitudes sin rotularlas (la leyenda cubre las
+    // dos, ver el bloque `legend`).
     dayWeekLabel: {
       fontFamily: theme.fonts.display,
       fontSize: 15,
@@ -753,6 +797,12 @@ const makeStyles = () =>
     legendCodeMuted: {
       color: theme.colors.textSecondary,
       backgroundColor: theme.colors.surfaceAlt,
+    },
+    // Mismo hueco que `legendCode` para que las filas de la leyenda queden
+    // alineadas cuando lo que se explica es un icono y no un código.
+    legendIcon: {
+      minWidth: 26,
+      alignItems: 'center',
     },
     legendText: {
       flex: 1,

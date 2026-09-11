@@ -45,3 +45,4 @@ gradle-bundle.log
 gradle-release-deload.log
 android/buildclean.log
 *.log
+modules/*/android/.gradle/

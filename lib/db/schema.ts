@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 6;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
@@ -9,6 +9,11 @@ export const SCHEMA_VERSION = 4;
 // sincronización (Fase 1 del backend). Lo escribe cada upsert; el sync lo usará
 // para el pull incremental y el last-write-wins. `sync_outbox` acumula cada
 // cambio pendiente de subir a la nube (ver .github/docs/backend-fase1-runbook.md).
+//
+// `linked_owner_id` / `source_routine_id` / `source_author` / `source_owner_id`
+// en `routines` son columnas SOLO LOCALES (procedencia de una rutina traída de
+// la comunidad): no existen en la tabla espejo de Supabase y el push las
+// descarta.
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
@@ -16,12 +21,16 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 
 CREATE TABLE IF NOT EXISTS routines (
-  id             TEXT PRIMARY KEY,
-  name           TEXT NOT NULL,
-  description    TEXT,
-  timer_duration INTEGER,
-  created_at     INTEGER NOT NULL,
-  updated_at     INTEGER NOT NULL DEFAULT 0
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  description       TEXT,
+  timer_duration    INTEGER,
+  created_at        INTEGER NOT NULL,
+  updated_at        INTEGER NOT NULL DEFAULT 0,
+  linked_owner_id   TEXT,
+  source_routine_id TEXT,
+  source_author     TEXT,
+  source_owner_id   TEXT
 );
 
 CREATE TABLE IF NOT EXISTS workout_days (

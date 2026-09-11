@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (15 suites, 201 tests)
+npm test           # Jest sobre lib/ (16 suites, 226 tests)
 npm run format     # Prettier
 ```
 
@@ -67,10 +67,11 @@ GymToni/
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
-│   ├── ProfileScreen.tsx     ← Perfil (pestaña): resumen, menú (rutinas, progreso, datos) y ajustes (tema, idioma, novedades)
+│   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y menú (rutinas, progreso, configuración)
+│   ├── SettingsScreen.tsx    ← Configuración: tema, idioma, novedades y acceso a Datos y nube
 │   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
 │   ├── PublicRoutineScreen.tsx ← Rutina ajena en solo lectura (antes de copiarla)
-│   ├── ProfileEditScreen.tsx ← Perfil público propio (se abre desde Comunidad)
+│   ├── ProfileEditScreen.tsx ← Perfil público propio (se abre desde Perfil)
 │   ├── UserProfileScreen.tsx / FollowingScreen.tsx ← Perfil de otro y listas de seguir/seguidores
 │   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx / QRScannerScreen.tsx
 │   └── WeekAchievementScreen.tsx ← Compartir logros semanales
@@ -92,18 +93,25 @@ GymToni/
 │   └── changelog.ts          ← Novedades por versión (popup in-app)
 ├── supabase/
 │   ├── schema.sql            ← Esquema de la nube (tablas espejo + RLS)
-│   └── social-schema.sql     ← Esquema social (is_public, follows, likes, RLS pública)
+│   └── social-schema.sql     ← Esquema social (is_public, follows, likes, comentarios, reports, RLS pública)
+├── modules/                  ← Módulos nativos locales (autolinked por Expo)
+│   ├── pip-timer/            ← Ventana flotante del descanso (PiP de Android)
+│   └── video-encoder/        ← Vídeo de logros (fotogramas → MP4)
 ├── android/                  ← Proyecto nativo Android (build.gradle: versionCode)
 └── assets/                   ← Iconos, wordmark, fuente Anton
 ```
 
 ## Formato de entrada
 
-- **Series**: `{peso}x{reps}`, una a una — `60x8`, `22.5x10`. Botones ➕ añadir,
-  ➖ borrar última, ✓ finalizar sin completar.
+- **Series**: `{peso}x{reps}`, una a una — `60x8`, `22.5x10`. Dos campos con
+  flechas +/− y el botón "Añadir serie", que se encoge a un "+" junto a las
+  burbujas en cuanto entra la primera. Cada serie metida lleva su × para
+  borrarla (no hay "borrar última"), y "Saltar resto / Saltar ejercicio" cierra
+  el ejercicio desde el ⋯ de su cabecera.
 - **Cardio**: por disciplina en `CardioInputField` (cinta andar/correr, bici,
   elíptica…), con duración, velocidad/pendiente. Se guarda como `rawInput`.
-- **Notas**: icono 📝 por ejercicio (modal).
+- **Notas**: desde el ⋯ del ejercicio (modal); con la tarjeta plegada, el icono
+  de nota junto al título avisa de que hay algo escrito y la abre.
 
 ## Persistencia
 

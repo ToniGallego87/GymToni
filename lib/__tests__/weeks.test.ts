@@ -6,11 +6,12 @@ import {
   isWeekCompleted,
   logsBeforeBlock,
   planWeekMove,
+  currentWeekDayState,
   weekMoveNeedsConfirm,
   workoutsUpToBlock,
   WeekMovePlan,
 } from '../weeks';
-import { ParsedSet, WorkoutDay, WorkoutLog } from '../../types';
+import { ParsedSet, WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 
 function makeLog(
   id: string,
@@ -371,7 +372,44 @@ describe('buildWeekProgress', () => {
       week: 2,
       improvement: 0,
       isIncomplete: true,
+      // Sin dato que medir: el 0% no es estancamiento, es ausencia.
+      isMissing: true,
     });
+  });
+
+  it('una semana incompleta sí compara: no se marca como sin dato', () => {
+    const logs = [
+      makeScoredLog('a', 1, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('b', 2, 1, [{ weight: 100, reps: 10 }]),
+      // Semana 2: solo el día 1, pero ese día sí se entrenó.
+      makeScoredLog('c', 1, 7, [{ weight: 110, reps: 10 }]),
+    ];
+
+    const points = buildWeekProgress(logs, 'r1', days);
+    expect(points[1].isIncomplete).toBe(true);
+    expect(points[1].isMissing).toBeUndefined();
+    expect(points[1].improvement).toBeGreaterThan(0);
+  });
+
+  it('con filtro por día, la base es la primera semana que entrenó ese día', () => {
+    // La semana 1 solo entrenó el día 1: no puede ser la referencia del día 2
+    // aunque sea la primera semana de carga.
+    const logs = [
+      makeScoredLog('a', 1, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('b', 1, 7, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('c', 2, 8, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('d', 1, 14, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('e', 2, 15, [{ weight: 110, reps: 10 }]),
+    ];
+
+    const points = buildWeekProgress(logs, 'r1', days, 'd2');
+    expect(points).toHaveLength(3);
+    expect(points[0].isMissing).toBe(true);
+    // La semana 2 es la primera con el día 2: se compara consigo misma, 0%.
+    expect(points[1].week).toBe(2);
+    expect(points[1].improvement).toBeCloseTo(0, 5);
+    expect(points[1].isMissing).toBeUndefined();
+    expect(points[2].improvement).toBeGreaterThan(0);
   });
 });
 
@@ -554,5 +592,60 @@ describe('weekMoveNeedsConfirm', () => {
         isBlockCompleted: () => false,
       })
     ).toBe(false);
+  });
+});
+
+describe('currentWeekDayState', () => {
+  const routine = (dayCount: number): WorkoutRoutine => ({
+    id: 'r1',
+    name: 'Rutina',
+    days: makeDays(dayCount),
+    isActive: true,
+    createdAt: 1_700_000_000_000,
+  });
+
+  it('sugiere el primer día que falta en la semana en curso', () => {
+    const state = currentWeekDayState(routine(4), [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+    ]);
+    expect([...state.trained].sort()).toEqual(['d1', 'd2']);
+    expect(state.nextDay?.id).toBe('d3');
+  });
+
+  it('salta el hueco: si se entrenó el 3 sin el 2, el que falta sigue siendo el 2', () => {
+    const state = currentWeekDayState(routine(4), [
+      makeLog('a', 1, 0),
+      makeLog('c', 3, 1),
+    ]);
+    expect(state.nextDay?.id).toBe('d2');
+  });
+
+  it('con la semana completa empieza una nueva: nada entrenado y toca el día 1', () => {
+    const state = currentWeekDayState(routine(2), [
+      makeLog('a', 1, 0),
+      makeLog('b', 2, 1),
+    ]);
+    expect(state.trained.size).toBe(0);
+    expect(state.nextDay?.id).toBe('d1');
+  });
+
+  it('sin historial toca el primer día', () => {
+    const state = currentWeekDayState(routine(3), []);
+    expect(state.trained.size).toBe(0);
+    expect(state.nextDay?.id).toBe('d1');
+  });
+
+  it('ignora el cardio suelto y las otras rutinas', () => {
+    const otherRoutine: WorkoutLog = { ...makeLog('x', 1, 0), routineId: 'r2' };
+    const cardioOnly: WorkoutLog = { ...makeLog('y', 2, 1), cardioOnly: true };
+    const state = currentWeekDayState(routine(3), [otherRoutine, cardioOnly]);
+    expect(state.trained.size).toBe(0);
+    expect(state.nextDay?.id).toBe('d1');
+  });
+
+  it('sin rutina no sugiere nada', () => {
+    const state = currentWeekDayState(undefined, [makeLog('a', 1, 0)]);
+    expect(state.nextDay).toBeUndefined();
   });
 });

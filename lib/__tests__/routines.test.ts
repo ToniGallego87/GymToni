@@ -2,12 +2,19 @@ import {
   buildCopyName,
   countRoutineSets,
   duplicateRoutine,
+  findSavedRoutine,
   intensityLabel,
+  isLinkedRoutine,
+  linkPublicRoutine,
+  routineAuthorId,
+  routineClosedAt,
   routineIntensity,
+  routineStatus,
+  sortRoutinesForList,
   INTENSITY_MEDIUM_MAX,
   INTENSITY_SOFT_MAX,
 } from '../routines';
-import { WorkoutRoutine } from '../../types';
+import { WorkoutLog, WorkoutRoutine } from '../../types';
 
 const routine: WorkoutRoutine = {
   id: 'r1',
@@ -110,6 +117,72 @@ describe('duplicateRoutine', () => {
   });
 });
 
+describe('rutinas traídas de la comunidad', () => {
+  it('enlazar conserva los ids del autor y marca de quién es', () => {
+    const linked = linkPublicRoutine(routine, 'user-9', 'Toni');
+
+    expect(linked.id).toBe(routine.id);
+    expect(linked.days.map((day) => day.id)).toEqual(['d1', 'd2']);
+    expect(linked.linkedOwnerId).toBe('user-9');
+    expect(linked.sourceRoutineId).toBe(routine.id);
+    expect(linked.sourceAuthor).toBe('Toni');
+    expect(linked.isActive).toBe(false);
+    expect(isLinkedRoutine(linked)).toBe(true);
+  });
+
+  it('copiar una enlazada la hace tuya pero guarda el origen', () => {
+    const linked = linkPublicRoutine(routine, 'user-9', 'Toni');
+    const copy = duplicateRoutine(linked, [linked.name]);
+
+    expect(isLinkedRoutine(copy)).toBe(false);
+    expect(copy.id).not.toBe(linked.id);
+    expect(copy.sourceRoutineId).toBe(routine.id);
+    expect(copy.sourceAuthor).toBe('Toni');
+  });
+
+  it('copiar una copia mantiene el crédito del original', () => {
+    const linked = linkPublicRoutine(routine, 'user-9', 'Toni');
+    const copy = duplicateRoutine(linked, []);
+    const copyOfCopy = duplicateRoutine(copy, [copy.name]);
+
+    expect(copyOfCopy.sourceRoutineId).toBe(routine.id);
+    expect(copyOfCopy.sourceAuthor).toBe('Toni');
+  });
+
+  it('una rutina propia no arrastra procedencia al duplicarse', () => {
+    const copy = duplicateRoutine(routine, []);
+
+    expect(copy.linkedOwnerId).toBeUndefined();
+    expect(copy.sourceRoutineId).toBeUndefined();
+    expect(copy.sourceAuthor).toBeUndefined();
+    expect(copy.sourceOwnerId).toBeUndefined();
+    expect(routineAuthorId(copy)).toBeUndefined();
+  });
+
+  it('la copia conserva el ID del autor, no solo su nombre', () => {
+    const linked = linkPublicRoutine(routine, 'user-9', 'Toni');
+    const copy = duplicateRoutine(linked, []);
+    const copyOfCopy = duplicateRoutine(copy, [copy.name]);
+
+    // La enlazada sabe quién es el dueño; la copia ya no (es tuya), pero
+    // arrastra el autor para poder abrir su perfil desde la marca de origen.
+    expect(copy.linkedOwnerId).toBeUndefined();
+    expect(copy.sourceOwnerId).toBe('user-9');
+    expect(copyOfCopy.sourceOwnerId).toBe('user-9');
+    expect(routineAuthorId(linked)).toBe('user-9');
+    expect(routineAuthorId(copy)).toBe('user-9');
+  });
+
+  it('findSavedRoutine reconoce la enlazada y también la copia', () => {
+    const linked = linkPublicRoutine(routine, 'user-9', 'Toni');
+    const copy = duplicateRoutine(linked, []);
+
+    expect(findSavedRoutine([linked], routine.id)).toBe(linked);
+    expect(findSavedRoutine([copy], routine.id)).toBe(copy);
+    expect(findSavedRoutine([], routine.id)).toBeUndefined();
+  });
+});
+
 describe('intensidad por nº total de series', () => {
   it('countRoutineSets suma los targetSets de todos los días', () => {
     // La rutina de arriba: 4 series en e1, y e2/e3 sin targetSets (no suman).
@@ -136,5 +209,96 @@ describe('intensidad por nº total de series', () => {
     expect(intensityLabel('soft')).toBe('Suave');
     expect(intensityLabel('medium')).toBe('Medio');
     expect(intensityLabel('hard')).toBe('Intenso');
+  });
+});
+
+describe('situación, cierre y orden de la lista', () => {
+  const makeRoutine = (id: string, createdAt: number): WorkoutRoutine => ({
+    ...routine,
+    id,
+    name: id,
+    isActive: false,
+    createdAt,
+  });
+
+  const makeLog = (id: string, routineId: string, createdAt: number) =>
+    ({
+      id,
+      routineId,
+      dayId: 'd1',
+      date: '2025-03-12',
+      exercises: [],
+      createdAt,
+      updatedAt: createdAt,
+    }) as WorkoutLog;
+
+  it('cada rutina cae en su situación', () => {
+    const activa = makeRoutine('activa', 10);
+    const cerrada = makeRoutine('cerrada', 20);
+    const nueva = makeRoutine('nueva', 30);
+    const logs = [makeLog('l1', 'activa', 100), makeLog('l2', 'cerrada', 200)];
+
+    expect(routineStatus(activa, logs, 'activa')).toBe('active');
+    expect(routineStatus(cerrada, logs, 'activa')).toBe('closed');
+    expect(routineStatus(nueva, logs, 'activa')).toBe('prepared');
+  });
+
+  it('la fecha de cierre es la del último entrenamiento', () => {
+    const cerrada = makeRoutine('cerrada', 20);
+    const logs = [
+      makeLog('l1', 'cerrada', 100),
+      makeLog('l2', 'cerrada', 300),
+      makeLog('l3', 'otra', 900),
+    ];
+
+    expect(routineClosedAt(cerrada, logs)).toBe(300);
+  });
+
+  it('una rutina sin entrenamientos no tiene fecha de cierre', () => {
+    expect(routineClosedAt(makeRoutine('nueva', 20), [])).toBeUndefined();
+  });
+
+  it('sin createdAt la fecha de cierre cae en la del log', () => {
+    const cerrada = makeRoutine('cerrada', 20);
+    const log = { ...makeLog('l1', 'cerrada', 0), createdAt: undefined };
+
+    expect(routineClosedAt(cerrada, [log as unknown as WorkoutLog])).toBe(
+      new Date('2025-03-12T00:00:00').getTime()
+    );
+  });
+
+  it('ordena: la que entrenas, las sin estrenar y al final las cerradas', () => {
+    const activa = makeRoutine('activa', 10);
+    const cerradaVieja = makeRoutine('cerrada-vieja', 20);
+    const cerradaReciente = makeRoutine('cerrada-reciente', 30);
+    const nuevaVieja = makeRoutine('nueva-vieja', 40);
+    const nuevaReciente = makeRoutine('nueva-reciente', 50);
+    const logs = [
+      makeLog('l1', 'activa', 1_000),
+      makeLog('l2', 'cerrada-vieja', 100),
+      makeLog('l3', 'cerrada-reciente', 900),
+    ];
+
+    const sorted = sortRoutinesForList(
+      [cerradaVieja, nuevaVieja, cerradaReciente, activa, nuevaReciente],
+      logs,
+      'activa'
+    );
+
+    expect(sorted.map((r) => r.id)).toEqual([
+      'activa',
+      'nueva-reciente',
+      'nueva-vieja',
+      'cerrada-reciente',
+      'cerrada-vieja',
+    ]);
+  });
+
+  it('no toca el array original', () => {
+    const list = [makeRoutine('a', 10), makeRoutine('b', 20)];
+    const snapshot = list.map((r) => r.id);
+    sortRoutinesForList(list, [], undefined);
+
+    expect(list.map((r) => r.id)).toEqual(snapshot);
   });
 });

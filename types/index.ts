@@ -27,6 +27,20 @@ export interface WorkoutRoutine {
   days: WorkoutDay[];
   createdAt: number;
   timerDuration?: number;
+  // Rutina AJENA añadida desde la comunidad por referencia: conserva los ids
+  // originales de su autor y se entrena igual que las propias, pero NO se
+  // edita (para cambiarla se saca una copia). Guarda el id de su dueño.
+  linkedOwnerId?: string;
+  // Rutina pública de la que procede: la enlazada apunta a sí misma y la copia
+  // de una enlazada apunta al original. Evita enlazar dos veces lo mismo y
+  // permite decir de dónde salió.
+  sourceRoutineId?: string;
+  // Nombre público de quien la creó, para dar el crédito en la ficha.
+  sourceAuthor?: string;
+  // Id de quien la creó. `linkedOwnerId` solo lo tiene la enlazada, y al sacar
+  // una copia se cae; este sobrevive a la copia, que es lo que permite abrir el
+  // perfil del autor desde cualquiera de las dos.
+  sourceOwnerId?: string;
 }
 
 export interface ParsedSet {

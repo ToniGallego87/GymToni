@@ -249,7 +249,17 @@ interface ExerciseSummaryRowProps {
   canMoveDown?: boolean;
 }
 
-/** Fila colapsada: el ejercicio ya definido, como una sola línea de texto. */
+/**
+ * Fila colapsada: el ejercicio ya definido.
+ *
+ * Va en DOS alturas. En una sola línea el nombre —que es el dato por el que se
+ * reconoce la fila— competía por el ancho con cinco dianas (reordenar, editar,
+ * GIF, borrar) y se quedaba con unos 80 px: ocho caracteres, así que "Press
+ * banca inclinado con mancuernas" se leía "Press banca i…". Ahora el nombre
+ * tiene la primera línea entera (hasta dos renglones) y los controles bajan a
+ * una fila propia, donde caben a tamaño de dedo: las flechas eran de 30×22 px,
+ * apiladas una sobre otra, el control más fácil de fallar de la pantalla.
+ */
 export function ExerciseSummaryRow({
   exercise,
   canRemove,
@@ -265,63 +275,22 @@ export function ExerciseSummaryRow({
 
   return (
     <>
-      <View style={styles.summaryRow}>
-        {showReorder && (
-          <View style={styles.reorderColumn}>
-            <Pressable
-              style={({ pressed }) => [
-                styles.reorderButton,
-                !canMoveUp && styles.controlDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={onMoveUp}
-              disabled={!canMoveUp}
-              hitSlop={6}
-              accessibilityLabel={t('Subir ejercicio')}
-            >
-              <MaterialCommunityIcons
-                name="chevron-up"
-                size={18}
-                color={
-                  canMoveUp ? theme.colors.text : theme.colors.textSecondary
-                }
-              />
-            </Pressable>
-            <Pressable
-              style={({ pressed }) => [
-                styles.reorderButton,
-                !canMoveDown && styles.controlDisabled,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={onMoveDown}
-              disabled={!canMoveDown}
-              hitSlop={6}
-              accessibilityLabel={t('Bajar ejercicio')}
-            >
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={18}
-                color={
-                  canMoveDown ? theme.colors.text : theme.colors.textSecondary
-                }
-              />
-            </Pressable>
-          </View>
-        )}
+      <View style={styles.summaryCard}>
+        {/* Primera altura: el nombre manda, y tocarlo abre el editor (el lápiz
+            lo delata). Hasta dos renglones antes de recortar. */}
         <Pressable
           style={({ pressed }) => [
-            styles.summaryMain,
+            styles.summaryNameRow,
             pressed && styles.buttonPressed,
           ]}
           onPress={onEdit}
-          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={t('Editar {name}', {
+            name: exercise.name.trim(),
+          })}
         >
-          <Text style={styles.summaryText} numberOfLines={1}>
+          <Text style={styles.summaryName} numberOfLines={2}>
             {exercise.name.trim()}
-          </Text>
-          <View style={styles.summaryDivider} />
-          <Text style={styles.summarySets}>
-            {exercise.sets}x{buildTargetReps(exercise)}
           </Text>
           <MaterialCommunityIcons
             name="pencil"
@@ -329,39 +298,96 @@ export function ExerciseSummaryRow({
             color={theme.colors.textSecondary}
           />
         </Pressable>
-        {!!exercise.catalogId && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.iconButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={() => setShowGif(true)}
-            hitSlop={8}
-            accessibilityLabel={t('Ver GIF')}
-          >
-            <MaterialCommunityIcons
-              name="play-box-outline"
-              size={18}
-              color={theme.colors.primary}
-            />
-          </Pressable>
-        )}
-        <Pressable
-          style={({ pressed }) => [
-            styles.removeExerciseButton,
-            !canRemove && styles.controlDisabled,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={onRemove}
-          disabled={!canRemove}
-          hitSlop={8}
-        >
-          <MaterialCommunityIcons
-            name="close"
-            size={18}
-            color={canRemove ? theme.colors.error : theme.colors.textSecondary}
-          />
-        </Pressable>
+
+        {/* Segunda altura: el plan a la izquierda y los controles a la derecha,
+            todos de 44 px de alto. */}
+        <View style={styles.summaryMetaRow}>
+          <Text style={styles.summarySets}>
+            {exercise.sets}x{buildTargetReps(exercise)}
+          </Text>
+          <View style={styles.summaryActions}>
+            {!!exercise.catalogId && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.summaryAction,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => setShowGif(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('Ver GIF')}
+              >
+                <MaterialCommunityIcons
+                  name="play-box-outline"
+                  size={20}
+                  color={theme.colors.primary}
+                />
+              </Pressable>
+            )}
+            {showReorder && (
+              <>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.summaryAction,
+                    !canMoveUp && styles.controlDisabled,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={onMoveUp}
+                  disabled={!canMoveUp}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Subir ejercicio')}
+                >
+                  <MaterialCommunityIcons
+                    name="chevron-up"
+                    size={22}
+                    color={
+                      canMoveUp ? theme.colors.text : theme.colors.textSecondary
+                    }
+                  />
+                </Pressable>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.summaryAction,
+                    !canMoveDown && styles.controlDisabled,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={onMoveDown}
+                  disabled={!canMoveDown}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Bajar ejercicio')}
+                >
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={22}
+                    color={
+                      canMoveDown
+                        ? theme.colors.text
+                        : theme.colors.textSecondary
+                    }
+                  />
+                </Pressable>
+              </>
+            )}
+            <Pressable
+              style={({ pressed }) => [
+                styles.summaryAction,
+                !canRemove && styles.controlDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={onRemove}
+              disabled={!canRemove}
+              accessibilityRole="button"
+              accessibilityLabel={t('Quitar ejercicio')}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={20}
+                color={
+                  canRemove ? theme.colors.error : theme.colors.textSecondary
+                }
+              />
+            </Pressable>
+          </View>
+        </View>
       </View>
 
       <GifViewerModal
@@ -432,53 +458,50 @@ const makeStyles = () =>
       justifyContent: 'center',
       backgroundColor: theme.colors.surface,
     },
-    summaryRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    // Flechas de reordenado apiladas a la izquierda de la fila resumen.
-    reorderColumn: {
-      justifyContent: 'center',
-    },
-    reorderButton: {
-      width: 30,
-      height: 22,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    summaryMain: {
-      flex: 1,
-      minWidth: 0,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+    // Tarjeta de dos alturas: nombre arriba, plan y controles abajo.
+    summaryCard: {
       backgroundColor: theme.colors.surfaceAlt,
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
       borderColor: theme.colors.border,
       paddingHorizontal: 12,
-      height: 44,
+      paddingTop: 10,
+      paddingBottom: 4,
     },
-    summaryText: {
+    summaryNameRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+    },
+    summaryName: {
       flex: 1,
       minWidth: 0,
       color: theme.colors.text,
-      fontSize: 15,
+      fontSize: 16,
       fontWeight: '700',
-      lineHeight: 20,
+      lineHeight: 21,
     },
-    summaryDivider: {
-      width: 1,
-      alignSelf: 'stretch',
-      marginVertical: 6,
-      backgroundColor: theme.colors.border,
+    summaryMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 8,
     },
     summarySets: {
       color: theme.colors.textSecondary,
       fontSize: 14,
       fontWeight: '700',
-      lineHeight: 20,
+    },
+    summaryActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    // Diana de 44 px: las flechas apiladas de antes medían 30×22 y se fallaban.
+    summaryAction: {
+      width: 44,
+      height: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     exerciseControlsRow: {
       flexDirection: 'row',

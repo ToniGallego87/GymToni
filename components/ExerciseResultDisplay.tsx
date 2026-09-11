@@ -121,10 +121,14 @@ export function ExerciseResultDisplay({
         <Text style={styles.exerciseName} numberOfLines={2}>
           {exerciseName}
         </Text>
+        {/* El GIF va en neutro AQUÍ (no en el registro, donde sí es dorado):
+            consultar un entreno guardado no se hace para mirar cómo era el
+            ejercicio, así que el oro no le corresponde. Ver `progressButton`. */}
         <ExerciseGifButton
           name={exerciseName}
           catalogId={catalogId}
           size={18}
+          style={styles.gifButtonNeutral}
           onAssign={onAssignGif}
         />
         {!!onOpenProgress && (
@@ -141,7 +145,7 @@ export function ExerciseResultDisplay({
             <MaterialCommunityIcons
               name="chart-line"
               size={18}
-              color={theme.colors.textSecondary}
+              color={theme.colors.primary}
             />
           </Pressable>
         )}
@@ -248,17 +252,25 @@ const makeStyles = () =>
       lineHeight: 27,
     },
 
-    // Botón de evolución del ejercicio: mismo tamaño/forma que el de GIF pero
-    // con acento neutro (es acción secundaria de consulta, no la primaria dorada).
+    // Botón de evolución del ejercicio: mismo tamaño/forma que el de GIF y, en
+    // esta pantalla, el que lleva el oro. Es la acción con la que se sigue el
+    // hilo desde un entreno guardado ("¿voy subiendo en esto?"); el GIF, que
+    // aquí es curiosidad, se queda en neutro (`gifButtonNeutral`). Antes era al
+    // revés y el color decía lo contrario de lo que la pantalla quiere.
     progressButton: {
       width: 34,
       height: 34,
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.primaryLine,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: theme.colors.surface,
+    },
+    // Quita el borde dorado que `ExerciseGifButton` trae por defecto (allí sí
+    // corresponde: en el registro el GIF es la referencia de cómo se hace).
+    gifButtonNeutral: {
+      borderColor: theme.colors.border,
     },
     progressButtonPressed: {
       opacity: 0.8,

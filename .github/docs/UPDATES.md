@@ -1,5 +1,722 @@
 # UPDATES
 
+## Version 0.7.4 - 2026-09-11
+
+La tanda más grande desde el 0.7.0: Comunidad estrena **hilo de comentarios** y
+**reportes**, el descanso pasa a ser un singleton que sobrevive a cambiar de
+pantalla y a minimizar la app (**Picture-in-Picture nativo**), el peso corporal
+se muda a su propia pantalla en Perfil, adoptar una rutina ajena pasa a
+**enlazarla** en vez de copiarla, y se revisan a fondo Rutinas, Registro,
+Perfil, Detalle, Calendario y Progreso por ejercicio. Cierran la tanda dos
+auditorías (`/revision-app`): el ROADMAP queda solo con lo pendiente y el código
+pierde duplicados, restos muertos y la caché de Gradle que se colaba en git,
+todo sin tocar comportamiento.
+`npm run type-check` y `npm test` (16 suites, 233 tests) en verde.
+`versionCode` 25 → 26.
+
+**Ojo backend:** hay que **ejecutar `supabase/social-schema.sql` en el SQL
+Editor de Supabase** antes de publicar. Trae las tablas nuevas
+`routine_comments` y `reports` con su RLS (leer comentarios si la rutina es
+pública, escribir solo en tu nombre, borrar el autor o el dueño; insertar y leer
+solo tus propios reportes). Es **aditivo e idempotente**, así que se puede
+lanzar entero. Mientras no se ejecute, los hilos salen vacíos y reportar no
+guarda nada: los errores se tragan y la app se ve igual.
+
+**Ojo build:** la ventanita flotante del descanso es **código nativo nuevo**
+(`modules/pip-timer/`, `android/app/src/main/AndroidManifest.xml`,
+`MainActivity.kt`) — hace falta recompilar APK/AAB, con recarga de JS no
+aparece.
+
+**Ojo sync:** `SCHEMA_VERSION` 4 → 6, con dos migraciones por `ALTER TABLE`. Las
+columnas de rutina enlazada (`linkedOwnerId`, `sourceRoutineId`, `sourceAuthor`,
+`sourceOwnerId`) son SOLO locales y una rutina enlazada NO se sube a la nube:
+sus ids pertenecen a otro usuario y chocarían con su RLS.
+
+### Nuevas funcionalidades
+
+- **El peso corporal tiene su propia pantalla en Perfil, y avisa cuando se queda
+  viejo** (`lib/bodyWeight.ts` nuevo,
+  `features/workout/BodyWeightScreen.tsx` nuevo,
+  `features/workout/ProfileScreen.tsx`, `features/workout/CardioScreen.tsx`,
+  `app/App.tsx`): el peso vivía en una diapositiva del carrusel de Cardio, donde
+  ocupaba media hero para algo que se toca una vez cada varias semanas, y su
+  histórico era una línea de ocho puntos en miniatura. Ahora está en **Perfil →
+  Peso corporal**: la misma tarjeta de cabecera (peso, cambio respecto al
+  anterior y evolución) más el **histórico completo**, con la fecha de cada
+  anotación y cuánto subiste o bajaste. Y como el peso no es un dato de adorno
+  —las kcal de TODO el cardio se estiman con el peso que tenías en cada
+  momento—, a partir de **dos semanas** sin actualizarlo la pantalla lo marca en
+  ámbar y salta un **recordatorio**. El aviso se programa unas horas por
+  delante, no al instante: con la app abierta sería avisar de algo que ya tienes
+  delante. Solo se avisa a quien ya usa el dato (si nunca has anotado un peso no
+  hay nada que refrescar) y como mucho una vez por semana.
+  **Ojo:** el peso pasa a ser un singleton (`lib/bodyWeight.ts`) en vez de estado
+  de la pantalla de Cardio. Hacía falta: con el estado dentro de Cardio,
+  actualizarlo desde Perfil dejaba la pestaña calculando con el peso viejo hasta
+  reiniciar la app. El modelo de TRAMOS no cambia: los cardios ya registrados
+  conservan el peso de entonces.
+- **El descanso sobrevive a salir del registro**
+  (`lib/restTimerStore.ts`, `components/RestTimerBar.tsx` nuevo,
+  `components/PipRestTimer.tsx`, `features/workout/WorkoutLogScreen.tsx`,
+  `app/App.tsx`): pasaba algo absurdo — **minimizar la app entera** conservaba la
+  cuenta atrás (la ventanita flotante lo tenía resuelto), pero tocar
+  "Calendario" para mirar algo entre serie y serie la **mataba**. La cuenta vivía
+  en el estado de la pantalla de registro y la navegación la desmonta, así que se
+  iban a la vez las tres cosas: el temporizador, la notificación programada y la
+  ventanita. Ahora el descanso es un **singleton** (`lib/restTimerStore.ts`):
+  sigue contando mires lo que mires, y una **barra flotante** lo acompaña por el
+  resto de la app con los segundos que quedan y el ejercicio, para volver al
+  entreno de un toque. Cortarlo se ve (la × de la barra, la misma marca que salta
+  el descanso dentro de la tarjeta); el "+30s" y el resto siguen en el registro,
+  gobernando el MISMO temporizador y no una copia.
+  **Dónde muere ahora:** al llegar a cero o al saltarlo a mano. Navegar ya no
+  cuenta como terminar el descanso, que era justo el defecto.
+  De paso, las tres cuentas atrás de la app (tarjeta, barra y ventanita PiP)
+  restan contra la misma marca de fin absoluta, así que no pueden discrepar.
+- **La app está entera en inglés otra vez** (`lib/i18n.ts`,
+  `lib/__tests__/i18n.test.ts`): Configuración ofrece dos idiomas, pero `t()` cae
+  al español en silencio cuando falta una traducción — y con Comunidad, el perfil
+  público y la semana de descarga se habían quedado **79 textos** sin traducir:
+  la pantalla de "Perfil público" completa, buena parte de Comunidad ("Seguir",
+  "Me gusta", "Anónimo"), las tres confirmaciones largas de la descarga y verbos
+  de uso diario ("Guardar", "Editar", "Eliminar", "Hoy"). Traducidos los 79. Y
+  para que no vuelva a pasar, un test recorre todos los `t()` del código y
+  **falla** si alguno se ha quedado sin entrada en el diccionario: era un hueco
+  que no rompía nada, así que nadie se enteraba hasta abrir la app en inglés.
+- **Reportar contenido público** (`supabase/social-schema.sql`,
+  `lib/cloud/social.ts`, `lib/moderation.ts` nuevo, `components/ReportModal.tsx`
+  nuevo, `features/workout/PublicRoutineScreen.tsx`,
+  `features/workout/UserProfileScreen.tsx`,
+  `features/workout/CommunityScreen.tsx`): con el hilo de comentarios abierto, la
+  app pasa a tener texto libre de terceros y no había ninguna salida. Ahora se
+  puede reportar una **rutina**, un **perfil** y un **comentario** (en el hilo,
+  cada comentario lleva UNA acción: la papelera si puedes borrarlo —es tuyo o es
+  tu rutina— y la bandera si no). El parte va a la tabla `reports` y se revisa
+  desde el panel de Supabase. Y, sin esperar a que nadie lo revise, lo reportado
+  **desaparece de tu dispositivo**: `lib/moderation.ts` guarda esos ids en
+  AsyncStorage y el tablón y los hilos los filtran. El motivo es opcional a
+  propósito: obligar a escribirlo hace que no se reporte.
+  **Ojo backend:** tabla `reports` nueva con su RLS (insertas y lees solo lo
+  tuyo). Va en el mismo `supabase/social-schema.sql` que los comentarios: con
+  ejecutarlo una vez quedan las dos.
+- **Avisos de lo que le pasa a tus rutinas**
+  (`features/workout/CommunityScreen.tsx`): publicar era un pozo — nadie te decía
+  que le habías gustado a alguien ni que te habían preguntado algo. Al abrir
+  Comunidad, un solo aviso resume lo que ha pasado desde tu última visita:
+  seguidores nuevos, me gusta nuevos y comentarios nuevos en tus rutinas
+  públicas, y lleva a tu perfil. Reutiliza el patrón que ya existía para los
+  seguidores (recuento guardado en AsyncStorage y comparado al abrir), sin
+  servidor de notificaciones: la primera vez se siembra con los valores actuales
+  para no anunciar el histórico entero como novedad.
+- **Buscar en "Progreso por ejercicio"**
+  (`features/workout/ExerciseProgressScreen.tsx`): la lista se paginaba de 20 en
+  20 y solo se podía reordenar, así que responder "¿cómo voy en press banca?" con
+  30-40 ejercicios era scroll y "Ver más". Ahora hay un buscador por nombre
+  encima del orden, con la misma caja que el catálogo y Comunidad; la paginación
+  y el "Ver más" cuentan sobre lo filtrado.
+
+- **Comentarios en las rutinas de la comunidad** (`supabase/social-schema.sql`,
+  `lib/cloud/social.ts`, `features/workout/PublicRoutineScreen.tsx`,
+  `features/workout/CommunityScreen.tsx`, `app/App.tsx`, `lib/i18n.ts`): lo único
+  que se podía responder a una rutina ajena era un corazón, que dice cuánta gente
+  pero nunca por qué. Ahora cada rutina pública tiene su **hilo** al pie de la
+  ficha: quien tiene sesión escribe, cualquiera que vea la rutina lee, y borra el
+  autor del comentario o el dueño de la rutina (con `ConfirmModal`, como el resto
+  de borrados). Cada comentario lleva foto, nombre y "hace X" (`formatAgo`), y la
+  foto abre el perfil de quien lo escribió. En el tablón, la tarjeta muestra el
+  recuento junto a la intensidad: es un DATO, no un botón —el hilo se abre
+  entrando en la rutina—, por eso va con las series y no con las acciones.
+  Sin sesión la caja no se esconde: sale "Inicia sesión para comentar", que
+  lleva a la pantalla de cuenta.
+  **Ojo backend:** tabla nueva `routine_comments` con su RLS (leer si la rutina
+  es pública, escribir solo en tu nombre, borrar el autor o el dueño). Hay que
+  **ejecutar `supabase/social-schema.sql` en el SQL Editor de Supabase**; es
+  aditivo e idempotente, así que se puede lanzar entero. Mientras no se ejecute,
+  el hilo simplemente sale vacío y la rutina se ve igual (el error se traga).
+  Los recuentos del tablón van en el mismo lote que las series, después de
+  pintar: si fallan, las tarjetas se quedan sin el dato pero enteras.
+
+- **El descanso sigue contando en una ventanita flotante al minimizar la app**
+  (`modules/pip-timer/` nuevo, `android/app/src/main/AndroidManifest.xml`,
+  `android/app/src/main/java/com/tonigallego/gymbro/MainActivity.kt`,
+  `lib/pipTimer.ts` nuevo, `lib/restTimerStore.ts` nuevo,
+  `components/PipRestTimer.tsx` nuevo, `components/index.ts`,
+  `features/workout/WorkoutLogScreen.tsx`, `app/App.tsx`): entre serie y serie se
+  sale de la app —el cronómetro del móvil, un mensaje, la música— y la cuenta
+  atrás desaparecía de la vista hasta que saltaba la notificación. Ahora, con un
+  descanso corriendo, minimizar deja el temporizador en una ventanita movible
+  encima de lo que estés usando, como el vídeo de YouTube. Es el
+  **Picture-in-Picture nativo de Android** (módulo local `pip-timer`), no una
+  ventana dibujada a mano: la mueve, la encoge y la cierra el sistema, y tocarla
+  devuelve a la app. En Android 12+ entra sola (`setAutoEnterEnabled`); en 8.0-11
+  la pide `MainActivity` en `onUserLeaveHint()`, el último aviso que llega
+  mientras la Activity aún está visible (para cuando JS se entera, ya es tarde).
+  Dentro no se desmonta nada: el árbol se **tapa** con `PipRestTimer` en la raíz
+  y al volver el entreno está donde se dejó. El dato viaja por
+  `restTimerStore` como marca de fin absoluta, no como segundos, para que no
+  puedan existir dos cuentas atrás desincronizadas.
+  **Ojo build:** es código nativo nuevo — hace falta recompilar la APK, con
+  recarga de JS no aparece.
+  **La cuenta atrás dentro de la ventanita corre de verdad**: entrar en PiP
+  PAUSA la Activity, y al pausarse React Native corta las dos cosas que hacen
+  falta —el volcado de cambios a las vistas nativas
+  (`UIManagerModule.onHostPause` para el `DISPATCH_UI`) y los propios timers de
+  JS (`JavaTimerManager.onHostPause`)—, así que el número se quedaba clavado en
+  el último fotograma y solo se ponía al día al volver a pantalla completa.
+  `MainActivity` le devuelve a RN el estado "resumido" mientras dura la
+  ventanita (que es lo honesto: en PiP la app sigue VISIBLE) y se lo quita en
+  `onStop()`, por donde pasa siempre que la ventanita se cierra. Se rearma
+  desde `onPause()` y desde `onPictureInPictureModeChanged()`: el orden entre
+  las dos no es el mismo en todas las versiones de Android y el último en llegar
+  tiene que dejar RN despierto.
+- **Añadir una rutina de la comunidad la ENLAZA, no la copia** (`types/index.ts`,
+  `lib/routines.ts`, `lib/cloud/social.ts`, `lib/db/schema.ts`, `lib/db/index.ts`,
+  `lib/db/mappers.ts`, `lib/cloud/sync.ts`,
+  `features/workout/RoutineDetailScreen.tsx`,
+  `features/workout/RoutineSelectorScreen.tsx`, `app/App.tsx`): antes
+  `duplicateRoutine` clonaba el plan con ids nuevos y nombre "(copia)", así que
+  el espacio de rutinas se llenaba de clones huérfanos sin crédito ni forma de
+  saber de dónde salieron. Ahora se guarda una **referencia**: la rutina
+  conserva los ids ORIGINALES del autor (los que ya devolvía
+  `fetchPublicRoutine`) y se marca con `linkedOwnerId` / `sourceRoutineId` /
+  `sourceAuthor`. Se entrena igual que una propia, pero su ficha es de solo
+  lectura: nada de editar, renombrar ni republicar, y la ceja rotula "Rutina de
+  {autor}". El botón "Editar" de la barra pasa a **"Hacer copia"**, que bifurca
+  en una rutina tuya (ids nuevos, sincronizable) que **conserva la procedencia**
+  ("Copiada de {autor}") y abre su ficha directamente. Copiar una copia mantiene
+  el crédito del original. `SCHEMA_VERSION` 4 → 5 con migración por `ALTER TABLE`.
+  **Ojo sync:** las tres columnas son SOLO locales y una rutina enlazada NO se
+  sube (sus ids pertenecen a otro usuario y chocarían con la RLS del dueño): ni
+  se encola en el outbox ni se acepta en `pushRoutineUpsert`, y `cloudRoutineRow`
+  quita las columnas locales antes del upsert. Los entrenamientos que registres
+  en ella sí son tuyos y se sincronizan. Como contrapartida, una rutina enlazada
+  vive solo en el dispositivo donde se guardó.
+- **Desde una rutina de la comunidad se llega al perfil de quien la hizo**
+  (`features/workout/PublicRoutineScreen.tsx`,
+  `features/workout/CommunityScreen.tsx`, `app/App.tsx`): la firma "por {autor}"
+  era texto muerto y la pantalla, un callejón. Ahora es una fila pulsable con la
+  foto real del autor (se pide su perfil al abrir) y chevron, que abre su perfil
+  público. El `ownerId` viaja desde el tablón y desde el perfil ajeno.
+
+### Cambios
+
+- **La mejora se pinta igual en toda la pantalla de Inicio**
+  (`features/workout/HomeScreen.tsx`, `components/TrendDelta.tsx`): bajando por
+  Inicio con la semana desplegada, el MISMO dato —el % de mejora— salía de tres
+  formas distintas, a veces a la vez: el `TrendDelta` de la tarjeta de progreso,
+  el `TrendDelta` de la cabecera de cada semana y, en cada día, una **píldora**
+  con fondo de color y el número en Anton, con cuatro paletas. Nadie podía saber
+  que medían lo mismo. Ahora la fila del día usa el mismo `TrendDelta` que el
+  resto, que es para lo que se creó. De paso, `TrendDelta` gana el tercer estado
+  que solo tenía la píldora: **"igual" ya no es una flecha**, es un `=` en ámbar
+  (una flecha para un 0% mentía sobre el dato, y también lo hacía en la cabecera
+  de semana y en Cardio). Y la tarjeta de progreso deja de caer a un **"0%"** en
+  texto plano cuando no hay punto que mostrar: no había nada que comparar, así
+  que no se inventa un dato. Igual con el "—" de la fila del día: sin con qué
+  comparar, no se pinta nada.
+- **"Elige la sesión" baja el "Día N" a ceja gris**
+  (`features/workout/DaySelectorScreen.tsx`): cada tarjeta de día llevaba a la
+  derecha un badge dorado (14/800) que pesaba más que el nombre del día al que
+  acompañaba, y arriba, en la barra, había OTRA píldora dorada con el nombre de
+  la rutina: dos bloques de oro compitiendo en una pantalla cuyo único trabajo
+  es "toca el día que vas a entrenar". El número pasa a ceja gris sobre el
+  nombre, exactamente como ya hace la ficha de la rutina. De paso, el recuento
+  dice **"1 ejercicio"** cuando el día trae uno solo.
+- **El filtro de intensidad de Comunidad deja de ser un raíl gemelo**
+  (`features/workout/CommunityScreen.tsx`, `lib/i18n.ts`): al abrirlo, bajo el
+  raíl "Populares / Siguiendo" aparecía otro con exactamente el mismo aspecto
+  —mismos chips, mismo alto, activo relleno de oro— para "Todas / Suave / Medio
+  / Intenso". Son dos ejes distintos (de dónde salen las rutinas y cuánta caña
+  llevan) pintados como un solo control partido en dos, y ninguno decía qué
+  filtraba. Ahora la intensidad va **rotulada** ("INTENSIDAD") y en chips de
+  filtro: más pequeños, alineados a la izquierda, con su velocímetro y el activo
+  en oro apagado (contorno + fondo velado). El relleno macizo de oro se queda
+  para el raíl de pestañas, que es el control que manda.
+- **Buscar personas deja de secuestrar el tablón**
+  (`features/workout/CommunityScreen.tsx`, `lib/i18n.ts`): escribir UNA letra
+  sustituía la lista de rutinas por los resultados de personas **y escondía el
+  raíl de pestañas y el de intensidad**; si no había resultados, todo lo que
+  quedaba en pantalla era un "Sin resultados" en gris pequeño donde antes había
+  un tablón, y la única forma de volver era vaciar el campo. Era un modo
+  encubierto. Ahora los resultados salen en su **propia sección** —rotulada
+  "PERSONAS" y con su cierre— encima del tablón, que sigue ahí con sus raíles:
+  el cambio de modo pasa a ser lo que en realidad es, un filtro temporal. De
+  paso, mientras la consulta está en vuelo se dice "Buscando…" en vez de
+  parpadear "Sin resultados" en cada tecla, y `Buscar personas` ya tiene
+  traducción al inglés (se había quedado sin registrar).
+- **Las acciones de una semana salen al abrirla, no al final del todo**
+  (`features/workout/HomeScreen.tsx`): "Marcar descarga" y "Ver logros" se
+  pintaban al cierre del acordeón, detrás de TODAS las tarjetas de día — con una
+  rutina de 4-5 días, 350-450 px de scroll desde que despliegas hasta que las
+  ves. Y "Ver logros" es la única puerta a compartir los de una semana pasada:
+  la hero solo los ofrece el mismo día en que la semana se cierra, así que al
+  día siguiente el único camino era ese. Suben al principio del cuerpo
+  desplegado, justo bajo la cabecera. Los botones no cambian: siguen etiquetados
+  y en el cuerpo, no en la cabecera colapsada.
+- **Un solo modal "Editar Temporizador"** (`components/RestTimerModal.tsx`
+  nuevo, `features/workout/RoutineDetailScreen.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`, `components/index.ts`): la ficha de la
+  rutina y la pantalla de registro abrían un diálogo idéntico —título, campo de
+  segundos, "Equivalente: 2:30", Cancelar/Guardar— pero cada uno con sus
+  estilos: el campo a 16 px en un sitio y a 18 en negrita en el otro, la línea
+  del equivalente centrada aquí y en cursiva allá. Es el mismo ajuste de la misma
+  rutina, así que ahora es un único componente sobre `AppModal`, la misma
+  especialización que ya hace `ConfirmModal`. Se queda el campo grande (18/700,
+  se abre para teclear un número corto) y el equivalente alineado con el campo,
+  sin cursiva.
+
+- **Comunidad ya tiene un "tú"** (`features/workout/CommunityScreen.tsx`,
+  `features/workout/ProfileEditScreen.tsx`, `app/App.tsx`): la pestaña hablaba
+  solo de los demás. A "Seguidores" solo se llegaba por el aviso de nuevos
+  seguidores (y solo cuando el número subía) o dando la vuelta por Perfil →
+  Editar perfil, donde los dos contadores estaban metidos dentro de un
+  formulario. Ahora la pestaña abre con TU tarjeta: foto, nombre visible, si tu
+  perfil se ve o no, y los contadores de seguidores y seguidos —que son los
+  caminos a las dos listas—. La tarjeta entera abre tu perfil público, el mismo
+  que ve la gente. Los contadores salen del formulario de edición.
+- **El subtítulo de Inicio deja de rotular la versión**
+  (`features/workout/HomeScreen.tsx`): la pantalla que más se abre gastaba el
+  hueco de orientación —el que en las demás dice "Consulta tus resultados" o
+  "Repasa tus ejercicios mes por mes"— en "Versión 0.7.3", un dato de
+  desarrollador que además ya está al pie de Configuración. Ahora dice qué
+  rutina estás viendo, que en Inicio es la SELECCIONADA y no siempre la activa.
+
+- **Los días de una rutina se pliegan y despliegan**
+  (`features/workout/RoutineDetailScreen.tsx`, `lib/i18n.ts`): la ficha
+  escupía TODOS los ejercicios de TODOS los días de golpe, así que en una rutina
+  de cuatro días había que hacer scroll un rato solo para saber cuántos días
+  tiene. Ahora nace plegada: cada día muestra su icono, su "Día N", su nombre y,
+  a la derecha del todo, cuántos ejercicios trae ("8 ejercicios"). Desplegado
+  está exactamente como estaba, lectura y edición incluidas.
+  Es **el mismo plegado que las tarjetas de la pantalla de registro**: mismo
+  peldaño con chevron al pie (`collapseBar`, con su degradado `heroStep`),
+  mismas transiciones (`LinearTransition` a 220 ms y fundido de 180/140) y la
+  cabecera también pliega al tocarla —salvo en edición, donde sigue abriendo
+  "Editar día"—. Plegar un día con una fila de ejercicio abierta la **guarda**,
+  igual que hace el ✓ de la propia fila: ningún borrador se queda colgando
+  fuera de vista.
+
+- **Guardar una rutina pesa lo mismo que darle a me gusta**
+  (`components/SaveRoutineButton.tsx` nuevo, `components/index.ts`,
+  `features/workout/CommunityScreen.tsx`,
+  `features/workout/UserProfileScreen.tsx`,
+  `features/workout/PublicRoutineScreen.tsx`): "Añadir a mis rutinas" era un
+  botón a fila completa al pie de cada tarjeta del tablón, otro en cada rutina
+  del perfil ajeno y otro `size="large"` cerrando la consulta. Ahora es una
+  píldora con icono de marcador junto al corazón, en la cabecera de la tarjeta:
+  caben más rutinas por pantalla y las dos acciones sociales se leen como lo que
+  son. El estado "ya la tienes" se pinta como el corazón lleno (marcador en oro,
+  botón inerte), y reconoce tanto la enlazada como una copia suya
+  (`findSavedRoutine`).
+- **Los avisos de "inicia sesión para…" llevan a iniciar sesión**
+  (`components/Toast.tsx`, `features/workout/CommunityScreen.tsx`,
+  `features/workout/UserProfileScreen.tsx`,
+  `features/workout/RoutineDetailScreen.tsx`, `app/App.tsx`): decían lo que
+  faltaba pero no dónde arreglarlo, y la cuenta está tres pantallas más allá
+  (Perfil → Ajustes → Datos y nube). El `Toast` admite ahora acción
+  (`actionLabel` + `onAction`, y deja de ser `pointerEvents="none"` cuando la
+  lleva; con acción dura 6 s en vez de 3). Los cuatro avisos —dar like, seguir y
+  las dos de compartir rutina— traen botón "Iniciar sesión" que abre la cuenta.
+- **Las gráficas dejan de dibujar lo que no es progreso** (`lib/weeks.ts`,
+  `lib/exerciseProgress.ts`, `features/workout/HomeScreen.tsx`,
+  `features/workout/ExerciseProgressScreen.tsx`): la gráfica de Inicio pintaba
+  las semanas de **descarga** heredando el % de la carga anterior (una meseta
+  azul que no era ningún dato) y, con el filtro por día puesto, las semanas que
+  no entrenaron ese día caían a **0%**, que se lee como estancamiento cuando en
+  realidad no hay medida. Las dos desaparecen de las barras. Una semana
+  **incompleta sí se queda**: entrenó lo que la serie mide y cada día compara
+  contra su propia base, así que es comparable con el resto. `WeekProgressPoint`
+  estrena `isMissing` para distinguir "no hay dato" de "se quedó igual", y con
+  filtro por día la base pasa a ser la primera semana que entrenó ESE día (antes
+  la primera semana de carga marcaba 0% aunque no lo hubiera entrenado). En
+  Progreso por ejercicio, la gráfica omite también las **sesiones de descarga**:
+  metían un bache rojo en mitad de la progresión y ensanchaban el dominio hasta
+  aplanar el resto de barras (los récords y el listado las siguen contando, que
+  ahí sí son sesiones entrenadas). Si al filtrar no queda ninguna barra, la
+  tarjeta de la gráfica ya no se despliega en vez de abrir un lienzo vacío.
+- **El descanso deja de ser dorado: bloque invertido**
+  (`lib/theme.ts`, `features/workout/WorkoutLogScreen.tsx`,
+  `components/ExerciseInputField.tsx`): el bloque del descanso iba en el mismo
+  oro que los CTA de la app, así que competía con ellos siendo lo único que NO
+  se pulsa (corre solo). Ahora usa dos tokens nuevos, `restFill` / `onRestFill`:
+  superficie de máximo contraste contra el lienzo —blanca en noche, pizarra
+  oscura en día, donde un bloque blanco se perdería entre las tarjetas— con la
+  cuenta atrás y el reloj en su tinta. El **"+30s" pasa a macizo en negativo**
+  (antes un aro dorado, que sobre el bloque invertido no tendría contraste):
+  relleno con la tinta del bloque y rótulo con su superficie, la misma pareja de
+  colores que la × de saltar, así los dos controles del descanso se leen como
+  una sola familia.
+- **La × de quitar es un disco lleno con el aspa en negativo**
+  (`components/ExerciseInputField.tsx`, `features/workout/WorkoutLogScreen.tsx`):
+  las dos aspas de la tarjeta —quitar una serie metida y saltar el descanso—
+  eran un aro con la × dibujada dentro, que a 16 px sobre una burbuja de color
+  se emborronaba. Pasan a `close-circle` (disco macizo con la × recortada,
+  el mismo icono que ya limpia el buscador): blanca sobre la burbuja de la
+  serie, en la tinta del bloque sobre el descanso.
+- **Fuera el botón de editar perfil de Comunidad**
+  (`features/workout/CommunityScreen.tsx`, `app/App.tsx`): era un icono sin
+  rótulo entre dos controles que hablan de otra gente, y duplicaba lo que ya hace
+  el botón "Editar perfil" de la tarjeta de identidad de Perfil. Con él se va el
+  prop `onOpenProfileEdit` y el `back` de la pantalla `profile-edit`, que ahora
+  siempre vuelve a Perfil.
+- **La tarjeta de la lista de Rutinas pasa de cinco renglones a dos**
+  (`features/workout/RoutineSelectorScreen.tsx`): cada rutina apilaba nombre,
+  marca de origen, descripción, "N días de entrenamiento" y la fila de estado a
+  ancho completo dentro de un `padding: 18` (~170 px, 3-4 rutinas por pantalla)
+  en una lista que existe para compararlas. Ahora son cabecera (nombre + los dos
+  iconos, alineados arriba y no a media tarjeta), descripción a una línea y solo
+  si existe, y **un renglón** con estado · días · intensidad. La atribución y
+  "Ver en Inicio" bajan a una fila que solo se pinta cuando dice algo, así que
+  la rutina típica —tuya y ya en Inicio— se queda en dos bloques (~100 px).
+  El `Text` de la descripción ya no se pinta vacío.
+- **La lista de Rutinas se ordena por relevancia** (`lib/routines.ts`,
+  `features/workout/RoutineSelectorScreen.tsx`): salía en orden de creación, así
+  que una rutina cerrada hace dos años podía quedar por encima de la activa.
+  `sortRoutinesForList` ordena al pintar (activa → sin estrenar por creación →
+  cerradas por fecha de cierre), sin tocar el estado ni el orden guardado.
+- **"Cerrada" dice cuándo** (`lib/routines.ts`,
+  `features/workout/RoutineSelectorScreen.tsx`): el nuevo `routineClosedAt`
+  deriva la fecha del ÚLTIMO entrenamiento de la rutina (sobre `getLogTimestamp`,
+  sin campo nuevo) y la tarjeta rotula "Cerrada el 12 mar 2025". Antes una rutina
+  que dejaste hace dos años se leía igual que la del mes pasado.
+- **Estado vacío y etiquetas de accesibilidad en Rutinas**
+  (`features/workout/RoutineSelectorScreen.tsx`): sin rutinas la lista no pintaba
+  nada bajo una barra que prometía "consulta la que desees"; ahora hay un vacío
+  que explica el botón de abajo. Y cada tarjeta se anuncia con su nombre, su
+  estado y sus días en vez de repetir las ocho la misma etiqueta genérica.
+
+- **El bloque del descanso se pinta como una burbuja de serie**
+  (`features/workout/WorkoutLogScreen.tsx`, `components/ExerciseInputField.tsx`,
+  `lib/theme.ts`): era una superficie invertida de máximo contraste (blanca en
+  noche, pizarra en día) que competía con la tarjeta del ejercicio. Ahora usa el
+  patrón de `serieTag`: relleno del acento al 18% (gris translúcido en noche) y
+  cuenta atrás en la tinta del acento (blanca). El "+30s" pasa a **oro macizo**
+  —es lo único que se pulsa en el bloque, porque el descanso corre solo— y la ×
+  de saltar usa exactamente la misma tinta que la × de las series metidas.
+  Con ello mueren los tokens `restFill` / `onRestFill`, que solo servían aquí.
+  El bloque suelto pierde su `shadow.card`: fondo translúcido con `elevation`
+  pinta en Android un rectángulo de esquinas vivas dentro del redondeo.
+
+- **Editar una rutina deja de ser dos editores anidados**
+  (`features/workout/RoutineDetailScreen.tsx`): había que pulsar "Editar" en la
+  barra y, dentro de cada día, "Editar ejercicios" para entrar en un SEGUNDO
+  editor con su propio Cancelar/Guardar. Ahora al entrar en edición los
+  ejercicios ya son editables en la propia tarjeta del día, como en "Nueva
+  rutina", y se guardan solos: plegar una fila (✓), moverla, quitarla, salir de
+  edición o volver atrás vuelca el día. Desaparecen el botón "Editar
+  ejercicios", el segundo par de botones y el borrador.
+- **La fila de un ejercicio pasa a dos alturas**
+  (`components/ExerciseFormRow.tsx`): el nombre compartía una línea de 44 px con
+  cinco dianas y se quedaba con ~80 px (ocho caracteres), así que "Press banca
+  inclinado con mancuernas" se leía "Press banca i…". Ahora el nombre tiene la
+  primera línea entera (hasta dos renglones, 16/700) y los controles bajan a una
+  fila propia a 44 px cada uno; las flechas de reordenar eran de 30×22 apiladas.
+  Lo heredan la ficha y "Nueva rutina", que comparten la fila.
+- **Los ejercicios mandan en la lectura de la ficha**
+  (`features/workout/RoutineDetailScreen.tsx`): iban en color secundario a 16/18
+  —interlineado más corto que la fuente, con las líneas tocándose— mientras el
+  badge "Día 3" lucía relleno dorado. Ahora el ejercicio va en tinta primaria a
+  16/22 con las series apartadas a la derecha, y el número del día baja a ceja.
+- **Se puede renombrar un día** (`features/workout/RoutineDetailScreen.tsx`):
+  no había ningún camino para cambiar el nombre de un día (crear una rutina sí
+  lo permite), así que corregirlo obligaba a borrar el día y perder su
+  historial. El modal del icono se convierte en **"Editar día"** con nombre +
+  rejilla de icono: una capacidad nueva y un modal menos.
+- **Mover y borrar un día dejan de ser tres cuadros iguales**
+  (`features/workout/RoutineDetailScreen.tsx`): ↑/↓/papelera vivían en una fila
+  aparte alineada a la derecha, idénticos entre sí y despegados de su día (con 4
+  días, doce iconos repetidos). Las flechas suben a la cabecera del día, junto al
+  nombre que mueven, y borrar baja al pie del bloque con rótulo "Quitar día".
+- **El temporizador de descanso se ajusta siempre**
+  (`features/workout/RoutineDetailScreen.tsx`): su fila parecía igual que las de
+  compartir pero en modo lectura no hacía nada al tocarla y nada lo explicaba.
+  Ahora responde siempre (como publicar, que tampoco exige entrar en edición) y
+  en rutina ajena o cerrada lleva candado y motivo.
+- **Un solo formateo del descanso** (`lib/utils.ts`,
+  `features/workout/RoutineDetailScreen.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`): la ficha de rutina y el registro
+  tenían la misma función con dos nombres (`formatTime` / `formatTimerLabel`) y
+  cuerpo idéntico. Pasa a `formatRestTime` en `lib/utils.ts`, como el resto de
+  utilidades compartidas. La cuenta atrás en curso conserva su formato propio
+  (`mm:ss` en `ExerciseInputField`, donde el ancho fijo evita que el número
+  baile).
+- **Fuera código muerto** (`lib/progress.ts`, `lib/pipTimer.ts`, `lib/i18n.ts`):
+  `getWorkoutStrengthScore` no lo llamaba nadie desde que las comparaciones de
+  sesión pasaron por `getComparableWorkoutScores`; `isPipTimerAvailable` y
+  `enterPipTimer` quedaron sin consumidores (la ventanita la enciende
+  `setPipAutoEnter` y la pinta `subscribePipMode`). Además se retiran 18
+  traducciones al inglés de textos que ya no existen en ninguna pantalla
+  ("Editar Ejercicios", "Compartir en texto plano", "Mi perfil público"…).
+  Sin cambios de comportamiento.
+- **Documentación al día con el código** (`.github/docs/SETUP.md`,
+  `.github/ARCHITECTURE.md`, `AGENTS.md`,
+  `features/workout/ProfileEditScreen.tsx`): las dos guías seguían diciendo que
+  los ajustes viven "al pie de Perfil" y que el perfil público se edita desde
+  Comunidad, cuando hoy hay una pantalla `SettingsScreen` (que además es la
+  puerta a Datos y nube) y a `ProfileEditScreen` se entra desde Perfil. Se
+  corrige también el recuento de tests de SETUP (16 suites, 226), se añade
+  COMMANDS.md al índice de AGENTS y se arregla el comentario de cabecera de
+  `ProfileEditScreen`.
+- **La rutina de la comunidad se lee como la ficha de una propia: con los días
+  plegados** (`features/workout/PublicRoutineScreen.tsx`): la consulta de una
+  rutina ajena pintaba TODOS los días abiertos, así que con 5 días había que
+  recorrer 30-40 renglones antes de saber siquiera cuántos días traía. Ahora nace
+  plegada, con el recuento de ejercicios a la derecha de cada día, la misma barra
+  de pliegue con chevron al pie de cada bloque, el número del día como ceja (se
+  va el badge de arriba a la derecha) y los ejercicios en tinta primaria a 16/22
+  con el plan de series apartado a la derecha, en vez de "Nombre — 4x8" en
+  secundario. Es exactamente el lenguaje de `RoutineDetailScreen`: la misma
+  rutina ya no cambia de forma según de dónde se abra.
+- **Quedarse una rutina de la comunidad deja de ser un icono sin rótulo**
+  (`features/workout/PublicRoutineScreen.tsx`): la única decisión que se viene a
+  tomar a esa pantalla se pintaba como un marcador de 20 px arrimado al título,
+  igual que en las tarjetas del tablón —donde sí tiene sentido, porque hay una
+  por rutina y no sobra ancho—. Ahora usa el `withLabel` que el componente ya
+  traía (y que no se usaba en ninguna parte): botón ancho al pie de la cabecera
+  con "Añadir a mis rutinas" / "En tus rutinas". De paso el nombre de la rutina
+  recupera la fila entera.
+- **La tarjeta del tablón deja de comerse el nombre de la rutina**
+  (`features/workout/CommunityScreen.tsx`): la cabecera metía cuatro dianas en la
+  misma fila que el título (avatar, guardar, me gusta) y en un móvil de 360 dp al
+  nombre le quedaban ~125 px, unos 12 caracteres: "Push Pull Legs" ya salía
+  cortado. Guardar y "me gusta" bajan al pie que ya existía (el de intensidad y
+  series, medio vacío), el título se queda con la fila entera a dos líneas, y la
+  firma pasa a ser **una sola diana** con foto y nombre —antes eran dos
+  `Pressable` distintos para la misma acción—, con el mismo aspecto que la firma
+  de la ficha de una rutina pública.
+- **Publicar una rutina ya no te deja firmando como «Anónimo» sin avisar**
+  (`features/workout/RoutineDetailScreen.tsx`): el perfil público nace en privado
+  (`profiles.is_public` por defecto `false`), así que publicar por el camino
+  feliz sacaba la rutina al tablón sin foto, sin nombre, sin poder abrir tu
+  perfil ni seguirte, y nada lo decía. Ahora, si el perfil está en privado o aún
+  no tiene nombre visible, publicar abre un aviso que explica qué va a pasar y
+  ofrece las dos salidas: **"Hacerme visible y publicar"** (pone el nombre y
+  marca el perfil como público ahí mismo, sin ir a Perfil → Editar perfil) o
+  "Publicar como «Anónimo»". Y la fila lo rotula: "Pública · firmada como
+  «Anónimo»" mientras siga así.
+- **Limpieza tras la auditoría: cuatro copias fundidas y el código muerto
+  fuera** (`lib/progress.ts`, `lib/exerciseProgress.ts`, `lib/routines.ts`,
+  `lib/utils.ts`, `lib/achievements.ts`, `components/PipRestTimer.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`, `features/workout/DetailScreen.tsx`,
+  `features/workout/DaySelectorScreen.tsx`,
+  `features/workout/RoutineDetailScreen.tsx`,
+  `features/workout/ProfileEditScreen.tsx`): sin cambiar nada de lo que se ve.
+  El predicado `isValidSet` estaba escrito dos veces con el mismo cuerpo (los
+  porcentajes por sesión y el histórico por ejercicio) y ahora vive solo en
+  `progress.ts`. El descanso en `m:ss` se formateaba en tres sitios —
+  `lib/utils.ts` ya tenía `formatRestTime`, y aun así la ventanita flotante
+  llevaba su propia función y la pantalla de registro lo hacía a mano en el
+  JSX—: los tres usan ya el de `utils`. Fijar el GIF de un ejercicio calculaba
+  el día actualizado por su cuenta en el registro y en el detalle: ese cálculo
+  es ahora `withExerciseCatalogId` en `routines.ts`. Y el rótulo "1 ejercicio /
+  N ejercicios" se duplicaba entre "Elige la sesión" y la ficha de la rutina:
+  pasa a `exerciseCountText`. Además, fuera un import sin usar
+  (`Pressable` en Perfil público), un import muerto en un test y una variable
+  que no leía nadie (`currentDayIds` en los logros semanales) — `tsc
+--noUnusedLocals --noUnusedParameters` queda limpio.
+- **La caché de Gradle del módulo de vídeo deja de estar en git**
+  (`.gitignore`, `modules/video-encoder/android/.gradle/`): ocho ficheros de
+  caché de compilación (`fileHashes.bin`, los `.lock`, `gc.properties`) estaban
+  versionados, así que cada build ensuciaba el `git status` con cambios que no
+  eran de nadie. Se dejan de seguir (siguen en disco) y la regla
+  `modules/*/android/.gradle/` lo evita en adelante.
+- **Documentación puesta al día con el código** (`AGENTS.md`,
+  `.github/ARCHITECTURE.md`, `.github/docs/SETUP.md`): los botones del registro
+  se documentaban como "➕ ➖ ✓" desde antes de que "borrar última serie" se
+  convirtiera en la × de cada burbuja y "finalizar" se mudara al ⋯ del
+  ejercicio; la lista de modales solo nombraba `ConfirmModal` aunque ya hay dos
+  especializaciones más (`RestTimerModal`, `ReportModal`); `SegmentedFilter`
+  seguía llevándose el crédito del filtro de intensidad de Comunidad, que dejó
+  de ser un raíl; `routines.ts` se describía como "duplicar una rutina" cuando
+  hace ya intensidad, situación y orden de la lista; y ni `modules/` ni
+  `moderation.ts` ni las tablas de comentarios/reportes aparecían en los mapas
+  de archivos.
+- **En "Progreso por ejercicio", "Volver" ya dice a dónde va — y el atrás del
+  móvil va al mismo sitio** (`features/workout/ExerciseProgressScreen.tsx`,
+  `app/App.tsx`): la pantalla son dos pasos (la lista de ejercicios y la ficha
+  de uno), pero la selección vivía dentro de la pantalla, así que el atrás
+  físico de Android no la veía: el botón en pantalla subía a la lista y el gesto
+  del móvil se largaba a Perfil, saltándosela. Justo lo que `App.tsx` prohíbe
+  ("una sola función por pantalla para que ambos caminos lleven siempre al mismo
+  sitio"). La selección se muda a la navegación, con el resto: ahora los dos
+  gestos recorren los mismos pasos porque son **la misma función**. Y el botón
+  deja de ser mudo: con la ficha abierta rotula **"← Todos los ejercicios"**, y
+  solo pone "Volver" cuando de verdad sale de la pantalla (o cuando se entró
+  enfocado desde el detalle de un día, donde no hay lista detrás).
+- **El Detalle de una sesión de solo cardio ya dice cuánto hiciste**
+  (`features/workout/DetailScreen.tsx`): la tira-resumen de arriba estaba
+  condicionada a que hubiera ejercicios de fuerza, así que una sesión de solo
+  cardio —la más corta de leer— se quedaba sin ningún total: tres disciplinas
+  eran tres cajas y en ninguna parte los minutos ni las kcal del día. Consultarla
+  enseñaba MENOS que la fila de Cardio que habías tocado para abrirla. Ahora la
+  tira está siempre y se adapta: en fuerza como antes, sumando las kcal si además
+  hubo cardio, y en solo cardio la tira **es** el total (minutos, kcal y km). Los
+  números ya estaban calculados en `cardioSessionFromLog`; solo faltaba
+  enseñarlos.
+- **En el Calendario, el pie de la celda dice de qué habla**
+  (`features/workout/CalendarScreen.tsx`): el mismo hueco, con la misma
+  tipografía, ponía "S3" (la semana de la rutina) en modo Fuerza y "45'" (los
+  minutos) en modo Cardio — dos magnitudes sin relación y solo un toggle lejano
+  para distinguirlas. Encima la leyenda que descifra los códigos solo se pintaba
+  en Fuerza, así que en Cardio no había nada que dijera qué era ese número, y el
+  apóstrofo como unidad no se usa en ningún otro sitio de la app. Ahora la celda
+  de cardio pone **"45 min"** y el modo Cardio tiene su propia leyenda: qué son
+  los minutos y que la silueta es la disciplina que más calorías quemó ese día.
+  De paso, el Calendario deja de tener **dos subtítulos** según hubiera datos o
+  no ("Tu historial mensual" / "Repasa tus ejercicios mes por mes"): es la misma
+  pantalla y el hueco orienta sobre lo que hace, no sobre lo que hay dentro.
+- **En el Detalle, el oro pasa del GIF a "Ver evolución"**
+  (`components/ExerciseResultDisplay.tsx`): en la cabecera de cada ejercicio el
+  botón de GIF llevaba borde dorado y el de evolución —la acción que enlaza con
+  la pantalla de Progreso, la razón de estar consultando un entreno guardado— iba
+  en gris y sin rótulo. El color decía lo contrario de lo que la pantalla quiere.
+  Se intercambian: aquí el oro es para seguir el hilo del ejercicio y el GIF se
+  queda en neutro. En el **registro** el GIF conserva su oro, que ahí sí es la
+  referencia de cómo se hace el movimiento.
+- **Un solo botón de paginar en toda la app**
+  (`components/LoadMoreButton.tsx`, `features/workout/ExerciseProgressScreen.tsx`):
+  Inicio y Cardio cargaban más historial con `LoadMoreButton` y "Progreso por
+  ejercicio" hacía lo mismo con un `Button` secundario y otras palabras ("Ver
+  más"). Misma tarea, dos pieles. Ahora los tres usan el componente compartido, y
+  el recuento de los que faltan —que era lo único que aportaba la copia—
+  sobrevive como prop suya (`remaining`), no como otro botón.
+- **La app ya dice qué día te toca, y la hero lleva directa a él**
+  (`lib/weeks.ts`, `features/workout/HomeScreen.tsx`,
+  `features/workout/DaySelectorScreen.tsx`): el camino más repetido de la app era
+  Inicio → "Empezar entrenamiento" → "Elige la sesión" → acertar el día de
+  memoria. Y eso que la app lo sabe: la cabecera de la semana ya rotula "2 de 4
+  días". Ahora la hero **nombra** el día que toca ("Día 3 · Pecho y tríceps") y
+  pulsarla abre ese registro: el caso común baja de tres pantallas a dos. En
+  "Elige la sesión", los días ya entrenados esta semana llevan su visto y se
+  apagan, y el que toca va con aro dorado y una ceja que lo dice. Es una
+  **sugerencia**, no una imposición: saltarse un día o repetir uno son gestos
+  normales y las tarjetas se tocan todas igual. Y elegir otro sigue a un toque,
+  en "Elegir otro día" bajo la hero — que es además la puerta al "Solo cardio".
+  El "día que toca" lo calcula `currentWeekDayState` en `lib/weeks.ts`, una sola
+  vez y para las dos pantallas, con sus tests.
+- **"Insertar cardio" sale del carrusel a su propio botón**
+  (`features/workout/CardioScreen.tsx`): era la TERCERA diapositiva de un héroe
+  de tres, así que la única acción de la pantalla estaba a dos toques de flecha,
+  detrás de dos tarjetas de consulta. Ahora **abre el carrusel**, como la hero de
+  Inicio: la acción primero y la consulta después. (El peso, la otra tarjeta, se
+  ha mudado a Perfil, así que el carrusel se queda en dos.)
+- **"Elegir otro día" se mete dentro de la hero y deja de empujar Inicio hacia
+  abajo** (`components/HeroCard.tsx`, `features/workout/HomeScreen.tsx`): era una
+  pastilla bajo la hero que desplazaba racha, progreso e historial por una opción
+  que casi no se usa. Ahora el control es el **subtítulo de la propia hero** —el
+  que nombra el día que toca—, con su chevron para que se vea que se pulsa:
+  cuesta cero píxeles y lo pulsable queda pegado a lo que describe. Mismo patrón
+  que el subtítulo de `GlassTopBar` en el registro y el Detalle. Solo cuando ese
+  subtítulo ES el día: en "¡Semana completada!" dice otra cosa y se queda quieto.
+- **Las tarjetas de día de Inicio y Cardio adelgazan**
+  (`features/workout/HomeScreen.tsx`, `features/workout/CardioScreen.tsx`):
+  llevaban 16 px de padding por los cuatro lados **más** un `minHeight: 72`, así
+  que el alto lo fijaba el mínimo y no el contenido (un icono de 36 y dos
+  renglones). Fuera el mínimo y el padding vertical baja a 10: en las dos listas
+  que más se recorren cabe ahora un día más por pantalla sin tocar el ancho.
+- **En Progreso por ejercicio sale el GIF del ejercicio**
+  (`features/workout/ExerciseProgressScreen.tsx`, `components/index.ts`): la
+  lista era texto puro y la ficha se titulaba con un icono de gráfica, el mismo
+  para todos. Ahora cada fila lleva su miniatura en movimiento —igual que en el
+  registro y en el Detalle— y la ficha de "Tu evolución" la lleva a la izquierda
+  del título. El que no tenga GIF enseña la lupa y abre el catálogo buscando por
+  su nombre. El `catalogId` se resuelve por NOMBRE, como toda esta pantalla: el
+  mismo press de banca tiene otro id en cada rutina.
+- **El raíl de Comunidad deja de colgar 18 px por debajo de su filtro**
+  (`components/SegmentedFilter.tsx`, y sus cuatro consumidores): el desajuste no
+  era de Comunidad — `SegmentedFilter` traía un `marginTop: 18` de fábrica,
+  heredado de cuando solo colgaba de una gráfica, y dentro de una fila lo dejaba
+  descolgado por mucho que la fila alineara al centro. El margen sale del
+  componente y lo ponen las tres pantallas que sí lo necesitan
+  (`SEGMENTED_FILTER_CHART_GAP`); Progreso, que lo neutralizaba a mano con un
+  `marginTop: 0`, se queda sin el parche.
+- **Comunidad recoge el buscador y suelta un botón duplicado**
+  (`features/workout/CommunityScreen.tsx`): la fila de arriba tenía una caja de
+  búsqueda de 46 px permanente para algo puntual y, al lado, un botón a "A quién
+  sigo" al que **ya se llega** pulsando el contador de "Siguiendo" de tu tarjeta.
+  El botón se va y el buscador se pliega tras una lupa junto al filtro de
+  intensidad, con el campo y sus resultados desplegándose bajo los filtros. Al
+  cerrarlo se vacía, para que no quede el tablón filtrado por un texto invisible;
+  si hay texto, el campo no se pliega (un filtro activo nunca se esconde).
+- **"Datos y nube" deja de prometer un historial que no tiene**
+  (`features/workout/DataScreen.tsx`): el subtítulo decía "Tu cuenta, tus copias
+  y tu historial", pero la tercera sección es "Reemplazar o borrar" —justo lo
+  contrario—. Ahora dice "tus datos". Y el título de "Copia automática" se
+  alinea por fin con su icono: era Anton en una fila centrada, y Anton pega el
+  glifo al borde superior de su caja; se le aplica el mismo remedio que al resto
+  de la app (`includeFontPadding: false` + empujón), que alinea de paso todas las
+  tarjetas de la pantalla.
+
+### Correcciones
+
+- **Sin internet, Perfil decía que no tenías perfil** (`hooks/useMyProfile.ts`,
+  `features/workout/ProfileScreen.tsx`): el perfil público vive solo en la nube y,
+  si la petición fallaba, el store se quedaba en `null`: la pantalla pintaba "Sin
+  perfil", el texto de bienvenida y un botón dorado "Completar perfil" —
+  invitando a rehacer algo que ya existe—, y la barra inferior perdía la foto. Y
+  no hacía falta estar sin cobertura: como la pantalla ignoraba el `loading` que
+  el hook ya devolvía, ese estado falso parpadeaba en **cada arranque en frío**.
+  Ahora el último perfil conocido se guarda en local (una clave por usuario en
+  AsyncStorage, mismo patrón que el cursor de sync) y se pinta al instante; la
+  respuesta de la nube lo pisa cuando llega y, si falla, se queda el cacheado en
+  vez de vaciarse. "Sin perfil" solo cuando de verdad no hay ninguno, y mientras
+  no se sabe, el botón espera desactivado en vez de invitar a completar.
+  **Ojo:** `avatar_url` es una URL de Supabase Storage, así que sin red la foto
+  sigue dependiendo de la caché de disco de `Image`; el nombre y la bio ya no.
+
+- **"Anterior" se quedaba en blanco si la semana pasada te saltaste el ejercicio**
+  (`features/workout/WorkoutLogScreen.tsx`): un ejercicio saltado se guarda igual
+  que uno hecho —una fila por serie— pero con todas a (-1, -1), así que existía
+  como "última vez" y no decía nada: ni comparación, ni peso ni reps sugeridos en
+  las casillas, justo el día que más falta hacen. Ahora `getPreviousExerciseLog`
+  busca la última sesión con series DE VERDAD (`hasLoggedSets`) y retrocede tantas
+  semanas como haga falta; las de descarga siguen fuera, como ya hacía
+  `getPreviousExerciseRuns`.
+- **Un ejercicio plegado escondía por completo su nota**
+  (`components/ExerciseInputField.tsx`, `lib/i18n.ts`): el bloque de la nota solo
+  se pinta con la tarjeta desplegada, y al completarse un ejercicio la tarjeta se
+  pliega sola — así que lo que hubieras apuntado desaparecía sin dejar rastro de
+  que estaba ahí. Ahora, plegada y con nota, sale su icono pegado al título; y
+  pulsarlo la abre, sin tener que desplegar ni pasar por el ⋯.
+- **Saltar un ejercicio lanzaba un descanso de 2:30**
+  (`features/workout/WorkoutLogScreen.tsx`): `handleFinishExercise` trataba saltar
+  como terminar y arrancaba el temporizador, con lo que la app mandaba descansar
+  de un esfuerzo que no había existido. Saltar ya no lanza descanso ninguno y
+  detiene el que estuviera corriendo por ESE ejercicio.
+- **La foto de perfil nueva se perdía si no dabas a "Guardar perfil"**
+  (`features/workout/ProfileEditScreen.tsx`, `lib/i18n.ts`): elegir la foto ya es
+  la confirmación —la has recortado y aceptado—, pero el avatar se quedaba solo en
+  pantalla esperando un botón fácil de olvidar. Ahora se guarda sola al elegirla
+  (con el resto del formulario tal y como esté) y avisa con un toast. El botón
+  sigue ahí para el nombre, la bio y la visibilidad.
+- **La marca "de {autor}" ya lleva al perfil de quien hizo la rutina**
+  (`components/SaveRoutineButton.tsx`, `types/index.ts`, `lib/routines.ts`,
+  `lib/db/schema.ts`, `lib/db/index.ts`, `lib/db/mappers.ts`, `lib/cloud/sync.ts`,
+  `features/workout/RoutineSelectorScreen.tsx`,
+  `features/workout/RoutineDetailScreen.tsx`, `app/App.tsx`): `RoutineOriginPill`
+  daba el crédito pero era texto muerto, cuando en el tablón y en la consulta
+  pública el autor sí abre su perfil. Ahora la píldora es pulsable (con chevron)
+  en la lista y en la ficha. Hacía falta un campo nuevo: `duplicateRoutine` tiraba
+  `linkedOwnerId` al copiar y de una copia solo quedaba el NOMBRE del autor, así
+  que se añade `sourceOwnerId` (`SCHEMA_VERSION` 5 → 6 con migración por
+  `ALTER TABLE`; columna solo local, `cloudRoutineRow` la descarta). La pantalla
+  `user-profile` gana un `back` opcional: antes volvía siempre a Comunidad y
+  abrir un perfil desde Rutinas dejaba al usuario en otra pestaña.
+- **La ficha de una rutina ajena decía el autor en dos sitios distintos**
+  (`features/workout/RoutineDetailScreen.tsx`): la enlazada lo rotulaba en la
+  ceja ("Rutina de {autor}") y la copia en la marca de origen. Ahora las dos usan
+  la marca —que además enlaza al perfil— y la ceja vuelve a ser "Rutina".
+- **El distintivo de intensidad se pintaba por triplicado**
+  (`components/RoutineIntensityPill.tsx` nuevo,
+  `features/workout/CommunityScreen.tsx`,
+  `features/workout/PublicRoutineScreen.tsx`,
+  `features/workout/RoutineSelectorScreen.tsx`, `components/index.ts`):
+  Comunidad y la consulta pública tenían cada una su píldora y su tabla de
+  colores. Se unifican en un componente, y **tus propias rutinas por fin lo
+  muestran** (calculado en local con `countRoutineSets`, oculto si el plan no
+  guarda series): antes la app enseñaba la caña de una rutina a los desconocidos
+  y no a su dueño.
+
 ## Version 0.7.3 - 2026-08-26
 
 Revisión completa del 2026-08-24 (`/revision-app`), las tareas del ROADMAP

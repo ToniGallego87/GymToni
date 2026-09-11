@@ -13,7 +13,7 @@ import {
   Toast,
   StretchScrollView,
 } from '@components';
-import { View, Text, StyleSheet, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -574,10 +574,14 @@ export function DataScreen({
         )}
       </StretchScrollView>
 
+      {/* El subtítulo resume las tres secciones de la pantalla, en su orden:
+          "Tu cuenta", "Copias de seguridad" y "Reemplazar o borrar". Antes
+          prometía "tu historial", que no es ninguna de ellas —la tercera es
+          justo lo contrario: deshacer y vaciar—. */}
       <GlassTopBar
         title={t('Datos y nube')}
         icon="folder-cog-outline"
-        subtitle={t('Tu cuenta, tus copias y tu historial')}
+        subtitle={t('Tu cuenta, tus copias y tus datos')}
         topInset={insets.top}
       />
 
@@ -683,6 +687,13 @@ const makeStyles = () =>
       letterSpacing: 0.4,
       color: theme.colors.text,
       lineHeight: 30,
+      // Anton pega el glifo al borde superior de su caja, así que en una fila
+      // centrada el texto se veía más bajo que el icono que lo acompaña. Mismo
+      // remedio que el resto de la app (ver lib/textStyles.ts): quitar el
+      // relleno de fuente y empujar el glifo, sin agrandar la caja de línea.
+      includeFontPadding: false,
+      textAlignVertical: 'center',
+      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
     },
     actionSubtitle: {
       fontSize: 14,

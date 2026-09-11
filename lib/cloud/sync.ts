@@ -13,7 +13,12 @@ import {
   type RemoteChanges,
   type RemoteTableChange,
 } from '../db';
-import { dayToRows, logToRows, routineToRows } from '../db/mappers';
+import {
+  dayToRows,
+  logToRows,
+  routineToRows,
+  type RoutineRow,
+} from '../db/mappers';
 
 // Motor de sincronización incremental (Fase 3). Push + pull artesanales sobre el
 // `sync_outbox` y las tablas espejo de Supabase.
@@ -83,6 +88,20 @@ function own<T extends object>(row: T, userId: string, now: number): Row {
   return { ...row, user_id: userId, updated_at: now, deleted: false };
 }
 
+// La fila de rutina lleva columnas que solo existen en el SQLite local (la
+// procedencia de una rutina traída del tablón): se quitan antes de subirla, o
+// el upsert fallaría por columna desconocida.
+function cloudRoutineRow(row: RoutineRow, userId: string, now: number): Row {
+  const {
+    linked_owner_id: _linked,
+    source_routine_id: _source,
+    source_author: _author,
+    source_owner_id: _owner,
+    ...rest
+  } = row;
+  return own(rest, userId, now);
+}
+
 async function cloudUpsert(table: string, rows: Row[]): Promise<void> {
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
     const { error } = await supabase
@@ -148,8 +167,13 @@ async function pushRoutineUpsert(
   userId: string,
   now: number
 ): Promise<void> {
+  // Una rutina enlazada de la comunidad no se sube (sus ids son de su dueño):
+  // el outbox ni siquiera la encola, pero si llegara una entrada antigua se
+  // descarta aquí antes de chocar contra la RLS.
+  if (routine.linkedOwnerId) return;
+
   const { routine: routineRow, days, exercises } = routineToRows(routine);
-  await cloudUpsert('routines', [own(routineRow, userId, now)]);
+  await cloudUpsert('routines', [cloudRoutineRow(routineRow, userId, now)]);
 
   const dayIds = days.map((d) => d.id);
   const removedDays = await reconcileChildren(

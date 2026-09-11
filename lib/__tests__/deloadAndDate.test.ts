@@ -2,7 +2,6 @@ import {
   assignmentDuplicatesDayInWeek,
   buildWeekProgress,
   isDeloadBlock,
-  groupLogsIntoWeekBlocks,
 } from '../weeks';
 import { combineDateWithTime } from '../utils';
 import { parseImportedExercise, buildWorkoutExercises } from '../exerciseForm';

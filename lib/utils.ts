@@ -52,6 +52,21 @@ export function getToday(): string {
 }
 
 /**
+ * Segundos de descanso en `m:ss` ("150" → "2:30"). Fuente única del formateo
+ * que la ficha de la rutina y el registro tenían duplicado con dos nombres
+ * (`formatTime` / `formatTimerLabel`) y el mismo cuerpo.
+ *
+ * La cuenta atrás EN CURSO usa su propio formato (`mm:ss`, con los minutos
+ * rellenados) en `ExerciseInputField`: ahí el ancho fijo evita que el número
+ * baile mientras corre.
+ */
+export function formatRestTime(seconds: number): string {
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds % 60;
+  return `${minutes}:${rest.toString().padStart(2, '0')}`;
+}
+
+/**
  * Combina una fecha (YYYY-MM-DD) con la hora de un timestamp de referencia.
  * Se usa al reasignar un entreno a otro día: cambia el día pero conserva la
  * hora, para que `createdAt` (con el que se ordenan y agrupan las semanas)

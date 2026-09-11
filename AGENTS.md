@@ -11,6 +11,7 @@ Para detalles técnicos consulta:
 - [.github/docs/backend-design.md](.github/docs/backend-design.md) — propuesta de backend, cuentas y sincronización (Supabase, por fases)
 - [.github/docs/backend-fase1-runbook.md](.github/docs/backend-fase1-runbook.md) — runbook de la Fase 1 del backend: fundaciones locales de sync sobre la `expo-sqlite` actual (sin subir SDK ni New Architecture). Entregada en 0.7.0; PowerSync se descartó (ver backend-design.md §14)
 - [.github/docs/SETUP.md](.github/docs/SETUP.md) — instalación y estructura de archivos
+- [.github/docs/COMMANDS.md](.github/docs/COMMANDS.md) — comandos de build (APK release), depuración por USB y verificación
 - [.github/docs/UPDATES.md](.github/docs/UPDATES.md) — historial de versiones
 - [.github/docs/ROADMAP.md](.github/docs/ROADMAP.md) — seguimiento de futuros desarrollos (mejoras visuales, simplificaciones y nuevas funcionalidades pendientes)
 
@@ -127,14 +128,17 @@ Antes de finalizar, verificar:
 
 ## Diseño UI
 
-- Inputs rápidos (ej: `60x8`), botones grandes (➕ ➖ ✓)
+- Inputs rápidos (ej: `60x8`): peso y reps en dos campos con flechas +/− y un
+  botón grande de añadir serie; cada serie metida se borra con su propia ×
 - Uso con una mano, navegación simple
 - Evitar modales innecesarios y formularios largos
 - Sistema glass: usar tokens de `glassTokens.ts`
 - Colores y degradados SIEMPRE desde `theme.ts` (`theme.colors`, `theme.gradients`); no hex sueltos en pantallas
 - Modales: SIEMPRE `AppModal` (overlay/tarjeta/título/pie), con `Button` en las
   acciones. Nunca montar un `Modal` + overlay a mano
-- Confirmaciones (eliminar/importar/limpiar): `ConfirmModal` (es `AppModal` + cancelar/confirmar)
+- Confirmaciones (eliminar/importar/limpiar): `ConfirmModal` (es `AppModal` + cancelar/confirmar).
+  Las otras especializaciones ya escritas: `RestTimerModal` (descanso por defecto
+  de la rutina) y `ReportModal` (reportar rutina/perfil/comentario)
 - Gráficas de barras: `BarChart`. Filtros de gráfica: `SegmentedFilter`
 - Nada de acciones escondidas tras long-press: si algo se puede hacer, tiene que
   verse (botón propio con su icono)

@@ -12,7 +12,13 @@ export interface ImprovementResult {
  */
 export const FIRST_TIME_IMPROVEMENT_PERCENT = 30;
 
-function isValidSet(setItem: ParsedSet): boolean {
+/**
+ * ¿Una serie puntúa? Descarta las que no son números y las omitidas (el "—" que
+ * deja "Saltar resto" se guarda como -1). Fuente única: la usan tanto los
+ * porcentajes por sesión/semana de aquí como el histórico por ejercicio
+ * (`lib/exerciseProgress.ts`), que la tenían duplicada con el mismo cuerpo.
+ */
+export function isValidSet(setItem: ParsedSet): boolean {
   return (
     Number.isFinite(setItem.weight) &&
     Number.isFinite(setItem.reps) &&
@@ -83,13 +89,6 @@ export function getExerciseStrengthScore(
 ): number {
   if (!exerciseLog) return 0;
   return getTotalSetsStrengthScore(exerciseLog.parsedSets || []);
-}
-
-export function getWorkoutStrengthScore(workoutLog: WorkoutLog | null): number {
-  if (!workoutLog) return 0;
-  return workoutLog.exercises.reduce((sum, exerciseLog) => {
-    return sum + getTotalSetsStrengthScore(exerciseLog.parsedSets || []);
-  }, 0);
 }
 
 /** Nombre normalizado, para emparejar el mismo ejercicio entre dos sesiones. */

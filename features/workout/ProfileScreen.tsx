@@ -22,6 +22,9 @@ import { t } from '@lib/i18n';
 interface ProfileScreenProps {
   onOpenRoutines?: () => void;
   onOpenExerciseProgress?: () => void;
+  // Peso corporal: se edita aquí, no en el carrusel de Cardio (se toca una vez
+  // cada varias semanas y allí ocupaba media hero).
+  onOpenBodyWeight?: () => void;
   onOpenSettings?: () => void;
   onOpenProfileEdit?: () => void;
 }
@@ -47,13 +50,18 @@ type MenuEntry = {
 export function ProfileScreen({
   onOpenRoutines,
   onOpenExerciseProgress,
+  onOpenBodyWeight,
   onOpenSettings,
   onOpenProfileEdit,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
-  const { profile } = useMyProfile();
+  const { profile, loading: profileLoading } = useMyProfile();
   const isProfileFilled = hasProfileFilled(profile);
+  // Primera carga sin nada que enseñar (ni copia local ni respuesta todavía):
+  // no se puede decir "Sin perfil" porque aún no se sabe. Con copia local esto
+  // no llega a verse; solo pasa en el primer arranque tras iniciar sesión.
+  const profileUnknown = profileLoading && !profile;
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
@@ -74,6 +82,12 @@ export function ProfileScreen({
       label: t('Progreso por ejercicio'),
       hint: t('Tu evolución y tus récords, ejercicio a ejercicio'),
       onPress: onOpenExerciseProgress,
+    },
+    {
+      icon: 'scale-bathroom',
+      label: t('Peso corporal'),
+      hint: t('Actualízalo y mira cómo ha ido cambiando'),
+      onPress: onOpenBodyWeight,
     },
     {
       icon: 'cog-outline',
@@ -109,24 +123,41 @@ export function ProfileScreen({
             <Avatar uri={profile?.avatar_url} size={72} />
             <View style={styles.identityTextWrap}>
               <Text style={styles.identityName} numberOfLines={2}>
-                {isProfileFilled ? profile?.display_name : t('Sin perfil')}
+                {profileUnknown
+                  ? t('Cargando…')
+                  : isProfileFilled
+                  ? profile?.display_name
+                  : t('Sin perfil')}
               </Text>
-              <Text style={styles.identityBio} numberOfLines={3}>
-                {isProfileFilled
-                  ? profile?.bio?.trim() ||
-                    t('Sin biografía: cuéntale a la gente qué entrenas.')
-                  : t(
-                      'Tu foto y tu nombre son lo que ve la gente en Comunidad.'
-                    )}
-              </Text>
+              {!profileUnknown && (
+                <Text style={styles.identityBio} numberOfLines={3}>
+                  {isProfileFilled
+                    ? profile?.bio?.trim() ||
+                      t('Sin biografía: cuéntale a la gente qué entrenas.')
+                    : t(
+                        'Tu foto y tu nombre son lo que ve la gente en Comunidad.'
+                      )}
+                </Text>
+              )}
             </View>
           </View>
           {/* Un solo botón, y dice lo que toca: editar si ya hay perfil,
-              completarlo si aún no lo hay. Los dos llevan al mismo sitio. */}
+              completarlo si aún no lo hay. Los dos llevan al mismo sitio.
+              Mientras no se sabe cuál de los dos casos es, el botón no invita a
+              "completar" un perfil que puede existir ya: espera desactivado. */}
           <Button
-            title={isProfileFilled ? t('Editar perfil') : t('Completar perfil')}
-            variant={isProfileFilled ? 'secondary' : 'primary'}
+            title={
+              profileUnknown
+                ? t('Cargando…')
+                : isProfileFilled
+                ? t('Editar perfil')
+                : t('Completar perfil')
+            }
+            variant={
+              isProfileFilled || profileUnknown ? 'secondary' : 'primary'
+            }
             size="medium"
+            disabled={profileUnknown}
             onPress={() => onOpenProfileEdit?.()}
           />
         </View>

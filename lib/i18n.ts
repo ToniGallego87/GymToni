@@ -106,6 +106,16 @@ export function parseTypedNumber(text: string): number {
 
 const EN: Record<string, string> = {};
 
+/**
+ * ¿Esta clave tiene traducción registrada? Solo para el test que recorre los
+ * `t('…')` del código y falla si alguno se ha quedado sin entrada: `t()` cae al
+ * español en silencio, así que sin esta red la app se va quedando a medio
+ * traducir sin que nada avise.
+ */
+export function hasEnglish(text: string): boolean {
+  return Object.prototype.hasOwnProperty.call(EN, text);
+}
+
 export function t(
   text: string,
   params?: Record<string, string | number>
@@ -164,7 +174,6 @@ register({
   'hace {n} min': '{n} min ago',
   'hace {n} h': '{n} h ago',
   'hace {n} d': '{n} d ago',
-  'Tema, idioma y novedades': "Theme, language and what's new",
   'Tu rutina, tus datos y la configuración': 'Your routine, data and settings',
   Entrenamientos: 'Workouts',
   'Sesiones cardio': 'Cardio sessions',
@@ -197,8 +206,6 @@ register({
   'Solo cardio': 'Cardio only',
   'Registra solo tu cardio': 'Log just your cardio',
   'Añade tu cardio antes de guardar': 'Add your cardio before saving',
-  'Empezar una nueva semana con este día': 'Start a new week with this day',
-  'Empezar sesión': 'Start session',
   '¡Semana completada!': 'Week completed!',
   'Pulsa para compartir resultados': 'Tap to share your results',
   'Continúa tu entrenamiento': 'Continue your workout',
@@ -234,11 +241,20 @@ register({
   Eliminar: 'Delete',
   Volver: 'Back',
   Activa: 'Active',
-  '+ Nueva rutina': '+ New routine',
   'Consultar detalles de esta rutina': 'View this routine in detail',
-  '{n} días de entrenamiento': '{n} training days',
   'Consulta la que desees o crea una nueva':
     'Check any routine or create a new one',
+  'Aún no tienes rutinas': "You don't have any routines yet",
+  'Crea la primera aquí abajo o cógela de la comunidad':
+    'Create your first one below or grab one from the community',
+  // Situación de una rutina en la lista (y su lectura para el lector de pantalla)
+  'La que entrenas': 'The one you train',
+  'Sin estrenar': 'Not started yet',
+  Cerrada: 'Closed',
+  'Cerrada el {date}': 'Closed on {date}',
+  'En Inicio': 'On Home',
+  'Ver en Inicio': 'Show on Home',
+  '{name}. {status}. {days}': '{name}. {status}. {days}',
   Duplicar: 'Duplicate',
   '(copia)': '(copy)',
   '(copia {n})': '(copy {n})',
@@ -254,6 +270,7 @@ register({
   Día: 'Day',
   'Selecciona el día que vas a registrar': "Select the day you'll log",
   '{n} ejercicios': '{n} exercises',
+  '1 ejercicio': '1 exercise',
 
   // Registro de entrenamiento
   Guardar: 'Save',
@@ -262,7 +279,6 @@ register({
   'Cronómetro del ejercicio': 'Exercise stopwatch',
   Cancelar: 'Cancel',
   Borrar: 'Clear',
-  'Entrenamiento guardado': 'Workout saved',
   'Error al guardar.': 'Could not save.',
   'Rellena primero los datos': 'Fill in the data first',
   'El peso y las repeticiones no pueden ser negativos':
@@ -270,11 +286,15 @@ register({
   'Valor demasiado alto (máx. {max}kg / {reps} reps)':
     'Value too high (max. {max}kg / {reps} reps)',
   'Valor no válido: usa solo números': 'Invalid value: numbers only',
-  'Rellena los ejercicios': 'Fill in the exercises',
+  'Plegar día': 'Collapse day',
+  'Desplegar día': 'Expand day',
   'Notas del ejercicio': 'Exercise notes',
+  'Ver la nota del ejercicio': 'See the exercise note',
   'Añade una nota (ej: muy cansado, fallo en última serie)':
     'Add a note (e.g. very tired, failed last set)',
   'Descanso finalizado': 'Rest over',
+  Descanso: 'Rest',
+  '¡A por la siguiente serie!': 'On to the next set!',
   'Es hora de tu siguiente serie': 'Time for your next set',
   Objetivo: 'Target',
   Anterior: 'Previous',
@@ -311,13 +331,11 @@ register({
   'Ej: Escalador, Remo, etc.': 'E.g.: Stair climber, Rowing, etc.',
   Continuar: 'Continue',
   Atrás: 'Back',
-  'Disciplinas ejecutadas:': 'Disciplines done:',
   'Detalles del cardio': 'Cardio details',
   'Se guarda solo: pulsa ✓ en el teclado o toca fuera.':
     'Saves itself: tap ✓ on the keyboard or tap outside.',
   Minutos: 'Minutes',
   'Pendiente %': 'Incline %',
-  'Ej: Cinta: 22.5mins, 11.5kmh': 'E.g.: Treadmill: 22.5mins, 11.5kmh',
   'Consulta tus resultados': 'Check your results',
   'Aún no hay cardio. Añádelo dentro de un día de fuerza.':
     'No cardio yet. Add it inside a strength day.',
@@ -475,6 +493,16 @@ register({
   'Quitar día': 'Remove day',
   'Subir día': 'Move day up',
   'Bajar día': 'Move day down',
+  'Quitar ejercicio': 'Remove exercise',
+  'Subir ejercicio': 'Move exercise up',
+  'Bajar ejercicio': 'Move exercise down',
+  'Editar {name}': 'Edit {name}',
+  // Editar un día de la rutina: nombre e icono en el mismo modal
+  'Editar día': 'Edit day',
+  'Nombre del día:': 'Day name:',
+  'Icono:': 'Icon:',
+  // La rutina es de otra persona: sus ajustes no se tocan
+  'No es tuya': 'Not yours',
   '¿Eliminar el día?': 'Delete the day?',
   'Se elimina «{name}» de la rutina y los días se renumeran.':
     'This removes "{name}" from the routine and the days are renumbered.',
@@ -493,7 +521,6 @@ register({
   'Añade al menos un día': 'Add at least one day',
   'Falta el título del Día {n}': 'Day {n} is missing a title',
   'Faltan ejercicios en el Día {n}': 'Day {n} is missing exercises',
-  'Añade al menos un ejercicio': 'Add at least one exercise',
   'Elige un icono para el Día {n}': 'Pick an icon for Day {n}',
   'Nueva rutina creada': 'New routine created',
   'No se pudo crear la rutina': 'Could not create the routine',
@@ -507,22 +534,13 @@ register({
   'Nombre:': 'Name:',
   'Descripción:': 'Description:',
   'Nombre de la rutina': 'Routine name',
-  'Toca para editar': 'Tap to edit',
   'Temporizador de descanso': 'Rest timer',
   'Editar Temporizador': 'Edit Timer',
   'Modificar temporizador': 'Change timer',
   'Duración en segundos:': 'Duration in seconds:',
   'Equivalente:': 'Equivalent:',
-  'Editar Ejercicios': 'Edit Exercises',
   'Compartir por QR': 'Share via QR',
-  'Otro móvil escanea y carga la rutina':
-    'Another phone scans it and loads the routine',
-  'Compartir en texto plano': 'Share as plain text',
-  'Copia la rutina para pegarla en «Crear a partir de texto plano»':
-    'Copies the routine to paste into "Create from plain text"',
   'Compartir rutina': 'Share routine',
-  'Escanea este código con la cámara de otro móvil para cargar «{name}».':
-    "Scan this code with another phone's camera to load “{name}”.",
   'Rutina copiada al portapapeles': 'Routine copied to clipboard',
   'No se pudo copiar la rutina': 'Could not copy the routine',
 
@@ -615,7 +633,6 @@ register({
   '{r} reps': '{r} reps',
 
   // Hero cards (carrusel de estados)
-  'Ver rutinas': 'View routines',
   'Aún no hay entrenamientos registrados.': 'No workouts logged yet.',
   'Insertar cardio': 'Add cardio',
 
@@ -638,7 +655,11 @@ register({
   Populares: 'Popular',
   Siguiendo: 'Following',
   'Buscar usuarios': 'Search users',
+  'Buscar personas': 'Search people',
+  Personas: 'People',
+  'Buscando…': 'Searching…',
   'Sin resultados': 'No results',
+  'Filtrar por intensidad': 'Filter by intensity',
   'Cargando…': 'Loading…',
   Reintentar: 'Retry',
   'por {name}': 'by {name}',
@@ -648,8 +669,22 @@ register({
   'Esta rutina ya no está disponible': 'This routine is no longer available',
   'Rutina de la comunidad': 'Community routine',
   'Ver rutina': 'View routine',
-  'Mi perfil público': 'My public profile',
+  'Perfil guardado': 'Profile saved',
+  'Foto de perfil actualizada': 'Profile photo updated',
   'A quién sigo': 'Who I follow',
+  'En tus rutinas': 'In your routines',
+  'Ver perfil de {name}': "View {name}'s profile",
+  'Iniciar sesión': 'Sign in',
+  'Inicia sesión para compartir en la comunidad':
+    'Sign in to share with the community',
+
+  // Rutinas traídas de la comunidad: se enlazan (no se copian) y llevan crédito
+  'De {name}': 'By {name}',
+  'Copiada de {name}': 'Copied from {name}',
+  'Hacer copia': 'Make a copy',
+  'Copia creada en tus rutinas': 'Copy created in your routines',
+  'Puedes entrenarla tal cual. Para cambiarla, haz una copia tuya.':
+    'You can train it as is. To change it, make your own copy.',
 
   // Intensidad de una rutina (nº total de series por semana)
   Intensidad: 'Intensity',
@@ -660,4 +695,236 @@ register({
   '1 serie': '1 set',
   '{n} series': '{n} sets',
   'Sin rutinas de esa intensidad': 'No routines at that intensity',
+
+  // Comentarios de una rutina pública
+  '1 comentario': '1 comment',
+  '{n} comentarios': '{n} comments',
+  'Todavía no hay comentarios. Rompe el hielo.':
+    'No comments yet. Break the ice.',
+  'Escribe un comentario': 'Write a comment',
+  'Enviar comentario': 'Send comment',
+  'Eliminar comentario': 'Delete comment',
+  '¿Eliminar el comentario?': 'Delete this comment?',
+  'Inicia sesión para comentar': 'Sign in to comment',
+
+  // Publicar una rutina con el perfil en privado
+  'Pública · firmada como «Anónimo»': 'Public · signed as “Anonymous”',
+  'Saldrás como «Anónimo»': 'You will show up as “Anonymous”',
+  'Tu perfil está en privado: la rutina aparecerá en el tablón sin tu nombre ni tu foto, y nadie podrá abrir tu perfil ni seguirte desde ella.':
+    'Your profile is private: the routine will show on the board without your name or photo, and nobody will be able to open your profile or follow you from it.',
+  'Todavía no tienes nombre visible, así que la rutina aparecerá en el tablón firmada como «Anónimo» y nadie podrá seguirte desde ella.':
+    'You have no display name yet, so the routine will show on the board signed as “Anonymous” and nobody will be able to follow you from it.',
+  'Hacerme visible y publicar': 'Go public and share',
+  'Publicar como «Anónimo»': 'Share as “Anonymous”',
+  'Nombre visible': 'Display name',
+
+  // Tu tarjeta y tus novedades en Comunidad
+  'Ver mi perfil público': 'View my public profile',
+  'Así te ve la comunidad': 'This is how the community sees you',
+  'Tu perfil no aparece para otros': 'Your profile is hidden from others',
+  'Sin nombre visible': 'No display name',
+  Seguidores: 'Followers',
+  '1 nuevo seguidor': '1 new follower',
+  '{n} nuevos seguidores': '{n} new followers',
+  '1 me gusta nuevo': '1 new like',
+  '{n} me gusta nuevos': '{n} new likes',
+  '1 comentario nuevo': '1 new comment',
+  '{n} comentarios nuevos': '{n} new comments',
+
+  // Reportar contenido (moderación)
+  Reportar: 'Report',
+  'Enviando…': 'Sending…',
+  '¿Reportar {what}?': 'Report {what}?',
+  'Lo revisaremos. Además dejará de aparecerte en este dispositivo.':
+    'We will review it. It will also stop showing up on this device.',
+  'Motivo (opcional)': 'Reason (optional)',
+  'Qué problema tiene': "What's wrong with it",
+  'esta rutina': 'this routine',
+  'este perfil': 'this profile',
+  'este comentario': 'this comment',
+  'Reportar esta rutina': 'Report this routine',
+  'Reportar este perfil': 'Report this profile',
+  'Reportar comentario': 'Report comment',
+  'Inicia sesión para reportar': 'Sign in to report',
+  'Gracias, lo revisaremos': 'Thanks, we will review it',
+
+  // Buscador de la lista de ejercicios (progreso y catálogo)
+  'Buscar ejercicio…': 'Search exercise…',
+  'Añade tu primera rutina': 'Add your first routine',
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Rezagados: textos que fueron entrando con Comunidad, el perfil público y la
+// semana de descarga y se quedaron sin traducir, más un puñado de verbos de uso
+// diario. `t()` cae al español cuando falta la entrada, así que no rompían nada
+// — solo dejaban la app a medio traducir, con diálogos enteros en español.
+// Lo vigila `lib/__tests__/i18n.test.ts`, que falla si algún `t('…')` del código
+// no tiene su entrada aquí.
+//
+// Los que se repiten idénticos en inglés (1RM, Email, Cardio…) llevan su entrada
+// igualmente: dice "comprobado, se escribe igual" en vez de "se nos olvidó".
+register({
+  // Verbos y rótulos de uso diario
+  Editar: 'Edit',
+  Eliminar: 'Delete',
+  Borrar: 'Delete',
+  Cancelar: 'Cancel',
+  Continuar: 'Continue',
+  Guardar: 'Save',
+  Hecho: 'Done',
+  Cerrar: 'Close',
+  Atrás: 'Back',
+  Actualizar: 'Update',
+  Entendido: 'Got it',
+  Opciones: 'Options',
+  'Más acciones': 'More actions',
+  Asignar: 'Assign',
+  Duplicar: 'Duplicate',
+  Iniciar: 'Start',
+  Exportar: 'Export',
+  Importar: 'Import',
+  Todos: 'All',
+  Hoy: 'Today',
+  Ejercicio: 'Exercise',
+  Ejercicios: 'Exercises',
+  Entrenamientos: 'Workouts',
+  Anterior: 'Previous',
+  Actual: 'Current',
+  Distancia: 'Distance',
+  Disponible: 'Available',
+  Activado: 'On',
+  Desactivado: 'Off',
+  Descanso: 'Rest',
+  'Añadir nota': 'Add note',
+  'Editar nota': 'Edit note',
+  'Modo claro': 'Light mode',
+  'Modo oscuro': 'Dark mode',
+  'Abriendo…': 'Opening…',
+  'Ver ejercicio': 'View exercise',
+  'Ver evolución': 'View progress',
+  'Ver logros': 'View achievements',
+  'Ver GIF': 'View GIF',
+  'Todos los ejercicios': 'All exercises',
+  'Cargar más ({n})': 'Load more ({n})',
+  'Ver tarjeta {n} de {total}': 'View card {n} of {total}',
+  'Fecha del entreno': 'Workout date',
+  '1RM': '1RM',
+  Email: 'Email',
+
+  // Catálogo y GIF de un ejercicio
+  'Catálogo de ejercicios': 'Exercise catalogue',
+  'Buscar en el catálogo': 'Search the catalogue',
+  'GIF asignado al ejercicio': 'GIF assigned to the exercise',
+  'Este ejercicio no tiene GIF de referencia.':
+    'This exercise has no reference GIF.',
+  'No se pudo cargar el GIF (¿sin conexión?)':
+    'The GIF could not be loaded (are you offline?)',
+
+  // Semana de descarga
+  'Semana de descarga': 'Deload week',
+  'Marcar descarga': 'Mark as deload',
+  'Quitar descarga': 'Remove deload',
+  '¿Quitar semana de descarga?': 'Remove deload week?',
+  'La semana se preparará como descarga: menos series y peso más ligero. ¿Continuar?':
+    'The week will be set up as a deload: fewer sets and lighter weight. Continue?',
+  'La semana quedará al margen de las estadísticas: no compara ni cuenta para récords. ¿Continuar?':
+    'The week will sit outside your stats: it will not be compared and will not count towards records. Continue?',
+  'La semana volverá a contar como carga normal (objetivos de series y peso completos). ¿Continuar?':
+    'The week will count as a normal load again (full set targets and weight). Continue?',
+  'La semana volverá a contar como carga normal en racha, progreso y récords. ¿Continuar?':
+    'The week will count as a normal load again for your streak, progress and records. Continue?',
+
+  // Mover un entreno de semana y cambiar su fecha
+  'Mover a la semana anterior': 'Move to the previous week',
+  'Mover a la semana siguiente': 'Move to the next week',
+  'Mover a una semana nueva': 'Move to a new week',
+  '¿Dividir la semana?': 'Split the week?',
+  'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?':
+    'That date falls in a week that already has this day. It will be split in two, which may affect your streak and progress. Continue?',
+
+  // Calendario
+  'Semana de la rutina': 'Week of the routine',
+  'La disciplina que más calorías quemó ese día':
+    'The discipline that burned the most calories that day',
+  'Minutos de cardio del día': 'Minutes of cardio that day',
+
+  // Compartir una rutina (QR y texto plano)
+  'Copiar en texto plano': 'Copy as plain text',
+  'Por QR o copiando el texto': 'By QR or by copying the text',
+  '¿Ya tienes la rutina en otro sitio?': 'Already have the routine elsewhere?',
+  'o créala a mano': 'or create it by hand',
+  'Escanea el QR con la cámara de otro móvil o copia la rutina como texto para pegarla en «Crear a partir de texto plano».':
+    'Scan the QR with another phone’s camera, or copy the routine as text and paste it into “Create from plain text”.',
+  'Esta rutina es demasiado grande para un código QR. Cópiala como texto para pegarla en «Crear a partir de texto plano».':
+    'This routine is too big for a QR code. Copy it as text and paste it into “Create from plain text”.',
+
+  // Perfil público
+  'Perfil público': 'Public profile',
+  'Guardar perfil': 'Save profile',
+  'Cambiar foto': 'Change photo',
+  'Bio (opcional)': 'Bio (optional)',
+  Público: 'Public',
+  Privado: 'Private',
+  'Otros pueden ver tu perfil y seguirte.':
+    'Others can see your profile and follow you.',
+  'Tu perfil no aparece para otros.': 'Your profile is hidden from others.',
+  'Así te ven en la comunidad cuando publicas una rutina.':
+    'This is how the community sees you when you share a routine.',
+
+  // Comunidad: tablón, seguir y rutinas públicas
+  Seguir: 'Follow',
+  'Me gusta': 'Like',
+  Anónimo: 'Anonymous',
+  'Rutinas públicas': 'Public routines',
+  'Compartir en la comunidad': 'Share with the community',
+  Pública: 'Public',
+  Privada: 'Private',
+  'Pública · aparece en el tablón': 'Public · shows on the board',
+  'Privada · solo tú la ves': 'Private · only you can see it',
+  'Rutina publicada en la comunidad': 'Routine shared with the community',
+  'Rutina retirada de la comunidad': 'Routine removed from the community',
+  'Inicia sesión para seguir': 'Sign in to follow',
+  'Inicia sesión para dar like': 'Sign in to like',
+  'Inicia sesión para compartir': 'Sign in to share',
+  '1 seguidor': '1 follower',
+  '{n} seguidores': '{n} followers',
+  'Aún no hay rutinas': 'No routines yet',
+  'Nada por aquí todavía': 'Nothing here yet',
+  'Publica una de tus rutinas desde su detalle para que aparezca aquí.':
+    'Share one of your routines from its detail view so it shows up here.',
+  'Sigue a alguien para ver aquí sus rutinas públicas.':
+    'Follow someone to see their public routines here.',
+  'Este usuario no tiene rutinas públicas.':
+    'This user has no public routines.',
+  'Aún no sigues a nadie. Busca usuarios en Comunidad.':
+    'You are not following anyone yet. Search for people in Community.',
+  'Aún no te sigue nadie.': 'Nobody follows you yet.',
+});
+
+// Peso corporal: su pantalla en Perfil y el aviso de que se ha quedado viejo.
+register({
+  'Peso corporal': 'Body weight',
+  'Actualízalo y mira cómo ha ido cambiando':
+    'Update it and see how it has changed',
+  'Tu peso y cómo ha ido cambiando': 'Your weight and how it has changed',
+  Histórico: 'History',
+  'Actualizado hoy': 'Updated today',
+  'Actualizado ayer': 'Updated yesterday',
+  'Actualizado hace {n} días': 'Updated {n} days ago',
+  'Aún no has anotado tu peso': 'You have not logged your weight yet',
+  'Con tu peso se estiman las kcal del cardio. Los cardios ya registrados conservan el peso que tenías entonces.':
+    'Your weight is used to estimate cardio calories. Sessions already logged keep the weight you had back then.',
+  '¿Sigues pesando lo mismo?': 'Still the same weight?',
+  'Hace {n} días que no actualizas tu peso, y con él se calculan las kcal de tu cardio.':
+    'It has been {n} days since you updated your weight, and your cardio calories are worked out with it.',
+  'Tu cuenta, tus copias y tus datos': 'Your account, backups and data',
+});
+
+// El día que toca y el descanso que sobrevive a salir del registro.
+register({
+  'Te toca': 'Up next',
+  'Te toca este': 'This one is up next',
+  'Ya entrenado esta semana': 'Already trained this week',
+  'Elegir otro día': 'Pick another day',
+  'Volver al entreno': 'Back to the workout',
 });

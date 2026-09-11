@@ -1,5 +1,5 @@
 import { ParsedSet, WorkoutLog } from '../types';
-import { getEstimatedOneRepMax } from './progress';
+import { getEstimatedOneRepMax, isValidSet } from './progress';
 import { getLogTimestamp } from './utils';
 
 /**
@@ -31,6 +31,13 @@ export interface ExerciseSession {
   /** Volumen de carga: suma de peso × reps. */
   volume: number;
   totalReps: number;
+  /**
+   * Sesión de una semana de DESCARGA: se baja la carga a propósito, así que no
+   * es un retroceso. La gráfica la omite (dibujaría un bache que no dice nada
+   * del progreso); los récords y el listado la siguen contando, porque ahí sí
+   * es una sesión realmente entrenada.
+   */
+  isDeload?: boolean;
 }
 
 export interface ExerciseSummary {
@@ -56,15 +63,6 @@ export interface ExerciseRecords {
   bestVolume: { value: number; date: string } | null;
 }
 
-function isValidSet(setItem: ParsedSet): boolean {
-  return (
-    Number.isFinite(setItem.weight) &&
-    Number.isFinite(setItem.reps) &&
-    setItem.weight >= 0 &&
-    setItem.reps > 0
-  );
-}
-
 /** Todas las series de un ejercicio dentro de un log (puede repetirse por id). */
 function setsForKeyInLog(log: WorkoutLog, key: string): ParsedSet[] {
   return log.exercises
@@ -87,6 +85,7 @@ function buildSession(log: WorkoutLog, sets: ParsedSet[]): ExerciseSession {
     bestSetReps: sets.reduce((best, s) => Math.max(best, s.reps), 0),
     volume: sets.reduce((sum, s) => sum + s.weight * s.reps, 0),
     totalReps: sets.reduce((sum, s) => sum + s.reps, 0),
+    isDeload: log.isDeload || undefined,
   };
 }
 

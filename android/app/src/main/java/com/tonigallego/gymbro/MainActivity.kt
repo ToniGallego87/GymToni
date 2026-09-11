@@ -1,8 +1,11 @@
 package com.tonigallego.gymbro
 
+import android.app.PictureInPictureParams
+import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.graphics.Color
+import android.util.Rational
 import android.view.View
 import android.view.WindowInsetsController
 import android.view.WindowManager
@@ -15,10 +18,12 @@ import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
+import com.facebook.react.ReactApplication
 import com.facebook.react.defaults.DefaultNewArchitectureEntryPoint.fabricEnabled
 import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import expo.modules.ReactActivityDelegateWrapper
+import expo.modules.piptimer.PipTimerController
 
 class MainActivity : ReactActivity() {
   private fun applySystemBarStyle() {
@@ -121,6 +126,96 @@ class MainActivity : ReactActivity() {
   override fun onResume() {
     super.onResume()
     applySystemBarStyle()
+    // De vuelta a pantalla completa: RN ya está resumido por el ciclo normal,
+    // así que la muleta de abajo deja de estar puesta.
+    pipHostResumed = false
+  }
+
+  // ──────────── Repintado de React dentro de la ventanita (PiP) ────────────
+  // Entrar en PiP PAUSA la Activity, y al pausarse React Native deja de volcar
+  // cambios a las vistas nativas (UIManagerModule.onHostPause corta el
+  // DISPATCH_UI del choreographer). El árbol seguía vivo —al volver a pantalla
+  // completa la cuenta atrás estaba al día— pero la ventanita se quedaba con el
+  // último fotograma: un temporizador congelado.
+  //
+  // Aquí se le devuelve a RN el estado "resumido" mientras dura la ventanita,
+  // que es lo honesto: en PiP la app SIGUE VISIBLE. Se deshace en onStop(), por
+  // donde pasa siempre que la ventanita se cierra y la app se va al fondo.
+  private var pipHostResumed = false
+
+  private fun keepReactRenderingInPip() {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    if (!isInPictureInPictureMode) return
+    pipHostResumed = true
+    runCatching {
+      (application as? ReactApplication)
+        ?.reactNativeHost
+        ?.reactInstanceManager
+        ?.onHostResume(this)
+    }
+  }
+
+  override fun onPause() {
+    // super.onPause() es donde RN se pausa: rearmar DESPUÉS. Se hace también
+    // aquí (y no solo en onPictureInPictureModeChanged) porque el orden de las
+    // dos llamadas al entrar en PiP no es el mismo en todas las versiones de
+    // Android, y quien llegue el último tiene que dejar RN despierto.
+    super.onPause()
+    keepReactRenderingInPip()
+  }
+
+  override fun onStop() {
+    if (pipHostResumed) {
+      pipHostResumed = false
+      runCatching {
+        (application as? ReactApplication)
+          ?.reactNativeHost
+          ?.reactInstanceManager
+          ?.onHostPause(this)
+      }
+    }
+    super.onStop()
+  }
+
+  // ───────────────── Ventana flotante del descanso (Picture-in-Picture) ─────────────────
+  // Con un descanso corriendo, minimizar la app deja el temporizador en una
+  // ventanita movible encima de lo que sea que estés mirando (igual que el vídeo
+  // de YouTube). Quién manda es JS: enciende y apaga la bandera de
+  // PipTimerController al arrancar y parar la cuenta atrás.
+  //
+  // En Android 12+ el sistema entra solo (setAutoEnterEnabled, ver
+  // PipTimerModule) y este onUserLeaveHint no llega a hacer nada. En 8.0-11 no
+  // existe esa opción y hay que pedirlo aquí: es el último aviso que recibe la
+  // Activity mientras todavía está visible, cuando ya es tarde para JS.
+  override fun onUserLeaveHint() {
+    super.onUserLeaveHint()
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) return
+    if (!PipTimerController.autoEnterEnabled) return
+    runCatching {
+      enterPictureInPictureMode(
+        PictureInPictureParams.Builder()
+          .setAspectRatio(
+            Rational(
+              PipTimerController.aspectWidth,
+              PipTimerController.aspectHeight
+            )
+          )
+          .build()
+      )
+    }
+  }
+
+  // El árbol de React sigue montado dentro de la ventanita: se avisa a JS para
+  // que pinte encima la vista compacta (components/PipRestTimer.tsx) y la quite
+  // al volver a pantalla completa.
+  override fun onPictureInPictureModeChanged(
+    isInPictureInPictureMode: Boolean,
+    newConfig: Configuration
+  ) {
+    super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+    if (isInPictureInPictureMode) keepReactRenderingInPip()
+    PipTimerController.notifyPipMode(isInPictureInPictureMode)
   }
 
   /**

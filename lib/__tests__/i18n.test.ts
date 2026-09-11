@@ -1,7 +1,10 @@
+import fs from 'fs';
+import path from 'path';
 import {
   canonicalDecimals,
   dateLocale,
   decimalSeparator,
+  hasEnglish,
   language,
   localizeDecimals,
   parseTypedNumber,
@@ -68,5 +71,77 @@ describe('cambio de idioma en caliente (setLanguage)', () => {
     expect(t('Guardar')).toBe('Guardar');
     expect(decimalSeparator).toBe(',');
     expect(dateLocale).toBe('es-ES');
+  });
+});
+
+// Red contra el inglés a medias. `t()` cae al español cuando falta la entrada,
+// así que una tanda de funciones nuevas puede dejar pantallas enteras sin
+// traducir sin romper nada ni avisar (pasó con Comunidad, el perfil público y
+// la semana de descarga: 75 textos). Este test recorre los `t('…')` del código
+// y falla si alguno no tiene su entrada en el diccionario.
+describe('cobertura del diccionario inglés', () => {
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const SOURCE_DIRS = ['app', 'components', 'data', 'features', 'hooks', 'lib'];
+
+  const sourceFiles = (dir: string): string[] => {
+    const out: string[] = [];
+    const walk = (current: string) => {
+      for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) {
+          // Los propios tests no cuentan: escriben claves de ejemplo.
+          if (entry.name === '__tests__') continue;
+          walk(full);
+        } else if (/\.tsx?$/.test(entry.name)) {
+          out.push(full);
+        }
+      }
+    };
+    const start = path.join(ROOT, dir);
+    if (fs.existsSync(start)) walk(start);
+    return out;
+  };
+
+  // Fuera los comentarios antes de buscar: en este repo se documentan mucho las
+  // decisiones y una llamada de ejemplo escrita en un comentario contaría como
+  // texto sin traducir. El guardia del `//` evita comerse las URL (`https://`).
+  const stripComments = (source: string): string =>
+    source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+  // Solo claves LITERALES: `t(variable)` no se puede comprobar en estático y no
+  // se usa en el código (si algún día se usa, este test no la verá).
+  const keysIn = (source: string): string[] => {
+    const found: string[] = [];
+    for (const pattern of [
+      /\bt\(\s*'((?:[^'\\]|\\.)*)'/g,
+      /\bt\(\s*"((?:[^"\\]|\\.)*)"/g,
+    ]) {
+      let match: RegExpExecArray | null;
+      while ((match = pattern.exec(source)) !== null) {
+        found.push(match[1].replace(/\\'/g, "'").replace(/\\"/g, '"'));
+      }
+    }
+    return found;
+  };
+
+  it('todo texto que pasa por t() tiene traducción al inglés', () => {
+    const keys = new Set<string>();
+    for (const dir of SOURCE_DIRS) {
+      for (const file of sourceFiles(dir)) {
+        const source = stripComments(fs.readFileSync(file, 'utf8'));
+        for (const key of keysIn(source)) {
+          keys.add(key);
+        }
+      }
+    }
+
+    // Si esto falla de golpe con cero claves, es el barrido lo que se ha roto
+    // (una carpeta movida), no el diccionario.
+    expect(keys.size).toBeGreaterThan(100);
+
+    const missing = [...keys].filter((key) => !hasEnglish(key)).sort();
+    expect(missing).toEqual([]);
   });
 });
