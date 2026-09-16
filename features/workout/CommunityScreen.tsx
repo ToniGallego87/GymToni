@@ -432,6 +432,10 @@ export function CommunityScreen({
   const myName = hasProfileFilled(myProfile)
     ? (myProfile?.display_name as string)
     : t('Sin nombre visible');
+  // Singular con uno: "1 Seguidores" es lo primero que ve quien acaba de
+  // estrenar el perfil. Mismo criterio que el perfil público ajeno.
+  const followersLabel =
+    socialCounts.followers === 1 ? t('Seguidor') : t('Seguidores');
 
   // Aviso de novedades: una sola frase con lo que haya (seguidores, me gusta y
   // comentarios). Si no hay nada nuevo, no hay aviso.
@@ -642,10 +646,10 @@ export function CommunityScreen({
             disabled={!onOpenFollowers}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel={t('Seguidores')}
+            accessibilityLabel={followersLabel}
           >
             <Text style={styles.meCountValue}>{socialCounts.followers}</Text>
-            <Text style={styles.meCountLabel}>{t('Seguidores')}</Text>
+            <Text style={styles.meCountLabel}>{followersLabel}</Text>
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.meCount, pressed && styles.pressed]}

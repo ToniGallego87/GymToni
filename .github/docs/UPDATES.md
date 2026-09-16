@@ -1,5 +1,92 @@
 # UPDATES
 
+## Version 0.7.5 - 2026-09-16
+
+Tanda corta y centrada en quitar fricción: el **descanso entre series pasa a
+ser un ajuste de la persona** (se fija una vez en Perfil y vale para todas las
+rutinas), las **rutinas enlazadas de la comunidad siguen los cambios de su
+autor** tras cada sync, desde la ficha de un ejercicio se **salta a la rutina**
+que lo contiene, el GIF que no carga se puede **reintentar** y Perfil sin cuenta
+explica por qué no se puede completar. Se cierran del ROADMAP las tres fichas
+implementadas. `npm run type-check` y `npm test` (237 tests) en verde.
+`versionCode` 26 → 27.
+
+**Ojo sync:** `SCHEMA_VERSION` 6 → 7. La migración no altera tablas: siembra el
+ajuste `restTimerSeconds` con el `timer_duration` de la rutina activa y, desde
+entonces, esa columna se escribe null y no se lee (sigue existiendo en SQLite y
+en `supabase/schema.sql`, sin uso).
+
+### Cambios
+
+- **El descanso entre series es un ajuste de la persona, no de cada rutina**
+  (`lib/restTimerStore.ts`, `lib/appSettings.ts`, `lib/db/index.ts`,
+  `lib/db/schema.ts`, `lib/db/mappers.ts`, `lib/routineShare.ts`,
+  `types/index.ts`, `features/workout/ProfileScreen.tsx`,
+  `features/workout/RoutineDetailScreen.tsx`,
+  `features/workout/WorkoutLogScreen.tsx`): `timerDuration` desaparece de
+  `WorkoutRoutine`. El descanso por defecto vive ahora en `restTimerStore`
+  (`getRestDuration` / `setRestDuration` / `useRestDuration`), persistido con
+  los ajustes de la app, y se edita desde una fila nueva en **Perfil**
+  ("Temporizador de descanso · 2:30 entre series, en todas tus rutinas") o
+  desde el ⋯ del registro, que abren el mismo `RestTimerModal`. La fila con
+  candado de la ficha de rutina se va: ya no hay que repetir el ajuste al crear
+  o copiar una rutina, las enlazadas de la comunidad dejan de bloquearlo y el
+  QR / texto compartido ya no arrastra el descanso de otra persona. Migración
+  v7 del SQLite: siembra el ajuste con el descanso que tenía la rutina activa
+  (o la primera que lo tuviera) para no cambiárselo a nadie; la columna
+  `timer_duration` se queda en la tabla (se escribe null y no se lee).
+
+### Nuevas funcionalidades
+
+- **Las rutinas enlazadas de la comunidad siguen los cambios de su autor**
+  (`lib/routines.ts`, `lib/cloud/social.ts`, `hooks/useCloudSync.ts`,
+  `app/App.tsx`): enlazar era una foto del día en que se añadía; si el autor
+  corregía series o añadía un día, quien la tenía enlazada no se enteraba (el
+  pull incremental solo baja filas con `user_id` propio). Tras cada sync con
+  sesión, `refreshLinkedRoutines` vuelve a bajar las enlazadas
+  (`fetchPublicRoutine`) y `refreshLinkedRoutine` compara el plan (nombre,
+  descripción, días, ejercicios; `routinePlanFingerprint`, con orden estable)
+  con la copia local: si cambió, entra por `UPDATE_ROUTINE` conservando lo
+  local (activa, fecha de alta, procedencia y los GIF asignados a mano a
+  ejercicios a los que el autor no puso ninguno). La persistencia no encola al
+  outbox las enlazadas, así que el refresco no choca con la RLS. Si el autor la
+  despublica o la borra, la copia local se deja tal cual. Con tests.
+- **Desde la ficha de un ejercicio se salta a la rutina que lo tiene**
+  (`features/workout/ExerciseProgressScreen.tsx`,
+  `features/workout/RoutineDetailScreen.tsx`, `app/App.tsx`): el menú ⋯ de
+  "Tu evolución" solo traía el cambio de tema, y para retocar el ejercicio en
+  la rutina había que volver a Perfil → Mis rutinas y buscarlo a mano. Ahora
+  trae "Ver en la rutina", que abre la ficha de la rutina con el día del
+  ejercicio ya desplegado; si el ejercicio está en varias rutinas sale una
+  opción por rutina, con su nombre (la activa primero). Al volver se cae otra
+  vez en la ficha del ejercicio, no en el selector de rutinas: `routine-details`
+  gana un `back?: Screen` (mismo patrón que `user-profile`) y un
+  `expandDayId`, y `RoutineDetailScreen` un `initialExpandedDayId`.
+
+### Correcciones
+
+- **El GIF que no carga se puede reintentar** (`components/GifViewerModal.tsx`):
+  si el GIF de referencia fallaba (sin cobertura, CDN lento) el visor pintaba
+  "No se pudo cargar" y ahí acababa; y como el modal queda montado, el estado
+  de fallo no se reseteaba nunca: el error salía en cada apertura y, en el
+  selector del catálogo, en cualquier otro ejercicio que se previsualizara
+  después. Ahora el recuadro de error trae un botón "Reintentar" que vuelve a
+  pedir el GIF sin cerrar el visor, y el estado se limpia al abrirlo o al
+  cambiar de ejercicio.
+- **Perfil sin cuenta ya avisa de que no se puede completar**
+  (`features/workout/ProfileScreen.tsx`, `app/App.tsx`, `lib/i18n.ts`): sin
+  sesión, la tarjeta de identidad decía "Sin perfil" e invitaba con un botón
+  primario a "Completar perfil"; se rellenaba el formulario entero y solo al
+  pie aparecía la nota de que el perfil vive en la cuenta, con "Guardar"
+  desactivado. Ahora la tarjeta dice "Sin cuenta", explica que sin ella no se
+  puede completar y el botón pasa a ser "Crear cuenta", que lleva a Datos y
+  nube (el mismo `onOpenAccount` que ya usan Comunidad y la ficha de rutina).
+  De paso, mientras la sesión aún no se ha resuelto la tarjeta espera en
+  "Cargando…" en vez de decir "Sin perfil" un instante.
+- **"1 Seguidor", no "1 Seguidores"** (`features/workout/CommunityScreen.tsx`,
+  `lib/i18n.ts`): el contador de tu tarjeta de Comunidad rotulaba siempre en
+  plural. Mismo criterio singular/plural que ya usaba el perfil público ajeno.
+
 ## Version 0.7.4 - 2026-09-11
 
 La tanda más grande desde el 0.7.0: Comunidad estrena **hilo de comentarios** y

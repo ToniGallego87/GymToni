@@ -237,7 +237,8 @@ movible encima de lo que estés usando, igual que YouTube con el vídeo. Es el
 - Modal único: `AppModal` (overlay, tarjeta, título con icono, mensaje y pie).
   El cuerpo y los botones los pone quien lo usa, siempre con `Button`. Sus
   especializaciones: `ConfirmModal` (confirmar/cancelar), `RestTimerModal` (el
-  descanso por defecto de la rutina, que abren la ficha y el registro) y
+  descanso por defecto entre series, ajuste de la persona: lo abren Perfil y
+  el registro) y
   `ReportModal` (reportar rutina, perfil o comentario)
 - Gráfica de barras única: `BarChart` (progreso semanal de Inicio y métricas
   mensuales de Cardio); cada pantalla aporta sus barras ya coloreadas y su dominio

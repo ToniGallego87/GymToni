@@ -19,7 +19,6 @@ function buildAppData(): WorkoutAppData {
         description: 'desc',
         isActive: true,
         createdAt: 100,
-        timerDuration: 90,
         days: [
           {
             id: 'd1',
@@ -149,12 +148,12 @@ describe('appDataToRows', () => {
 
   it('convierte opcionales ausentes en NULL', () => {
     const data = buildAppData();
-    delete data.routines[0].timerDuration;
     delete data.logs[0].exercises[0].notes;
     delete data.logs[0].cardio;
 
     const rows = appDataToRows(data, stubId);
 
+    // Columna heredada (v7): siempre null, el descanso ya no es de la rutina.
     expect(rows.routines[0].timer_duration).toBeNull();
     expect(rows.exerciseLogs[0].notes).toBeNull();
     expect(rows.cardioLogs).toEqual([]);
@@ -172,7 +171,6 @@ describe('rowsToAppData', () => {
       id: 'r1',
       name: 'Rutina 1',
       isActive: true,
-      timerDuration: 90,
     });
     expect(restored.routines[0].days.map((d) => d.id)).toEqual(['d1', 'd2']);
     expect(restored.logs[0]).toMatchObject({

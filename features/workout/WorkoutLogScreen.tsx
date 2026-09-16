@@ -72,7 +72,9 @@ import {
 import { withExerciseCatalogId } from '@lib/routines';
 import {
   extendRestTimer,
+  getRestDuration,
   REST_TIMER_CHANNEL_ID,
+  setRestDuration,
   startRestTimer,
   stopRestTimer,
   useRestSecondsLeft,
@@ -365,29 +367,18 @@ export function WorkoutLogScreen({
     return owningRoutine?.id || state.activeRoutineId || '';
   };
 
-  const getTimerDurationFromRoutine = (): number => {
-    const routineId = getRoutineIdForDay();
-    const routine = state.routines.find((r) => r.id === routineId);
-    return routine?.timerDuration || 150;
-  };
-
   const openTimerModal = () => {
-    setTimerInput(getTimerDurationFromRoutine().toString());
+    setTimerInput(getRestDuration().toString());
     setShowTimerModal(true);
   };
 
-  // Guarda el nuevo descanso por defecto en la rutina dueña del día (mismo
-  // UPDATE_ROUTINE que RoutineDetailScreen). No toca el descanso en curso: para
-  // eso están +30s y Saltar; esto ajusta el valor de las próximas series.
+  // Guarda el nuevo descanso por defecto: es un ajuste de la PERSONA (el mismo
+  // que edita Perfil), no de la rutina. No toca el descanso en curso: para eso
+  // están +30s y Saltar; esto ajusta el valor de las próximas series.
   const handleSaveTimer = () => {
     const newDuration = parseInt(timerInput, 10);
-    const routineId = getRoutineIdForDay();
-    const routine = state.routines.find((r) => r.id === routineId);
-    if (routine && !isNaN(newDuration) && newDuration > 0) {
-      dispatch({
-        type: 'UPDATE_ROUTINE',
-        payload: { ...routine, timerDuration: newDuration },
-      });
+    if (!isNaN(newDuration) && newDuration > 0) {
+      setRestDuration(newDuration);
     }
     setShowTimerModal(false);
     setTimerInput('');
@@ -530,7 +521,7 @@ export function WorkoutLogScreen({
       // temporizador, que se pinta BAJO la tarjeta —ya completada—. Si era el
       // último, no hay siguiente serie ni ejercicio: se detiene.
       if (countIncompleteExercises(updated) > 0) {
-        void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
+        void startOrResetTimer(exerciseId, getRestDuration());
       } else {
         void stopTimer();
       }
@@ -538,7 +529,7 @@ export function WorkoutLogScreen({
     }
 
     // Activar temporizador solo si aún faltan series por completar.
-    void startOrResetTimer(exerciseId, getTimerDurationFromRoutine());
+    void startOrResetTimer(exerciseId, getRestDuration());
   };
 
   // Quita la serie del índice indicado (la × de su burbuja).

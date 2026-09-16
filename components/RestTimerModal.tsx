@@ -20,10 +20,11 @@ interface RestTimerModalProps {
 }
 
 /**
- * "Editar Temporizador": el descanso por defecto de la rutina. Es el MISMO
- * ajuste de la MISMA rutina se abra desde su ficha o desde la pantalla de
- * registro, así que vive en un solo sitio (misma especialización de `AppModal`
- * que `ConfirmModal`).
+ * "Editar Temporizador": el descanso por defecto entre series, que es un
+ * ajuste de la PERSONA (lib/restTimerStore `setRestDuration`), no de cada
+ * rutina. Es el MISMO ajuste se abra desde Perfil o desde el ⋯ de la pantalla
+ * de registro, así que vive en un solo sitio (misma especialización de
+ * `AppModal` que `ConfirmModal`).
  *
  * Antes eran dos copias con dos aspectos: el campo a 16 px en una y a 18 en
  * negrita en la otra, el "Equivalente" centrado aquí y en cursiva allá.

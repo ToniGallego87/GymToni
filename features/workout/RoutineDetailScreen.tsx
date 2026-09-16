@@ -27,7 +27,6 @@ import {
   GradientFill,
   GymIconGrid,
   resolveDayIcon,
-  RestTimerModal,
   RoutineOriginPill,
   StretchScrollView,
   Toast,
@@ -35,7 +34,6 @@ import {
 import type { GymIconName } from '../../components';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { getDisplayDayName, getTrainingAccent, theme } from '@lib/theme';
-import { formatRestTime } from '@lib/utils';
 import { t } from '@lib/i18n';
 import {
   buildWorkoutExercises,
@@ -90,6 +88,9 @@ interface RoutineDetailScreenProps {
   onOpenAccount?: () => void;
   // Perfil del autor de una rutina traída de la comunidad.
   onOpenProfile?: (userId: string, name: string) => void;
+  // Día que nace desplegado: se llega desde la ficha de un ejercicio (Progreso)
+  // y lo que se quiere ver es ESE ejercicio, no una lista de días plegados.
+  initialExpandedDayId?: string;
 }
 
 export function RoutineDetailScreen({
@@ -98,6 +99,7 @@ export function RoutineDetailScreen({
   onForked,
   onOpenAccount,
   onOpenProfile,
+  initialExpandedDayId,
 }: RoutineDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
@@ -122,12 +124,11 @@ export function RoutineDetailScreen({
   );
   // Días desplegados. La ficha nace PLEGADA entera: de un vistazo se ve qué días
   // tiene la rutina y cuántos ejercicios cada uno, en vez de un rollo de 30
-  // ejercicios que obliga a hacer scroll para saber si hay un cuarto día.
+  // ejercicios que obliga a hacer scroll para saber si hay un cuarto día. Salvo
+  // que se venga buscando un ejercicio concreto: entonces su día ya está abierto.
   const [expandedDayIds, setExpandedDayIds] = useState<Set<string>>(
-    () => new Set()
+    () => new Set(initialExpandedDayId ? [initialExpandedDayId] : [])
   );
-  const [showTimerModal, setShowTimerModal] = useState(false);
-  const [timerInput, setTimerInput] = useState('');
   const [showShareModal, setShowShareModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [nameInput, setNameInput] = useState('');
@@ -380,36 +381,6 @@ export function RoutineDetailScreen({
     } catch {
       setToast({ message: t('No se pudo copiar la rutina'), type: 'error' });
     }
-  };
-
-  const getTimerDurationSeconds = () => {
-    return currentRoutine.timerDuration || 150;
-  };
-
-  // El descanso se ajusta siempre, sin entrar en modo edición: es un ajuste de
-  // la rutina, como publicarla en la comunidad, que tampoco lo exige. Lo único
-  // que lo bloquea es que la rutina no sea tuya o esté cerrada.
-  const canEditTimer = canEdit && !isClosed;
-
-  const handleOpenTimerModal = () => {
-    if (!canEditTimer) return;
-    setTimerInput(getTimerDurationSeconds().toString());
-    setShowTimerModal(true);
-  };
-
-  const handleSaveTimer = () => {
-    const newDuration = parseInt(timerInput, 10);
-    if (!isNaN(newDuration) && newDuration > 0) {
-      dispatch({
-        type: 'UPDATE_ROUTINE',
-        payload: {
-          ...currentRoutine,
-          timerDuration: newDuration,
-        },
-      });
-    }
-    setShowTimerModal(false);
-    setTimerInput('');
   };
 
   // Abre "Editar día": nombre + icono en un solo sitio. El nombre no tenía
@@ -927,41 +898,8 @@ export function RoutineDetailScreen({
           );
         })}
 
-        {/* Temporizador de descanso: un ajuste, no un héroe. Responde SIEMPRE,
-            como sus dos filas hermanas; antes solo se dejaba tocar en modo
-            edición y en lectura no pasaba nada al pulsarla, sin decir por qué. */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.settingRow,
-            pressed && canEditTimer && styles.buttonPressed,
-          ]}
-          onPress={handleOpenTimerModal}
-          disabled={!canEditTimer}
-        >
-          <MaterialCommunityIcons
-            name="timer-sand"
-            size={20}
-            color={theme.colors.text}
-          />
-          <View style={styles.settingRowTextWrap}>
-            <Text style={styles.settingRowLabel}>
-              {t('Temporizador de descanso')}
-            </Text>
-            <Text style={styles.settingRowHint}>
-              {canEditTimer
-                ? formatRestTime(getTimerDurationSeconds())
-                : `${formatRestTime(getTimerDurationSeconds())} · ${
-                    isLinked ? t('No es tuya') : t('Rutina cerrada')
-                  }`}
-            </Text>
-          </View>
-          {/* Candado en vez de nada: si la fila no se puede tocar, se dice. */}
-          <MaterialCommunityIcons
-            name={canEditTimer ? 'chevron-right' : 'lock-outline'}
-            size={canEditTimer ? 22 : 18}
-            color={theme.colors.textSecondary}
-          />
-        </Pressable>
+        {/* El descanso entre series ya no es de la rutina: es un ajuste de la
+            persona y se toca desde Perfil (o desde el ⋯ del registro). */}
 
         {/* Una sola acción de compartir: la hoja de dentro ofrece QR y texto. */}
         <Pressable
@@ -1186,16 +1124,6 @@ export function RoutineDetailScreen({
           maxLength={80}
         />
       </AppModal>
-
-      {/* Mismo diálogo que abre la pantalla de registro: es el descanso por
-          defecto de ESTA rutina, así que vive en un único componente. */}
-      <RestTimerModal
-        visible={showTimerModal}
-        value={timerInput}
-        onChangeValue={setTimerInput}
-        onSave={handleSaveTimer}
-        onCancel={() => setShowTimerModal(false)}
-      />
 
       <AppModal
         visible={showShareModal}

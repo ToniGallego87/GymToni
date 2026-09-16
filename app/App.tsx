@@ -171,6 +171,12 @@ type Screen =
       type: 'routine-details';
       routine: WorkoutRoutine;
       origin?: 'home' | 'profile';
+      // Vista desde la que se abrió cuando NO fue el selector de rutinas: desde
+      // la ficha de un ejercicio (Progreso) se vuelve a esa ficha, no al
+      // selector. Con `back`, `origin` no se usa.
+      back?: Screen;
+      // Día que se abre desplegado (el del ejercicio desde el que se llegó).
+      expandDayId?: string;
     }
   | { type: 'qr-scanner' }
   | {
@@ -194,8 +200,9 @@ function AppContent() {
   // Foto del perfil público para la pestaña de Perfil de la barra.
   const { profile: myProfile } = useMyProfile();
   // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
-  // plano. Refresca el estado si el pull trae cambios de otro dispositivo.
-  useCloudSync(dispatch);
+  // plano. Refresca el estado si el pull trae cambios de otro dispositivo y
+  // pone al día las rutinas enlazadas de la comunidad si su autor las cambió.
+  useCloudSync(dispatch, state.routines);
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
   // "Calentar" el resto de pestañas: al arrancar se monta SOLO la activa (splash
   // corto y arranque ágil); tras el primer render se montan las demás en segundo
@@ -483,8 +490,12 @@ function AppContent() {
           ? 'cardio'
           : 'home',
     });
-  const backFromRoutineDetails = (origin?: 'home' | 'profile') =>
-    setScreen({ type: 'routine-selector', origin });
+  const backFromRoutineDetails = (
+    screen: Extract<Screen, { type: 'routine-details' }>
+  ) =>
+    setScreen(
+      screen.back ?? { type: 'routine-selector', origin: screen.origin }
+    );
   const backToNewRoutine = () => setScreen({ type: 'new-routine' });
   // "Progreso por ejercicio" son dos pasos en una pantalla (lista → ficha del
   // ejercicio), así que su vuelta atrás también: primero se cierra la ficha y
@@ -570,7 +581,7 @@ function AppContent() {
               backFromExerciseProgress(screen);
               return true;
             case 'routine-details':
-              backFromRoutineDetails(screen.origin);
+              backFromRoutineDetails(screen);
               return true;
             case 'qr-scanner':
               backToNewRoutine();
@@ -987,6 +998,7 @@ function AppContent() {
             onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
             onOpenSettings={() => setScreen({ type: 'settings' })}
             onOpenProfileEdit={() => setScreen({ type: 'profile-edit' })}
+            onOpenAccount={() => setScreen({ type: 'data' })}
           />
         )}
       </PagerView>
@@ -1159,6 +1171,16 @@ function AppContent() {
           // El mismo camino que recorre el atrás del móvil (ver
           // `backFromExerciseProgress`): una sola función para los dos gestos.
           onBack={() => backFromExerciseProgress(screen)}
+          // Ficha de la rutina que tiene el ejercicio, con su día abierto. Se
+          // vuelve a esta misma ficha del ejercicio, no al selector de rutinas.
+          onOpenRoutine={(routine, dayId) =>
+            setScreen({
+              type: 'routine-details',
+              routine,
+              back: screen,
+              expandDayId: dayId,
+            })
+          }
         />
       )}
 
@@ -1192,7 +1214,8 @@ function AppContent() {
       {screen.type === 'routine-details' && (
         <RoutineDetailScreen
           routine={screen.routine}
-          onBack={() => backFromRoutineDetails(screen.origin)}
+          initialExpandedDayId={screen.expandDayId}
+          onBack={() => backFromRoutineDetails(screen)}
           // Al copiar una rutina ajena se abre la copia: es la que ya se puede
           // tocar, y dejar al usuario en la de solo lectura sería un callejón.
           onForked={(copy) =>
@@ -1200,22 +1223,14 @@ function AppContent() {
               type: 'routine-details',
               routine: copy,
               origin: screen.origin,
+              back: screen.back,
             })
           }
           onOpenAccount={() => setScreen({ type: 'data' })}
           // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
-          // vuelve a esta misma ficha.
+          // vuelve a esta misma ficha (tal cual: con su propio camino de vuelta).
           onOpenProfile={(userId, name) =>
-            setScreen({
-              type: 'user-profile',
-              userId,
-              name,
-              back: {
-                type: 'routine-details',
-                routine: screen.routine,
-                origin: screen.origin,
-              },
-            })
+            setScreen({ type: 'user-profile', userId, name, back: screen })
           }
         />
       )}

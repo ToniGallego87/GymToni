@@ -13,6 +13,7 @@ const THEME_KEY = 'themeMode';
 const LANGUAGE_KEY = 'language';
 const AUTO_BACKUP_KEY = 'autoBackupEnabled';
 const LAST_AUTO_BACKUP_KEY = 'lastAutoBackupAt';
+const REST_TIMER_KEY = 'restTimerSeconds';
 // En web (sin SQLite en SDK 51) se usa localStorage con este prefijo.
 const WEB_PREFIX = 'gymbro_setting_';
 
@@ -115,4 +116,17 @@ export function getLastAutoBackupAt(): number {
 
 export function setLastAutoBackupAt(timestamp: number): void {
   writeSetting(LAST_AUTO_BACKUP_KEY, String(timestamp));
+}
+
+// Descanso por defecto entre series, en segundos. Es un ajuste de la PERSONA
+// (antes vivía en cada rutina; ver lib/restTimerStore). `null` = nunca fijado:
+// la migración de la BD lo siembra con el de la rutina activa la primera vez.
+export function getStoredRestTimerSeconds(): number | null {
+  const raw = readSetting(REST_TIMER_KEY);
+  const value = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+export function setStoredRestTimerSeconds(seconds: number): void {
+  writeSetting(REST_TIMER_KEY, String(seconds));
 }

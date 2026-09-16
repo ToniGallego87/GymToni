@@ -17,7 +17,6 @@ export interface SharedRoutineDay {
 
 export interface SharedRoutine {
   name?: string;
-  timerDuration?: number;
   days: SharedRoutineDay[];
 }
 
@@ -27,7 +26,6 @@ export interface SharedRoutine {
 interface RoutinePayload {
   v: 1;
   n?: string;
-  t?: number;
   d: { t: string; e: string[]; i?: string }[];
 }
 
@@ -79,7 +77,6 @@ export function buildRoutineShareLink(routine: WorkoutRoutine): string {
   const payload: RoutinePayload = {
     v: 1,
     n: routine.name,
-    t: routine.timerDuration,
     d: routine.days.map((day) => ({
       t: getDisplayDayName(day.name) || day.name,
       e: day.exercises.map(exerciseToLine),
@@ -118,7 +115,6 @@ export function parseRoutineShareLink(url: string): SharedRoutine | null {
 
     return {
       name: typeof payload.n === 'string' ? payload.n : undefined,
-      timerDuration: typeof payload.t === 'number' ? payload.t : undefined,
       days,
     };
   } catch {

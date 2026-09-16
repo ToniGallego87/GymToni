@@ -3,6 +3,10 @@ import { AppState, Platform, Vibration } from 'react-native';
 import { setPipAutoEnter } from './pipTimer';
 import { theme } from './theme';
 import { t } from './i18n';
+import {
+  getStoredRestTimerSeconds,
+  setStoredRestTimerSeconds,
+} from './appSettings';
 
 // expo-notifications no existe en web: se carga solo en nativo.
 const Notifications: typeof import('expo-notifications') | null =
@@ -96,6 +100,60 @@ export function useRestSecondsLeft(): number {
   }, [timer]);
 
   return seconds;
+}
+
+// ──────────────── Descanso por defecto (ajuste de la persona) ────────────────
+//
+// Cuánto dura un descanso al arrancarlo. Es un ajuste del USUARIO, no de cada
+// rutina: nadie descansa distinto según el plan, y tenerlo por rutina obligaba
+// a repetirlo al crear o copiar una, lo dejaba bajo candado en las enlazadas de
+// la comunidad y viajaba dentro del QR al compartir. Se edita desde Perfil y
+// desde el ⋯ del registro, y las dos escriben AQUÍ. Persiste con los demás
+// ajustes de la app (appSettings), no en la BD de dominio.
+
+export const DEFAULT_REST_SECONDS = 150;
+
+const durationListeners = new Set<Listener>();
+let restDuration = getStoredRestTimerSeconds() ?? DEFAULT_REST_SECONDS;
+
+/** Descanso por defecto, en segundos. Siempre > 0. */
+export function getRestDuration(): number {
+  return restDuration;
+}
+
+export function setRestDuration(seconds: number): void {
+  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  const next = Math.round(seconds);
+  setStoredRestTimerSeconds(next);
+  if (next === restDuration) return;
+  restDuration = next;
+  for (const listener of Array.from(durationListeners)) listener();
+}
+
+/**
+ * Semilla de la migración (lib/db): el descanso que tenía la rutina activa
+ * cuando el ajuste era por rutina. Solo cuenta si la persona aún no ha fijado
+ * el suyo; después, no hace nada.
+ */
+export function seedRestDuration(seconds: number): void {
+  if (getStoredRestTimerSeconds() !== null) return;
+  setRestDuration(seconds);
+}
+
+function subscribeDuration(listener: Listener): () => void {
+  durationListeners.add(listener);
+  return () => {
+    durationListeners.delete(listener);
+  };
+}
+
+/** Descanso por defecto, vivo: re-renderiza al cambiarlo desde cualquier sitio. */
+export function useRestDuration(): number {
+  return useSyncExternalStore(
+    subscribeDuration,
+    getRestDuration,
+    getRestDuration
+  );
 }
 
 // ─────────────────────────── Notificación del final ───────────────────────────

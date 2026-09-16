@@ -172,17 +172,6 @@ Candidatas (compatibles con las restricciones):
       `features/workout/DataScreen.tsx:482-490` (botón nuevo junto a Exportar, en
       el bloque "Copias de seguridad").
       **Esfuerzo:** bajo.
-- [ ] **Widget Android** — estado de la semana en curso en la pantalla de
-      inicio del móvil.
-      **Por qué:** ver la semana a medias sin abrir la app empuja a completarla.
-      **Archivos:** `android/app/src/main/java/com/tonigallego/gymbro/` (módulo
-      nativo nuevo; el patrón de módulo local ya existe en `modules/pip-timer`,
-      recién estrenado), `lib/weeks.ts:433` (`computeStreak`) y `:517`
-      (`buildWeekProgress`), de donde salen los datos de la semana.
-      **Ojo:** lleva varias pasadas aquí sin que nadie la toque. Si en la próxima
-      revisión sigue igual, bórrala: el recordatorio por notificación cubre más
-      barato el mismo "empújame a completar la semana".
-      **Esfuerzo:** alto.
 
 ## Descartado por restricciones del proyecto
 

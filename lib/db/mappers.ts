@@ -24,6 +24,8 @@ export interface RoutineRow {
   id: string;
   name: string;
   description: string | null;
+  // Columna heredada: el descanso dejó de ser de la rutina (v7). Se escribe
+  // null y no se lee; la migración la usa una sola vez como semilla.
   timer_duration: number | null;
   created_at: number;
   // Procedencia (solo local, ver schema.ts): de quién es la rutina enlazada y
@@ -165,7 +167,7 @@ export function routineToRows(routine: WorkoutRoutine): RoutineRows {
       id: routine.id,
       name: routine.name,
       description: routine.description ?? null,
-      timer_duration: routine.timerDuration ?? null,
+      timer_duration: null,
       created_at: routine.createdAt,
       linked_owner_id: routine.linkedOwnerId ?? null,
       source_routine_id: routine.sourceRoutineId ?? null,
@@ -374,7 +376,6 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       isActive: row.id === activeRoutineId,
       days: daysByRoutine.get(row.id) ?? [],
       createdAt: row.created_at,
-      timerDuration: row.timer_duration ?? undefined,
       linkedOwnerId: row.linked_owner_id ?? undefined,
       sourceRoutineId: row.source_routine_id ?? undefined,
       sourceAuthor: row.source_author ?? undefined,

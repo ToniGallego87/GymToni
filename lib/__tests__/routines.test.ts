@@ -6,6 +6,7 @@ import {
   intensityLabel,
   isLinkedRoutine,
   linkPublicRoutine,
+  refreshLinkedRoutine,
   routineAuthorId,
   routineClosedAt,
   routineIntensity,
@@ -22,7 +23,6 @@ const routine: WorkoutRoutine = {
   description: 'Tres días',
   isActive: true,
   createdAt: 1_700_000_000_000,
-  timerDuration: 120,
   days: [
     {
       id: 'd1',
@@ -87,7 +87,6 @@ describe('duplicateRoutine', () => {
     ]);
     expect(copy.days[0].exercises[0].targetSets).toBe(4);
     expect(copy.description).toBe(routine.description);
-    expect(copy.timerDuration).toBe(120);
   });
 
   it('todos los ids nuevos son distintos entre sí', () => {
@@ -180,6 +179,104 @@ describe('rutinas traídas de la comunidad', () => {
     expect(findSavedRoutine([linked], routine.id)).toBe(linked);
     expect(findSavedRoutine([copy], routine.id)).toBe(copy);
     expect(findSavedRoutine([], routine.id)).toBeUndefined();
+  });
+});
+
+describe('refreshLinkedRoutine: la enlazada sigue al original', () => {
+  const linked = linkPublicRoutine(routine, 'user-9', 'Toni');
+
+  it('sin cambios en el autor no devuelve nada', () => {
+    expect(refreshLinkedRoutine(linked, routine)).toBeNull();
+    // El orden de llegada de días/ejercicios no cuenta como cambio.
+    const shuffled: WorkoutRoutine = {
+      ...routine,
+      days: [...routine.days].reverse().map((day) => ({
+        ...day,
+        exercises: [...day.exercises].reverse(),
+      })),
+    };
+    expect(refreshLinkedRoutine(linked, shuffled)).toBeNull();
+  });
+
+  it('trae el plan nuevo del autor y conserva lo local', () => {
+    const fresh: WorkoutRoutine = {
+      ...routine,
+      name: 'Push Pull v2',
+      isActive: true,
+      createdAt: 1,
+      days: [
+        {
+          ...routine.days[0],
+          exercises: [
+            { ...routine.days[0].exercises[0], targetSets: 5 },
+            routine.days[0].exercises[1],
+          ],
+        },
+        routine.days[1],
+        {
+          id: 'd3',
+          dayNumber: 3,
+          name: 'Pierna',
+          emoji: '🦵',
+          exercises: [{ id: 'e9', name: 'Sentadilla', order: 1 }],
+        },
+      ],
+    };
+    const refreshed = refreshLinkedRoutine(linked, fresh);
+
+    expect(refreshed).not.toBeNull();
+    expect(refreshed?.name).toBe('Push Pull v2');
+    expect(refreshed?.days.map((day) => day.id)).toEqual(['d1', 'd2', 'd3']);
+    expect(refreshed?.days[0].exercises[0].targetSets).toBe(5);
+    // Lo local no se pisa: sigue enlazada, con su alta y sin activarse sola.
+    expect(refreshed?.linkedOwnerId).toBe('user-9');
+    expect(refreshed?.sourceAuthor).toBe('Toni');
+    expect(refreshed?.isActive).toBe(false);
+    expect(refreshed?.createdAt).toBe(linked.createdAt);
+  });
+
+  it('respeta el GIF asignado a mano si el autor no puso ninguno', () => {
+    const withGif: WorkoutRoutine = {
+      ...linked,
+      days: linked.days.map((day, index) =>
+        index === 0
+          ? {
+              ...day,
+              exercises: day.exercises.map((exercise, i) =>
+                i === 0 ? { ...exercise, catalogId: 'bench-press' } : exercise
+              ),
+            }
+          : day
+      ),
+    };
+    const fresh: WorkoutRoutine = { ...routine, name: 'Push Pull v2' };
+    const refreshed = refreshLinkedRoutine(withGif, fresh);
+
+    expect(refreshed?.days[0].exercises[0].catalogId).toBe('bench-press');
+
+    // Pero si el autor fija uno, manda el del autor.
+    const authored: WorkoutRoutine = {
+      ...fresh,
+      days: fresh.days.map((day, index) =>
+        index === 0
+          ? {
+              ...day,
+              exercises: day.exercises.map((exercise, i) =>
+                i === 0 ? { ...exercise, catalogId: 'incline-press' } : exercise
+              ),
+            }
+          : day
+      ),
+    };
+    expect(
+      refreshLinkedRoutine(withGif, authored)?.days[0].exercises[0].catalogId
+    ).toBe('incline-press');
+  });
+
+  it('una rutina propia nunca se refresca', () => {
+    expect(
+      refreshLinkedRoutine(routine, { ...routine, name: 'Otra' })
+    ).toBeNull();
   });
 });
 

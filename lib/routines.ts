@@ -120,6 +120,82 @@ export function linkPublicRoutine(
   };
 }
 
+/**
+ * Huella del PLAN de una rutina (cabecera + días + ejercicios), en orden
+ * estable, para saber si la versión pública del autor ha cambiado respecto a
+ * la copia local enlazada. Fuera lo que es de este dispositivo: `isActive`,
+ * `createdAt` y la procedencia.
+ */
+export function routinePlanFingerprint(routine: WorkoutRoutine): string {
+  const days = [...routine.days]
+    .sort((a, b) => a.dayNumber - b.dayNumber)
+    .map((day) => ({
+      id: day.id,
+      dayNumber: day.dayNumber,
+      name: day.name,
+      emoji: day.emoji,
+      description: day.description ?? '',
+      exercises: [...day.exercises]
+        .sort((a, b) => a.order - b.order)
+        .map((exercise) => ({
+          id: exercise.id,
+          name: exercise.name,
+          order: exercise.order,
+          targetReps: exercise.targetReps ?? '',
+          targetSets: exercise.targetSets ?? null,
+          catalogId: exercise.catalogId ?? '',
+        })),
+    }));
+  return JSON.stringify({
+    name: routine.name,
+    description: routine.description ?? '',
+    days,
+  });
+}
+
+/**
+ * Aplica a la copia local de una rutina ENLAZADA la versión pública actual de
+ * su autor. Devuelve la rutina refrescada, o `null` si no hay nada nuevo.
+ *
+ * Enlazar promete seguir al original: sin esto, la enlazada era una foto del
+ * día en que se añadió y el autor podía corregir series o añadir un día sin
+ * que nadie se enterase. Se conserva todo lo local (activa, fecha de alta,
+ * procedencia) y los GIF que el usuario asignó a mano a ejercicios a los que
+ * el autor no ha puesto ninguno.
+ */
+export function refreshLinkedRoutine(
+  local: WorkoutRoutine,
+  fresh: WorkoutRoutine
+): WorkoutRoutine | null {
+  if (!local.linkedOwnerId) return null;
+
+  const localCatalogIds = new Map<string, string>();
+  for (const day of local.days) {
+    for (const exercise of day.exercises) {
+      if (exercise.catalogId)
+        localCatalogIds.set(exercise.id, exercise.catalogId);
+    }
+  }
+
+  const merged: WorkoutRoutine = {
+    ...local,
+    name: fresh.name,
+    description: fresh.description,
+    days: fresh.days.map((day) => ({
+      ...day,
+      exercises: day.exercises.map((exercise) =>
+        exercise.catalogId || !localCatalogIds.has(exercise.id)
+          ? exercise
+          : { ...exercise, catalogId: localCatalogIds.get(exercise.id) }
+      ),
+    })),
+  };
+
+  return routinePlanFingerprint(merged) === routinePlanFingerprint(local)
+    ? null
+    : merged;
+}
+
 /** Autor de una rutina ajena, si se sabe quién es (enlazada o copiada). */
 export function routineAuthorId(routine: WorkoutRoutine): string | undefined {
   return routine.linkedOwnerId ?? routine.sourceOwnerId;

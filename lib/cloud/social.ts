@@ -1,6 +1,10 @@
 import type { WorkoutRoutine } from '../../types';
 import { supabase } from '../supabase';
-import { linkPublicRoutine } from '../routines';
+import {
+  isLinkedRoutine,
+  linkPublicRoutine,
+  refreshLinkedRoutine,
+} from '../routines';
 import {
   rowsToAppData,
   DbRows,
@@ -475,6 +479,37 @@ export async function linkablePublicRoutine(
 ): Promise<WorkoutRoutine | null> {
   const routine = await fetchPublicRoutine(routineId);
   return routine ? linkPublicRoutine(routine, ownerId, authorName) : null;
+}
+
+// ─────────────────── Refresco de las rutinas enlazadas ───────────────────
+
+// Vuelve a bajar las rutinas ENLAZADAS (las de otra persona, `linkedOwnerId`)
+// y devuelve las que han cambiado desde que se enlazaron, ya fundidas con la
+// copia local (`refreshLinkedRoutine`). El sync incremental no las trae: solo
+// baja filas con `user_id` propio, y estas son del autor. Lo llama
+// useCloudSync tras cada sync; suelen ser 0–3 rutinas, así que bajarlas
+// enteras cada vez sale más barato que llevar un cursor por rutina.
+//
+// Si el autor la despublicó o la borró, `fetchPublicRoutine` devuelve null y
+// la copia local se deja en paz: sigue siendo entrenable. Un fallo de red en
+// una no tumba las demás (se reintenta en el siguiente sync).
+export async function refreshLinkedRoutines(
+  routines: WorkoutRoutine[]
+): Promise<WorkoutRoutine[]> {
+  const linked = routines.filter(isLinkedRoutine);
+  if (!linked.length) return [];
+
+  const refreshed = await Promise.all(
+    linked.map(async (local) => {
+      try {
+        const fresh = await fetchPublicRoutine(local.id);
+        return fresh ? refreshLinkedRoutine(local, fresh) : null;
+      } catch {
+        return null;
+      }
+    })
+  );
+  return refreshed.filter((r): r is WorkoutRoutine => r !== null);
 }
 
 // ─────────────────── Volumen de una rutina pública (intensidad) ───────────────────

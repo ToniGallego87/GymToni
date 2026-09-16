@@ -1,5 +1,6 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -45,6 +46,25 @@ export function GifViewerModal({
   const exercise = getCatalogExercise(catalogId);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  // Contador de intentos: cambia la `key` de la Image para volver a pedir el
+  // GIF al pulsar "Reintentar" (sin remontar, RN no repite una carga fallida).
+  const [attempt, setAttempt] = useState(0);
+
+  // El visor queda montado (se abre y cierra con `visible`) y el selector del
+  // catálogo lo reutiliza cambiando `catalogId`: sin esto, un fallo de red se
+  // quedaba pegado y el error salía en cada apertura y en cualquier otro
+  // ejercicio que se previsualizara después.
+  useEffect(() => {
+    if (!visible) return;
+    setFailed(false);
+    setLoading(true);
+  }, [visible, catalogId]);
+
+  const retry = () => {
+    setFailed(false);
+    setLoading(true);
+    setAttempt((n) => n + 1);
+  };
 
   const title = exercise
     ? exerciseName(exercise)
@@ -97,11 +117,27 @@ export function GifViewerModal({
               />
             )}
             {failed ? (
-              <Text style={styles.errorText}>
-                {t('No se pudo cargar el GIF (¿sin conexión?)')}
-              </Text>
+              // Error con salida: el aviso dice qué pasó y el botón lo repite
+              // sin cerrar el visor.
+              <View style={styles.errorBox}>
+                <MaterialCommunityIcons
+                  name="cloud-off-outline"
+                  size={28}
+                  color={theme.colors.textSecondary}
+                />
+                <Text style={[styles.errorText, styles.errorTextInBox]}>
+                  {t('No se pudo cargar el GIF (¿sin conexión?)')}
+                </Text>
+                <Button
+                  title={t('Reintentar')}
+                  onPress={retry}
+                  variant="secondary"
+                  size="small"
+                />
+              </View>
             ) : (
               <Image
+                key={attempt}
                 source={{ uri: gifUrl(exercise) }}
                 style={styles.gif}
                 resizeMode="contain"
@@ -170,6 +206,15 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
       textAlign: 'center',
       opacity: 0.8,
+    },
+    // Error dentro del recuadro del GIF: icono, texto y botón apilados.
+    errorBox: {
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 20,
+    },
+    errorTextInBox: {
+      marginTop: 0,
     },
     errorText: {
       marginTop: 16,

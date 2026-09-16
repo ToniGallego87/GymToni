@@ -138,7 +138,7 @@ Antes de finalizar, verificar:
   acciones. Nunca montar un `Modal` + overlay a mano
 - Confirmaciones (eliminar/importar/limpiar): `ConfirmModal` (es `AppModal` + cancelar/confirmar).
   Las otras especializaciones ya escritas: `RestTimerModal` (descanso por defecto
-  de la rutina) y `ReportModal` (reportar rutina/perfil/comentario)
+  entre series, ajuste de la persona) y `ReportModal` (reportar rutina/perfil/comentario)
 - Gráficas de barras: `BarChart`. Filtros de gráfica: `SegmentedFilter`
 - Nada de acciones escondidas tras long-press: si algo se puede hacer, tiene que
   verse (botón propio con su icono)

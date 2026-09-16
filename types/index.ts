@@ -26,7 +26,8 @@ export interface WorkoutRoutine {
   isActive: boolean;
   days: WorkoutDay[];
   createdAt: number;
-  timerDuration?: number;
+  // El descanso entre series NO va aquí: es un ajuste de la persona
+  // (lib/restTimerStore `getRestDuration`), no de cada rutina.
   // Rutina AJENA añadida desde la comunidad por referencia: conserva los ids
   // originales de su autor y se entrena igual que las propias, pero NO se
   // edita (para cambiarla se saca una copia). Guarda el id de su dueño.

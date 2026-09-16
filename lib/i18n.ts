@@ -162,6 +162,9 @@ register({
     'No bio yet: tell people what you train.',
   'Tu foto y tu nombre son lo que ve la gente en Comunidad.':
     'Your photo and name are what people see in Community.',
+  'Sin cuenta': 'No account',
+  'El perfil público vive en tu cuenta: sin ella no se puede completar. Créala en Datos y nube.':
+    'Your public profile lives in your account: without one it cannot be completed. Create it in Data & cloud.',
   'Tema, idioma, tus datos en la nube y novedades':
     'Theme, language, your cloud data and news',
   'El perfil público vive en tu cuenta: créala en Datos y nube para poder guardarlo.':
@@ -535,6 +538,8 @@ register({
   'Descripción:': 'Description:',
   'Nombre de la rutina': 'Routine name',
   'Temporizador de descanso': 'Rest timer',
+  '{time} entre series, en todas tus rutinas':
+    '{time} between sets, in all your routines',
   'Editar Temporizador': 'Edit Timer',
   'Modificar temporizador': 'Change timer',
   'Duración en segundos:': 'Duration in seconds:',
@@ -609,6 +614,8 @@ register({
   'Elige un ejercicio para ver su evolución':
     'Pick an exercise to see how it evolved',
   'Tu evolución': 'Your progress',
+  'Ver en la rutina': 'View in routine',
+  'Ver en {routine}': 'View in {routine}',
   'Sesión a sesión y tus mejores marcas': 'Session by session and your bests',
   'Registra un entrenamiento y aquí verás tu evolución.':
     'Log a workout and your progress will show up here.',
@@ -724,6 +731,7 @@ register({
   'Tu perfil no aparece para otros': 'Your profile is hidden from others',
   'Sin nombre visible': 'No display name',
   Seguidores: 'Followers',
+  Seguidor: 'Follower',
   '1 nuevo seguidor': '1 new follower',
   '{n} nuevos seguidores': '{n} new followers',
   '1 me gusta nuevo': '1 new like',

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS routines (
   id                TEXT PRIMARY KEY,
   name              TEXT NOT NULL,
   description       TEXT,
-  timer_duration    INTEGER,
+  timer_duration    INTEGER, -- sin uso desde v7 (el descanso es ajuste de la persona)
   created_at        INTEGER NOT NULL,
   updated_at        INTEGER NOT NULL DEFAULT 0,
   linked_owner_id   TEXT,

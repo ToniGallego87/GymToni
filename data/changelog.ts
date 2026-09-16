@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.5',
+    items: [
+      'El tiempo de descanso entre series ahora se ajusta una sola vez, en Perfil, y vale para todas tus rutinas. Ya no hay que repetirlo al crear o copiar una rutina, y en las rutinas de la comunidad también puedes cambiarlo. Se mantiene el que tenías.',
+      'Las rutinas que has añadido de la comunidad se actualizan solas: si su autor corrige las series o añade un día, lo verás en tu móvil la próxima vez que se sincronice.',
+      'Desde la ficha de un ejercicio en "Tu evolución" puedes ir directo a la rutina que lo tiene, con ese día ya abierto. Si está en varias rutinas, eliges cuál.',
+      'Si el dibujo de un ejercicio no carga por falta de cobertura, ahora tienes un botón "Reintentar" para volver a pedirlo sin cerrar nada.',
+      'Si aún no tienes cuenta, Perfil te lo dice claro y te lleva a crearla, en vez de dejarte rellenar un formulario que luego no se puede guardar.',
+      'Comunidad ya dice "1 Seguidor" y no "1 Seguidores".',
+    ],
+  },
+  {
     version: '0.7.4',
     items: [
       'El descanso ya no se pierde: sigue contando aunque salgas del registro para mirar el calendario, y una barra flotante te enseña los segundos que quedan y te devuelve al entreno de un toque. Y si minimizas la app, el descanso se queda en una ventanita encima de lo que estés usando, como los vídeos de YouTube.',

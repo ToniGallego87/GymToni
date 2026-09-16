@@ -14,7 +14,6 @@ const routine: WorkoutRoutine = {
   description: 'desc',
   isActive: true,
   createdAt: 100,
-  timerDuration: 90,
   days: [
     {
       id: 'd1',
@@ -51,7 +50,8 @@ describe('routineToRows', () => {
       id: 'r1',
       name: 'Rutina 1',
       description: 'desc',
-      timer_duration: 90,
+      // Columna heredada (v7): el descanso ya no es de la rutina.
+      timer_duration: null,
       created_at: 100,
       // Rutina propia: sin procedencia de la comunidad.
       linked_owner_id: null,

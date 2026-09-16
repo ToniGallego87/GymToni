@@ -26,6 +26,7 @@ import {
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
 import { dateLocale, fmtNum, t } from '@lib/i18n';
+import { WorkoutRoutine } from '../../types';
 import {
   BarChart,
   BarChartPoint,
@@ -55,6 +56,10 @@ interface ExerciseProgressScreenProps {
   // Se abrió desde el detalle de un día, ya enfocado en un ejercicio: no hay
   // lista detrás, así que "Volver" sale de la pantalla en vez de subir a ella.
   focused?: boolean;
+  // Abre la ficha de la rutina que contiene el ejercicio, con su día
+  // desplegado. Desde el menú ⋯ de la ficha: la pregunta "¿cómo voy en press
+  // banca?" acaba muchas veces en "pues le subo el peso en la rutina".
+  onOpenRoutine?: (routine: WorkoutRoutine, dayId: string) => void;
 }
 
 // Sesiones que caben en la gráfica sin que las barras se conviertan en rayas.
@@ -206,6 +211,7 @@ export function ExerciseProgressScreen({
   selectedKey,
   onSelectExercise,
   focused,
+  onOpenRoutine,
 }: ExerciseProgressScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -246,6 +252,23 @@ export function ExerciseProgressScreen({
     }
     return map;
   }, [state.routines]);
+  // Rutinas que tienen el ejercicio abierto (y en qué día): la activa primero,
+  // que es la que se está entrenando. Mismo criterio que el GIF: por nombre.
+  const routineHits = useMemo(() => {
+    if (!selectedKey) return [];
+    const hits: { routine: WorkoutRoutine; dayId: string }[] = [];
+    for (const routine of state.routines) {
+      const day = routine.days.find((d) =>
+        d.exercises.some((e) => exerciseKey(e.name) === selectedKey)
+      );
+      if (day) hits.push({ routine, dayId: day.id });
+    }
+    return hits.sort(
+      (a, b) =>
+        Number(b.routine.id === state.activeRoutineId) -
+        Number(a.routine.id === state.activeRoutineId)
+    );
+  }, [selectedKey, state.routines, state.activeRoutineId]);
   const sorted = useMemo(
     () => sortExercises(exercises, sort),
     [exercises, sort]
@@ -472,6 +495,20 @@ export function ExerciseProgressScreen({
             : t('Elige un ejercicio para ver su evolución')
         }
         topInset={insets.top}
+        // Salto a la rutina desde la ficha. Con el ejercicio en varias rutinas,
+        // una opción por rutina (con su nombre) en vez de un selector aparte.
+        menuItems={
+          selected && onOpenRoutine && routineHits.length
+            ? routineHits.map(({ routine, dayId }) => ({
+                icon: 'book-open-variant' as const,
+                label:
+                  routineHits.length === 1
+                    ? t('Ver en la rutina')
+                    : t('Ver en {routine}', { routine: routine.name }),
+                onPress: () => onOpenRoutine(routine, dayId),
+              }))
+            : undefined
+        }
       />
 
       <FloatingBackButton

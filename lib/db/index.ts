@@ -26,6 +26,7 @@ import {
 } from './mappers';
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
 import { generateId } from '../utils';
+import { seedRestDuration } from '../restTimerStore';
 
 // Entidades que se sincronizan con la nube (sync artesanal, Fase 1). El sync
 // (Fase 3) vacía sync_outbox; aquí solo se encolan las operaciones.
@@ -90,6 +91,30 @@ async function bulkInsert<T>(
 const DB_NAME = 'gymbro.db';
 
 let dbPromise: Promise<SQLiteDatabase> | null = null;
+
+// Migración v7 (ver getDb): lee el descanso que tenía la rutina activa y lo
+// deja como ajuste de la persona. Si no había ninguno, no toca nada y el
+// ajuste se queda en su valor por defecto. Nunca puede tumbar la apertura de
+// la BD: un fallo aquí solo pierde la semilla.
+async function seedRestDurationFromRoutines(db: SQLiteDatabase): Promise<void> {
+  try {
+    const active = await db.getFirstAsync<{ value: string }>(
+      'SELECT value FROM settings WHERE key = ?',
+      [SETTING_ACTIVE_ROUTINE_ID]
+    );
+    const row =
+      (active?.value
+        ? await db.getFirstAsync<{ timer_duration: number | null }>(
+            'SELECT timer_duration FROM routines WHERE id = ? AND timer_duration > 0',
+            [active.value]
+          )
+        : null) ??
+      (await db.getFirstAsync<{ timer_duration: number | null }>(
+        'SELECT timer_duration FROM routines WHERE timer_duration > 0 ORDER BY created_at DESC'
+      ));
+    if (row?.timer_duration) seedRestDuration(row.timer_duration);
+  } catch {}
+}
 
 // require perezoso: en web este módulo puede importarse (storage.ts) pero
 // nunca debe ejecutar expo-sqlite, que no está soportado en web en SDK 51.
@@ -159,6 +184,12 @@ function getDb(): Promise<SQLiteDatabase> {
             await db.execAsync(`ALTER TABLE routines ADD COLUMN ${column}`);
           } catch {}
         }
+        // v7: el descanso entre series pasa de cada rutina a un ajuste de la
+        // persona. Se siembra con el que tenía la rutina activa (o, si no, la
+        // primera que lo tuviera) para no cambiarle el descanso a nadie. La
+        // columna `timer_duration` se queda (SQLite no la borra barato) y a
+        // partir de aquí se escribe null.
+        await seedRestDurationFromRoutines(db);
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
