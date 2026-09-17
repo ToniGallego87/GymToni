@@ -47,6 +47,12 @@ interface DataScreenProps {
   onBack: () => void;
 }
 
+// Longitud del código de confirmación por correo. Supabase la deja elegir
+// entre 6 y 10 (Auth → Providers → Email → OTP Length): no fijar el 6 aquí
+// para que cambiar ese ajuste no deje la app sin poder confirmar.
+const OTP_MIN_LENGTH = 6;
+const OTP_MAX_LENGTH = 10;
+
 // Toda acción con espera propia, para deshabilitar el resto mientras corre.
 type BusyAction =
   | 'import'
@@ -96,7 +102,7 @@ export function DataScreen({
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   // Email pendiente de confirmar por código. Mientras no sea null, el bloque de
-  // cuenta muestra el campo de 6 dígitos en vez del formulario de login.
+  // cuenta muestra el campo del código en vez del formulario de login.
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
   const [code, setCode] = useState('');
   const [toast, setToast] = useState<{
@@ -163,8 +169,8 @@ export function DataScreen({
 
   const handleVerifyCode = async () => {
     if (!pendingEmail) return;
-    if (code.trim().length < 6) {
-      notify(t('Escribe el código de 6 dígitos'), 'error');
+    if (code.trim().length < OTP_MIN_LENGTH) {
+      notify(t('Escribe el código del correo'), 'error');
       return;
     }
     setBusyAction('verify');
@@ -428,19 +434,21 @@ export function DataScreen({
           ) : pendingEmail ? (
             <>
               <Text style={styles.actionSubtitle}>
-                {t('Te hemos enviado un código de 6 dígitos a')}{' '}
+                {t('Te hemos enviado un código a')}{' '}
                 <Text style={styles.emailHighlight}>{pendingEmail}</Text>
               </Text>
               <TextInput
                 style={[styles.input, styles.codeInput]}
-                placeholder="000000"
+                placeholder="······"
                 placeholderTextColor={theme.colors.textMuted}
                 value={code}
-                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+                onChangeText={(v) =>
+                  setCode(v.replace(/\D/g, '').slice(0, OTP_MAX_LENGTH))
+                }
                 keyboardType="number-pad"
                 textContentType="oneTimeCode"
                 autoComplete="one-time-code"
-                maxLength={6}
+                maxLength={OTP_MAX_LENGTH}
               />
               <Button
                 title={
@@ -831,7 +839,7 @@ const makeStyles = () =>
       textAlign: 'center',
       fontSize: 24,
       fontWeight: '700',
-      letterSpacing: 8,
+      letterSpacing: 6,
     },
     emailHighlight: {
       color: theme.colors.text,

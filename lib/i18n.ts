@@ -454,8 +454,8 @@ register({
   'Te hemos enviado un código a tu correo': 'We sent a code to your inbox',
   'Ese email ya tiene cuenta. Inicia sesión.':
     'That email already has an account. Sign in.',
-  'Te hemos enviado un código de 6 dígitos a': 'We sent a 6-digit code to',
-  'Escribe el código de 6 dígitos': 'Enter the 6-digit code',
+  'Te hemos enviado un código a': 'We sent a code to',
+  'Escribe el código del correo': 'Enter the code from the email',
   'Cuenta confirmada': 'Account confirmed',
   'Código reenviado': 'Code resent',
   Confirmar: 'Confirm',

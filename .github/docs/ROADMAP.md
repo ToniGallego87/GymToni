@@ -103,6 +103,31 @@ Supabase (cuentas, sync y social) está entregado; plan en
 
 Candidatas (compatibles con las restricciones):
 
+- [ ] **Añadir una rutina de Comunidad exige cuenta** — hoy "Añadir" enlaza la
+      rutina del autor sin comprobar si hay sesión: funciona en los tres sitios
+      desde donde se puede (tablón, ficha pública y perfil de la persona), y en
+      ninguno se mira `user`. Bloquearlo sin sesión: al pulsar, en vez de
+      enlazar, aviso que explique que hace falta cuenta y **botón que lleve a
+      crearla** (Datos y nube). El patrón ya existe en esas mismas pantallas
+      para el like (`notifySignIn` → toast con acción "Iniciar sesión" que
+      dispara `onOpenAccount`); reutilizarlo con un texto propio ("Crea una
+      cuenta para añadir rutinas") y, si se quiere más visible que un toast,
+      un `ConfirmModal` con "Crear cuenta" como confirmación.
+      **Por qué:** una rutina enlazada sigue los cambios de su autor **a través
+      del sync**, y el sync solo existe con cuenta: sin ella el enlace queda
+      congelado y el usuario nunca ve las actualizaciones que la ficha promete.
+      Además la cuenta es lo que permite dar like, comentar y seguir, así que
+      pedirla en el primer gesto útil de Comunidad es el momento natural.
+      **Archivos:** `features/workout/CommunityScreen.tsx:404-423`
+      (`handleSave`, sin comprobar `user`), `:165-166` (`notifySignIn`, el
+      patrón a reutilizar) y `:365-369` (cómo lo usa el like),
+      `features/workout/PublicRoutineScreen.tsx:213-225` (`handleSave` de la
+      ficha, ídem; `:773-780` ya monta el toast con acción),
+      `features/workout/UserProfileScreen.tsx:163-175` (`handleSave` del
+      perfil, ídem), `components/SaveRoutineButton.tsx` (el botón "Añadir"
+      común), `app/App.tsx:985-1229` (`onOpenAccount` ya cableado a la pantalla
+      Datos y nube en las tres).
+      **Esfuerzo:** bajo.
 - [ ] **Recordatorio de entrenamiento** — notificación local programable por
       día de la semana (la infraestructura de notificaciones ya existe para el
       timer de descanso).

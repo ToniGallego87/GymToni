@@ -4,6 +4,7 @@
 
 ### Correcciones
 
+- **El campo del código de confirmación aceptaba solo 6 dígitos y Supabase enviaba 8.** La longitud del OTP es un ajuste del proyecto (Auth → Providers → Email → OTP Length, entre 6 y 10); `DataScreen` tenía el 6 fijado en `maxLength`, la validación y los textos. Ahora acepta de 6 a 10 (`OTP_MIN_LENGTH`/`OTP_MAX_LENGTH`) y los textos hablan de "el código del correo" sin cifra. El ajuste del proyecto se ha puesto a 6 para las apps ya instaladas.
 - **"Crear cuenta" con un email que ya tiene cuenta confirmada avisaba "te hemos enviado un código" y no llegaba nada.** Supabase responde a ese caso con un éxito ficticio sin sesión y con `identities: []` (para no revelar qué emails existen) y no envía correo; `DataScreen` ahora detecta ese `identities` vacío y avisa "Ese email ya tiene cuenta. Inicia sesión." en vez de mandar al usuario a esperar un código. Caso real: un usuario confirmado que volvió a pulsar "Crear cuenta" en vez de "Iniciar sesión".
 
 ## Version 0.7.5-a - 2026-09-17
