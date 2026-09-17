@@ -137,6 +137,15 @@ export function DataScreen({
           : await signIn(email, password);
       if (error) {
         notify(error.message, 'error');
+      } else if (
+        mode === 'signup' &&
+        !data.session &&
+        data.user?.identities?.length === 0
+      ) {
+        // Supabase responde con un "éxito" sin identidades cuando el email ya
+        // tiene cuenta confirmada (para no revelar qué emails existen). No envía
+        // ningún correo, así que no hay que mandar al usuario a esperar un código.
+        notify(t('Ese email ya tiene cuenta. Inicia sesión.'), 'error');
       } else if (mode === 'signup' && !data.session) {
         setPendingEmail(email.trim());
         setCode('');

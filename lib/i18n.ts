@@ -452,6 +452,8 @@ register({
   'Datos restaurados desde la nube': 'Data restored from the cloud',
   'Escribe email y contraseña': 'Enter your email and password',
   'Te hemos enviado un código a tu correo': 'We sent a code to your inbox',
+  'Ese email ya tiene cuenta. Inicia sesión.':
+    'That email already has an account. Sign in.',
   'Te hemos enviado un código de 6 dígitos a': 'We sent a 6-digit code to',
   'Escribe el código de 6 dígitos': 'Enter the 6-digit code',
   'Cuenta confirmada': 'Account confirmed',

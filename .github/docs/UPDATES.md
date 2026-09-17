@@ -1,5 +1,11 @@
 # UPDATES
 
+## Sin publicar
+
+### Correcciones
+
+- **"Crear cuenta" con un email que ya tiene cuenta confirmada avisaba "te hemos enviado un código" y no llegaba nada.** Supabase responde a ese caso con un éxito ficticio sin sesión y con `identities: []` (para no revelar qué emails existen) y no envía correo; `DataScreen` ahora detecta ese `identities` vacío y avisa "Ese email ya tiene cuenta. Inicia sesión." en vez de mandar al usuario a esperar un código. Caso real: un usuario confirmado que volvió a pulsar "Crear cuenta" en vez de "Iniciar sesión".
+
 ## Version 0.7.5-a - 2026-09-17
 
 ### Correcciones
