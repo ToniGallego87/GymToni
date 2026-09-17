@@ -18,6 +18,9 @@ en `supabase/schema.sql`, sin uso).
 
 ### Cambios
 
+- **`minSdkVersion` 23 → 24** (`android/gradle.properties`,
+  `android.minSdkVersion=24`): Google Play rechazaba el AAB ("Play automatic
+  protection requires a minimum SDK version of 24 or higher"). Android 7.0+.
 - **El descanso entre series es un ajuste de la persona, no de cada rutina**
   (`lib/restTimerStore.ts`, `lib/appSettings.ts`, `lib/db/index.ts`,
   `lib/db/schema.ts`, `lib/db/mappers.ts`, `lib/routineShare.ts`,
