@@ -451,8 +451,16 @@ register({
     "This device's data will be replaced with the cloud's. Continue?",
   'Datos restaurados desde la nube': 'Data restored from the cloud',
   'Escribe email y contraseña': 'Enter your email and password',
-  'Revisa tu correo para confirmar la cuenta':
-    'Check your inbox to confirm the account',
+  'Te hemos enviado un código a tu correo': 'We sent a code to your inbox',
+  'Te hemos enviado un código de 6 dígitos a': 'We sent a 6-digit code to',
+  'Escribe el código de 6 dígitos': 'Enter the 6-digit code',
+  'Cuenta confirmada': 'Account confirmed',
+  'Código reenviado': 'Code resent',
+  Confirmar: 'Confirm',
+  'Confirmando…': 'Confirming…',
+  'Reenviar código': 'Resend code',
+  'Reenviando…': 'Resending…',
+  'Cambiar email': 'Change email',
   'Crea una cuenta para guardar tus datos en la nube y usarlos en varios dispositivos. La app funciona igual sin cuenta.':
     'Create an account to store your data in the cloud and use it on several devices. The app works the same without one.',
   'Tus cambios se sincronizan solos con la nube y con tus otros dispositivos.':

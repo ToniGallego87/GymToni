@@ -9,6 +9,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.7.5-a',
+    items: [
+      'Confirmar la cuenta al registrarte ahora es más fácil: en vez de un enlace por correo (que a veces no funcionaba con el correo del trabajo), te enviamos un código de 6 dígitos que escribes en la app. También puedes pedir que te lo reenvíen o cambiar el email si te equivocaste.',
+    ],
+  },
+  {
     version: '0.7.5',
     items: [
       'El tiempo de descanso entre series ahora se ajusta una sola vez, en Perfil, y vale para todas tus rutinas. Ya no hay que repetirlo al crear o copiar una rutina, y en las rutinas de la comunidad también puedes cambiarlo. Se mantiene el que tenías.',

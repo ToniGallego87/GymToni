@@ -25,7 +25,14 @@ import {
   getLastAutoBackupAt,
 } from '@lib/appSettings';
 import { canWriteLocalBackup } from '@lib/fileIO';
-import { useSession, signUp, signIn, signOut } from '@lib/cloud/auth';
+import {
+  useSession,
+  signUp,
+  signIn,
+  signOut,
+  verifySignUpCode,
+  resendSignUpCode,
+} from '@lib/cloud/auth';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
 import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
 import { clearOutbox } from '@lib/db';
@@ -47,6 +54,8 @@ type BusyAction =
   | 'backup'
   | 'signin'
   | 'signup'
+  | 'verify'
+  | 'resend'
   | 'signout'
   | 'sync'
   | 'cloud-backup'
@@ -86,6 +95,10 @@ export function DataScreen({
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // Email pendiente de confirmar por código. Mientras no sea null, el bloque de
+  // cuenta muestra el campo de 6 dígitos en vez del formulario de login.
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  const [code, setCode] = useState('');
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -125,11 +138,52 @@ export function DataScreen({
       if (error) {
         notify(error.message, 'error');
       } else if (mode === 'signup' && !data.session) {
-        notify(t('Revisa tu correo para confirmar la cuenta'), 'success');
+        setPendingEmail(email.trim());
+        setCode('');
+        notify(t('Te hemos enviado un código a tu correo'), 'success');
       } else {
         setPassword('');
         notify(t('Sesión iniciada'), 'success');
       }
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleVerifyCode = async () => {
+    if (!pendingEmail) return;
+    if (code.trim().length < 6) {
+      notify(t('Escribe el código de 6 dígitos'), 'error');
+      return;
+    }
+    setBusyAction('verify');
+    try {
+      const { error } = await verifySignUpCode(pendingEmail, code);
+      if (error) {
+        notify(error.message, 'error');
+      } else {
+        // verifyOtp devuelve sesión: useSession la recoge por onAuthStateChange.
+        setPendingEmail(null);
+        setCode('');
+        setPassword('');
+        notify(t('Cuenta confirmada'), 'success');
+      }
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const handleResendCode = async () => {
+    if (!pendingEmail) return;
+    setBusyAction('resend');
+    try {
+      const { error } = await resendSignUpCode(pendingEmail);
+      if (error) notify(error.message, 'error');
+      else notify(t('Código reenviado'), 'success');
     } catch (e) {
       notify((e as Error).message, 'error');
     } finally {
@@ -359,6 +413,51 @@ export function DataScreen({
                 title={t('Cerrar sesión')}
                 variant="secondary"
                 onPress={handleSignOut}
+                disabled={busy}
+              />
+            </>
+          ) : pendingEmail ? (
+            <>
+              <Text style={styles.actionSubtitle}>
+                {t('Te hemos enviado un código de 6 dígitos a')}{' '}
+                <Text style={styles.emailHighlight}>{pendingEmail}</Text>
+              </Text>
+              <TextInput
+                style={[styles.input, styles.codeInput]}
+                placeholder="000000"
+                placeholderTextColor={theme.colors.textMuted}
+                value={code}
+                onChangeText={(v) => setCode(v.replace(/\D/g, '').slice(0, 6))}
+                keyboardType="number-pad"
+                textContentType="oneTimeCode"
+                autoComplete="one-time-code"
+                maxLength={6}
+              />
+              <Button
+                title={
+                  busyAction === 'verify' ? t('Confirmando…') : t('Confirmar')
+                }
+                onPress={handleVerifyCode}
+                disabled={busy}
+                size="large"
+              />
+              <Button
+                title={
+                  busyAction === 'resend'
+                    ? t('Reenviando…')
+                    : t('Reenviar código')
+                }
+                variant="secondary"
+                onPress={handleResendCode}
+                disabled={busy}
+              />
+              <Button
+                title={t('Cambiar email')}
+                variant="secondary"
+                onPress={() => {
+                  setPendingEmail(null);
+                  setCode('');
+                }}
                 disabled={busy}
               />
             </>
@@ -718,6 +817,16 @@ const makeStyles = () =>
       paddingVertical: 12,
       color: theme.colors.text,
       fontSize: 16,
+    },
+    codeInput: {
+      textAlign: 'center',
+      fontSize: 24,
+      fontWeight: '700',
+      letterSpacing: 8,
+    },
+    emailHighlight: {
+      color: theme.colors.text,
+      fontWeight: '700',
     },
     dangerCard: {
       borderColor: theme.colors.error,

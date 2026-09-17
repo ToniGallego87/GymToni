@@ -1,5 +1,11 @@
 # UPDATES
 
+## Version 0.7.5-a - 2026-09-17
+
+### Correcciones
+
+- **Confirmación de cuenta por código de 6 dígitos en vez de enlace**. Un usuario no pudo confirmar su cuenta: el enlace del correo redirigía a `localhost:3000` (Site URL por defecto de Supabase) y además llegaba como `otp_expired` porque el escáner de enlaces de su correo corporativo consumía el token de un solo uso antes de que lo pulsara. Ahora el registro deja el bloque de cuenta de `DataScreen` en un estado `pendingEmail` con un campo numérico de 6 dígitos (`textContentType="oneTimeCode"` para autorrelleno), botón **Confirmar** (`verifySignUpCode` → `supabase.auth.verifyOtp({ type: 'signup' })`, que devuelve sesión directamente), **Reenviar código** (`resendSignUpCode` → `supabase.auth.resend`) y **Cambiar email**. Nuevas funciones en `lib/cloud/auth.ts`; textos nuevos en `lib/i18n.ts`. **Requiere cambiar en el Dashboard de Supabase** la plantilla *Authentication → Email Templates → Confirm signup* para enviar `{{ .Token }}` en lugar de `{{ .ConfirmationURL }}`. `versionCode` 27 → 28.
+
 ## Version 0.7.5 - 2026-09-16
 
 Tanda corta y centrada en quitar fricción: el **descanso entre series pasa a

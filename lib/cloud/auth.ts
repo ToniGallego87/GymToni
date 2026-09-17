@@ -43,3 +43,19 @@ export function signIn(email: string, password: string) {
 export function signOut() {
   return supabase.auth.signOut();
 }
+
+// Confirmación de registro por código de 6 dígitos (la plantilla "Confirm
+// signup" de Supabase envía {{ .Token }} en vez de un enlace). Un enlace de un
+// solo uso lo "quemaban" los escáneres de correo corporativos antes de que el
+// usuario lo pulsara; el código no tiene ese problema y no sale de la app.
+export function verifySignUpCode(email: string, code: string) {
+  return supabase.auth.verifyOtp({
+    email: email.trim(),
+    token: code.trim(),
+    type: 'signup',
+  });
+}
+
+export function resendSignUpCode(email: string) {
+  return supabase.auth.resend({ type: 'signup', email: email.trim() });
+}
