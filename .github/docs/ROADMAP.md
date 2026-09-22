@@ -38,11 +38,11 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
       para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [ ] **Rendimiento: afinar lo que queda tras quitar el blur** — sin el
-      desenfoque (`GLASS_BLUR_ENABLED = false`, medido 2026-09-22 en garnet: la
-      mediana bajó de 26 a 15 ms y el p90 de 40 a 25) la app ya va a ~60 fps en
-      uso normal, pero el p99 sigue en 48 ms y hay 14 frames con el hilo UI
-      lento en el recorrido. Candidatos, por orden: (1) sombra/elevación +
+- [ ] **Rendimiento: afinar lo que queda tras arreglar el blur** — con un solo
+      blur (barra superior, `blurReductionFactor` 12; medido 2026-09-22 en
+      garnet: mediana 26 → 16 ms, p90 40 → 22, p99 69 → 32) la app ya va a
+      ~60 fps en uso normal; quedan picos sueltos (p99 32 ms, 6 frames con el
+      hilo UI lento en el recorrido). Candidatos, por orden: (1) sombra/elevación +
       `GradientFill` en cada tarjeta del historial de semanas (una por log);
       (2) `animateLayout` (LayoutAnimation) en los desplegables; (3) el
       `Anton` con `adjustsFontSizeToFit` en las cabeceras. Medir con el mismo
@@ -51,7 +51,8 @@ Supabase (cuentas, sync y social) está entregado; plan en
       **Por qué:** "velocidad de uso" es la prioridad número uno; lo grande ya
       está, lo que queda son picos que se notan al abrir semanas y al arrastrar
       entre pestañas.
-      **Archivos:** `components/glassTokens.ts` (`GLASS_BLUR_ENABLED`),
+      **Archivos:** `components/glassTokens.ts` (`GLASS_BLUR_ENABLED`,
+      `GLASS_TOP_BAR_BLUR_REDUCTION`),
       `features/workout/HomeScreen.tsx` (tarjetas de semana y de log),
       `components/GradientFill.tsx`, `lib/theme.ts` (`shadow.soft` /
       `shadow.card`).

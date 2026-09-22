@@ -18,8 +18,9 @@ import { openAchievements } from '@lib/achievementsLink';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { LevelPill } from './LevelPill';
 import {
-  GLASS_BLUR_ENABLED,
   GLASS_TINT,
+  GLASS_TOP_BAR_BLUR_ENABLED,
+  GLASS_TOP_BAR_BLUR_REDUCTION,
   GLASS_TOP_BAR_BLUR_INTENSITY,
   GLASS_TOP_BAR_BG,
   GLASS_TOP_BAR_HAIRLINE,
@@ -148,10 +149,14 @@ export function GlassTopBar({
           containerStyle,
         ]}
       >
-        {GLASS_BLUR_ENABLED && (
+        {/* Desenfoque real con bitmap muy reducido (blurReductionFactor): a
+            reducción 4 los tres blurs de la app costaban 10 ms por frame; uno
+            solo a 12 no se nota en la medida y a ojo desenfoca igual. */}
+        {GLASS_TOP_BAR_BLUR_ENABLED && (
           <FrostedBlur
             tint={GLASS_TINT}
             intensity={topBarBlurIntensity}
+            blurReductionFactor={GLASS_TOP_BAR_BLUR_REDUCTION}
             experimentalBlurMethod="dimezisBlurView"
             style={styles.topBarBlur}
             pointerEvents="none"

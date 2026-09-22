@@ -55,7 +55,8 @@ $adb="$env:LOCALAPPDATAAndroidSdkplatform-toolsadb.exe"; $p="com.tonigallego.gym
 
 Referencia 2026-09-22 (garnet, con `TabStateBoundary`):
 - con blur (`GLASS_BLUR_ENABLED = true`): 3988 frames, mediana 26 ms, p90 40, p99 69, 123 frames UI lentos.
-- sin blur (lo que va en la app): 1278 frames, mediana 15 ms, p90 25, p99 48, 14 frames UI lentos.
+- sin ningún blur: 1278 frames, mediana 15 ms, p90 25, p99 48, 14 frames UI lentos.
+- un blur en la barra superior, `blurReductionFactor={12}` (lo que va en la app): 2704 frames, mediana 16 ms, p90 22, p99 32, 6 frames UI lentos.
 
 ## Verificación
 

@@ -16,16 +16,26 @@ export const GLASS_FLOATING_TEXT = '#F5F7FA';
 
 // Tinte del BlurView acorde al tema.
 /**
- * Interruptor del desenfoque real (`BlurView` dimezis) de barras y botón
- * flotante. Apagado, queda solo el fondo translúcido: prueba A/B de
- * rendimiento (2026-09-22), el blur re-desenfoca en cada frame que algo se
- * mueve debajo.
+ * Desenfoque real (`BlurView` dimezis) de la barra inferior, el botón Volver
+ * y la barra de descanso: APAGADO. El blur re-desenfoca en cada frame que algo
+ * se mueve debajo; con los tres encendidos a la reducción por defecto (4) la
+ * mediana de frame en garnet era 26 ms (medido 2026-09-22, ver COMMANDS.md).
+ * Ahí basta el fondo translúcido: son pequeños.
  */
 export const GLASS_BLUR_ENABLED = false;
+/**
+ * La barra superior sí lleva desenfoque, pero con el bitmap reducido
+ * `GLASS_TOP_BAR_BLUR_REDUCTION` veces: a 12 cuesta lo mismo que no tenerlo
+ * (mediana 16 ms, p99 32) y a ojo desenfoca igual. Se probó también montarlo
+ * solo en reposo (apagado al arrastrar): mismo rendimiento y un salto visible
+ * al parar, descartado.
+ */
+export const GLASS_TOP_BAR_BLUR_ENABLED = true;
+export const GLASS_TOP_BAR_BLUR_REDUCTION = 12;
 
 export let GLASS_TINT: 'light' | 'dark' = 'dark';
 
-export let GLASS_TOP_BAR_BG = 'rgba(30, 34, 44, 0.9)';
+export let GLASS_TOP_BAR_BG = 'rgba(30, 34, 44, 0.74)';
 export let GLASS_TOP_BAR_OVERLAY = 'rgba(255, 255, 255, 0.04)';
 // Filo inferior de la top bar: en día separa la barra del contenido que pasa
 // por debajo (en noche el contraste del blur ya lo hace y no lleva borde).
@@ -56,8 +66,8 @@ function recomputeGlassTokens() {
   GLASS_TINT = isLight ? 'light' : 'dark';
 
   GLASS_TOP_BAR_BG = isLight
-    ? 'rgba(237, 240, 246, 0.92)'
-    : 'rgba(30, 34, 44, 0.9)';
+    ? 'rgba(237, 240, 246, 0.78)'
+    : 'rgba(30, 34, 44, 0.74)';
   GLASS_TOP_BAR_OVERLAY = isLight
     ? 'rgba(237, 240, 246, 0.08)'
     : 'rgba(255, 255, 255, 0.04)';
