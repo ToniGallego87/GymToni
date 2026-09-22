@@ -30,6 +30,7 @@ import { WorkoutRoutine } from '../../types';
 import {
   BarChart,
   BarChartPoint,
+  Button,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
@@ -60,6 +61,8 @@ interface ExerciseProgressScreenProps {
   // desplegado. Desde el menú ⋯ de la ficha: la pregunta "¿cómo voy en press
   // banca?" acaba muchas veces en "pues le subo el peso en la rutina".
   onOpenRoutine?: (routine: WorkoutRoutine, dayId: string) => void;
+  // Salida del estado vacío: empezar un entreno o crear la primera rutina.
+  emptyAction?: { label: string; onPress: () => void };
 }
 
 // Sesiones que caben en la gráfica sin que las barras se conviertan en rayas.
@@ -68,6 +71,13 @@ const MAX_CHART_SESSIONS = 8;
 // Ejercicios por página: con un historial largo pintar la lista entera de golpe
 // bloquea la entrada a la pantalla. Se amplía de PAGE_SIZE en PAGE_SIZE.
 const PAGE_SIZE = 20;
+
+// Umbrales del chrome de la lista. Con dos o tres ejercicios registrados (las
+// primeras semanas) buscador y orden eran más control que contenido encima de
+// filas que caben enteras: el orden aparece cuando la lista deja de verse de un
+// vistazo y el buscador cuando ya no cabe en una pantalla.
+const MIN_EXERCISES_FOR_SORT = 5;
+const MIN_EXERCISES_FOR_SEARCH = 10;
 
 // Sin icono, a diferencia del filtro de métrica: los cuatro criterios con
 // icono + texto no caben de ancho, y "ordenar por sesiones" no tiene un dibujo
@@ -212,6 +222,7 @@ export function ExerciseProgressScreen({
   onSelectExercise,
   focused,
   onOpenRoutine,
+  emptyAction,
 }: ExerciseProgressScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -346,13 +357,21 @@ export function ExerciseProgressScreen({
             <Text style={styles.emptyText}>
               {t('Registra un entrenamiento y aquí verás tu evolución.')}
             </Text>
+            {!!emptyAction && (
+              <Button
+                title={emptyAction.label}
+                onPress={emptyAction.onPress}
+                variant="primary"
+                size="medium"
+              />
+            )}
           </View>
         )}
 
         {/* Buscar por nombre, encima del orden: con 30-40 ejercicios encontrar
             uno concreto era scroll y "Ver más". Mismo patrón que el buscador
             del catálogo de ejercicios. */}
-        {!selected && exercises.length > 1 && (
+        {!selected && exercises.length >= MIN_EXERCISES_FOR_SEARCH && (
           <View style={styles.searchBox}>
             <MaterialCommunityIcons
               name="magnify"
@@ -384,7 +403,7 @@ export function ExerciseProgressScreen({
           </View>
         )}
 
-        {!selected && exercises.length > 1 && (
+        {!selected && exercises.length >= MIN_EXERCISES_FOR_SORT && (
           <SegmentedFilter
             // Sin margen: encabeza la lista, no cuelga de ninguna gráfica.
             options={SORT_OPTIONS}

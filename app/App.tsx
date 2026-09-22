@@ -20,7 +20,6 @@ const Notifications: typeof import('expo-notifications') | null =
 import {
   CalendarScreen,
   CardioScreen,
-  ProfileEditScreen,
   CommunityScreen,
   PublicRoutineScreen,
   UserProfileScreen,
@@ -32,6 +31,7 @@ import {
   HomeScreen,
   NewRoutineScreen,
   ProfileScreen,
+  AchievementsScreen,
   BodyWeightScreen,
   SettingsScreen,
   QRScannerScreen,
@@ -43,6 +43,7 @@ import {
   useWorkout,
 } from '@features/workout';
 import {
+  AwardModal,
   WhatsNewModal,
   UpdateAvailableModal,
   ThemeRevealOverlay,
@@ -72,6 +73,9 @@ import {
   setLastUpdatePromptVersion,
 } from '@lib/storage';
 import { useMyProfile } from '@hooks/useMyProfile';
+import { useAccountLevel } from '@hooks/useAccountLevel';
+import { shiftAward, useAwards } from '@lib/awards';
+import { setAchievementsOpener } from '@lib/achievementsLink';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { isAutoBackupDue, runAutoBackup } from '@lib/backup';
 import { loadBodyWeight, maybeNotifyStaleWeight } from '@lib/bodyWeight';
@@ -119,9 +123,10 @@ type Screen =
   | { type: 'settings' }
   // Peso corporal: se edita desde Perfil, no en el carrusel de Cardio.
   | { type: 'body-weight' }
+  // Logros: insignias derivadas del histórico; cuelga de Perfil.
+  | { type: 'achievements' }
   // El perfil público se edita desde Perfil (su tarjeta de identidad), que es
   // el único sitio desde el que se llega: Comunidad habla de otra gente.
-  | { type: 'profile-edit' }
   | { type: 'community' }
   | { type: 'following'; back: 'community' }
   | { type: 'followers'; back: 'community' }
@@ -224,6 +229,18 @@ function AppContent() {
   // que esto es true, para no pintar primero los datos semilla y saltar luego
   // a los reales (el "carga a trompicones" del arranque).
   const [hydrated, setHydrated] = useState(false);
+  // Retos semanales: aquí (y solo aquí) se apuntan los superados, se avisa de
+  // lo nuevo (retos, logros, nivel: cola de `lib/awards`) y se sube el nivel
+  // al perfil público. Solo con los datos reales: con los semilla de antes de
+  // hidratar, todo parecería "nuevo".
+  useAccountLevel({ record: hydrated });
+  const awards = useAwards();
+  // La píldora de nivel de la barra superior (GlassTopBar, en todas las
+  // pantallas) abre Logros a través de este puente.
+  useEffect(() => {
+    setAchievementsOpener(() => setScreen({ type: 'achievements' }));
+    return () => setAchievementsOpener(null);
+  }, []);
   const [isFirstInstall, setIsFirstInstall] = useState(false);
   const [whatsNewEntry, setWhatsNewEntry] = useState<ChangelogEntry | null>(
     null
@@ -497,6 +514,21 @@ function AppContent() {
       screen.back ?? { type: 'routine-selector', origin: screen.origin }
     );
   const backToNewRoutine = () => setScreen({ type: 'new-routine' });
+  // "Ir a la rutina" desde el ⋯ del Detalle, del Registro y de Inicio: la ficha
+  // de la rutina a la que pertenece el día, con ese día desplegado, y vuelta a
+  // la pantalla desde la que se abrió. Mismo camino que el atajo de Progreso.
+  const openRoutineOfDay = (dayId: string, back: Screen) => {
+    const routine = state.routines.find((r) =>
+      r.days.some((d) => d.id === dayId)
+    );
+    if (!routine) return;
+    setScreen({
+      type: 'routine-details',
+      routine,
+      back,
+      expandDayId: dayId,
+    });
+  };
   // "Progreso por ejercicio" son dos pasos en una pantalla (lista → ficha del
   // ejercicio), así que su vuelta atrás también: primero se cierra la ficha y
   // solo desde la lista se sale. Salvo que se entrara ENFOCADO desde el detalle
@@ -557,9 +589,7 @@ function AppContent() {
               goProfile();
               return true;
             case 'body-weight':
-              goProfile();
-              return true;
-            case 'profile-edit':
+            case 'achievements':
               goProfile();
               return true;
             case 'following':
@@ -628,6 +658,19 @@ function AppContent() {
     );
     return selected ?? activeRoutine;
   }, [state.routines, state.selectedRoutineId, activeRoutine]);
+
+  // Salida de los vacíos (Calendario, Progreso por ejercicio): a elegir la
+  // sesión si ya hay rutina, o a crear una si no. Misma regla que la hero de
+  // Inicio (`onOpenDaySelector`).
+  const emptyStateAction = displayedRoutine?.days.length
+    ? {
+        label: t('Empezar entrenamiento'),
+        onPress: () => setScreen({ type: 'day-selector' }),
+      }
+    : {
+        label: t('Crear rutina'),
+        onPress: () => setScreen({ type: 'new-routine' }),
+      };
 
   const openWorkoutFromNotificationData = (
     data: Record<string, unknown> | undefined
@@ -857,6 +900,12 @@ function AppContent() {
         onClose={handleCloseWhatsNew}
       />
 
+      {/* Premios (reto superado, logro nuevo, subida de nivel): un popup por
+          premio, en el orden en que cayeron. Ceden el paso a las novedades. */}
+      {whatsNewEntry === null && (
+        <AwardModal award={awards[0] ?? null} onClose={shiftAward} />
+      )}
+
       {/* Aviso de versión nueva. Cede el paso a las novedades si ambos caen en
           el mismo arranque (primero qué ha cambiado, después que hay más). */}
       {updateRelease && (
@@ -913,7 +962,19 @@ function AppContent() {
             onOpenRoutineSelector={() =>
               setScreen({ type: 'routine-selector', origin: 'home' })
             }
+            // Ficha de la rutina ACTIVA (no la mostrada: es la que se entrena).
+            onOpenActiveRoutine={
+              activeRoutine
+                ? () =>
+                    setScreen({
+                      type: 'routine-details',
+                      routine: activeRoutine,
+                      back: { type: 'home' },
+                    })
+                : undefined
+            }
             onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+            onOpenCommunity={() => setScreen({ type: 'community' })}
             onShowWeekAchievement={(achievements, routineName) =>
               setScreen({
                 type: 'week-achievement',
@@ -938,12 +999,14 @@ function AppContent() {
                 origin: 'cardio',
               })
             }
+            onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
           />
         )}
 
         {tabLayer(
           'calendar',
           <CalendarScreen
+            emptyAction={emptyStateAction}
             onSelectLog={(log, day) =>
               setScreen({ type: 'detail', log, day, origin: 'calendar' })
             }
@@ -996,8 +1059,8 @@ function AppContent() {
               setScreen({ type: 'exercise-progress' })
             }
             onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
+            onOpenAchievements={() => setScreen({ type: 'achievements' })}
             onOpenSettings={() => setScreen({ type: 'settings' })}
-            onOpenProfileEdit={() => setScreen({ type: 'profile-edit' })}
             onOpenAccount={() => setScreen({ type: 'data' })}
           />
         )}
@@ -1056,6 +1119,7 @@ function AppContent() {
           cardioOnly={screen.cardioOnly}
           onSave={() => backFromWorkoutLog(screen.origin)}
           onBack={() => backFromWorkoutLog(screen.origin)}
+          onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
         />
       )}
 
@@ -1064,6 +1128,7 @@ function AppContent() {
           log={screen.log}
           day={screen.day}
           onBack={() => backFromDetail(screen.origin)}
+          onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
           onEdit={() =>
             setScreen({
               type: 'workout-log',
@@ -1092,16 +1157,15 @@ function AppContent() {
       )}
 
       {screen.type === 'body-weight' && <BodyWeightScreen onBack={goProfile} />}
+      {screen.type === 'achievements' && (
+        <AchievementsScreen onBack={goProfile} />
+      )}
 
       {screen.type === 'settings' && (
         <SettingsScreen
           onBack={goProfile}
           onOpenData={() => setScreen({ type: 'data' })}
         />
-      )}
-
-      {screen.type === 'profile-edit' && (
-        <ProfileEditScreen onBack={goProfile} />
       )}
 
       {screen.type === 'following' && (
@@ -1163,6 +1227,7 @@ function AppContent() {
 
       {screen.type === 'exercise-progress' && (
         <ExerciseProgressScreen
+          emptyAction={emptyStateAction}
           selectedKey={screen.selectedKey ?? screen.initialExerciseKey}
           focused={!!screen.initialExerciseKey}
           onSelectExercise={(exerciseKey) =>
@@ -1207,6 +1272,7 @@ function AppContent() {
           onCreateRoutine={handleCreateRoutine}
           onBack={goHome}
           onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
+          onOpenCommunity={() => setScreen({ type: 'community' })}
           initialDays={screen.initialDays}
         />
       )}

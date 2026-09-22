@@ -807,6 +807,12 @@ export interface PendingLocalIds {
   routines: string[];
   days: string[];
   logs: string[];
+  /**
+   * Ejercicios (en local) de los días y rutinas pendientes. El pull baja los
+   * borrados de `exercises` sueltos (solo ids), así que sin esta lista no
+   * podría saber que pertenecen a un día que aún no se ha subido.
+   */
+  exercises?: string[];
 }
 
 // Qué tiene el outbox pendiente de subir ahora mismo. El pull lo consulta para
@@ -821,6 +827,20 @@ export async function getPendingOutboxIds(): Promise<PendingLocalIds> {
     if (row.entity === 'routine') pending.routines.push(row.entity_id);
     else if (row.entity === 'workout_day') pending.days.push(row.entity_id);
     else if (row.entity === 'workout_log') pending.logs.push(row.entity_id);
+  }
+  const dayHolders = [...pending.days, ...pending.routines];
+  if (dayHolders.length) {
+    const marks = (n: number) => Array(n).fill('?').join(', ');
+    const rows = await db.getAllAsync<{ id: string }>(
+      `SELECT id FROM exercises
+       WHERE workout_days_id IN (${marks(pending.days.length) || "''"})
+          OR workout_days_id IN (
+            SELECT id FROM workout_days
+            WHERE routines_id IN (${marks(pending.routines.length) || "''"})
+          )`,
+      [...pending.days, ...pending.routines]
+    );
+    pending.exercises = rows.map((r) => r.id);
   }
   return pending;
 }

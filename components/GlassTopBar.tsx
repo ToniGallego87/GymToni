@@ -14,6 +14,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme, getModeBackgroundColor } from '@lib/theme';
 import { requestThemeReveal } from '@lib/themeTransition';
 import { t } from '@lib/i18n';
+import { openAchievements } from '@lib/achievementsLink';
+import { useAccountLevel } from '@hooks/useAccountLevel';
+import { LevelPill } from './LevelPill';
 import {
   GLASS_TINT,
   GLASS_TOP_BAR_BLUR_INTENSITY,
@@ -93,6 +96,7 @@ export function GlassTopBar({
   // overflow:hidden, que si no los recortaría). El estado vive aquí para que
   // las opciones globales estén en el mismo sitio en TODAS las pantallas.
   const [menuOpen, setMenuOpen] = useState(false);
+  const { level } = useAccountLevel();
   const menuButtonRef = useRef<View>(null);
 
   // La opción ofrece siempre el modo contrario al activo.
@@ -203,6 +207,15 @@ export function GlassTopBar({
                 ))}
             </View>
             {rightElement}
+            {/* Nivel de la cuenta (solo el número), a la izquierda del menú
+                en TODAS las pantallas: es el acceso permanente a Logros. */}
+            {showMenu && (
+              <LevelPill
+                level={level.level}
+                compact
+                onPress={openAchievements}
+              />
+            )}
             {showMenu && (
               <Pressable
                 ref={menuButtonRef}

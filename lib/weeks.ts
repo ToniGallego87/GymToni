@@ -438,27 +438,69 @@ export function improvementAgainstHistory(
   currentWeekLogs: WorkoutLog[],
   priorLogs: WorkoutLog[]
 ): ImprovementResult | null {
-  const currentByDayId = latestLogsByDayId(currentWeekLogs);
-  const currentDayIds = Object.keys(currentByDayId);
-  if (currentDayIds.length === 0) return null;
+  const days = comparableDayScores(currentWeekLogs, priorLogs);
+  if (days.length === 0) return null;
 
-  const references = referenceLogsByDay(priorLogs, currentDayIds);
-
-  // Dentro de cada día solo cuentan los ejercicios que están en las DOS
-  // sesiones: uno que hoy no se hizo no vale cero (ver
-  // `getComparableWorkoutScores`).
   let currentScore = 0;
   let previousScore = 0;
-  currentDayIds.forEach((dayId) => {
-    const reference = references[dayId];
-    if (!reference) return;
-    const scores = getComparableWorkoutScores(currentByDayId[dayId], reference);
-    currentScore += scores.current;
-    previousScore += scores.previous;
+  days.forEach((day) => {
+    currentScore += day.current;
+    previousScore += day.previous;
   });
 
   if (currentScore <= 0 && previousScore <= 0) return null;
   return buildImprovementFromStrengthScores(currentScore, previousScore);
+}
+
+/**
+ * Puntuación de cada día de la semana frente a su sesión anterior. Solo salen
+ * los días CON referencia; dentro de cada uno solo cuentan los ejercicios que
+ * están en las DOS sesiones: uno que hoy no se hizo no vale cero (ver
+ * `getComparableWorkoutScores`). Base común de la mejora de la semana y del
+ * recuento de días mejorados.
+ */
+function comparableDayScores(
+  currentWeekLogs: WorkoutLog[],
+  priorLogs: WorkoutLog[]
+): { dayId: string; current: number; previous: number }[] {
+  const currentByDayId = latestLogsByDayId(currentWeekLogs);
+  const currentDayIds = Object.keys(currentByDayId);
+  if (currentDayIds.length === 0) return [];
+
+  const references = referenceLogsByDay(priorLogs, currentDayIds);
+  const days: { dayId: string; current: number; previous: number }[] = [];
+  currentDayIds.forEach((dayId) => {
+    const reference = references[dayId];
+    if (!reference) return;
+    const scores = getComparableWorkoutScores(currentByDayId[dayId], reference);
+    days.push({ dayId, current: scores.current, previous: scores.previous });
+  });
+  return days;
+}
+
+/**
+ * Cuántos días de la semana mejoran al menos `minPercent` respecto a su propia
+ * sesión anterior (solo pueden contar los que tienen con qué compararse). Es
+ * la base del reto "+3 %": no vale un único día muy bueno que suba la suma de
+ * la semana; se pide que lo hagan la mitad o más de los días de la rutina.
+ */
+export function countImprovedDays(
+  currentWeekLogs: WorkoutLog[],
+  priorLogs: WorkoutLog[],
+  minPercent: number
+): number {
+  let improved = 0;
+  comparableDayScores(currentWeekLogs, priorLogs).forEach((day) => {
+    if (day.current <= 0 && day.previous <= 0) return;
+    const result = buildImprovementFromStrengthScores(
+      day.current,
+      day.previous
+    );
+    if (result && result.isImproved && result.percent >= minPercent) {
+      improved += 1;
+    }
+  });
+  return improved;
 }
 
 export interface StreakSummary {

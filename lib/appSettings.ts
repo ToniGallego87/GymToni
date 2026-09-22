@@ -130,3 +130,49 @@ export function getStoredRestTimerSeconds(): number | null {
 export function setStoredRestTimerSeconds(seconds: number): void {
   writeSetting(REST_TIMER_KEY, String(seconds));
 }
+
+// Retos semanales superados, como lista de claves `id@periodo` (ver
+// lib/level.ts). Es lo ÚNICO de los retos que se guarda: el nivel de la cuenta
+// sale de aquí y no debe bajar aunque se borre historial.
+const CHALLENGE_WINS_KEY = 'challengeWins';
+
+export function getStoredChallengeWins(): string[] {
+  const raw = readSetting(CHALLENGE_WINS_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setStoredChallengeWins(wins: string[]): void {
+  writeSetting(CHALLENGE_WINS_KEY, JSON.stringify(wins));
+}
+
+// Logros (insignias) de los que ya se ha avisado, por id. Sirve solo para no
+// repetir el popup de "¡Nuevo logro!": las insignias en sí se rederivan del
+// historial (lib/badges.ts). `null` = nunca guardado (primer arranque con
+// esta versión): quien lo lea debe sembrarlo con lo ya desbloqueado sin
+// avisar, para no soltar un popup por cada logro viejo.
+const SEEN_BADGES_KEY = 'seenBadges';
+
+export function getStoredSeenBadges(): string[] | null {
+  const raw = readSetting(SEEN_BADGES_KEY);
+  if (raw === null || raw === undefined) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setStoredSeenBadges(ids: string[]): void {
+  writeSetting(SEEN_BADGES_KEY, JSON.stringify(ids));
+}

@@ -26,11 +26,14 @@ import {
   CardioInputField,
   Button,
   FloatingBackButton,
+  FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
   GradientCtaButton,
+  GradientFill,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   RestTimerModal,
+  RestTimerRing,
   Toast,
   StretchScrollView,
 } from '../../components';
@@ -70,6 +73,7 @@ import {
   getTotalSetsStrengthScore,
 } from '@lib/progress';
 import { withExerciseCatalogId } from '@lib/routines';
+import { exerciseKey } from '@lib/exerciseProgress';
 import {
   extendRestTimer,
   getRestDuration,
@@ -89,11 +93,17 @@ interface WorkoutLogScreenProps {
   cardioOnly?: boolean;
   onSave: () => void;
   onBack: () => void;
+  // Abrir la ficha de la rutina a la que pertenece este día (con él desplegado).
+  onOpenRoutine?: () => void;
 }
 
 // Lado de la × que salta el descanso. El icono ES el botón (disco lleno con el
 // aspa recortada), así que el tamaño del dibujo y el del control coinciden.
 const TIMER_CLOSE_SIZE = 22;
+// Rueda del descanso flotante: grande, para que la cuenta atrás se lea desde
+// el banco sin acercarse al móvil.
+const TIMER_RING_SIZE = 112;
+const TIMER_RING_STROKE = 9;
 
 export function WorkoutLogScreen({
   day,
@@ -101,6 +111,7 @@ export function WorkoutLogScreen({
   cardioOnly,
   onSave,
   onBack,
+  onOpenRoutine,
 }: WorkoutLogScreenProps) {
   // La pantalla no se apaga mientras se registra: entre serie y serie pasan
   // minutos y desbloquear el móvil con las manos ocupadas es la fricción del
@@ -355,6 +366,19 @@ export function WorkoutLogScreen({
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
+  // El descanso flota al pie, justo encima de "Volver": la MISMA posición que
+  // ocupa la barra de descanso cuando se sale de esta pantalla (ver
+  // `restBarBottom` en App.tsx), para que el temporizador no salte de sitio al
+  // entrar y salir del registro. Aquí conserva su contenido completo.
+  const floatingTimerBottom =
+    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 10;
+  const showFloatingTimer = !!activeTimerId && timerSeconds > 0;
+  // Fracción consumida del descanso, para la rueda. Un "+30s" alarga el total,
+  // así que el anillo retrocede un poco: es lo honesto (queda más por delante).
+  const timerTotalSeconds = restTimer
+    ? Math.max(1, (restTimer.endAt - restTimer.startAt) / 1000)
+    : 1;
+  const timerProgress = 1 - timerSeconds / timerTotalSeconds;
   const dayAccent = getTrainingAccent({
     emoji: selectedDay.emoji,
     name: selectedDay.name,
@@ -391,6 +415,12 @@ export function WorkoutLogScreen({
 
   const startOrResetTimer = (exerciseId: string, durationSeconds: number) => {
     const exercise = selectedDay.exercises.find((ex) => ex.id === exerciseId);
+    // El permiso de notificaciones se pide AQUÍ, al primer descanso, y no al
+    // abrir la pantalla: pedido nada más entrar, antes de la primera serie y
+    // sin saber que existe el descanso, el diálogo del sistema se deniega.
+    // Ahora llega justo cuando el aviso "ha terminado el descanso" va a tener
+    // sentido. Es asíncrono y no bloquea el arranque de la cuenta atrás.
+    void ensureNotificationPermission();
     startRestTimer({
       seconds: durationSeconds,
       exerciseId,
@@ -403,16 +433,29 @@ export function WorkoutLogScreen({
 
   const extendTimerBy = (extraSeconds: number) => extendRestTimer(extraSeconds);
 
+  // Pide el permiso una sola vez por sesión de pantalla (el sistema recuerda
+  // la respuesta; esto solo evita repetir la consulta en cada serie).
+  const permissionAskedRef = useRef(false);
+  const ensureNotificationPermission = async () => {
+    if (!Notifications || permissionAskedRef.current) return;
+    permissionAskedRef.current = true;
+    try {
+      const permissions = await Notifications.getPermissionsAsync();
+      if (permissions.status !== 'granted') {
+        await Notifications.requestPermissionsAsync();
+      }
+    } catch (error) {
+      console.error('Error requesting notification permission:', error);
+    }
+  };
+
+  // El canal de Android se configura al abrir la pantalla (no pide nada al
+  // usuario); el permiso se pide al primer descanso (ver startOrResetTimer).
   useEffect(() => {
     if (!Notifications) return;
 
     const configureNotifications = async () => {
       try {
-        const permissions = await Notifications.getPermissionsAsync();
-        if (permissions.status !== 'granted') {
-          await Notifications.requestPermissionsAsync();
-        }
-
         if (Platform.OS === 'android') {
           // Remove previous channels to avoid stale channel settings kept by Android.
           await Notifications.deleteNotificationChannelAsync(
@@ -556,53 +599,62 @@ export function WorkoutLogScreen({
       void stopTimer();
     }
   };
-
   // Todas las ejecuciones anteriores de un ejercicio (ordenadas de más reciente
   // a más antigua), respetando el tope temporal al editar un log existente.
   // Salta las semanas de descarga: un deload nunca es la referencia "anterior"
   // (misma regla que la vista de consulta, DetailScreen), así que al empezar una
   // semana normal tras una de descarga la referencia es la anterior al deload.
+  //
+  // Primero se busca en ESTE día de ESTA rutina (por `exerciseId`, que es
+  // distinto en cada rutina). Si no hay nada —la rutina se estrena—, se cae a
+  // la última vez que se hizo el mismo ejercicio en CUALQUIER log, agrupando
+  // por nombre normalizado (`exerciseKey`, como Progreso por ejercicio une el
+  // histórico entre rutinas): cambiar de rutina no borra la memoria de un
+  // press de banca que llevas meses haciendo.
   const getPreviousExerciseRuns = (exerciseId: string) => {
     // La sesión en curso nunca es su propia referencia (su id ya es estable,
     // esté el log creado o no).
     const currentLogId = sessionLogId;
-
-    // Obtener todos los logs del mismo día, sin filtrar por fecha
-    const logsForDay = state.logs.filter((log) => log.dayId === selectedDay.id);
-
-    // Obtener todos los ejercicios de esos logs
-    const allExercisesForDay: (ExerciseLog & {
-      logDate: number;
-      logId: string;
-      isDeload: boolean;
-    })[] = [];
-    logsForDay.forEach((log) => {
-      log.exercises.forEach((ex) => {
-        allExercisesForDay.push({
-          ...ex,
-          logDate: log.createdAt,
-          logId: log.id,
-          isDeload: !!log.isDeload,
-        });
-      });
-    });
 
     // Tope temporal: si estamos editando un log existente, "anterior" debe ser
     // el inmediatamente previo a ESE log, no el más reciente de todos (que podría
     // ser uno posterior al que editamos).
     const currentLogDate = existingLog?.createdAt ?? Infinity;
 
-    // Filtrar por exerciseId, excluir el log actual y descartar los posteriores
-    // al log que se está editando; ordenar de más reciente a más antiguo.
-    return allExercisesForDay
-      .filter(
-        (ex) =>
-          ex.exerciseId === exerciseId &&
-          ex.logId !== currentLogId &&
-          ex.logDate < currentLogDate &&
-          !ex.isDeload
-      )
-      .sort((a, b) => b.logDate - a.logDate);
+    // Ejecuciones de los logs dados que pasen el filtro de ejercicio, sin el
+    // log actual, sin los posteriores al editado y sin descargas; de más
+    // reciente a más antigua.
+    const collectRuns = (
+      logs: WorkoutLog[],
+      matches: (ex: ExerciseLog) => boolean
+    ) =>
+      logs
+        .filter(
+          (log) =>
+            log.id !== currentLogId &&
+            log.createdAt < currentLogDate &&
+            !log.isDeload
+        )
+        .flatMap((log) =>
+          log.exercises
+            .filter(matches)
+            .map((ex) => ({ ...ex, logDate: log.createdAt, logId: log.id }))
+        )
+        .sort((a, b) => b.logDate - a.logDate);
+
+    const sameDayRuns = collectRuns(
+      state.logs.filter((log) => log.dayId === selectedDay.id),
+      (ex) => ex.exerciseId === exerciseId
+    );
+    if (sameDayRuns.length > 0) return sameDayRuns;
+
+    const exercise = selectedDay.exercises.find((ex) => ex.id === exerciseId);
+    if (!exercise) return sameDayRuns;
+    const key = exerciseKey(exercise.name);
+    return collectRuns(
+      state.logs,
+      (ex) => exerciseKey(ex.exerciseName) === key
+    );
   };
 
   // ¿Ese registro dice algo? Un ejercicio SALTADO se guarda igual que uno hecho
@@ -970,17 +1022,24 @@ export function WorkoutLogScreen({
   // de series. Es el que la tarjeta abre sola (los demás quedan colapsados como
   // resumen) para no obligar a desplegar cada ejercicio antes de registrar. Al
   // completarse uno, el siguiente incompleto pasa a ser el en curso y se abre.
+  // ¿Está todo el día hecho? Solo cuenta si se ha metido algo: un día cuyos
+  // ejercicios no tienen objetivo daría cero incompletos sin haber empezado.
+  const allExercisesDone =
+    !cardioOnly &&
+    selectedDay.exercises.length > 0 &&
+    hasInsertedData &&
+    countIncompleteExercises(exerciseSets) === 0;
+
   const currentExerciseId = selectedDay.exercises.find((ex) => {
     const target = effectiveTargetSets(ex.targetSets);
     const sets = exerciseSets[ex.id] || [];
     return !(target > 0 && sets.length >= target);
   })?.id;
 
-  // Contenido del temporizador de descanso (label + cuenta atrás + acciones).
-  // Se reutiliza en dos sitios: DENTRO de la tarjeta del ejercicio mientras
-  // quedan series (via prop `restTimer` de ExerciseInputField) y FUERA, como
-  // bloque suelto, cuando el ejercicio ya está completo (no hay siguiente serie
-  // que enmarcar).
+  // Contenido del temporizador de descanso (cuenta atrás + acciones). Antes se
+  // inyectaba dentro de la tarjeta del ejercicio (o debajo, si ya estaba
+  // completa), así que se movía por la lista y desaparecía al hacer scroll;
+  // ahora va en un bloque flotante fijo al pie (`floatingTimer`).
   // Una sola fila centrada: reloj de arena, cuenta atrás y "+30s", con la × de
   // cerrar en la esquina del bloque. Sin título (el reloj
   // junto a los números ya dice qué es) y sin la fila de botones aparte, que
@@ -1011,12 +1070,15 @@ export function WorkoutLogScreen({
         />
       </Pressable>
       <View style={styles.timerRow}>
-        <MaterialCommunityIcons
-          name="timer-sand"
-          size={22}
-          color={theme.colors.accentLine}
-        />
-        <Text style={styles.timerText}>{formatRestTime(timerSeconds)}</Text>
+        {/* La cuenta atrás va dentro de la rueda, que se completa con el
+            tiempo: de un vistazo se ve cuánto queda sin leer el número. */}
+        <RestTimerRing
+          progress={timerProgress}
+          size={TIMER_RING_SIZE}
+          strokeWidth={TIMER_RING_STROKE}
+        >
+          <Text style={styles.timerText}>{formatRestTime(timerSeconds)}</Text>
+        </RestTimerRing>
         {/* Acción VISIBLE (nada escondido tras un gesto): alargar el descanso.
             En oro, el color de lo que se pulsa: es el único control del bloque
             con el que se hace algo (la × solo cierra). */}
@@ -1033,7 +1095,7 @@ export function WorkoutLogScreen({
         >
           <MaterialCommunityIcons
             name="plus"
-            size={16}
+            size={18}
             color={theme.colors.onGold}
           />
           <Text style={styles.timerActionText} numberOfLines={1}>
@@ -1079,10 +1141,6 @@ export function WorkoutLogScreen({
             isDeloadSession && !hasUsableWeight(previousLog)
               ? getPreviousWeightLog(exercise.id)
               : previousLog;
-          const targetSets = effectiveTargetSets(exercise.targetSets);
-          const isTargetCompleted =
-            targetSets > 0 && currentSets.length >= targetSets;
-
           return (
             <React.Fragment key={exercise.id}>
               <ExerciseInputField
@@ -1112,25 +1170,8 @@ export function WorkoutLogScreen({
                 previousLog={previousLogForField}
                 improvement={isDeloadSession ? null : improvement}
                 accent={dayAccent}
-                restTimer={
-                  activeTimerId === exercise.id &&
-                  timerSeconds > 0 &&
-                  !isTargetCompleted
-                    ? renderRestTimerContent()
-                    : null
-                }
                 isCurrent={exercise.id === currentExerciseId}
               />
-              {/* Última serie ya hecha: el descanso sigue tocando, pero no hay
-                  siguiente serie que enmarcar, así que el timer va FUERA de la
-                  tarjeta como bloque suelto. */}
-              {activeTimerId === exercise.id &&
-                timerSeconds > 0 &&
-                isTargetCompleted && (
-                  <View style={styles.timerContainer}>
-                    {renderRestTimerContent()}
-                  </View>
-                )}
             </React.Fragment>
           );
         })}
@@ -1178,6 +1219,36 @@ export function WorkoutLogScreen({
             />
           </View>
         )}
+
+        {/* Fuerza: al completar el último ejercicio, un remate que diga que
+            está hecho y guardado. "Terminar" hace lo mismo que "Volver" (el
+            registro ya está en el historial): no añade un paso, le pone nombre
+            al que existe, que es lo que le faltaba al primer entreno. */}
+        {allExercisesDone && (
+          <View style={styles.completedCard}>
+            <GradientFill accent={theme.colors.success} />
+            <View style={styles.completedRow}>
+              <MaterialCommunityIcons
+                name="check-circle"
+                size={20}
+                color={theme.colors.success}
+              />
+              <Text style={styles.completedText}>
+                {t('Entreno completado · {n} ejercicios', {
+                  n: selectedDay.exercises.length,
+                })}
+              </Text>
+            </View>
+            <Text style={styles.completedHint}>
+              {t('Ya está guardado en tu historial.')}
+            </Text>
+            <GradientCtaButton
+              icon="check-bold"
+              title={t('Terminar')}
+              onPress={handleSaveWorkout}
+            />
+          </View>
+        )}
       </StretchScrollView>
 
       {/* En solo cardio la pantalla se titula como la tarjeta de disciplinas
@@ -1219,8 +1290,17 @@ export function WorkoutLogScreen({
           cardioOnly
             ? undefined
             : [
+                ...(onOpenRoutine
+                  ? [
+                      {
+                        icon: 'file-document-edit-outline' as const,
+                        label: t('Ir a la rutina'),
+                        onPress: onOpenRoutine,
+                      },
+                    ]
+                  : []),
                 {
-                  icon: 'timer-cog-outline',
+                  icon: 'timer-cog-outline' as const,
                   label: t('Modificar temporizador'),
                   onPress: openTimerModal,
                 },
@@ -1301,6 +1381,15 @@ export function WorkoutLogScreen({
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+
+      {/* Descanso en curso de ESTE día, flotando sobre la lista justo encima
+          de "Volver". Fuera del registro lo releva la barra de la raíz, en el
+          mismo sitio. */}
+      {showFloatingTimer && (
+        <View style={[styles.floatingTimer, { bottom: floatingTimerBottom }]}>
+          <View style={styles.timerContainer}>{renderRestTimerContent()}</View>
+        </View>
+      )}
 
       {toast && (
         <Toast
@@ -1387,6 +1476,33 @@ const makeStyles = () =>
     buttonContainer: {
       marginTop: 15,
     },
+    // Remate del día completado: tarjeta verde con el CTA de cierre.
+    completedCard: {
+      marginTop: 15,
+      padding: 16,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.success,
+      backgroundColor: theme.colors.surface,
+      overflow: 'hidden',
+      gap: 10,
+      ...theme.shadow.soft,
+    },
+    completedRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    completedText: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    completedHint: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+    },
     // "Añadir cardio": ocupa el hueco del campo cuando está plegado. Contorno
     // discontinuo, como el resto de "añadir" de la app (Añadir ejercicio/día).
     addCardioButton: {
@@ -1439,12 +1555,20 @@ const makeStyles = () =>
     // relleno del acento al 18% y tinta del acento. Sin sombra: un fondo
     // translúcido con `elevation` pinta en Android un rectángulo de esquinas
     // vivas dentro del redondeo (ver checklist de frontend-design.md).
+    // Base opaca del bloque flotante: el relleno translúcido del acento va
+    // encima y, sin ella, se leería el contenido de la lista a través.
+    floatingTimer: {
+      position: 'absolute',
+      left: 16,
+      right: 16,
+      borderRadius: theme.borderRadius.lg,
+      backgroundColor: theme.colors.surface,
+      overflow: 'hidden',
+    },
     timerContainer: {
-      marginVertical: 16,
-      marginHorizontal: 20,
       backgroundColor: theme.colors.accentLine + '2E',
       borderRadius: theme.borderRadius.lg,
-      paddingVertical: 10,
+      paddingVertical: 12,
       paddingHorizontal: 14,
       justifyContent: 'center',
     },
@@ -1456,17 +1580,16 @@ const makeStyles = () =>
       alignItems: 'center',
       alignSelf: 'stretch',
       justifyContent: 'center',
-      gap: 8,
+      gap: 18,
       paddingHorizontal: 26,
     },
+    // Cuenta atrás dentro de la rueda: cabe "10:00" a este cuerpo con el
+    // anillo de 112.
     timerText: {
-      fontSize: 34,
+      fontSize: 30,
       fontWeight: '800',
       color: theme.colors.accentLine,
       fontVariant: ['tabular-nums'],
-      // Ancho fijo para 0:00: sin él la fila entera se desplazaba al pasar de
-      // 1:00 a 0:59 (los dígitos ya son tabulares, el que sobraba era el hueco).
-      marginRight: 2,
     },
     // "+30s" en oro macizo: es lo ÚNICO que se pulsa dentro del bloque (el
     // descanso corre solo), así que lleva el color de las acciones y destaca
@@ -1476,8 +1599,8 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
       gap: 3,
-      paddingVertical: 7,
-      paddingHorizontal: 11,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
       borderRadius: theme.borderRadius.pill,
       backgroundColor: theme.colors.primaryFill,
     },
@@ -1498,7 +1621,7 @@ const makeStyles = () =>
       opacity: 0.6,
     },
     timerActionText: {
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '800',
       color: theme.colors.onGold,
     },

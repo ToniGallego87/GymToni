@@ -26,6 +26,13 @@ export interface Profile {
   avatar_url: string | null;
   bio: string | null;
   is_public: boolean;
+  /**
+   * Nivel de la cuenta y sus puntos (lib/level.ts): lo escribe el propio
+   * usuario cuando supera retos y lo leen los demás en su perfil público.
+   * Opcionales porque las filas anteriores a la columna vienen sin ellos.
+   */
+  level?: number;
+  xp?: number;
 }
 
 // Versión ligera del perfil para listas (búsqueda, seguidos, autor del tablón).
@@ -33,6 +40,39 @@ export interface ProfileLite {
   id: string;
   display_name: string | null;
   avatar_url: string | null;
+  /**
+   * Perfil privado. Con relación contigo (te sigue o le sigues) la RLS lo
+   * devuelve entero y las listas lo pintan con su foto y su nombre más un
+   * candado; sin relación no lo devuelve y solo se sabe su id (vuelve sin
+   * nombre ni foto, para que el contador y la lista cuadren).
+   */
+  private?: boolean;
+}
+
+// Perfiles de una lista de ids, RESPETANDO el orden y sin perder a nadie: los
+// ids que la RLS no devuelve (perfil privado) vuelven como `private: true`.
+async function profilesByIds(ids: string[]): Promise<ProfileLite[]> {
+  if (!ids.length) return [];
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url, is_public')
+    .in('id', ids);
+  if (error) throw new Error(`profiles: ${error.message}`);
+  const byId = new Map(
+    ((data ?? []) as (ProfileLite & { is_public: boolean })[]).map(
+      ({ is_public, ...p }) =>
+        [p.id, { ...p, private: !is_public } as ProfileLite] as const
+    )
+  );
+  return ids.map(
+    (id) =>
+      byId.get(id) ?? {
+        id,
+        display_name: null,
+        avatar_url: null,
+        private: true,
+      }
+  );
 }
 
 // Busca perfiles públicos por nombre (para "Buscar usuarios").
@@ -75,7 +115,7 @@ export async function getProfilesByIds(
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, bio, is_public')
+    .select('id, display_name, avatar_url, bio, is_public, level, xp')
     .eq('id', userId)
     .maybeSingle();
   if (error) throw new Error(`profiles: ${error.message}`);
@@ -174,18 +214,12 @@ async function getFollowingIds(followerId: string): Promise<string[]> {
   return (data ?? []).map((r) => (r as { following_id: string }).following_id);
 }
 
-// Perfiles a los que sigue el usuario (para la lista "A quién sigo").
+// Perfiles a los que sigue el usuario (para la lista "A quién sigo"). Los que
+// se hayan puesto privados después vuelven marcados, no desaparecen.
 export async function getFollowingProfiles(
   followerId: string
 ): Promise<ProfileLite[]> {
-  const ids = await getFollowingIds(followerId);
-  if (!ids.length) return [];
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, display_name, avatar_url')
-    .in('id', ids);
-  if (error) throw new Error(`profiles: ${error.message}`);
-  return (data ?? []) as ProfileLite[];
+  return profilesByIds(await getFollowingIds(followerId));
 }
 
 // ¿followerId sigue a targetId? (para el botón Seguir/Siguiendo de un perfil).
@@ -223,8 +257,8 @@ export async function getFollowingCount(followerId: string): Promise<number> {
   return count ?? 0;
 }
 
-// Perfiles que TE siguen (lista "Seguidores"). Solo devuelve los de perfil
-// público (la RLS oculta los privados), así que puede ser menor que el contador.
+// Perfiles que TE siguen (lista "Seguidores"). La RLS oculta los privados:
+// esos vuelven como `private: true` para que la lista cuadre con el contador.
 export async function getFollowerProfiles(
   userId: string
 ): Promise<ProfileLite[]> {
@@ -233,16 +267,9 @@ export async function getFollowerProfiles(
     .select('follower_id')
     .eq('following_id', userId);
   if (error) throw new Error(`follows: ${error.message}`);
-  const ids = (data ?? []).map(
-    (r) => (r as { follower_id: string }).follower_id
+  return profilesByIds(
+    (data ?? []).map((r) => (r as { follower_id: string }).follower_id)
   );
-  if (!ids.length) return [];
-  const { data: profs, error: e2 } = await supabase
-    .from('profiles')
-    .select('id, display_name, avatar_url')
-    .in('id', ids);
-  if (e2) throw new Error(`profiles: ${e2.message}`);
-  return (profs ?? []) as ProfileLite[];
 }
 
 // ─────────────────────── Rutinas públicas ───────────────────────

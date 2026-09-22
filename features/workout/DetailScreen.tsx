@@ -37,13 +37,12 @@ import {
 } from '@lib/cardio';
 import { exerciseKey } from '@lib/exerciseProgress';
 import { withExerciseCatalogId } from '@lib/routines';
+import { TrendDelta } from '@components/TrendDelta';
 import { getCardioWeightHistory } from '@lib/storage';
 import {
   combineDateWithTime,
   findDayInRoutines,
   formatDate,
-  getImprovementColor,
-  getImprovementDisplay,
   getLogTimestamp,
 } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
@@ -68,6 +67,8 @@ interface DetailScreenProps {
   onDelete?: () => void;
   // Abrir la evolución de un ejercicio (gráfica) preseleccionado por su clave.
   onOpenExerciseProgress?: (exerciseKey: string) => void;
+  // Abrir la ficha de la rutina a la que pertenece este día (con él desplegado).
+  onOpenRoutine?: () => void;
 }
 
 function extractIncline(rawInput: string): string | null {
@@ -91,6 +92,7 @@ export function DetailScreen({
   onEdit,
   onDelete,
   onOpenExerciseProgress,
+  onOpenRoutine,
 }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
@@ -224,6 +226,13 @@ export function DetailScreen({
       onPress: onEdit,
     });
   }
+  if (onOpenRoutine) {
+    menuItems.push({
+      icon: 'file-document-edit-outline',
+      label: t('Ir a la rutina'),
+      onPress: onOpenRoutine,
+    });
+  }
   // "Cambiar fecha" no va aquí: el subtítulo de la barra ya es un enlace visible
   // (texto dorado + icono calendar-edit) que abre el mismo DatePicker. Un item en
   // el ⋯ sería una segunda vía para lo mismo.
@@ -319,11 +328,13 @@ export function DetailScreen({
   // ejercicios de fuerza, así que una sesión de solo cardio —la más corta de
   // leer, y donde una línea bastaba— se quedaba sin ningún total, y una sesión
   // mixta resumía la fuerza e ignoraba el cardio del pie.
+  // `improvement` en vez de `value`: la celda de progreso la pinta `TrendDelta`
+  // (el mismo indicador que Inicio y Cardio), no un texto suelto.
   const summaryItems: {
     key: string;
-    value: string;
     label: string;
-    color?: string;
+    value?: string;
+    improvement?: { isImproved: boolean; percent: number };
   }[] = [];
 
   if (exerciseCount > 0) {
@@ -333,13 +344,10 @@ export function DetailScreen({
       label: t('Ejercicios'),
     });
     if (sessionImprovement) {
-      const { symbol, display, kind } =
-        getImprovementDisplay(sessionImprovement);
       summaryItems.push({
         key: 'improvement',
-        value: `${symbol} ${display}%`,
+        improvement: sessionImprovement,
         label: t('Progreso'),
-        color: getImprovementColor(kind),
       });
     }
     if (workoutMinutes > 0) {
@@ -406,14 +414,6 @@ export function DetailScreen({
     return null;
   };
 
-  const formatImprovementDisplay = (imp: {
-    isImproved: boolean;
-    percent: number;
-  }) => {
-    const { symbol, display, kind } = getImprovementDisplay(imp);
-    return { symbol, color: getImprovementColor(kind), display };
-  };
-
   // Solo tiene sentido "conservar el cardio" al borrar si hay fuerza que quitar
   // y además cardio que salvar (si no, el borrado es un borrado normal).
   const canKeepCardio = exerciseCount > 0 && !!log.cardio?.rawInput?.trim();
@@ -457,14 +457,16 @@ export function DetailScreen({
             <GradientFill accent={dayAccent} />
             {summaryItems.map((item) => (
               <View key={item.key} style={styles.summaryItem}>
-                <Text
-                  style={[
-                    styles.summaryValue,
-                    !!item.color && { color: item.color },
-                  ]}
-                >
-                  {item.value}
-                </Text>
+                {item.improvement ? (
+                  <TrendDelta
+                    value={item.improvement.percent}
+                    improved={item.improvement.isImproved}
+                    iconSize={20}
+                    textStyle={styles.summaryValue}
+                  />
+                ) : (
+                  <Text style={styles.summaryValue}>{item.value}</Text>
+                )}
                 <Text style={styles.summaryLabel}>{item.label}</Text>
               </View>
             ))}
@@ -523,25 +525,7 @@ export function DetailScreen({
               parsedSets={selectedExercise?.parsedSets || []}
               notes={selectedExercise?.notes}
               previousSets={prevExercise?.parsedSets}
-              improvementText={
-                exerciseImprovement
-                  ? (() => {
-                      const fmt = formatImprovementDisplay(exerciseImprovement);
-                      return `${fmt.symbol} ${fmt.display}%`;
-                    })()
-                  : undefined
-              }
-              improvementPositive={
-                exerciseImprovement ? exerciseImprovement.isImproved : true
-              }
-              improvementColor={
-                exerciseImprovement
-                  ? (() => {
-                      const fmt = formatImprovementDisplay(exerciseImprovement);
-                      return fmt.color;
-                    })()
-                  : undefined
-              }
+              improvement={exerciseImprovement}
               isDetail={true}
               accent={dayAccent}
             />
@@ -752,10 +736,10 @@ export function DetailScreen({
         message={
           pendingMove?.removesWeek
             ? t(
-                'Este movimiento vacía una semana y recalcula racha, progreso y logros. ¿Continuar?'
+                'Este movimiento vacía una semana y recalcula racha, progreso e hitos. ¿Continuar?'
               )
             : t(
-                'Este movimiento reorganiza una semana ya completada y recalcula racha, progreso y logros. ¿Continuar?'
+                'Este movimiento reorganiza una semana ya completada y recalcula racha, progreso e hitos. ¿Continuar?'
               )
         }
         confirmLabel={t('Mover')}

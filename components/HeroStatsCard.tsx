@@ -1,9 +1,11 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
+  SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,8 +28,8 @@ interface HeroStatsCardProps {
   mainValue: string;
   /** Unidad del dato principal (ej: "kcal", "kg"). */
   mainUnit: string;
-  /** Línea de detalle bajo el dato principal. */
-  subline: string;
+  /** Línea de detalle bajo el dato principal (opcional). */
+  subline?: string;
   /** Hasta tres referencias (semana pasada / media / mejor). */
   stats: HeroStat[];
   /** Si es true, se muestra `emptyText` centrado en vez de los datos. */
@@ -35,7 +37,14 @@ interface HeroStatsCardProps {
   emptyText?: string;
   /** Dirección de entrada del contenido en un carrusel (el frame no se mueve). */
   enterFrom?: 'left' | 'right';
+  /** Si se pasa, la tarjeta entera se vuelve pulsable (p. ej. abrir los retos). */
+  onPress?: () => void;
+  // Escala de pulsación del carrusel: si viene, la tarjeta la anima y es el
+  // carrusel quien escala el conjunto (tarjeta + flechas + puntos).
+  pressScale?: SharedValue<number>;
 }
+
+const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 /**
  * Tarjeta hero de estadísticas con gradiente dorado, del mismo aspecto que la
@@ -54,7 +63,11 @@ export function HeroStatsCard({
   isEmpty,
   emptyText,
   enterFrom,
+  onPress,
+  pressScale,
 }: HeroStatsCardProps) {
+  const localScale = useSharedValue(1);
+  const scale = pressScale ?? localScale;
   // Animación de solo el contenido (el frame/gradiente queda fijo en el carrusel).
   const enterDir = enterFrom === 'left' ? -1 : enterFrom === 'right' ? 1 : 0;
   const contentTx = useSharedValue(22 * enterDir);
@@ -68,7 +81,12 @@ export function HeroStatsCard({
     opacity: contentOpacity.value,
   }));
 
-  return (
+  // Suelta, la tarjeta se escala a sí misma; en un carrusel escala el conjunto.
+  const pressableStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pressScale ? 1 : localScale.value }],
+  }));
+
+  const gradient = (
     <LinearGradient
       colors={theme.gradients.primary}
       start={{ x: 0, y: 0 }}
@@ -99,7 +117,7 @@ export function HeroStatsCard({
                 <Text style={styles.heroMainValue}>{mainValue}</Text>
                 <Text style={styles.heroMainUnit}>{mainUnit}</Text>
               </View>
-              <Text style={styles.heroSubline}>{subline}</Text>
+              {!!subline && <Text style={styles.heroSubline}>{subline}</Text>}
             </View>
 
             {stats.length > 0 && (
@@ -119,6 +137,23 @@ export function HeroStatsCard({
         )}
       </Animated.View>
     </LinearGradient>
+  );
+
+  if (!onPress) return gradient;
+
+  return (
+    <AnimatedPressable
+      style={pressableStyle}
+      onPress={onPress}
+      onPressIn={() => {
+        scale.value = withSpring(0.97, { damping: 18, stiffness: 320 });
+      }}
+      onPressOut={() => {
+        scale.value = withSpring(1, { damping: 14, stiffness: 260 });
+      }}
+    >
+      {gradient}
+    </AnimatedPressable>
   );
 }
 

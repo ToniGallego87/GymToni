@@ -45,10 +45,21 @@ create index if not exists idx_likes_routine on public.routine_likes(routine_id)
 alter table public.follows       enable row level security;
 alter table public.routine_likes enable row level security;
 
--- Perfiles: además de "el propio" (schema.sql), permitir LEER los públicos.
+-- Perfiles: además de "el propio" (schema.sql), permitir LEER los públicos y
+-- los de quien tiene relación contigo (te sigue o le sigues): en las listas de
+-- Seguidores / A quién sigo un perfil privado sale con su foto y su nombre en
+-- vez de como "Perfil privado". Sus rutinas siguen ocultas (RLS de routines).
 drop policy if exists "read public profiles" on public.profiles;
 create policy "read public profiles" on public.profiles
-  for select using (is_public = true or id = auth.uid());
+  for select using (
+    is_public = true
+    or id = auth.uid()
+    or exists (
+      select 1 from public.follows f
+      where (f.follower_id = profiles.id and f.following_id = auth.uid())
+         or (f.following_id = profiles.id and f.follower_id = auth.uid())
+    )
+  );
 
 -- Rutinas: además de las propias, LEER las públicas no borradas.
 drop policy if exists "read public routines" on public.routines;

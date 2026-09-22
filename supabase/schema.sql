@@ -23,6 +23,13 @@ create table if not exists public.profiles (
   updated_at   bigint  not null default 0
 );
 
+-- Nivel de la cuenta (retos semanales superados + logros; lib/level.ts). Lo
+-- escribe el usuario y lo leen los demás en el perfil público.
+alter table public.profiles
+  add column if not exists level int not null default 1;
+alter table public.profiles
+  add column if not exists xp int not null default 0;
+
 -- Ajustes por usuario (rutina activa / seleccionada). Una fila por usuario.
 create table if not exists public.user_settings (
   user_id             uuid primary key references auth.users(id) on delete cascade,

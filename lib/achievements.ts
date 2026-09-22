@@ -190,14 +190,14 @@ function maxWeightByExercise(
   return byExercise;
 }
 
-interface PersonalRecord {
+export interface PersonalRecord {
   exerciseName: string;
   weight: number;
 }
 
 // Récord personal: ejercicio cuyo peso de esta semana supera su máximo histórico.
 // Con varios récords gana el de mayor margen relativo.
-function findPersonalRecord(
+export function findPersonalRecord(
   currentLogs: WorkoutLog[],
   historyLogs: WorkoutLog[]
 ): PersonalRecord | null {
@@ -219,6 +219,29 @@ function findPersonalRecord(
   });
 
   return best;
+}
+
+/**
+ * Cuántos ejercicios de la semana superan su mejor peso histórico (sin
+ * histórico no hay récord que batir). Base del reto "Récord personal": un
+ * único récord puntual no cierra el reto; se pide que lo batan la mitad o más
+ * de los ejercicios previstos por la rutina.
+ */
+export function countPersonalRecords(
+  currentLogs: WorkoutLog[],
+  historyLogs: WorkoutLog[]
+): number {
+  const historyMax = maxWeightByExercise(historyLogs);
+  const currentMax = maxWeightByExercise(currentLogs);
+
+  let records = 0;
+  currentMax.forEach((current, exerciseId) => {
+    const previous = historyMax.get(exerciseId);
+    if (!previous || previous.weight <= 0) return;
+    if (current.weight > previous.weight) records += 1;
+  });
+
+  return records;
 }
 
 // Volumen de carga de la semana: suma de peso × reps de las series con carga.

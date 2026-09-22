@@ -33,6 +33,9 @@ export const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
 export const REST_TIMER_VIBRATION = [0, 300, 150, 300, 150, 300];
 
 export interface RestTimerSnapshot {
+  /** Momento (Date.now) en el que arrancó: con `endAt` da el total, para la
+   * rueda de progreso del registro. Un "+30s" mueve `endAt`, no esto. */
+  startAt: number;
   /** Momento (Date.now) en el que termina el descanso. */
   endAt: number;
   /** Ejercicio que lo lanzó: el registro lo usa para saber en qué tarjeta va. */
@@ -234,13 +237,15 @@ function armExpiry(endAt: number): void {
  * la ventanita flotante: minimizar la app solo la abre si hay cuenta atrás.
  */
 export function startRestTimer(
-  input: Omit<RestTimerSnapshot, 'endAt'> & { seconds: number }
+  input: Omit<RestTimerSnapshot, 'startAt' | 'endAt'> & { seconds: number }
 ): void {
   const { seconds, ...rest } = input;
   const safeSeconds = Math.max(1, Math.round(seconds));
+  const now = Date.now();
   const snapshot: RestTimerSnapshot = {
     ...rest,
-    endAt: Date.now() + safeSeconds * 1000,
+    startAt: now,
+    endAt: now + safeSeconds * 1000,
   };
 
   publish(snapshot);

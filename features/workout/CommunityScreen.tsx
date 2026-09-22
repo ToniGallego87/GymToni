@@ -21,9 +21,12 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  LikeButton,
   RoutineIntensityPill,
   SaveRoutineButton,
   SegmentedFilter,
+  seriesExplanation,
+  StatBubble,
   Toast,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
@@ -145,6 +148,9 @@ export function CommunityScreen({
   // Si ya hay algo en caché para la pestaña inicial, no arrancamos en "Cargando".
   const [loading, setLoading] = useState(!boardCache.popular);
   const [refreshing, setRefreshing] = useState(false);
+  // Segundo tramo de la carga (fotos, series y comentarios): el tablón ya está
+  // pintado, pero las tarjetas aún van a cambiar. Una rueda al pie lo dice.
+  const [loadingMeta, setLoadingMeta] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toast, setToast] = useState<{
@@ -197,6 +203,7 @@ export function CommunityScreen({
         // cuanto llega la lista y los avatares entran un instante después.
         setItems(rows);
         if (!background) setLoading(false);
+        if (rows.length) setLoadingMeta(true);
         const avs = await getProfilesByIds(rows.map((r) => r.owner_id));
         setAvatars(avs);
         boardCache[tab] = { items: rows, avatars: avs };
@@ -224,6 +231,8 @@ export function CommunityScreen({
           setError((e as Error).message);
           setLoading(false);
         }
+      } finally {
+        setLoadingMeta(false);
       }
     },
     [tab, user?.id]
@@ -364,7 +373,7 @@ export function CommunityScreen({
 
   const handleToggleLike = async (item: RoutineItem) => {
     if (!user) {
-      notifySignIn(t('Inicia sesión para dar like'));
+      notifySignIn(t('Crea una cuenta para dar like'));
       return;
     }
     const liked = !!item.liked_by_me;
@@ -402,6 +411,12 @@ export function CommunityScreen({
   // entrena tal cual y se ve de quién es. Para cambiarla, su ficha ofrece
   // sacar una copia.
   const handleSave = async (item: RoutineItem) => {
+    // Sin cuenta no hay sync, y una rutina enlazada vive del sync (sigue los
+    // cambios de su autor): sin sesión el enlace quedaría congelado.
+    if (!user) {
+      notifySignIn(t('Crea una cuenta para añadir rutinas'));
+      return;
+    }
     setSavingId(item.id);
     try {
       const linked = await linkablePublicRoutine(
@@ -498,18 +513,16 @@ export function CommunityScreen({
         accessibilityLabel={t('Ver rutina')}
       >
         <GradientFill accent={theme.colors.primaryLine} />
+        {/* Una sola fila de cabecera: la foto del autor (su firma, y la diana
+            que lleva a su perfil) delante del nombre, y la intensidad arriba a
+            la derecha. Antes "por {autor}" gastaba un renglón entero para decir
+            lo mismo que dice la foto. */}
         <View style={styles.cardHead}>
-          {/* Quién la hizo: UNA sola diana con foto y nombre, la misma fila que
-              usa la ficha de la rutina pública. Antes la foto y el nombre eran
-              dos `Pressable` distintos para exactamente la misma acción. */}
           <Pressable
-            style={({ pressed }) => [
-              styles.authorRow,
-              pressed && styles.pressed,
-            ]}
+            style={({ pressed }) => [pressed && styles.pressed]}
             onPress={() => onOpenProfile?.(item.owner_id, authorName(item))}
             disabled={!onOpenProfile}
-            hitSlop={6}
+            hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={t('Ver perfil de {name}', {
               name: authorName(item),
@@ -517,19 +530,13 @@ export function CommunityScreen({
           >
             <Avatar
               uri={avatars.get(item.owner_id)?.avatar_url ?? null}
-              size={26}
+              size={28}
             />
-            <Text style={styles.author} numberOfLines={1}>
-              {t('por {name}', { name: authorName(item) })}
-            </Text>
           </Pressable>
-
-          {/* El nombre se queda con la fila entera: es el dato que decide si se
-              abre la rutina. Antes compartía renglón con el avatar y las dos
-              acciones, y le quedaban ~125 px (unos 12 caracteres). */}
           <Text style={styles.routineName} numberOfLines={2}>
             {item.name}
           </Text>
+          {level && <RoutineIntensityPill level={level} />}
         </View>
 
         {!!item.description && (
@@ -538,32 +545,34 @@ export function CommunityScreen({
           </Text>
         )}
 
-        {/* Pie de la tarjeta: a la izquierda cuánta caña lleva la semana (el
-            dato que dice si la rutina te sirve sin abrirla) y a la derecha las
-            dos acciones sociales, del mismo tamaño entre sí. */}
+        {/* Pie de la tarjeta: a la izquierda los datos (series y comentarios)
+            como burbujas, y a la derecha las dos acciones sociales, todas del
+            mismo tamaño. La de series se toca y explica qué mide; la de
+            comentarios se explica sola. El hilo se abre entrando en la rutina,
+            que es lo que hace la tarjeta entera. */}
         <View style={styles.footerRow}>
           {level && (
-            <>
-              <RoutineIntensityPill level={level} />
-              <Text style={styles.metaText}>
-                {item.total_sets === 1
+            <StatBubble
+              icon="repeat"
+              value={item.total_sets ?? 0}
+              label={
+                item.total_sets === 1
                   ? t('1 serie')
-                  : t('{n} series', { n: item.total_sets ?? 0 })}
-              </Text>
-            </>
+                  : t('{n} series', { n: item.total_sets ?? 0 })
+              }
+              explanation={seriesExplanation()}
+            />
           )}
-          {/* Cuánta conversación tiene. Es un DATO, no un botón: por eso va con
-              la intensidad y no con las acciones. El hilo se abre entrando en
-              la rutina, que es lo que hace la tarjeta entera. */}
           {!!item.comments && (
-            <View style={styles.commentCount}>
-              <MaterialCommunityIcons
-                name="comment-outline"
-                size={14}
-                color={theme.colors.textSecondary}
-              />
-              <Text style={styles.metaText}>{item.comments}</Text>
-            </View>
+            <StatBubble
+              icon="comment-outline"
+              value={item.comments}
+              label={
+                item.comments === 1
+                  ? t('1 comentario')
+                  : t('{n} comentarios', { n: item.comments })
+              }
+            />
           )}
           <View style={styles.footerSpacer} />
           <SaveRoutineButton
@@ -572,27 +581,11 @@ export function CommunityScreen({
             onPress={() => handleSave(item)}
           />
           {item.likes !== undefined && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.likeButton,
-                pressed && styles.pressed,
-              ]}
+            <LikeButton
+              likes={item.likes}
+              liked={!!item.liked_by_me}
               onPress={() => handleToggleLike(item)}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('Me gusta')}
-            >
-              <MaterialCommunityIcons
-                name={item.liked_by_me ? 'heart' : 'heart-outline'}
-                size={20}
-                color={
-                  item.liked_by_me
-                    ? theme.colors.error
-                    : theme.colors.textSecondary
-                }
-              />
-              <Text style={styles.likeCount}>{item.likes}</Text>
-            </Pressable>
+            />
           )}
         </View>
       </Pressable>
@@ -607,8 +600,8 @@ export function CommunityScreen({
   }[] = [
     { id: 'all', label: t('Todas') },
     { id: 'soft', label: t('Suave'), icon: 'speedometer-slow' },
-    { id: 'medium', label: t('Medio'), icon: 'speedometer-medium' },
-    { id: 'hard', label: t('Intenso'), icon: 'speedometer' },
+    { id: 'medium', label: t('Media'), icon: 'speedometer-medium' },
+    { id: 'hard', label: t('Intensa'), icon: 'speedometer' },
   ];
 
   // Cabecera fija de la lista (aviso + buscador + personas + pestañas). Va como
@@ -663,6 +656,34 @@ export function CommunityScreen({
             <Text style={styles.meCountLabel}>{t('Siguiendo')}</Text>
           </Pressable>
         </Pressable>
+      )}
+
+      {/* Sin cuenta, el mismo hueco lo ocupa la invitación: arriba siempre hay
+          una tarjeta de identidad (la tuya o esta). Antes la pestaña callaba
+          qué desbloquea la cuenta y se descubría a golpes, toast a toast. */}
+      {!user && !!onOpenAccount && (
+        <View style={styles.meCard}>
+          <GradientFill accent={theme.colors.primaryLine} />
+          <MaterialCommunityIcons
+            name="account-plus-outline"
+            size={30}
+            color={theme.colors.primary}
+          />
+          <View style={styles.meInfo}>
+            <Text style={styles.meName}>{t('Sin cuenta')}</Text>
+            <Text style={styles.noAccountHint}>
+              {t(
+                'Crea una cuenta para añadir rutinas, dar like y seguir a gente'
+              )}
+            </Text>
+          </View>
+          <Button
+            title={t('Crear cuenta')}
+            onPress={onOpenAccount}
+            variant="primary"
+            size="small"
+          />
+        </View>
       )}
 
       {/* Qué ha pasado desde la última visita. Un solo aviso para las tres
@@ -896,8 +917,19 @@ export function CommunityScreen({
           ? t(
               'Publica una de tus rutinas desde su detalle para que aparezca aquí.'
             )
-          : t('Sigue a alguien para ver aquí sus rutinas públicas.')}
+          : user
+          ? t('Sigue a alguien para ver aquí sus rutinas públicas.')
+          : t('Crea una cuenta para seguir a gente y ver aquí sus rutinas.')}
       </Text>
+      {/* Sin sesión, "Siguiendo" no puede llenarse: la salida es la cuenta. */}
+      {tab === 'following' && !user && !!onOpenAccount && (
+        <Button
+          title={t('Crear cuenta')}
+          onPress={onOpenAccount}
+          variant="primary"
+          size="medium"
+        />
+      )}
     </View>
   );
 
@@ -930,6 +962,15 @@ export function CommunityScreen({
         renderItem={({ item }) => renderRoutineCard(item)}
         ListHeaderComponent={header}
         ListEmptyComponent={listEmpty}
+        ListFooterComponent={
+          loadingMeta && items.length > 0 ? (
+            <ActivityIndicator
+              style={styles.footerSpinner}
+              size="large"
+              color={theme.colors.primary}
+            />
+          ) : null
+        }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={[
           styles.content,
@@ -978,7 +1019,7 @@ export function CommunityScreen({
           type={toast.type}
           actionLabel={
             toast.action === 'sign-in' && onOpenAccount
-              ? t('Iniciar sesión')
+              ? t('Crear cuenta')
               : undefined
           }
           onAction={
@@ -1021,6 +1062,13 @@ const makeStyles = () =>
       lineHeight: 21,
     },
     meHint: { color: theme.colors.textMuted, fontSize: 12, marginTop: 1 },
+    // Dos líneas caben: la invitación dice las tres cosas que da la cuenta.
+    noAccountHint: {
+      color: theme.colors.textSecondary,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: 2,
+    },
     meCount: { alignItems: 'center', minWidth: 54 },
     meCountValue: {
       color: theme.colors.primary,
@@ -1139,56 +1187,36 @@ const makeStyles = () =>
     card: {
       borderRadius: theme.borderRadius.lg,
       overflow: 'hidden',
-      padding: 20,
+      // El mismo padding que `routineCard` en Rutinas: son la misma cosa en
+      // dos pestañas vecinas y con 20 la Comunidad parecía otra app.
+      padding: 14,
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      gap: 12,
+      gap: 10,
     },
     cardPressed: { opacity: 0.85 },
-    // Firma y título, juntos y apretados: son la misma idea (qué rutina es y de
-    // quién), y el resto de la tarjeta respira con el `gap` de la tarjeta.
-    cardHead: { gap: 6 },
-    // Fila de autor pulsable (foto + "por X"), igual que en la ficha de una
-    // rutina pública. `alignSelf` para que la diana mida lo que mide el texto y
-    // no toda la anchura de la tarjeta, que ya es otro botón.
-    authorRow: {
+    // Cabecera en una fila: foto del autor, nombre (se queda el ancho que
+    // sobra) e intensidad, centrados en vertical con el nombre.
+    cardHead: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      alignSelf: 'flex-start',
-      maxWidth: '100%',
+      gap: 10,
     },
-    // Pie: intensidad y series a la izquierda, acciones a la derecha.
+    // Pie: burbujas de dato a la izquierda, acciones a la derecha.
     footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     footerSpacer: { flex: 1 },
-    commentCount: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    metaText: { color: theme.colors.textSecondary, fontSize: 13 },
     routineName: {
+      flex: 1,
       color: theme.colors.text,
       fontSize: 18,
       fontWeight: '800',
       lineHeight: 24,
     },
-    author: { color: theme.colors.textMuted, fontSize: 13, flexShrink: 1 },
     description: {
       color: theme.colors.textSecondary,
       fontSize: 14,
       lineHeight: 19,
-    },
-    likeButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 10,
-      paddingVertical: 6,
-      borderRadius: theme.borderRadius.pill,
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    likeCount: {
-      color: theme.colors.textSecondary,
-      fontSize: 14,
-      fontWeight: '800',
     },
     userRow: {
       flexDirection: 'row',
@@ -1211,6 +1239,7 @@ const makeStyles = () =>
     hint: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
     muted: { color: theme.colors.textMuted, fontSize: 14 },
     loadingBox: { alignItems: 'center', gap: 10, paddingVertical: 28 },
+    footerSpinner: { paddingVertical: 18 },
   });
 
 let styles = makeStyles();

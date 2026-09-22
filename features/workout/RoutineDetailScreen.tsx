@@ -1,12 +1,11 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { ReactNode, useEffect, useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
 import Animated, {
   Easing,
   FadeIn,
-  FadeOut,
   LinearTransition,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,8 +17,10 @@ import {
   Button,
   ConfirmModal,
   DayAccentIcon,
-  ExerciseFormRow,
+  ExerciseEditorModal,
   ExerciseSummaryRow,
+  ExerciseTileGrid,
+  SortableList,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
@@ -27,6 +28,7 @@ import {
   GradientFill,
   GymIconGrid,
   resolveDayIcon,
+  RoutineIntensityPill,
   RoutineOriginPill,
   StretchScrollView,
   Toast,
@@ -47,10 +49,12 @@ import {
 } from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
 import {
+  countRoutineSets,
   duplicateRoutine,
   exerciseCountText,
   isLinkedRoutine,
   routineAuthorId,
+  routineIntensity,
 } from '@lib/routines';
 import { useSession } from '@lib/cloud/auth';
 import {
@@ -71,7 +75,11 @@ const layoutTransition = LinearTransition.duration(220).easing(
   Easing.inOut(Easing.ease)
 );
 const fadeIn = FadeIn.duration(180);
-const fadeOut = FadeOut.duration(140);
+// El cuerpo del día NO lleva `exiting`: en Android, una vista que se desvanece
+// al desmontarse dentro de un padre con `layout` (y en un ScrollView) se queda
+// a veces como fantasma: la tarjeta crecía vacía y las filas de abajo se
+// pintaban encima. Sin salida animada el bloque encoge con su transición de
+// layout y el contenido aparece con el fundido de entrada.
 
 // Sombreado del "peldaño" del pliegue al pie de la tarjeta (mismos cortes que en
 // ExerciseInputField): intenso en el borde inferior y desvanecido hacia el
@@ -131,6 +139,9 @@ export function RoutineDetailScreen({
   );
   const [showShareModal, setShowShareModal] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  // Duplicar pide confirmación: antes un toque en la tarjeta de Rutinas creaba
+  // una copia sin avisar.
+  const [showDuplicateModal, setShowDuplicateModal] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [descriptionInput, setDescriptionInput] = useState('');
   const [toast, setToast] = useState<{
@@ -171,6 +182,10 @@ export function RoutineDetailScreen({
   // y se entrena, pero no se edita ni se republica. Para cambiarla se saca una
   // copia propia (que sí guarda de dónde vino).
   const isLinked = isLinkedRoutine(currentRoutine);
+  const totalSets = useMemo(
+    () => countRoutineSets(currentRoutine),
+    [currentRoutine]
+  );
   const canEdit = !isLinked;
 
   // Filas de un día: el borrador si lo hay, y si no el plan tal cual.
@@ -219,6 +234,10 @@ export function RoutineDetailScreen({
       commitAllDrafts();
       setDrafts({});
       setEditingExerciseId(null);
+    } else {
+      // Entrar en edición pliega los días: así el asa para ordenarlos está
+      // desde el primer momento, y cada día se abre con su peldaño.
+      setExpandedDayIds(new Set());
     }
     setIsEditing(!isEditing);
   };
@@ -230,9 +249,11 @@ export function RoutineDetailScreen({
     onBack();
   };
 
-  // Sacar una copia editable de una rutina ajena. La copia es tuya (ids nuevos,
-  // se sincroniza) pero arrastra el crédito: su ficha dirá de quién salió.
-  const handleFork = () => {
+  // Duplicar la rutina (desde el ⋯, o desde "Hacer copia" en una ajena). La
+  // copia es tuya (ids nuevos, se sincroniza) y queda sin estrenar; si viene de
+  // otra persona arrastra el crédito: su ficha dirá de quién salió.
+  const handleDuplicate = () => {
+    setShowDuplicateModal(false);
     const copy = duplicateRoutine(
       currentRoutine,
       state.routines.map((r) => r.name)
@@ -240,7 +261,10 @@ export function RoutineDetailScreen({
     dispatch({ type: 'ADD_ROUTINE', payload: copy });
     if (onForked) onForked(copy);
     else
-      setToast({ message: t('Copia creada en tus rutinas'), type: 'success' });
+      setToast({
+        message: t('Copiada como "{name}"', { name: copy.name }),
+        type: 'success',
+      });
   };
 
   const handleOpenInfoModal = () => {
@@ -458,22 +482,20 @@ export function RoutineDetailScreen({
     );
   };
 
-  // Reordena un ejercicio dentro del día. El id de cada fila viaja intacto (ver
-  // buildWorkoutExercises), así que el historial sigue apuntando a su ejercicio:
-  // los resultados pasados se muestran en la nueva posición, no se recalculan.
-  const moveExercise = (
-    day: WorkoutDay,
-    exerciseId: string,
-    direction: -1 | 1
-  ) => {
+  // Reordena un ejercicio dentro del día: la fila `from` cae en el hueco `to`
+  // (arrastre por el asa). Las demás se corren; nada se intercambia. El id de
+  // cada fila viaja intacto (ver buildWorkoutExercises), así que el historial
+  // sigue apuntando a su ejercicio.
+  const moveExerciseTo = (day: WorkoutDay, from: number, to: number) => {
     updateDayRows(
       day,
       (rows) => {
-        const index = rows.findIndex((row) => row.id === exerciseId);
-        const target = index + direction;
-        if (index === -1 || target < 0 || target >= rows.length) return rows;
+        if (from === to || from < 0 || to < 0 || from >= rows.length) {
+          return rows;
+        }
         const next = [...rows];
-        [next[index], next[target]] = [next[target], next[index]];
+        const [moved] = next.splice(from, 1);
+        next.splice(Math.min(to, next.length), 0, moved);
         return next;
       },
       true
@@ -496,14 +518,15 @@ export function RoutineDetailScreen({
       };
     });
 
-  const handleMoveDay = (dayId: string, direction: -1 | 1) => {
-    const index = currentRoutine.days.findIndex((d) => d.id === dayId);
-    const target = index + direction;
-    if (index === -1 || target < 0 || target >= currentRoutine.days.length) {
-      return;
-    }
-    const next = [...currentRoutine.days];
-    [next[index], next[target]] = [next[target], next[index]];
+  // Arrastre por el asa: el día `from` cae en el hueco `to` y los demás se
+  // corren (nada se intercambia). Los ids viajan intactos, así que el historial
+  // de cada día sigue apuntando al suyo; solo cambia el número que llevan.
+  const handleMoveDayTo = (from: number, to: number) => {
+    const days = currentRoutine.days;
+    if (from === to || from < 0 || to < 0 || from >= days.length) return;
+    const next = [...days];
+    const [moved] = next.splice(from, 1);
+    next.splice(Math.min(to, next.length), 0, moved);
     dispatch({
       type: 'UPDATE_ROUTINE',
       payload: { ...currentRoutine, days: renumberDays(next) },
@@ -516,6 +539,12 @@ export function RoutineDetailScreen({
   const dayToDeleteHasLogs =
     !!dayToDeleteId && state.logs.some((log) => log.dayId === dayToDeleteId);
 
+  const allDaysCollapsed = currentRoutine.days.every(
+    (day) => !expandedDayIds.has(day.id)
+  );
+  const canDragDays =
+    isEditing && canEdit && allDaysCollapsed && currentRoutine.days.length > 1;
+
   const handleDeleteDay = () => {
     if (!dayToDeleteId || currentRoutine.days.length <= 1) {
       setDayToDeleteId(null);
@@ -527,6 +556,228 @@ export function RoutineDetailScreen({
       payload: { ...currentRoutine, days: renumberDays(next) },
     });
     setDayToDeleteId(null);
+  };
+
+  // Un día de la rutina: cabecera (icono + nombre), sus ejercicios (en lectura
+  // como casillas; en edición, editables) y el peldaño de pliegue. `dragHandle`
+  // llega cuando los días se están ordenando arrastrando.
+  const renderDayBlock = (day: WorkoutDay, dragHandle?: ReactNode) => {
+    const accent = getTrainingAccent(day);
+    const canDeleteDay = currentRoutine.days.length > 1;
+    const rows = dayRows(day);
+    const expanded = expandedDayIds.has(day.id);
+
+    return (
+      <Animated.View
+        key={day.id}
+        // Dentro de la lista arrastrable la fila ya se anima sola.
+        layout={dragHandle ? undefined : layoutTransition}
+        style={[
+          styles.dayBlock,
+          !!dragHandle && styles.dayBlockSortable,
+          { borderColor: accent },
+        ]}
+      >
+        <GradientFill accent={accent} />
+        <View
+          style={[
+            styles.dayHeader,
+            // Plegado, la cabecera ES la tarjeta: sin hueco por debajo
+            // (mismo criterio que headerCollapsedEmpty en la pantalla de
+            // registro).
+            !expanded && styles.dayHeaderCollapsed,
+          ]}
+        >
+          {/* Asa de arrastre (la pone SortableList) para ordenar los
+                días: solo en edición y con todos plegados. */}
+          {dragHandle}
+          {/* En edición la cabecera entera abre "Editar día" (nombre +
+                icono), con el lápiz que lo delata. En lectura pliega y
+                despliega el día, igual que el nombre de un ejercicio en la
+                pantalla de registro. */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.dayHeaderLeft,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() =>
+              isEditing ? handleOpenDayModal(day.id) : toggleDay(day)
+            }
+            accessibilityRole="button"
+            accessibilityLabel={
+              isEditing
+                ? t('Editar día')
+                : expanded
+                ? t('Plegar día')
+                : t('Desplegar día')
+            }
+          >
+            <View style={styles.dayIconButton}>
+              <DayAccentIcon emoji={day.emoji} name={day.name} size={32} />
+              {isEditing && (
+                <View style={styles.dayIconEditBadge}>
+                  <MaterialCommunityIcons
+                    name="pencil"
+                    size={9}
+                    color={theme.colors.onGold}
+                  />
+                </View>
+              )}
+            </View>
+            <View style={styles.dayTitleWrap}>
+              {/* El número del día baja a ceja: es la referencia, no el
+                    titular. Antes iba en una píldora dorada que pesaba más
+                    que los propios ejercicios. */}
+              <Text style={styles.dayEyebrow}>
+                {t('Día')} {day.dayNumber}
+              </Text>
+              <Text style={styles.dayName} numberOfLines={2}>
+                {getDisplayDayName(day.name) || `${t('Día')} ${day.dayNumber}`}
+              </Text>
+            </View>
+          </Pressable>
+
+          {/* Plegado, lo único que se dice del contenido: cuántos
+                ejercicios hay. A la derecha del todo, que es donde se busca
+                un número en una fila que empieza por un nombre. */}
+          {!expanded && (
+            <Text style={styles.dayCount} numberOfLines={1}>
+              {exerciseCountLabel(day)}
+            </Text>
+          )}
+        </View>
+
+        {!expanded ? null : isEditing ? (
+          // Los ejercicios se editan AQUÍ mismo, como al crear la rutina.
+          // Antes hacía falta entrar en un segundo editor ("Editar
+          // ejercicios") con su propio Cancelar/Guardar, y salir de
+          // edición tiraba ese borrador sin avisar.
+          <Animated.View entering={fadeIn} style={styles.exercisesEditor}>
+            {/* Arrastrando por el asa se coloca cada ejercicio donde
+                  se quiera. */}
+            <SortableList
+              items={rows}
+              keyOf={(exercise) => exercise.id}
+              onMove={(from, to) => moveExerciseTo(day, from, to)}
+              renderItem={(exercise, handle) => (
+                <ExerciseSummaryRow
+                  exercise={exercise}
+                  canRemove={rows.length > 1}
+                  onEdit={() => setEditingExerciseId(exercise.id)}
+                  onRemove={() => removeExercise(day, exercise.id)}
+                  dragHandle={handle}
+                />
+              )}
+            />
+
+            {/* El ejercicio abierto se edita en un popup (el lápiz de
+                  su fila); cerrarlo ES guardarlo. Un ejercicio que se
+                  cierra sin nombre se descarta: no hay nada que guardar. */}
+            {(() => {
+              const editing = rows.find((row) => row.id === editingExerciseId);
+              if (!editing) return null;
+              return (
+                <ExerciseEditorModal
+                  visible
+                  exercise={editing}
+                  accent={theme.colors.primaryLine}
+                  onChange={(changes) =>
+                    updateDayRows(
+                      day,
+                      (previous) =>
+                        previous.map((row) =>
+                          row.id === editing.id ? { ...row, ...changes } : row
+                        ),
+                      false
+                    )
+                  }
+                  onDone={() => {
+                    if (!editing.name.trim()) {
+                      removeExercise(day, editing.id);
+                    } else {
+                      commitDay(day.id, dayRows(day));
+                    }
+                    setEditingExerciseId(null);
+                  }}
+                />
+              );
+            })()}
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.addExerciseButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => addExercise(day)}
+            >
+              <MaterialCommunityIcons
+                name="plus-circle-outline"
+                size={18}
+                color={theme.colors.onGold}
+              />
+              <Text style={styles.addExerciseText}>
+                {t('Añadir ejercicio')}
+              </Text>
+            </Pressable>
+
+            {/* Borrar el día, con rótulo y apartado de las flechas: antes
+                  era una papelera pegada a ellas, y borrar un día se lleva
+                  por delante su historial. */}
+            {canDeleteDay && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.removeDayButton,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => setDayToDeleteId(day.id)}
+                accessibilityRole="button"
+                accessibilityLabel={t('Quitar día')}
+              >
+                <MaterialCommunityIcons
+                  name="trash-can-outline"
+                  size={16}
+                  color={theme.colors.error}
+                />
+                <Text style={styles.removeDayText}>{t('Quitar día')}</Text>
+              </Pressable>
+            )}
+          </Animated.View>
+        ) : (
+          <Animated.View entering={fadeIn}>
+            {/* Casillas con el GIF grande, como las opciones del perfil;
+                  el mismo dibujo que en una rutina de la comunidad. */}
+            <ExerciseTileGrid exercises={day.exercises} accent={accent} />
+          </Animated.View>
+        )}
+
+        {/* Peldaño de pliegue al pie de la tarjeta: la MISMA barra con
+              chevron que cierra las tarjetas de la pantalla de registro. Va
+              la última porque es el borde inferior del bloque. */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.collapseBar,
+            pressed && styles.collapseBarPressed,
+          ]}
+          onPress={() => toggleDay(day)}
+          accessibilityRole="button"
+          accessibilityLabel={expanded ? t('Plegar día') : t('Desplegar día')}
+        >
+          <LinearGradient
+            colors={theme.gradients.heroStep}
+            locations={STEP_SHADE_STOPS}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <MaterialCommunityIcons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={24}
+            color={accent}
+          />
+        </Pressable>
+      </Animated.View>
+    );
   };
 
   return (
@@ -548,29 +799,21 @@ export function RoutineDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabecera de la rutina. Solo es pulsable (editar nombre/descripción)
-            en modo edición; en lectura es un banner de identidad. */}
+        {/* Cabecera de la rutina: la MISMA ficha que la de una rutina de la
+            comunidad (degradado, nombre e intensidad a la derecha), para que
+            una rutina se vea igual entres por donde entres. Solo es pulsable
+            (editar nombre/descripción) en modo edición. */}
         <Pressable
           style={styles.infoBlock}
           onPress={handleOpenInfoModal}
           disabled={!isEditing || isClosed || !canEdit}
         >
-          <View style={styles.infoTopRow}>
-            <View style={styles.infoBadge}>
-              <MaterialCommunityIcons
-                name={
-                  isLinked
-                    ? 'account-arrow-right-outline'
-                    : 'clipboard-text-outline'
-                }
-                size={22}
-                color={theme.colors.onGold}
-              />
-            </View>
-            <View style={styles.infoTextWrap}>
-              <Text style={styles.infoEyebrow}>{t('Rutina')}</Text>
-              <Text style={styles.infoName}>{currentRoutine.name}</Text>
-            </View>
+          <GradientFill accent={theme.colors.primaryLine} />
+          <View style={styles.infoHead}>
+            <Text style={styles.infoName}>{currentRoutine.name}</Text>
+            {totalSets > 0 && (
+              <RoutineIntensityPill level={routineIntensity(totalSets)} />
+            )}
             {isEditing && canEdit && (
               <View
                 style={[
@@ -608,295 +851,30 @@ export function RoutineDetailScreen({
           )}
         </Pressable>
 
-        {currentRoutine.days.map((day, index) => {
-          const accent = getTrainingAccent(day);
-          const isFirst = index === 0;
-          const isLast = index === currentRoutine.days.length - 1;
-          const canDeleteDay = currentRoutine.days.length > 1;
-          const rows = dayRows(day);
-          const expanded = expandedDayIds.has(day.id);
-
-          return (
-            <Animated.View
-              key={day.id}
-              layout={layoutTransition}
-              style={[styles.dayBlock, { borderColor: accent }]}
-            >
-              <GradientFill accent={accent} />
-              <View
-                style={[
-                  styles.dayHeader,
-                  // Plegado, la cabecera ES la tarjeta: sin hueco por debajo
-                  // (mismo criterio que headerCollapsedEmpty en la pantalla de
-                  // registro).
-                  !expanded && styles.dayHeaderCollapsed,
-                ]}
-              >
-                {/* En edición la cabecera entera abre "Editar día" (nombre +
-                    icono), con el lápiz que lo delata. En lectura pliega y
-                    despliega el día, igual que el nombre de un ejercicio en la
-                    pantalla de registro. */}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dayHeaderLeft,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() =>
-                    isEditing ? handleOpenDayModal(day.id) : toggleDay(day)
-                  }
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    isEditing
-                      ? t('Editar día')
-                      : expanded
-                      ? t('Plegar día')
-                      : t('Desplegar día')
-                  }
-                >
-                  <View style={styles.dayIconButton}>
-                    <DayAccentIcon
-                      emoji={day.emoji}
-                      name={day.name}
-                      size={32}
-                    />
-                    {isEditing && (
-                      <View style={styles.dayIconEditBadge}>
-                        <MaterialCommunityIcons
-                          name="pencil"
-                          size={9}
-                          color={theme.colors.onGold}
-                        />
-                      </View>
-                    )}
-                  </View>
-                  <View style={styles.dayTitleWrap}>
-                    {/* El número del día baja a ceja: es la referencia, no el
-                        titular. Antes iba en una píldora dorada que pesaba más
-                        que los propios ejercicios. */}
-                    <Text style={styles.dayEyebrow}>
-                      {t('Día')} {day.dayNumber}
-                    </Text>
-                    <Text style={styles.dayName} numberOfLines={2}>
-                      {getDisplayDayName(day.name) ||
-                        `${t('Día')} ${day.dayNumber}`}
-                    </Text>
-                  </View>
-                </Pressable>
-
-                {/* Plegado, lo único que se dice del contenido: cuántos
-                    ejercicios hay. A la derecha del todo, que es donde se busca
-                    un número en una fila que empieza por un nombre. */}
-                {!expanded && (
-                  <Text style={styles.dayCount} numberOfLines={1}>
-                    {exerciseCountLabel(day)}
-                  </Text>
-                )}
-
-                {/* Mover el día, pegado al día que mueve. Antes eran tres
-                    cuadros idénticos en una fila aparte, alineados a la derecha
-                    y despegados de su día: con 4 días, doce iconos iguales. */}
-                {isEditing && (
-                  <View style={styles.dayMoveGroup}>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.dayMoveButton,
-                        isFirst && styles.controlDisabled,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => handleMoveDay(day.id, -1)}
-                      disabled={isFirst}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('Subir día')}
-                    >
-                      <MaterialCommunityIcons
-                        name="chevron-up"
-                        size={22}
-                        color={
-                          isFirst
-                            ? theme.colors.textSecondary
-                            : theme.colors.text
-                        }
-                      />
-                    </Pressable>
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.dayMoveButton,
-                        isLast && styles.controlDisabled,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => handleMoveDay(day.id, 1)}
-                      disabled={isLast}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('Bajar día')}
-                    >
-                      <MaterialCommunityIcons
-                        name="chevron-down"
-                        size={22}
-                        color={
-                          isLast
-                            ? theme.colors.textSecondary
-                            : theme.colors.text
-                        }
-                      />
-                    </Pressable>
-                  </View>
-                )}
-              </View>
-
-              {!expanded ? null : isEditing ? (
-                // Los ejercicios se editan AQUÍ mismo, como al crear la rutina.
-                // Antes hacía falta entrar en un segundo editor ("Editar
-                // ejercicios") con su propio Cancelar/Guardar, y salir de
-                // edición tiraba ese borrador sin avisar.
-                <Animated.View
-                  entering={fadeIn}
-                  exiting={fadeOut}
-                  style={styles.exercisesEditor}
-                >
-                  {rows.map((exercise, exIndex) => {
-                    const expanded =
-                      editingExerciseId === exercise.id ||
-                      !exercise.name.trim();
-
-                    return expanded ? (
-                      <ExerciseFormRow
-                        key={exercise.id}
-                        exercise={exercise}
-                        accent={theme.colors.primaryLine}
-                        canRemove={rows.length > 1}
-                        onChange={(changes) =>
-                          updateDayRows(
-                            day,
-                            (previous) =>
-                              previous.map((row) =>
-                                row.id === exercise.id
-                                  ? { ...row, ...changes }
-                                  : row
-                              ),
-                            false
-                          )
-                        }
-                        onRemove={() => removeExercise(day, exercise.id)}
-                        // Plegar la fila ES guardarla: no hay botón "Guardar".
-                        onCollapse={() => {
-                          commitDay(day.id, dayRows(day));
-                          setEditingExerciseId(null);
-                        }}
-                      />
-                    ) : (
-                      <ExerciseSummaryRow
-                        key={exercise.id}
-                        exercise={exercise}
-                        canRemove={rows.length > 1}
-                        onEdit={() => setEditingExerciseId(exercise.id)}
-                        onRemove={() => removeExercise(day, exercise.id)}
-                        onMoveUp={() => moveExercise(day, exercise.id, -1)}
-                        onMoveDown={() => moveExercise(day, exercise.id, 1)}
-                        canMoveUp={exIndex > 0}
-                        canMoveDown={exIndex < rows.length - 1}
-                      />
-                    );
-                  })}
-
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.addExerciseButton,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => addExercise(day)}
-                  >
-                    <MaterialCommunityIcons
-                      name="plus-circle-outline"
-                      size={18}
-                      color={theme.colors.onGold}
-                    />
-                    <Text style={styles.addExerciseText}>
-                      {t('Añadir ejercicio')}
-                    </Text>
-                  </Pressable>
-
-                  {/* Borrar el día, con rótulo y apartado de las flechas: antes
-                      era una papelera pegada a ellas, y borrar un día se lleva
-                      por delante su historial. */}
-                  {canDeleteDay && (
-                    <Pressable
-                      style={({ pressed }) => [
-                        styles.removeDayButton,
-                        pressed && styles.buttonPressed,
-                      ]}
-                      onPress={() => setDayToDeleteId(day.id)}
-                      accessibilityRole="button"
-                      accessibilityLabel={t('Quitar día')}
-                    >
-                      <MaterialCommunityIcons
-                        name="trash-can-outline"
-                        size={16}
-                        color={theme.colors.error}
-                      />
-                      <Text style={styles.removeDayText}>
-                        {t('Quitar día')}
-                      </Text>
-                    </Pressable>
-                  )}
-                </Animated.View>
-              ) : (
-                <Animated.View
-                  entering={fadeIn}
-                  exiting={fadeOut}
-                  style={styles.exerciseList}
-                >
-                  {day.exercises.map((exercise) => (
-                    <View key={exercise.id} style={styles.exerciseRow}>
-                      <View
-                        style={[
-                          styles.exerciseDot,
-                          { backgroundColor: accent },
-                        ]}
-                      />
-                      {/* El ejercicio es EL contenido de la pantalla: tinta
-                          primaria y su interlineado. Antes iba en secundario a
-                          16/18, con las líneas tocándose. */}
-                      <Text style={styles.exerciseText}>{exercise.name}</Text>
-                      <Text style={styles.exerciseSets}>
-                        {exercise.targetSets || '-'}x
-                        {exercise.targetReps || '-'}
-                      </Text>
-                    </View>
-                  ))}
-                </Animated.View>
-              )}
-
-              {/* Peldaño de pliegue al pie de la tarjeta: la MISMA barra con
-                  chevron que cierra las tarjetas de la pantalla de registro. Va
-                  la última porque es el borde inferior del bloque. */}
-              <Pressable
-                style={({ pressed }) => [
-                  styles.collapseBar,
-                  pressed && styles.collapseBarPressed,
-                ]}
-                onPress={() => toggleDay(day)}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  expanded ? t('Plegar día') : t('Desplegar día')
-                }
-              >
-                <LinearGradient
-                  colors={theme.gradients.heroStep}
-                  locations={STEP_SHADE_STOPS}
-                  start={{ x: 0, y: 1 }}
-                  end={{ x: 0, y: 0 }}
-                  style={StyleSheet.absoluteFill}
-                  pointerEvents="none"
-                />
-                <MaterialCommunityIcons
-                  name={expanded ? 'chevron-up' : 'chevron-down'}
-                  size={24}
-                  color={accent}
-                />
-              </Pressable>
-            </Animated.View>
-          );
-        })}
+        {/* En edición, con todos los días plegados, se ordenan arrastrando por
+            el asa, como los ejercicios; con alguno abierto las alturas bailan
+            y el arrastre no tiene sentido, así que vuelven a la lista fija. */}
+        {canDragDays ? (
+          <View style={styles.daysSortable}>
+            <SortableList
+              items={currentRoutine.days}
+              keyOf={(day) => day.id}
+              gap={12}
+              onMove={handleMoveDayTo}
+              handleWidth={44}
+              handleIconSize={28}
+              handleStyle={styles.dayDragHandle}
+              renderItem={(day, handle) => renderDayBlock(day, handle)}
+            />
+          </View>
+        ) : (
+          currentRoutine.days.map((day) => renderDayBlock(day))
+        )}
+        {isEditing && !allDaysCollapsed && currentRoutine.days.length > 1 && (
+          <Text style={styles.dragHint}>
+            {t('Pliega todos los días para ordenarlos arrastrando')}
+          </Text>
+        )}
 
         {/* El descanso entre series ya no es de la rutina: es un ajuste de la
             persona y se toca desde Perfil (o desde el ⋯ del registro). */}
@@ -990,8 +968,15 @@ export function RoutineDetailScreen({
       <GlassTopBar
         title={t('Rutina')}
         icon="file-document-edit-outline"
-        subtitle={currentRoutine.name}
+        subtitle={t('Consulta o edita tu rutina')}
         topInset={insets.top}
+        menuItems={[
+          {
+            icon: 'content-copy',
+            label: t('Duplicar rutina'),
+            onPress: () => setShowDuplicateModal(true),
+          },
+        ]}
         rightElement={
           // Lo ajeno no se edita: en su lugar, el botón ofrece la salida real
           // (sacar una copia tuya, que sí se puede tocar).
@@ -1001,7 +986,9 @@ export function RoutineDetailScreen({
               isEditing && canEdit && styles.editToggleActive,
               pressed && styles.buttonPressed,
             ]}
-            onPress={canEdit ? toggleEditing : handleFork}
+            onPress={
+              canEdit ? toggleEditing : () => setShowDuplicateModal(true)
+            }
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={
@@ -1244,6 +1231,19 @@ export function RoutineDetailScreen({
         onCancel={() => setDayToDeleteId(null)}
       />
 
+      <ConfirmModal
+        visible={showDuplicateModal}
+        icon="content-copy"
+        title={t('¿Duplicar la rutina?')}
+        message={t(
+          'Se crea una copia de «{name}» en tus rutinas, sin estrenar. La original no cambia.',
+          { name: currentRoutine.name }
+        )}
+        confirmLabel={t('Duplicar')}
+        onConfirm={handleDuplicate}
+        onCancel={() => setShowDuplicateModal(false)}
+      />
+
       {toast && (
         <Toast
           message={toast.message}
@@ -1314,44 +1314,18 @@ const makeStyles = () =>
       borderColor: theme.colors.primary + '55',
       padding: theme.spacing.md,
       marginBottom: 16,
+      overflow: 'hidden',
+      gap: 6,
+    },
+    // Nombre + intensidad (+ lápiz en edición) arriba a la derecha. Alineados
+    // arriba para que, con un nombre a dos líneas, acompañen a la primera.
+    infoHead: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
       gap: 10,
     },
-    infoTopRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    // Insignia y eyebrow de la rutina en oro vivo con tinta oscura (como el
-    // selector Fuerza/Cardio): el amarillo brillante solo lee como relleno.
-    infoBadge: {
-      width: 44,
-      height: 44,
-      borderRadius: theme.borderRadius.md,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primaryFill,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryFillDark,
-    },
-    infoTextWrap: {
-      flex: 1,
-      minWidth: 0,
-    },
-    infoEyebrow: {
-      alignSelf: 'flex-start',
-      fontSize: 11,
-      fontWeight: '800',
-      letterSpacing: 1,
-      textTransform: 'uppercase',
-      color: theme.colors.onGold,
-      backgroundColor: theme.colors.primaryFill,
-      paddingHorizontal: 8,
-      paddingVertical: 2,
-      borderRadius: theme.borderRadius.sm,
-      overflow: 'hidden',
-      marginBottom: 4,
-    },
     infoName: {
+      flex: 1,
       fontSize: 22,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
@@ -1378,19 +1352,30 @@ const makeStyles = () =>
       lineHeight: 19,
       color: theme.colors.textSecondary,
     },
-    // Subir/bajar el día, junto al día que mueven y a tamaño de dedo.
-    dayMoveGroup: {
-      flexDirection: 'row',
-      alignItems: 'center',
+    // La lista arrastrable pinta ella el hueco entre días (gap): el bloque
+    // deja su margen y el envoltorio pone el de después del último.
+    daysSortable: {
+      marginBottom: 12,
     },
-    dayMoveButton: {
-      width: 40,
-      height: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
+    dayBlockSortable: {
+      marginBottom: 0,
     },
-    controlDisabled: {
-      opacity: 0.4,
+    // El asa de arrastre de los días se sale del `padding` de la tarjeta
+    // (margen negativo) para quedar a ras de su borde izquierdo, y del alto de
+    // la cabecera para llegar al alto real de la tarjeta: mientras se arrastra
+    // todos los días están plegados (`allDaysCollapsed`), así que la cabecera
+    // ES la tarjeta y el asa queda centrada con ella de punta a punta.
+    dayDragHandle: {
+      marginLeft: -theme.spacing.md,
+      marginVertical: -theme.spacing.md,
+    },
+    dragHint: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      marginTop: -4,
+      marginBottom: 12,
     },
     // Quitar el día: rotulado y al pie del bloque, lejos de las flechas. Borrar
     // un día se lleva por delante su historial, así que no puede estar pegado a
@@ -1484,29 +1469,6 @@ const makeStyles = () =>
       color: theme.colors.text,
       lineHeight: 28,
     },
-    exerciseList: {
-      gap: 8,
-    },
-    exerciseRow: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      gap: 10,
-    },
-    exerciseDot: {
-      width: 8,
-      height: 8,
-      borderRadius: 4,
-      marginTop: 6,
-    },
-    // Los ejercicios SON el contenido de la ficha: tinta primaria y su
-    // interlineado. Iban en secundario a 16/18, un interlineado más corto que la
-    // propia fuente, así que dos renglones se tocaban.
-    exerciseText: {
-      flex: 1,
-      fontSize: 16,
-      lineHeight: 22,
-      color: theme.colors.text,
-    },
     // Peldaño del pliegue al pie del bloque de día. Copia exacta del de las
     // tarjetas de registro (components/ExerciseInputField.tsx): los márgenes
     // negativos valen el padding del bloque (theme.spacing.md = 16), así que la
@@ -1527,13 +1489,6 @@ const makeStyles = () =>
     },
     // El plan de series, apartado a la derecha en vez de pegado al nombre con
     // un guion ("Sentadilla — 4x8").
-    exerciseSets: {
-      fontSize: 13,
-      fontWeight: '700',
-      lineHeight: 22,
-      color: theme.colors.textSecondary,
-      fontVariant: ['tabular-nums'],
-    },
     modalButtonRow: {
       flexDirection: 'row',
       gap: 10,

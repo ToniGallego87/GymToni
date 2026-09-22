@@ -304,8 +304,8 @@ describe('intensidad por nº total de series', () => {
 
   it('cada tramo tiene su etiqueta', () => {
     expect(intensityLabel('soft')).toBe('Suave');
-    expect(intensityLabel('medium')).toBe('Medio');
-    expect(intensityLabel('hard')).toBe('Intenso');
+    expect(intensityLabel('medium')).toBe('Media');
+    expect(intensityLabel('hard')).toBe('Intensa');
   });
 });
 

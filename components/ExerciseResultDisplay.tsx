@@ -9,6 +9,7 @@ import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { GradientFill } from './GradientFill';
 import { ExerciseGifButton } from './ExerciseGifButton';
+import { TrendDelta } from './TrendDelta';
 
 interface ExerciseResultDisplayProps {
   exerciseName: string;
@@ -18,9 +19,8 @@ interface ExerciseResultDisplayProps {
   parsedSets: ParsedSet[];
   notes?: string;
   previousSets?: ParsedSet[];
-  improvementText?: string;
-  improvementPositive?: boolean;
-  improvementColor?: string;
+  // Mejora respecto a la sesión anterior; la pinta `TrendDelta`.
+  improvement?: { isImproved: boolean; percent: number } | null;
   targetSets?: number;
   targetReps?: string | number;
   isDetail?: boolean;
@@ -66,9 +66,7 @@ export function ExerciseResultDisplay({
   parsedSets,
   notes,
   previousSets,
-  improvementText,
-  improvementPositive = true,
-  improvementColor,
+  improvement,
   targetSets,
   targetReps,
   isDetail = false,
@@ -118,12 +116,10 @@ export function ExerciseResultDisplay({
 
       {/* Cabecera: nombre del ejercicio + objetivo y mejora a la derecha. */}
       <View style={styles.header}>
-        <Text style={styles.exerciseName} numberOfLines={2}>
-          {exerciseName}
-        </Text>
         {/* El GIF va en neutro AQUÍ (no en el registro, donde sí es dorado):
             consultar un entreno guardado no se hace para mirar cómo era el
-            ejercicio, así que el oro no le corresponde. Ver `progressButton`. */}
+            ejercicio, así que el oro le corresponde al nombre, que es el
+            enlace a la evolución. */}
         <ExerciseGifButton
           name={exerciseName}
           catalogId={catalogId}
@@ -131,39 +127,41 @@ export function ExerciseResultDisplay({
           style={styles.gifButtonNeutral}
           onAssign={onAssignGif}
         />
-        {!!onOpenProgress && (
+        {/* El nombre ES el enlace a la evolución del ejercicio ("¿voy
+            subiendo en esto?"): en dorado y con el icono de gráfica al final,
+            que es lo que dice que se puede pulsar. Antes era un botón aparte
+            junto al GIF, con el mismo dibujo que este y sin rótulo. */}
+        {onOpenProgress ? (
           <Pressable
             style={({ pressed }) => [
-              styles.progressButton,
-              pressed && styles.progressButtonPressed,
+              styles.nameButton,
+              pressed && styles.nameButtonPressed,
             ]}
             onPress={onOpenProgress}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={t('Ver evolución')}
           >
-            <MaterialCommunityIcons
-              name="chart-line"
-              size={18}
-              color={theme.colors.primary}
-            />
+            {/* El icono va DENTRO del texto (los iconos de vector-icons son
+                Text): así acompaña a la última palabra aunque el nombre ocupe
+                dos líneas, en vez de quedarse colgado al margen. */}
+            <Text style={[styles.exerciseName, styles.exerciseNameLink]}>
+              {exerciseName}{' '}
+              <MaterialCommunityIcons
+                name="chart-line"
+                size={18}
+                color={theme.colors.primary}
+              />
+            </Text>
           </Pressable>
+        ) : (
+          <Text style={styles.exerciseName}>{exerciseName}</Text>
         )}
-        {!!improvementText && (
-          <Text
-            style={[
-              styles.improvementText,
-              {
-                color:
-                  improvementColor ??
-                  (improvementPositive
-                    ? theme.colors.success
-                    : theme.colors.error),
-              },
-            ]}
-          >
-            {improvementText}
-          </Text>
+        {!!improvement && (
+          <TrendDelta
+            value={improvement.percent}
+            improved={improvement.isImproved}
+          />
         )}
       </View>
 
@@ -252,34 +250,26 @@ const makeStyles = () =>
       lineHeight: 27,
     },
 
-    // Botón de evolución del ejercicio: mismo tamaño/forma que el de GIF y, en
-    // esta pantalla, el que lleva el oro. Es la acción con la que se sigue el
-    // hilo desde un entreno guardado ("¿voy subiendo en esto?"); el GIF, que
-    // aquí es curiosidad, se queda en neutro (`gifButtonNeutral`). Antes era al
-    // revés y el color decía lo contrario de lo que la pantalla quiere.
-    progressButton: {
-      width: 34,
-      height: 34,
-      borderRadius: theme.borderRadius.sm,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
+    // Nombre pulsable (→ evolución del ejercicio): fila nombre + icono de
+    // gráfica, que ocupa lo que queda entre el GIF y el % de mejora.
+    nameButton: {
+      flex: 1,
+      minWidth: 0,
+    },
+    nameButtonPressed: {
+      opacity: 0.7,
+    },
+    exerciseNameLink: {
+      color: theme.colors.primary,
     },
     // Quita el borde dorado que `ExerciseGifButton` trae por defecto (allí sí
     // corresponde: en el registro el GIF es la referencia de cómo se hace).
+    // Tan alto como dos líneas del nombre (2 x lineHeight 27), para que el
+    // GIF se vea y no quede como un sello al lado de un título a dos líneas.
     gifButtonNeutral: {
       borderColor: theme.colors.border,
-    },
-    progressButtonPressed: {
-      opacity: 0.8,
-    },
-
-    improvementText: {
-      fontSize: 14,
-      fontWeight: '800',
-      lineHeight: 18,
+      width: 54,
+      height: 54,
     },
 
     columnHeader: {

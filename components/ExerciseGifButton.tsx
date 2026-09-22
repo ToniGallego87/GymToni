@@ -10,7 +10,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { getCatalogExercise, gifUrl } from '@data/exerciseCatalog';
+import { getCatalogExercise, thumbUrl } from '@data/exerciseCatalog';
 import { ExercisePickerModal } from './ExercisePickerModal';
 import { GifViewerModal } from './GifViewerModal';
 
@@ -26,6 +26,13 @@ interface ExerciseGifButtonProps {
   size?: number;
   style?: StyleProp<ViewStyle>;
   /**
+   * `cover` (por defecto) recorta el aire que el catálogo deja alrededor de la
+   * figura, con zoom, para llenar botones pequeños y redondos. `contain`
+   * enseña el GIF entero sin recortar (lo usa `ExerciseTileGrid`, donde la
+   * casilla ya reserva el alto que haga falta).
+   */
+  fitMode?: 'cover' | 'contain';
+  /**
    * Permite fijar un GIF al ejercicio de la rutina: aparece un botón **Asignar**
    * en el visor/buscador que guarda el `catalogId` elegido. Solo tiene sentido
    * donde el ejercicio pertenece a una rutina editable (registro e historial).
@@ -35,9 +42,12 @@ interface ExerciseGifButtonProps {
 
 /**
  * Botón de GIF de un ejercicio, para el registro y el detalle del día ("¿qué
- * ejercicio era este?"). Con GIF asignado el propio botón **es el GIF**, en
- * miniatura y en movimiento: a un vistazo se reconoce el ejercicio sin abrir
- * nada, y el toque sigue llevando al visor a tamaño completo. Sin GIF (tecleado
+ * ejercicio era este?"). Con GIF asignado el propio botón enseña su fotograma
+ * fijo (el JPG del catálogo, el mismo que el buscador): a un vistazo se
+ * reconoce el ejercicio sin abrir nada, y el toque lleva al visor con el GIF en
+ * movimiento a tamaño completo. Antes la miniatura era el GIF animado: con una
+ * por tarjeta en el registro y ocho por día en Rutina, Android decodificaba
+ * frames sin parar y cada una pesaba 15 veces más que el JPG. Sin GIF (tecleado
  * a mano o historial antiguo) enseña la lupa y abre el catálogo buscando por su
  * nombre, para dar con uno y asignarlo.
  */
@@ -46,12 +56,13 @@ export function ExerciseGifButton({
   catalogId,
   size = 20,
   style,
+  fitMode = 'cover',
   onAssign,
 }: ExerciseGifButtonProps) {
   const [showGif, setShowGif] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
-  // La miniatura se descarga del CDN igual que el visor. Si falla (sin
-  // conexión), el botón cae al icono de play y sigue funcionando.
+  // La miniatura (JPG fijo) se descarga del CDN igual que el visor. Si falla
+  // (sin conexión), el botón cae al icono de play y sigue funcionando.
   const [thumbFailed, setThumbFailed] = useState(false);
   const exercise = getCatalogExercise(catalogId);
 
@@ -82,9 +93,9 @@ export function ExerciseGifButton({
       >
         {showThumb ? (
           <Image
-            source={{ uri: gifUrl(exercise) }}
-            style={styles.thumb}
-            resizeMode="cover"
+            source={{ uri: thumbUrl(exercise) }}
+            style={[styles.thumb, fitMode === 'contain' && styles.thumbContain]}
+            resizeMode={fitMode}
             onError={() => setThumbFailed(true)}
           />
         ) : (
@@ -140,6 +151,11 @@ const makeStyles = () =>
       height: '100%',
       backgroundColor: theme.colors.surfaceAlt,
       transform: [{ scale: THUMB_ZOOM }],
+    },
+    // `contain`: se ve el GIF entero, así que ni recorta ni hace falta el zoom
+    // que compensa el aire del catálogo.
+    thumbContain: {
+      transform: [{ scale: 1 }],
     },
     pressed: {
       opacity: 0.8,

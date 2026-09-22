@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (16 suites, 226 tests)
+npm test           # Jest sobre lib/ (19 suites, 256 tests)
 npm run format     # Prettier
 ```
 
@@ -48,36 +48,42 @@ GymToni/
 │   ├── ConfirmModal.tsx      ← AppModal + par cancelar/confirmar
 │   ├── HeroCard.tsx          ← Tarjeta principal de Inicio
 │   ├── BarChart.tsx          ← Gráfica de barras (Inicio y Cardio)
+│   ├── WeightTrendChart.tsx  ← Línea del peso corporal en el tiempo (pantalla Peso)
+│   ├── SortableList.tsx      ← Lista reordenable arrastrando por un asa (ejercicios del día)
 │   ├── SegmentedFilter.tsx   ← Filtro de chips de las gráficas
 │   ├── ExerciseInputField.tsx← Registro serie a serie (60x8 → ➕)
-│   ├── ExerciseFormRow.tsx   ← Edición de un ejercicio (crear rutina y editar día)
+│   ├── ExerciseFormRow.tsx   ← Popup de edición de un ejercicio + fila resumen (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
 │   ├── GymIcon.tsx / DayAccentIcon.tsx ← Iconos de grupo muscular por día
 │   ├── Avatar.tsx            ← Foto de perfil (fuente única de las pantallas sociales)
-│   ├── AchievementPoster.tsx ← Póster SVG de logros semanales (imagen/vídeo)
+│   ├── AchievementPoster.tsx ← Póster SVG de hitos semanales (imagen/vídeo)
+│   ├── ChallengesModal.tsx / AwardModal.tsx / LevelPill.tsx ← Retos de la semana, popup de premio y píldora de nivel
+│   ├── RestTimerRing.tsx     ← Rueda del descanso (SVG) del temporizador flotante del registro
 │   ├── WhatsNewModal.tsx     ← Popup de novedades tras actualizar
 │   └── Toast.tsx, GradientFill.tsx, AnimatedCounter.tsx, StretchScrollView.tsx…
 ├── features/workout/         ← Pantallas + estado global
 │   ├── WorkoutContext.tsx    ← Provider + reducer + persistencia granular
 │   ├── HomeScreen.tsx        ← Inicio: héroe, progreso semanal e historial
-│   ├── RoutineSelectorScreen.tsx ← Rutinas: elegir la que se ve en Inicio, duplicar, borrar
+│   ├── RoutineSelectorScreen.tsx ← Rutinas: elegir la que se ve en Inicio, borrar (duplicar vive en el ⋯ de la ficha)
 │   ├── ExerciseProgressScreen.tsx ← Progreso por ejercicio: gráfica y récords
 │   ├── DaySelectorScreen.tsx / WorkoutLogScreen.tsx  ← Elegir día y registrar
 │   ├── DetailScreen.tsx      ← Detalle de una sesión guardada
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
-│   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y menú (rutinas, progreso, configuración)
+│   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y cuadrícula (rutinas, ejercicios, peso, temporizador, configuración, logros)
+│   ├── AchievementsScreen.tsx ← Logros: nivel de la cuenta e insignias (lib/level.ts, badges.ts); los retos se abren desde la hero de Inicio/Cardio (ChallengesModal)
 │   ├── SettingsScreen.tsx    ← Configuración: tema, idioma, novedades y acceso a Datos y nube
 │   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
 │   ├── PublicRoutineScreen.tsx ← Rutina ajena en solo lectura (antes de copiarla)
-│   ├── ProfileEditScreen.tsx ← Perfil público propio (se abre desde Perfil)
+│   ├── ProfileEditModal.tsx  ← Popup del perfil público propio (lápiz de Perfil)
 │   ├── UserProfileScreen.tsx / FollowingScreen.tsx ← Perfil de otro y listas de seguir/seguidores
 │   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx / QRScannerScreen.tsx
 │   └── WeekAchievementScreen.tsx ← Compartir logros semanales
 ├── hooks/
 │   ├── useWorkout.ts         ← Consumer del contexto
 │   ├── useCloudSync.ts       ← Sync de fondo (login / foreground) → refresca estado
+│   ├── useAccountLevel.ts    ← Retos vigentes + nivel; con `record` apunta los superados y sube el nivel al perfil
 │   └── useDeferredReady.ts   ← Difiere el contenido pesado de una pantalla un frame
 ├── lib/                      ← Lógica compartida (ver ARCHITECTURE.md)
 │   ├── theme.ts              ← Colores, degradados, tipografía, spacing
@@ -85,7 +91,9 @@ GymToni/
 │   ├── cloud/               ← Nube: auth.ts, backup.ts, sync.ts (motor push/pull), social.ts (perfiles/seguir/tablón)
 │   ├── supabase.ts / supabaseConfig.ts ← Cliente Supabase (clave anon pública)
 │   └── parsers.ts, progress.ts, weeks.ts, exerciseProgress.ts, routines.ts,
-│       cardio.ts, achievements.ts…
+│       cardio.ts, achievements.ts (póster semanal), badges.ts (logros de Perfil),
+│       challenges.ts (retos semanales), level.ts (nivel permanente de la cuenta),
+│       awards.ts (cola de premios: reto / logro / nivel)…
 ├── lib/__tests__/            ← Tests Jest de la lógica pura
 ├── types/index.ts            ← Tipos centralizados
 ├── data/

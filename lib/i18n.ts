@@ -149,11 +149,7 @@ register({
   Versión: 'Version',
 
   // Perfil
-  'Mis rutinas': 'My routines',
-  'Consulta, comparte o cambia de rutina': 'View, share or switch routines',
   'Progreso por ejercicio': 'Progress by exercise',
-  'Tu evolución y tus récords, ejercicio a ejercicio':
-    'Your progress and records, exercise by exercise',
   'Datos y nube': 'Data & cloud',
   'Sin perfil': 'No profile',
   'Editar perfil': 'Edit profile',
@@ -165,18 +161,12 @@ register({
   'Sin cuenta': 'No account',
   'El perfil público vive en tu cuenta: sin ella no se puede completar. Créala en Datos y nube.':
     'Your public profile lives in your account: without one it cannot be completed. Create it in Data & cloud.',
-  'Tema, idioma, tus datos en la nube y novedades':
-    'Theme, language, your cloud data and news',
   'El perfil público vive en tu cuenta: créala en Datos y nube para poder guardarlo.':
     'Your public profile lives in your account: create one in Data & cloud to save it.',
   'Copias, exportar/importar y cuenta en la nube':
     'Backups, export/import and cloud account',
   Sincronizado: 'Synced',
   'Sesión iniciada': 'Signed in',
-  'hace un momento': 'just now',
-  'hace {n} min': '{n} min ago',
-  'hace {n} h': '{n} h ago',
-  'hace {n} d': '{n} d ago',
   'Tu rutina, tus datos y la configuración': 'Your routine, data and settings',
   Entrenamientos: 'Workouts',
   'Sesiones cardio': 'Cardio sessions',
@@ -230,11 +220,11 @@ register({
   '{n} de {total} días': '{n} of {total} days',
   '¿Mover el día?': 'Move the day?',
   Mover: 'Move',
-  'Este movimiento vacía una semana y recalcula racha, progreso y logros. ¿Continuar?':
+  'Este movimiento vacía una semana y recalcula racha, progreso e hitos. ¿Continuar?':
     'This move empties a week and recalculates streak, progress and achievements. Continue?',
-  'Este movimiento reorganiza una semana ya completada y recalcula racha, progreso y logros. ¿Continuar?':
+  'Este movimiento reorganiza una semana ya completada y recalcula racha, progreso e hitos. ¿Continuar?':
     'This move reorganizes an already completed week and recalculates streak, progress and achievements. Continue?',
-  'Ver logros de la semana': "See the week's achievements",
+  'Ver hitos de la semana': "See the week's milestones",
   'Más opciones': 'More options',
   '¿Qué deseas hacer?': 'What do you want to do?',
   'Puedes editar o eliminar el registro': 'You can edit or delete the entry',
@@ -278,6 +268,9 @@ register({
   // Registro de entrenamiento
   Guardar: 'Save',
   Hecho: 'Done',
+  Terminar: 'Finish',
+  'Entreno completado · {n} ejercicios': 'Workout complete · {n} exercises',
+  'Ya está guardado en tu historial.': 'It is already saved in your history.',
   'Buscar GIF': 'Search GIF',
   'Cronómetro del ejercicio': 'Exercise stopwatch',
   Cancelar: 'Cancel',
@@ -340,8 +333,11 @@ register({
   Minutos: 'Minutes',
   'Pendiente %': 'Incline %',
   'Consulta tus resultados': 'Check your results',
-  'Aún no hay cardio. Añádelo dentro de un día de fuerza.':
-    'No cardio yet. Add it inside a strength day.',
+  'Aún no hay cardio. Pulsa «Insertar cardio» para apuntar el primero.':
+    'No cardio yet. Tap «Add cardio» to add the first one.',
+  'kcal estimadas con {kg} kg · Pon tu peso':
+    'kcal estimated at {kg} kg · Set your weight',
+  'Poner mi peso': 'Set my weight',
   'Esta semana': 'This week',
   'semana pasada': 'last week',
   'media semanal': 'weekly average',
@@ -350,6 +346,10 @@ register({
   'Aún sin cardio hoy': 'No cardio yet today',
   disciplina: 'discipline',
   disciplinas: 'disciplines',
+  'hace un momento': 'just now',
+  'hace {n} min': '{n} min ago',
+  'hace {n} h': '{n} h ago',
+  'hace {n} d': '{n} d ago',
   'hace 7 días': '7 days ago',
   'media diaria': 'daily average',
   'mejor día': 'best day',
@@ -359,6 +359,8 @@ register({
   'Pulsa para actualizarlo': 'Tap to update it',
   '{d} kg desde el anterior': '{d} kg since the previous one',
   'Últimos {n} registros': 'Last {n} entries',
+  '{n} registros': '{n} entries',
+  Evolución: 'Trend',
   'Tu peso': 'Your weight',
   'Se usa para estimar las kcalorías del cardio. Se aplica a los próximos; los cardios ya registrados mantienen el peso que tenías entonces.':
     'Used to estimate cardio kcal. It applies from now on; cardio already logged keeps the weight you had back then.',
@@ -370,7 +372,6 @@ register({
   sesiones: 'sessions',
 
   // Calendario
-  'Tu historial mensual': 'Your monthly history',
   'Repasa tus ejercicios mes por mes': 'Review your workouts month by month',
   'Sin entrenamientos': 'No workouts',
   'Guarda una sesión para verla reflejada en el calendario.':
@@ -424,8 +425,6 @@ register({
     'The file contains data in an invalid format',
   'Exportación completada': 'Export completed',
   'Backup guardado en:': 'Backup saved to:',
-  'Tu cuenta, tus copias y tu historial':
-    'Your account, your backups and your history',
   'Tu cuenta': 'Your account',
   Cuenta: 'Account',
   Sincronización: 'Sync',
@@ -493,6 +492,8 @@ register({
   'Nombre (ej: Rutina {n})': 'Name (e.g. Routine {n})',
   'Descripción (opcional)': 'Description (optional)',
   'Ej: Push pesado': 'E.g.: Heavy push',
+  'Ej: Push, Pierna, Torso…': 'E.g.: Push, Legs, Upper…',
+  'Elegir una de la comunidad': 'Pick one from the community',
   'Elegir icono': 'Pick icon',
   Ejercicios: 'Exercises',
   'Ej: Press banca': 'E.g.: Bench press',
@@ -504,24 +505,25 @@ register({
   'Añadir ejercicio': 'Add exercise',
   'Añadir día': 'Add day',
   'Quitar día': 'Remove day',
-  'Subir día': 'Move day up',
-  'Bajar día': 'Move day down',
   'Quitar ejercicio': 'Remove exercise',
-  'Subir ejercicio': 'Move exercise up',
-  'Bajar ejercicio': 'Move exercise down',
   'Editar {name}': 'Edit {name}',
   // Editar un día de la rutina: nombre e icono en el mismo modal
   'Editar día': 'Edit day',
   'Nombre del día:': 'Day name:',
   'Icono:': 'Icon:',
   // La rutina es de otra persona: sus ajustes no se tocan
-  'No es tuya': 'Not yours',
   '¿Eliminar el día?': 'Delete the day?',
   'Se elimina «{name}» de la rutina y los días se renumeran.':
     'This removes "{name}" from the routine and the days are renumbered.',
   'Este día tiene entrenamientos registrados; su historial dejará de verse.':
     'This day has logged workouts; its history will no longer be visible.',
   'Crear rutina': 'Create routine',
+  'Primeros pasos': 'First steps',
+  'Crea una rutina o trae una de la comunidad':
+    'Create a routine or bring one from the community',
+  'Registra tu primer día, serie a serie': 'Log your first day, set by set',
+  'Mira cómo progresas semana a semana': 'See how you progress week by week',
+  'Ver la comunidad': 'See the community',
   'Crear a partir de QR': 'Create from QR',
   'Crear a partir de texto plano': 'Create from plain text',
   'Un día por bloque (sepáralos con una línea en blanco). La primera línea es el nombre del día; debajo, un ejercicio por línea. Añade una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).':
@@ -534,12 +536,10 @@ register({
   'Añade al menos un día': 'Add at least one day',
   'Falta el título del Día {n}': 'Day {n} is missing a title',
   'Faltan ejercicios en el Día {n}': 'Day {n} is missing exercises',
-  'Elige un icono para el Día {n}': 'Pick an icon for Day {n}',
   'Nueva rutina creada': 'New routine created',
   'No se pudo crear la rutina': 'Could not create the routine',
   'Rutina personalizada ({n} días)': 'Custom routine ({n} days)',
   'Selecciona un icono para este día': 'Pick an icon for this day',
-  'Selecciona un icono': 'Pick an icon',
   Cerrar: 'Close',
 
   // Detalle de rutina
@@ -547,9 +547,6 @@ register({
   'Nombre:': 'Name:',
   'Descripción:': 'Description:',
   'Nombre de la rutina': 'Routine name',
-  'Temporizador de descanso': 'Rest timer',
-  '{time} entre series, en todas tus rutinas':
-    '{time} between sets, in all your routines',
   'Editar Temporizador': 'Edit Timer',
   'Modificar temporizador': 'Change timer',
   'Duración en segundos:': 'Duration in seconds:',
@@ -572,7 +569,7 @@ register({
   'Importar rutina': 'Import routine',
 
   // Logros / póster
-  'Logros de la semana': "This week's achievements",
+  'Hitos de la semana': "This week's milestones",
   'Comparte tus resultados en redes': 'Share your results on social media',
   'Compartir resultados': 'Share results',
   'Generando…': 'Generating…',
@@ -582,7 +579,7 @@ register({
   'No se pudo generar el vídeo.': 'Could not generate the video.',
   'No se pudo leer la imagen': 'Could not read the image',
   'Póster no disponible': 'Poster not available',
-  'Compartir logros de la semana': "Share this week's achievements",
+  'Compartir hitos de la semana': "Share this week's milestones",
   'Imagen guardada': 'Image saved',
   'Disponible en:': 'Available at:',
   'No se encontró una carpeta disponible para la imagen':
@@ -639,7 +636,6 @@ register({
   Reciente: 'Recent',
   Nombre: 'Name',
   Sesiones: 'Sessions',
-  'Ver más ({n})': 'Show more ({n})',
   Récords: 'Records',
   '1RM estimado': 'Estimated 1RM',
   'Peso máximo': 'Max weight',
@@ -685,11 +681,15 @@ register({
   'Añadida a tus rutinas': 'Added to your routines',
   'Esta rutina ya no está disponible': 'This routine is no longer available',
   'Rutina de la comunidad': 'Community routine',
+  'Consulta o edita tu rutina': 'View or edit your routine',
   'Ver rutina': 'View routine',
-  'Perfil guardado': 'Profile saved',
-  'Foto de perfil actualizada': 'Profile photo updated',
+  'Ir a la rutina': 'Go to routine',
   'A quién sigo': 'Who I follow',
   'En tus rutinas': 'In your routines',
+  'Quitar de mis rutinas': 'Remove from my routines',
+  'Ver días de ejercicio': 'Show workout days',
+  'Ocultar días de ejercicio': 'Hide workout days',
+  'Quitada de tus rutinas': 'Removed from your routines',
   'Ver perfil de {name}': "View {name}'s profile",
   'Iniciar sesión': 'Sign in',
   'Inicia sesión para compartir en la comunidad':
@@ -699,7 +699,13 @@ register({
   'De {name}': 'By {name}',
   'Copiada de {name}': 'Copied from {name}',
   'Hacer copia': 'Make a copy',
-  'Copia creada en tus rutinas': 'Copy created in your routines',
+  '¿Hacer una copia?': 'Make a copy?',
+  'Se crea una copia tuya de «{name}», editable y sin cuenta. No seguirá los cambios del autor: para eso está «Añadir».':
+    'Creates your own copy of «{name}», editable and without an account. It will not follow the author’s changes: that is what «Add» is for.',
+  'Duplicar rutina': 'Duplicate routine',
+  '¿Duplicar la rutina?': 'Duplicate the routine?',
+  'Se crea una copia de «{name}» en tus rutinas, sin estrenar. La original no cambia.':
+    'A copy of «{name}» is created in your routines, unused. The original does not change.',
   'Puedes entrenarla tal cual. Para cambiarla, haz una copia tuya.':
     'You can train it as is. To change it, make your own copy.',
 
@@ -707,11 +713,18 @@ register({
   Intensidad: 'Intensity',
   Todas: 'All',
   Suave: 'Easy',
-  Medio: 'Moderate',
-  Intenso: 'Hard',
+  Media: 'Moderate',
+  Intensa: 'Hard',
   '1 serie': '1 set',
   '{n} series': '{n} sets',
   'Sin rutinas de esa intensidad': 'No routines at that intensity',
+  'Intensidad de la rutina': 'Routine intensity',
+  'Según las series planificadas en toda la semana.':
+    'Based on the sets planned across the whole week.',
+  'Hasta {n} series': 'Up to {n} sets',
+  'De {a} a {b} series': '{a} to {b} sets',
+  'Más de {n} series': 'More than {n} sets',
+  'Qué significa la intensidad': 'What intensity means',
 
   // Comentarios de una rutina pública
   '1 comentario': '1 comment',
@@ -722,7 +735,7 @@ register({
   'Enviar comentario': 'Send comment',
   'Eliminar comentario': 'Delete comment',
   '¿Eliminar el comentario?': 'Delete this comment?',
-  'Inicia sesión para comentar': 'Sign in to comment',
+  'Crea una cuenta para comentar': 'Create an account to comment',
 
   // Publicar una rutina con el perfil en privado
   'Pública · firmada como «Anónimo»': 'Public · signed as “Anonymous”',
@@ -763,7 +776,7 @@ register({
   'Reportar esta rutina': 'Report this routine',
   'Reportar este perfil': 'Report this profile',
   'Reportar comentario': 'Report comment',
-  'Inicia sesión para reportar': 'Sign in to report',
+  'Crea una cuenta para reportar': 'Create an account to report',
   'Gracias, lo revisaremos': 'Thanks, we will review it',
 
   // Buscador de la lista de ejercicios (progreso y catálogo)
@@ -820,7 +833,7 @@ register({
   'Abriendo…': 'Opening…',
   'Ver ejercicio': 'View exercise',
   'Ver evolución': 'View progress',
-  'Ver logros': 'View achievements',
+  'Ver hitos': 'View milestones',
   'Ver GIF': 'View GIF',
   'Todos los ejercicios': 'All exercises',
   'Cargar más ({n})': 'Load more ({n})',
@@ -877,8 +890,6 @@ register({
     'This routine is too big for a QR code. Copy it as text and paste it into “Create from plain text”.',
 
   // Perfil público
-  'Perfil público': 'Public profile',
-  'Guardar perfil': 'Save profile',
   'Cambiar foto': 'Change photo',
   'Bio (opcional)': 'Bio (optional)',
   Público: 'Public',
@@ -886,8 +897,6 @@ register({
   'Otros pueden ver tu perfil y seguirte.':
     'Others can see your profile and follow you.',
   'Tu perfil no aparece para otros.': 'Your profile is hidden from others.',
-  'Así te ven en la comunidad cuando publicas una rutina.':
-    'This is how the community sees you when you share a routine.',
 
   // Comunidad: tablón, seguir y rutinas públicas
   Seguir: 'Follow',
@@ -901,8 +910,13 @@ register({
   'Privada · solo tú la ves': 'Private · only you can see it',
   'Rutina publicada en la comunidad': 'Routine shared with the community',
   'Rutina retirada de la comunidad': 'Routine removed from the community',
-  'Inicia sesión para seguir': 'Sign in to follow',
-  'Inicia sesión para dar like': 'Sign in to like',
+  'Crea una cuenta para seguir': 'Create an account to follow',
+  'Crea una cuenta para dar like': 'Create an account to like',
+  'Crea una cuenta para añadir rutinas': 'Create an account to add routines',
+  'Crea una cuenta para añadir rutinas, dar like y seguir a gente':
+    'Create an account to add routines, like and follow people',
+  'Crea una cuenta para seguir a gente y ver aquí sus rutinas.':
+    'Create an account to follow people and see their routines here.',
   'Inicia sesión para compartir': 'Sign in to share',
   '1 seguidor': '1 follower',
   '{n} seguidores': '{n} followers',
@@ -922,8 +936,6 @@ register({
 // Peso corporal: su pantalla en Perfil y el aviso de que se ha quedado viejo.
 register({
   'Peso corporal': 'Body weight',
-  'Actualízalo y mira cómo ha ido cambiando':
-    'Update it and see how it has changed',
   'Tu peso y cómo ha ido cambiando': 'Your weight and how it has changed',
   Histórico: 'History',
   'Actualizado hoy': 'Updated today',
@@ -945,4 +957,101 @@ register({
   'Ya entrenado esta semana': 'Already trained this week',
   'Elegir otro día': 'Pick another day',
   'Volver al entreno': 'Back to the workout',
+});
+
+// Cuadrícula de Perfil, Logros, burbujas explicadas, seguidores privados y el
+// popup de edición de ejercicio.
+register({
+  Temporizador: 'Timer',
+  Logros: 'Achievements',
+  'Primer entreno': 'First workout',
+  'Registra tu primera sesión de fuerza.': 'Log your first strength session.',
+  'Primer cardio': 'First cardio',
+  'Registra tu primera sesión de cardio.': 'Log your first cardio session.',
+  'En marcha': 'Getting going',
+  'Completa 10 sesiones de fuerza.': 'Complete 10 strength sessions.',
+  'Semana redonda': 'Full week',
+  'Entrena todos los días de tu rutina en una misma semana.':
+    'Train every day of your routine within one week.',
+  'Récord personal': 'Personal record',
+  'Mejora una semana respecto a la anterior.':
+    'Improve one week over the previous one.',
+  'Un mes seguido': 'A month straight',
+  'Encadena 4 semanas completas sin faltar a un día.':
+    'Chain 4 full weeks without missing a day.',
+  'Medio centenar': 'Half a hundred',
+  'Completa 50 sesiones de fuerza.': 'Complete 50 strength sessions.',
+  Centurión: 'Centurion',
+  'Completa 100 sesiones de fuerza.': 'Complete 100 strength sessions.',
+  Veterano: 'Veteran',
+  'Completa 200 sesiones de fuerza.': 'Complete 200 strength sessions.',
+  Leyenda: 'Legend',
+  'Completa 500 sesiones de fuerza.': 'Complete 500 strength sessions.',
+  'Corazón en marcha': 'Heart pumping',
+  'Completa 10 sesiones de cardio.': 'Complete 10 cardio sessions.',
+  Fondista: 'Long-distance',
+  'Completa 50 sesiones de cardio.': 'Complete 50 cardio sessions.',
+  Maratoniano: 'Marathoner',
+  'Completa 100 sesiones de cardio.': 'Complete 100 cardio sessions.',
+  Semanas: 'Weeks',
+  'Completado el {date}': 'Completed on {date}',
+  'Aún sin conseguir': 'Not unlocked yet',
+  Conseguido: 'Unlocked',
+  'Arrastra para reordenar': 'Drag to reorder',
+  'Subir día': 'Move day up',
+  'Bajar día': 'Move day down',
+  'Pliega todos los días para ordenarlos arrastrando':
+    'Collapse every day to reorder them by dragging',
+  'Series de la rutina': 'Routine sets',
+  'Series planificadas en toda la semana, sumando todos los días y ejercicios. Es lo que decide la intensidad de la rutina.':
+    'Sets planned across the whole week, adding up every day and exercise. It is what decides the routine intensity.',
+  'Días de la rutina': 'Routine days',
+  'Días de entrenamiento que tiene la rutina cada semana. Cada uno lleva sus propios ejercicios.':
+    'Training days the routine has each week. Each one has its own exercises.',
+  'Perfil privado': 'Private profile',
+  'Esta persona tiene el perfil en privado: solo ella puede verlo.':
+    'This person keeps their profile private: only they can see it.',
+  Listo: 'Done',
+  Subir: 'Move up',
+  Bajar: 'Move down',
+  'Sin nombre': 'Unnamed',
+  '¿Quitar el ejercicio?': 'Remove the exercise?',
+  '"{name}" desaparecerá de este día de la rutina.':
+    '"{name}" will disappear from this routine day.',
+  'El ejercicio desaparecerá de este día de la rutina.':
+    'The exercise will disappear from this routine day.',
+  Quitar: 'Remove',
+  // Retos semanales y nivel de la cuenta (lib/challenges.ts, lib/level.ts).
+  'Entrena todos los días de tu rutina.': 'Train every day of your routine.',
+  '+3 %': '+3 %',
+  'Mejora un 3 % en la mitad o más de los días.':
+    'Improve 3 % on half or more of your days.',
+  'Supera tu mejor peso en la mitad o más de los ejercicios.':
+    'Beat your best weight in half or more of your exercises.',
+  'Tres días': 'Three days',
+  'Entrena en tres fechas distintas.': 'Train on three different dates.',
+  '100 kcal hoy': '100 kcal today',
+  'Quema 100 kcal de cardio en el día.': 'Burn 100 kcal of cardio today.',
+  '1000 kcal esta semana': '1000 kcal this week',
+  'Quema 1000 kcal de cardio de lunes a domingo.':
+    'Burn 1000 kcal of cardio from Monday to Sunday.',
+  'Dos cardios': 'Two cardios',
+  'Haz cardio dos días distintos esta semana.':
+    'Do cardio on two different days this week.',
+  'Último día': 'Last day',
+  'Nivel {n}': 'Level {n}',
+  '{xp} / {next} puntos · {done} / {total} logros':
+    '{xp} / {next} points · {done} / {total} badges',
+  'Retos de la semana': 'Weekly challenges',
+  'Retos de cardio': 'Cardio challenges',
+  'Insignias y tu nivel': 'Badges and your level',
+  retos: 'challenges',
+  // Popup de premio (lib/awards)
+  '¡Reto superado!': 'Challenge completed!',
+  '¡Nuevo logro!': 'New badge!',
+  '¡Has subido de nivel!': 'Level up!',
+  '¡Genial!': 'Awesome!',
+  '+{n} puntos': '+{n} points',
+  'Cada reto y logro te acerca al siguiente':
+    'Every challenge and badge brings you closer to the next one',
 });

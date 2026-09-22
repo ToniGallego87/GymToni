@@ -20,17 +20,23 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
   Button,
+  Collapsible,
   ConfirmModal,
   DayAccentIcon,
+  ExerciseTileGrid,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  LikeButton,
   ReportModal,
   RoutineIntensityPill,
   SaveRoutineButton,
+  seriesExplanation,
+  daysExplanation,
+  StatBubble,
   StretchScrollView,
   Toast,
 } from '@components';
@@ -41,7 +47,9 @@ import { subscribeTheme } from '@lib/themeStore';
 import { formatAgo, t } from '@lib/i18n';
 import {
   countRoutineSets,
+  duplicateRoutine,
   findSavedRoutine,
+  isLinkedRoutine,
   linkPublicRoutine,
   routineIntensity,
 } from '@lib/routines';
@@ -52,10 +60,13 @@ import {
   COMMENT_MAX_LENGTH,
   deleteRoutineComment,
   fetchPublicRoutine,
+  getLikeInfo,
   getProfile,
   getProfilesByIds,
   getRoutineComments,
+  likeRoutine,
   reportContent,
+  unlikeRoutine,
   ProfileLite,
   ReportTarget,
   RoutineComment,
@@ -123,10 +134,18 @@ export function PublicRoutineScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  // Días desplegados. La rutina ajena nace PLEGADA entera, igual que la ficha de
-  // una rutina propia: de un vistazo se ve cuántos días trae y cuántos
-  // ejercicios cada uno, en vez de un rollo de 30 ejercicios que obliga a
-  // hacer scroll para saber si hay un cuarto día.
+  // Likes de la rutina (nº y si le diste tú), como en la tarjeta del tablón.
+  const [likeInfo, setLikeInfo] = useState<{ likes: number; liked: boolean }>({
+    likes: 0,
+    liked: false,
+  });
+  // La lista de días nace OCULTA tras "Ver días de ejercicio": lo que se viene
+  // a decidir aquí es "¿me la quedo?", y la cabecera con intensidad, días y
+  // series ya lo dice; el plan se despliega solo cuando interesa mirarlo.
+  const [daysOpen, setDaysOpen] = useState(false);
+  // Días desplegados dentro de la lista. Cada día nace PLEGADO, igual que en la
+  // ficha de una rutina propia: de un vistazo se ve cuántos días trae y cuántos
+  // ejercicios cada uno, en vez de un rollo de 30 ejercicios.
   const [expandedDayIds, setExpandedDayIds] = useState<Set<string>>(
     () => new Set()
   );
@@ -185,6 +204,43 @@ export function PublicRoutineScreen({
     load();
   }, [load]);
 
+  // Likes aparte del plan (y silencioso si falla): la rutina se ve igual.
+  useEffect(() => {
+    let alive = true;
+    getLikeInfo([routineId], user?.id ?? null)
+      .then((info) => {
+        const entry = info.get(routineId);
+        if (alive && entry) setLikeInfo(entry);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [routineId, user?.id]);
+
+  const handleToggleLike = async () => {
+    if (!user) {
+      setToast({
+        message: t('Crea una cuenta para dar like'),
+        type: 'error',
+        action: 'sign-in',
+      });
+      return;
+    }
+    const previous = likeInfo;
+    setLikeInfo({
+      likes: Math.max(0, previous.likes + (previous.liked ? -1 : 1)),
+      liked: !previous.liked,
+    });
+    try {
+      if (previous.liked) await unlikeRoutine(routineId, user.id);
+      else await likeRoutine(routineId, user.id);
+    } catch (e) {
+      setLikeInfo(previous);
+      setToast({ message: (e as Error).message, type: 'error' });
+    }
+  };
+
   // Foto y nombre actuales del autor, para que la firma sea una cara pulsable y
   // no un texto muerto. Silencioso si falla: la firma cae al nombre que ya trajo
   // la tarjeta de origen.
@@ -210,8 +266,36 @@ export function PublicRoutineScreen({
   // Enlaza lo ya descargado (ids originales) en vez de volver a bajarlo: la
   // vista ya tiene el plan entero delante. Añadir NO copia: apunta a la rutina
   // del autor, que se entrena tal cual pero no se edita.
+  // La otra vía, sin cuenta: una copia PROPIA (ids nuevos, editable, con el
+  // crédito al autor) que no necesita sync y por tanto no necesita sesión. El
+  // enlace ("Añadir", que sigue al autor) sí la exige. Sin esto, un recién
+  // instalado podía mirar la Comunidad entera sin poder llevarse ninguna rutina.
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const handleCopy = () => {
+    setShowCopyModal(false);
+    if (!routine || !ownerId) return;
+    const copy = duplicateRoutine(
+      linkPublicRoutine(routine, ownerId, displayAuthor),
+      state.routines.map((r) => r.name)
+    );
+    dispatch({ type: 'ADD_ROUTINE', payload: copy });
+    setToast({
+      message: t('Copiada como "{name}"', { name: copy.name }),
+      type: 'success',
+    });
+  };
+
   const handleSave = () => {
     if (!routine || !ownerId) return;
+    // Sin cuenta no hay sync, y la rutina enlazada vive del sync.
+    if (!user) {
+      setToast({
+        message: t('Crea una cuenta para añadir rutinas'),
+        type: 'error',
+        action: 'sign-in',
+      });
+      return;
+    }
     setSaving(true);
     try {
       const linked = linkPublicRoutine(routine, ownerId, displayAuthor);
@@ -263,7 +347,7 @@ export function PublicRoutineScreen({
     if (!user) {
       setReportTarget(null);
       setToast({
-        message: t('Inicia sesión para reportar'),
+        message: t('Crea una cuenta para reportar'),
         type: 'error',
         action: 'sign-in',
       });
@@ -298,7 +382,7 @@ export function PublicRoutineScreen({
     if (!text) return;
     if (!user) {
       setToast({
-        message: t('Inicia sesión para comentar'),
+        message: t('Crea una cuenta para comentar'),
         type: 'error',
         action: 'sign-in',
       });
@@ -356,7 +440,20 @@ export function PublicRoutineScreen({
     (comment) => !hiddenIds.has(comment.id)
   );
 
-  const saved = !!findSavedRoutine(state.routines, routineId);
+  const savedRoutine = findSavedRoutine(state.routines, routineId);
+  const saved = !!savedRoutine;
+  // Quitarla solo si es el ENLACE (no una copia tuya, que ya es otra rutina) y
+  // no tiene entrenamientos: con historial rige la misma regla que en Rutinas,
+  // donde no se puede borrar. En ese caso el botón queda como estado.
+  const canUnsave =
+    !!savedRoutine &&
+    isLinkedRoutine(savedRoutine) &&
+    !state.logs.some((log) => log.routineId === savedRoutine.id);
+  const handleUnsave = () => {
+    if (!savedRoutine) return;
+    dispatch({ type: 'DELETE_ROUTINE', payload: savedRoutine.id });
+    setToast({ message: t('Quitada de tus rutinas'), type: 'success' });
+  };
 
   const totalSets = routine ? countRoutineSets(routine) : 0;
   const level = routineIntensity(totalSets);
@@ -380,10 +477,15 @@ export function PublicRoutineScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabecera: quién la hizo, de qué va y cuánto pesa la semana. */}
+        {/* Cabecera: quién la hizo, de qué va y cuánto pesa la semana. La
+            intensidad va arriba a la derecha, junto al nombre, como en la
+            tarjeta del tablón y en Rutinas. */}
         <View style={styles.infoBlock}>
           <GradientFill accent={theme.colors.primaryLine} />
-          <Text style={styles.infoName}>{routine?.name ?? name}</Text>
+          <View style={styles.infoHead}>
+            <Text style={styles.infoName}>{routine?.name ?? name}</Text>
+            {!!routine && <RoutineIntensityPill level={level} />}
+          </View>
           {/* La firma lleva al perfil de quien la hizo: si la rutina gusta, lo
               siguiente que se quiere es ver qué más tiene y seguirle. */}
           {!!displayAuthor && (
@@ -416,32 +518,78 @@ export function PublicRoutineScreen({
           {!!routine?.description && (
             <Text style={styles.description}>{routine.description}</Text>
           )}
+          {/* Pie como el de la tarjeta del tablón: los datos (días y series)
+              como burbujas a la izquierda —se tocan y explican qué miden— y, a
+              la derecha, el mismo par de acciones. Aquí el marcador además
+              QUITA la rutina si ya estaba enlazada y sin historial. */}
           {!!routine && (
             <View style={styles.metaRow}>
-              <RoutineIntensityPill level={level} />
-              <Text style={styles.metaText}>
-                {routine.days.length === 1
-                  ? t('1 día')
-                  : t('{n} días', { n: routine.days.length })}
-                {' · '}
-                {totalSets === 1
-                  ? t('1 serie')
-                  : t('{n} series', { n: totalSets })}
-              </Text>
+              <StatBubble
+                icon="calendar-outline"
+                value={routine.days.length}
+                label={
+                  routine.days.length === 1
+                    ? t('1 día')
+                    : t('{n} días', { n: routine.days.length })
+                }
+                explanation={daysExplanation()}
+              />
+              <StatBubble
+                icon="repeat"
+                value={totalSets}
+                label={
+                  totalSets === 1
+                    ? t('1 serie')
+                    : t('{n} series', { n: totalSets })
+                }
+                explanation={seriesExplanation()}
+              />
+              <View style={styles.metaSpacer} />
+              {!!ownerId && (
+                <>
+                  <SaveRoutineButton
+                    saved={saved}
+                    busy={saving}
+                    onPress={handleSave}
+                    onUnsave={canUnsave ? handleUnsave : undefined}
+                  />
+                  <LikeButton
+                    likes={likeInfo.likes}
+                    liked={likeInfo.liked}
+                    onPress={handleToggleLike}
+                  />
+                </>
+              )}
             </View>
           )}
-          {/* Quedarse la rutina es lo ÚNICO que se viene a decidir aquí, así que
-              va con su rótulo y a lo ancho de la cabecera. En el tablón sigue
-              siendo un icono suelto: allí hay una por tarjeta y no sobra ancho,
-              aquí solo hay una y un marcador sin texto no dice qué hace. */}
-          {!!routine && !!ownerId && (
-            <SaveRoutineButton
-              saved={saved}
-              busy={saving}
-              onPress={handleSave}
-              withLabel
-              style={styles.saveButton}
-            />
+          {/* Peldaño que despliega/pliega la lista de días (con la animación
+              de altura de las semanas de Inicio). */}
+          {!!routine && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.daysToggle,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => setDaysOpen((open) => !open)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: daysOpen }}
+              accessibilityLabel={
+                daysOpen
+                  ? t('Ocultar días de ejercicio')
+                  : t('Ver días de ejercicio')
+              }
+            >
+              <MaterialCommunityIcons
+                name={daysOpen ? 'chevron-up' : 'chevron-down'}
+                size={20}
+                color={theme.colors.primary}
+              />
+              <Text style={styles.daysToggleText}>
+                {daysOpen
+                  ? t('Ocultar días de ejercicio')
+                  : t('Ver días de ejercicio')}
+              </Text>
+            </Pressable>
           )}
         </View>
 
@@ -461,118 +609,106 @@ export function PublicRoutineScreen({
             />
           </View>
         ) : (
-          routine?.days.map((day) => {
-            const accent = getTrainingAccent(day);
-            const expanded = expandedDayIds.has(day.id);
-            const count = day.exercises.length;
+          <Collapsible open={daysOpen}>
+            <View style={styles.daysList}>
+              {routine?.days.map((day) => {
+                const accent = getTrainingAccent(day);
+                const expanded = expandedDayIds.has(day.id);
+                const count = day.exercises.length;
 
-            return (
-              <Animated.View
-                key={day.id}
-                layout={layoutTransition}
-                style={[styles.dayBlock, { borderColor: accent }]}
-              >
-                <GradientFill accent={accent} />
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dayHeader,
-                    // Plegado, la cabecera ES la tarjeta: sin hueco por debajo.
-                    !expanded && styles.dayHeaderCollapsed,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => toggleDay(day.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    expanded ? t('Plegar día') : t('Desplegar día')
-                  }
-                >
-                  <View style={styles.dayHeaderLeft}>
-                    <DayAccentIcon
-                      emoji={day.emoji}
-                      name={day.name}
-                      size={32}
-                    />
-                    <View style={styles.dayTitleWrap}>
-                      {/* El número del día como ceja, no como badge suelto
-                          arriba a la derecha: es la referencia, no el titular. */}
-                      <Text style={styles.dayEyebrow}>
-                        {t('Día')} {day.dayNumber}
-                      </Text>
-                      <Text style={styles.dayName} numberOfLines={2}>
-                        {getDisplayDayName(day.name) ||
-                          `${t('Día')} ${day.dayNumber}`}
-                      </Text>
-                    </View>
-                  </View>
-
-                  {/* Plegado, lo único que se dice del contenido: cuántos
-                      ejercicios trae. */}
-                  {!expanded && (
-                    <Text style={styles.dayCount} numberOfLines={1}>
-                      {count === 1
-                        ? t('1 ejercicio')
-                        : t('{n} ejercicios', { n: count })}
-                    </Text>
-                  )}
-                </Pressable>
-
-                {/* Mismo listado que el modo lectura de una rutina propia:
-                    punto de acento, el ejercicio en tinta primaria y el plan de
-                    series apartado a la derecha. */}
-                {expanded && (
+                return (
                   <Animated.View
-                    entering={fadeIn}
-                    exiting={fadeOut}
-                    style={styles.exerciseList}
+                    key={day.id}
+                    layout={layoutTransition}
+                    style={[styles.dayBlock, { borderColor: accent }]}
                   >
-                    {day.exercises.map((exercise) => (
-                      <View key={exercise.id} style={styles.exerciseRow}>
-                        <View
-                          style={[
-                            styles.exerciseDot,
-                            { backgroundColor: accent },
-                          ]}
+                    <GradientFill accent={accent} />
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.dayHeader,
+                        // Plegado, la cabecera ES la tarjeta: sin hueco por debajo.
+                        !expanded && styles.dayHeaderCollapsed,
+                        pressed && styles.pressed,
+                      ]}
+                      onPress={() => toggleDay(day.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        expanded ? t('Plegar día') : t('Desplegar día')
+                      }
+                    >
+                      <View style={styles.dayHeaderLeft}>
+                        <DayAccentIcon
+                          emoji={day.emoji}
+                          name={day.name}
+                          size={32}
                         />
-                        <Text style={styles.exerciseText}>{exercise.name}</Text>
-                        <Text style={styles.exerciseSets}>
-                          {exercise.targetSets || '-'}x
-                          {exercise.targetReps || '-'}
-                        </Text>
+                        <View style={styles.dayTitleWrap}>
+                          {/* El número del día como ceja, no como badge suelto
+                          arriba a la derecha: es la referencia, no el titular. */}
+                          <Text style={styles.dayEyebrow}>
+                            {t('Día')} {day.dayNumber}
+                          </Text>
+                          <Text style={styles.dayName} numberOfLines={2}>
+                            {getDisplayDayName(day.name) ||
+                              `${t('Día')} ${day.dayNumber}`}
+                          </Text>
+                        </View>
                       </View>
-                    ))}
-                  </Animated.View>
-                )}
 
-                {/* Peldaño de pliegue al pie de la tarjeta: la MISMA barra con
+                      {/* Plegado, lo único que se dice del contenido: cuántos
+                      ejercicios trae. */}
+                      {!expanded && (
+                        <Text style={styles.dayCount} numberOfLines={1}>
+                          {count === 1
+                            ? t('1 ejercicio')
+                            : t('{n} ejercicios', { n: count })}
+                        </Text>
+                      )}
+                    </Pressable>
+
+                    {/* Las mismas casillas que el modo lectura de una rutina
+                        propia: GIF grande, nombre y plan de series. */}
+                    {expanded && (
+                      <Animated.View entering={fadeIn} exiting={fadeOut}>
+                        <ExerciseTileGrid
+                          exercises={day.exercises}
+                          accent={accent}
+                        />
+                      </Animated.View>
+                    )}
+
+                    {/* Peldaño de pliegue al pie de la tarjeta: la MISMA barra con
                     chevron que cierra los días de una rutina propia. */}
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.collapseBar,
-                    pressed && styles.collapseBarPressed,
-                  ]}
-                  onPress={() => toggleDay(day.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    expanded ? t('Plegar día') : t('Desplegar día')
-                  }
-                >
-                  <LinearGradient
-                    colors={theme.gradients.heroStep}
-                    locations={STEP_SHADE_STOPS}
-                    start={{ x: 0, y: 1 }}
-                    end={{ x: 0, y: 0 }}
-                    style={StyleSheet.absoluteFill}
-                    pointerEvents="none"
-                  />
-                  <MaterialCommunityIcons
-                    name={expanded ? 'chevron-up' : 'chevron-down'}
-                    size={24}
-                    color={accent}
-                  />
-                </Pressable>
-              </Animated.View>
-            );
-          })
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.collapseBar,
+                        pressed && styles.collapseBarPressed,
+                      ]}
+                      onPress={() => toggleDay(day.id)}
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        expanded ? t('Plegar día') : t('Desplegar día')
+                      }
+                    >
+                      <LinearGradient
+                        colors={theme.gradients.heroStep}
+                        locations={STEP_SHADE_STOPS}
+                        start={{ x: 0, y: 1 }}
+                        end={{ x: 0, y: 0 }}
+                        style={StyleSheet.absoluteFill}
+                        pointerEvents="none"
+                      />
+                      <MaterialCommunityIcons
+                        name={expanded ? 'chevron-up' : 'chevron-down'}
+                        size={24}
+                        color={accent}
+                      />
+                    </Pressable>
+                  </Animated.View>
+                );
+              })}
+            </View>
+          </Collapsible>
         )}
 
         {/* Hilo de comentarios: va al pie, después del plan. Se pregunta por la
@@ -719,7 +855,7 @@ export function PublicRoutineScreen({
               </View>
             ) : (
               <Button
-                title={t('Inicia sesión para comentar')}
+                title={t('Crea una cuenta para comentar')}
                 variant="secondary"
                 size="medium"
                 onPress={() => onOpenAccount?.()}
@@ -761,6 +897,17 @@ export function PublicRoutineScreen({
         icon="book-open-variant"
         subtitle={t('Rutina de la comunidad')}
         topInset={insets.top}
+        menuItems={
+          routine && ownerId
+            ? [
+                {
+                  icon: 'content-copy',
+                  label: t('Hacer copia'),
+                  onPress: () => setShowCopyModal(true),
+                },
+              ]
+            : undefined
+        }
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -771,7 +918,7 @@ export function PublicRoutineScreen({
           type={toast.type}
           actionLabel={
             toast.action === 'sign-in' && onOpenAccount
-              ? t('Iniciar sesión')
+              ? t('Crear cuenta')
               : undefined
           }
           onAction={
@@ -800,6 +947,19 @@ export function PublicRoutineScreen({
         onConfirm={handleDeleteComment}
         onCancel={() => setCommentToDeleteId(null)}
       />
+
+      <ConfirmModal
+        visible={showCopyModal}
+        icon="content-copy"
+        title={t('¿Hacer una copia?')}
+        message={t(
+          'Se crea una copia tuya de «{name}», editable y sin cuenta. No seguirá los cambios del autor: para eso está «Añadir».',
+          { name: routine?.name ?? name }
+        )}
+        confirmLabel={t('Hacer copia')}
+        onConfirm={handleCopy}
+        onCancel={() => setShowCopyModal(false)}
+      />
     </View>
   );
 }
@@ -809,6 +969,9 @@ const makeStyles = () =>
     container: { flex: 1, backgroundColor: theme.colors.background },
     scroll: { flex: 1 },
     content: { paddingHorizontal: theme.spacing.md, gap: 12 },
+    // Los días dentro del acordeón: mismo hueco entre tarjetas que el resto
+    // del scroll (el `gap` del contenido no llega dentro de `Collapsible`).
+    daysList: { gap: 12 },
     // Banner de cabecera con el mismo lenguaje que el de una rutina propia
     // (fondo dorado tenue), para que se lea como "ficha de rutina".
     infoBlock: {
@@ -820,14 +983,33 @@ const makeStyles = () =>
       overflow: 'hidden',
       gap: 6,
     },
-    // Guardar, a lo ancho de la cabecera: es la acción de la pantalla.
-    saveButton: {
-      alignSelf: 'stretch',
+    // Nombre + intensidad arriba a la derecha. Alineados arriba para que, con
+    // un nombre a dos líneas, la píldora acompañe a la primera.
+    infoHead: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+    },
+    // Peldaño que abre/cierra la lista de días, al pie de la cabecera.
+    daysToggle: {
+      flexDirection: 'row',
+      alignItems: 'center',
       justifyContent: 'center',
-      paddingVertical: 10,
+      gap: 4,
       marginTop: 6,
+      paddingVertical: 8,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+    },
+    daysToggleText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      lineHeight: 17,
     },
     infoName: {
+      flex: 1,
       fontSize: 22,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
@@ -849,13 +1031,15 @@ const makeStyles = () =>
       fontSize: 14,
       lineHeight: 19,
     },
+    // Pie de la ficha: burbujas de dato a la izquierda, acciones a la derecha,
+    // el mismo dibujo que la tarjeta del tablón.
     metaRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 10,
+      gap: 8,
       marginTop: 4,
     },
-    metaText: { color: theme.colors.textSecondary, fontSize: 13 },
+    metaSpacer: { flex: 1 },
     dayBlock: {
       backgroundColor: 'transparent',
       borderRadius: theme.borderRadius.md,
@@ -909,24 +1093,6 @@ const makeStyles = () =>
       fontSize: 13,
       fontWeight: '700',
       color: theme.colors.textSecondary,
-    },
-    exerciseList: { gap: 8 },
-    exerciseRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-    exerciseDot: { width: 8, height: 8, borderRadius: 4, marginTop: 6 },
-    // Los ejercicios SON el contenido de la ficha: tinta primaria y su
-    // interlineado, como en una rutina propia.
-    exerciseText: {
-      flex: 1,
-      fontSize: 16,
-      lineHeight: 22,
-      color: theme.colors.text,
-    },
-    exerciseSets: {
-      fontSize: 13,
-      fontWeight: '700',
-      lineHeight: 22,
-      color: theme.colors.textSecondary,
-      fontVariant: ['tabular-nums'],
     },
     // Peldaño del pliegue al pie del bloque: los márgenes negativos valen el
     // padding del bloque (theme.spacing.md), así que la barra llega a los tres

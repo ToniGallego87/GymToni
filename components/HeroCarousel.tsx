@@ -30,6 +30,12 @@ export const HERO_ARROW_WIDTH = 42;
 // por dentro del padding horizontal de la tarjeta (20), más un poco de aire.
 export const HERO_ARROW_INSET = HERO_ARROW_WIDTH - 20 + 4;
 
+// Cada cuánto pasa sola a la siguiente tarjeta.
+const AUTO_ADVANCE_MS = 5000;
+// Tras tocar una flecha o un punto, el pase automático se para este tiempo
+// (quien toca quiere leer esa tarjeta) y después vuelve a la cadencia normal.
+const PAUSE_AFTER_MANUAL_MS = 20000;
+
 interface HeroCarouselProps {
   /** Cada estado de la hero card. Se muestra uno cada vez. */
   slides: React.ReactElement[];
@@ -80,17 +86,45 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
     transform: [{ scale: pressScale.value }],
   }));
   const count = slides.length;
-
-  if (count === 0) return null;
-  if (count === 1) return <View>{slides[0]}</View>;
-
-  const safeIndex = Math.min(index, count - 1);
-  const color = controlColor ?? theme.colors.onGold;
+  const safeIndex = Math.min(index, Math.max(0, count - 1));
 
   const go = (delta: 1 | -1) => {
     setDir(delta);
     setIndex((i) => (i + delta + count) % count);
   };
+
+  // Un toque manual (flecha o punto) detiene el pase automático durante
+  // PAUSE_AFTER_MANUAL_MS; `pausedUntil` guarda hasta cuándo y el efecto de
+  // abajo se rearma para respetarlo.
+  const [pausedUntil, setPausedUntil] = useState(0);
+  const pauseAuto = () => setPausedUntil(Date.now() + PAUSE_AFTER_MANUAL_MS);
+
+  // Pase automático: cada AUTO_ADVANCE_MS avanza a la derecha, como si se
+  // hubiera pulsado la flecha. Tras un toque manual espera lo que quede de la
+  // pausa y después retoma la cadencia de 5 s.
+  useEffect(() => {
+    if (count <= 1) return;
+    const remainingPause = pausedUntil - Date.now();
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const startInterval = () => {
+      interval = setInterval(() => go(1), AUTO_ADVANCE_MS);
+    };
+    const delay =
+      remainingPause > 0
+        ? setTimeout(startInterval, remainingPause)
+        : undefined;
+    if (!delay) startInterval();
+    return () => {
+      if (delay) clearTimeout(delay);
+      if (interval) clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [safeIndex, count, pausedUntil]);
+
+  if (count === 0) return null;
+  if (count === 1) return <View>{slides[0]}</View>;
+
+  const color = controlColor ?? theme.colors.onGold;
 
   // Salto directo desde los puntos. Entra por el lado que corresponde al sentido
   // del salto, igual que con las flechas.
@@ -115,7 +149,10 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
       <Pressable
         style={[styles.arrow, styles.arrowLeft]}
         hitSlop={10}
-        onPress={() => go(-1)}
+        onPress={() => {
+          pauseAuto();
+          go(-1);
+        }}
       >
         <View style={[styles.arrowStep, styles.arrowStepLeft]}>
           <LinearGradient
@@ -133,7 +170,10 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
       <Pressable
         style={[styles.arrow, styles.arrowRight]}
         hitSlop={10}
-        onPress={() => go(1)}
+        onPress={() => {
+          pauseAuto();
+          go(1);
+        }}
       >
         <View style={[styles.arrowStep, styles.arrowStepRight]}>
           <LinearGradient
@@ -163,7 +203,10 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
             key={i}
             style={styles.dotHit}
             hitSlop={6}
-            onPress={() => goTo(i)}
+            onPress={() => {
+              pauseAuto();
+              goTo(i);
+            }}
             accessibilityRole="button"
             accessibilityState={{ selected: i === safeIndex }}
             accessibilityLabel={t('Ver tarjeta {n} de {total}', {

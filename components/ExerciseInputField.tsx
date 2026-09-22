@@ -25,8 +25,9 @@ import {
   MAX_SET_WEIGHT_KG,
   parseSeriesString,
 } from '@lib/parsers';
-import { getImprovementDisplay } from '@lib/utils';
+import { getImprovementColor } from '@lib/utils';
 import { GradientFill } from './GradientFill';
+import { TrendDelta } from './TrendDelta';
 import { ExerciseGifButton } from './ExerciseGifButton';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
@@ -88,10 +89,6 @@ interface ExerciseInputFieldProps {
   previousLog?: ExerciseLog | null;
   improvement?: { isImproved: boolean; percent: number } | null;
   accent?: string;
-  // Temporizador de descanso, renderizado DENTRO de la tarjeta (al pie) mientras
-  // queden series. El padre decide su contenido; aquí solo se enmarca y anima la
-  // altura de la tarjeta al aparecer/desaparecer.
-  restTimer?: React.ReactNode;
   // El padre marca cuál es el ejercicio "en curso" (el primer incompleto del
   // día): esa tarjeta nace desplegada y se abre sola al pasar a serlo, para no
   // obligar a desplegar cada ejercicio antes de poder registrar una serie.
@@ -116,7 +113,6 @@ export function ExerciseInputField({
   previousLog,
   improvement,
   accent = theme.colors.primary,
-  restTimer,
   isCurrent,
   deload = false,
 }: ExerciseInputFieldProps) {
@@ -378,29 +374,26 @@ export function ExerciseInputField({
     if (deload) return null;
     if (!improvement || !isMaxSetsReached || addedSets.length === 0)
       return null;
-    const { symbol, display, kind } = getImprovementDisplay(improvement);
-    const badgeBg =
-      kind === 'up'
-        ? styles.improvementBadgeUp
-        : kind === 'down'
-        ? styles.improvementBadgeDown
-        : styles.improvementBadgeNeutral;
-    const textStyle =
-      kind === 'up'
-        ? styles.improvementUp
-        : kind === 'down'
-        ? styles.improvementDown
-        : styles.improvementNeutral;
+    // El indicador es `TrendDelta` (el mismo que Inicio y Cardio); la píldora
+    // solo aporta el fondo tintado y la animación de entrada/salida.
+    const tint = getImprovementColor(
+      improvement.percent === 0
+        ? 'neutral'
+        : improvement.isImproved
+        ? 'up'
+        : 'down'
+    );
     return (
       <Animated.View
         entering={fadeIn}
         exiting={fadeOut}
         layout={layoutTransition}
-        style={[styles.improvementBadge, badgeBg]}
+        style={[styles.improvementBadge, { backgroundColor: tint + '22' }]}
       >
-        <Text style={[styles.improvementText, textStyle]}>
-          {symbol} {display}%
-        </Text>
+        <TrendDelta
+          value={improvement.percent}
+          improved={improvement.isImproved}
+        />
       </Animated.View>
     );
   };
@@ -893,20 +886,6 @@ export function ExerciseInputField({
         )}
       </View>
 
-      {/* Temporizador de descanso dentro de la tarjeta: aparece al pie y, al
-          montarse/desmontarse, la `LinearTransition` del contenedor estira o
-          encoge la tarjeta para que el descanso quede atado a su ejercicio. */}
-      {restTimer && (
-        <Animated.View
-          entering={fadeIn}
-          exiting={fadeOut}
-          layout={layoutTransition}
-          style={styles.restTimerInside}
-        >
-          {restTimer}
-        </Animated.View>
-      )}
-
       {/* Pliegue de la tarjeta: barra ancha y baja al pie, con el mismo peldaño
           sombreado que las flechas laterales de la hero card. Antes era un aro de
           38 en la cabecera, que le comía el ancho al nombre del ejercicio (los
@@ -1202,17 +1181,6 @@ const makeStyles = () =>
       borderRadius: theme.borderRadius.pill,
       alignSelf: 'center',
     },
-    improvementBadgeUp: { backgroundColor: theme.colors.success + '22' },
-    improvementBadgeDown: { backgroundColor: theme.colors.error + '22' },
-    improvementBadgeNeutral: { backgroundColor: theme.colors.warning + '22' },
-    improvementText: {
-      fontSize: 15,
-      fontWeight: '800',
-      letterSpacing: 0.2,
-    },
-    improvementUp: { color: theme.colors.success },
-    improvementDown: { color: theme.colors.error },
-    improvementNeutral: { color: theme.colors.warning },
 
     // Bloque de contexto (objetivo + anterior)
     contextBlock: {
@@ -1428,18 +1396,6 @@ const makeStyles = () =>
     },
     collapseBarPressed: {
       opacity: 0.7,
-    },
-
-    // Temporizador de descanso (al pie de la tarjeta). Mismo patrón que las
-    // burbujas de serie: relleno del acento al 18% y tinta del acento (ver
-    // `serieTag`). El contenido lo aporta el padre con sus propios estilos.
-    restTimerInside: {
-      marginTop: 12,
-      backgroundColor: theme.colors.accentLine + '2E',
-      borderRadius: theme.borderRadius.md,
-      paddingVertical: 10,
-      paddingHorizontal: 14,
-      justifyContent: 'center',
     },
 
     // Cronómetro

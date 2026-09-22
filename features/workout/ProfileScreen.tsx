@@ -1,7 +1,13 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  useWindowDimensions,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -11,17 +17,19 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  LevelPill,
   RestTimerModal,
   StretchScrollView,
 } from '@components';
+import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useWorkout } from '@hooks/useWorkout';
+import { ProfileEditModal } from './ProfileEditModal';
 import { hasProfileFilled, useMyProfile } from '@hooks/useMyProfile';
 import { useSession } from '@lib/cloud/auth';
 import { cardioSessionFromLog } from '@lib/cardio';
 import { setRestDuration, useRestDuration } from '@lib/restTimerStore';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { formatRestTime } from '@lib/utils';
 
 interface ProfileScreenProps {
   onOpenRoutines?: () => void;
@@ -29,17 +37,28 @@ interface ProfileScreenProps {
   // Peso corporal: se edita aquí, no en el carrusel de Cardio (se toca una vez
   // cada varias semanas y allí ocupaba media hero).
   onOpenBodyWeight?: () => void;
+  // Logros: insignias que se desbloquean con el histórico de entrenos.
+  onOpenAchievements?: () => void;
   onOpenSettings?: () => void;
-  onOpenProfileEdit?: () => void;
   // Pantalla de cuenta (Datos y nube): sin sesión no hay perfil público que
   // completar, así que la tarjeta lleva a crearla en vez de al formulario.
   onOpenAccount?: () => void;
 }
 
+// Cuadrícula del menú: separación entre casillas, margen a los lados (para
+// que el cuadrado sea algo más pequeño que el ancho del tercio) y el rango de
+// letra. `MENU_CHAR_WIDTH` es el ancho medio de un carácter en em con la
+// negrita del sistema: sirve para estimar cuánto ocupa la etiqueta.
+const MENU_GAP = 12;
+const MENU_INSET = 8;
+const MENU_TILE_PADDING = 8;
+const MENU_FONT_MIN = 12;
+const MENU_FONT_MAX = 16;
+const MENU_CHAR_WIDTH = 0.6;
+
 type MenuEntry = {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
-  hint: string;
   onPress?: () => void;
 };
 
@@ -58,12 +77,14 @@ export function ProfileScreen({
   onOpenRoutines,
   onOpenExerciseProgress,
   onOpenBodyWeight,
+  onOpenAchievements,
   onOpenSettings,
-  onOpenProfileEdit,
   onOpenAccount,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  // Nivel de la cuenta: lo permanente que dejan los retos y los logros.
+  const { level } = useAccountLevel();
   const { user, loading: sessionLoading } = useSession();
   const { profile, loading: profileLoading } = useMyProfile();
   const isProfileFilled = hasProfileFilled(profile);
@@ -89,6 +110,8 @@ export function ProfileScreen({
   const restDuration = useRestDuration();
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [timerInput, setTimerInput] = useState('');
+  // El perfil público se edita en un popup sobre esta pantalla.
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
 
   const handleOpenTimerModal = () => {
     setTimerInput(String(restDuration));
@@ -102,40 +125,41 @@ export function ProfileScreen({
     setTimerInput('');
   };
 
+  // Seis casillas, tres por fila: icono + nombre corto. Sin subtítulos: una
+  // cuadrícula se lee de un vistazo y cabe sin scroll junto a la identidad.
   const menu: MenuEntry[] = [
-    {
-      icon: 'book-open-variant',
-      label: t('Mis rutinas'),
-      hint: t('Consulta, comparte o cambia de rutina'),
-      onPress: onOpenRoutines,
-    },
+    { icon: 'book-open-variant', label: t('Rutinas'), onPress: onOpenRoutines },
     {
       icon: 'chart-line',
-      label: t('Progreso por ejercicio'),
-      hint: t('Tu evolución y tus récords, ejercicio a ejercicio'),
+      label: t('Ejercicios'),
       onPress: onOpenExerciseProgress,
     },
-    {
-      icon: 'scale-bathroom',
-      label: t('Peso corporal'),
-      hint: t('Actualízalo y mira cómo ha ido cambiando'),
-      onPress: onOpenBodyWeight,
-    },
+    { icon: 'scale-bathroom', label: t('Peso'), onPress: onOpenBodyWeight },
     {
       icon: 'timer-sand',
-      label: t('Temporizador de descanso'),
-      hint: t('{time} entre series, en todas tus rutinas', {
-        time: formatRestTime(restDuration),
-      }),
+      label: t('Temporizador'),
       onPress: handleOpenTimerModal,
     },
-    {
-      icon: 'cog-outline',
-      label: t('Configuración'),
-      hint: t('Tema, idioma, tus datos en la nube y novedades'),
-      onPress: onOpenSettings,
-    },
+    { icon: 'cog-outline', label: t('Configuración'), onPress: onOpenSettings },
+    { icon: 'trophy-outline', label: t('Logros'), onPress: onOpenAchievements },
   ];
+  const menuRows: MenuEntry[][] = [];
+  for (let i = 0; i < menu.length; i += 3) menuRows.push(menu.slice(i, i + 3));
+
+  // Un solo tamaño de letra para las seis casillas: el mayor con el que cabe
+  // la etiqueta más larga en una línea. Con `adjustsFontSizeToFit` cada casilla
+  // encogía la suya y "Configuración" salía más pequeño que "Peso".
+  const { width: windowWidth } = useWindowDimensions();
+  const tileWidth =
+    (windowWidth - theme.spacing.md * 2 - MENU_INSET * 2 - MENU_GAP * 2) / 3;
+  const longestLabel = Math.max(...menu.map((entry) => entry.label.length));
+  const menuFontSize = Math.max(
+    MENU_FONT_MIN,
+    Math.min(
+      MENU_FONT_MAX,
+      (tileWidth - MENU_TILE_PADDING * 2) / (longestLabel * MENU_CHAR_WIDTH)
+    )
+  );
 
   return (
     <View style={styles.container}>
@@ -159,6 +183,30 @@ export function ProfileScreen({
         {/* ── Quién eres ──────────────────────────────────────────────────── */}
         <View style={styles.identityCard}>
           <GradientFill accent={theme.colors.primaryLine} />
+          {/* Editar (o completar) el perfil público: solo con cuenta, que es
+              donde vive. Arriba a la derecha de la tarjeta, junto al nombre.
+              Mientras no se sabe si hay perfil, espera desactivado. */}
+          {hasAccount && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.editButton,
+                pressed && styles.menuTilePressed,
+              ]}
+              onPress={() => setShowProfileEdit(true)}
+              disabled={profileUnknown}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={
+                isProfileFilled ? t('Editar perfil') : t('Completar perfil')
+              }
+            >
+              <MaterialCommunityIcons
+                name={isProfileFilled ? 'pencil' : 'account-plus-outline'}
+                size={18}
+                color={theme.colors.primary}
+              />
+            </Pressable>
+          )}
           <View style={styles.identityRow}>
             <Avatar uri={profile?.avatar_url} size={72} />
             <View style={styles.identityTextWrap}>
@@ -171,6 +219,7 @@ export function ProfileScreen({
                   ? t('Sin perfil')
                   : t('Sin cuenta')}
               </Text>
+              <LevelPill level={level.level} />
               {!profileUnknown && (
                 <Text style={styles.identityBio} numberOfLines={3}>
                   {isProfileFilled
@@ -187,38 +236,22 @@ export function ProfileScreen({
               )}
             </View>
           </View>
-          {/* Un solo botón, y dice lo que toca: editar si ya hay perfil,
-              completarlo si aún no lo hay, y crear la cuenta si ni eso: sin
-              ella el formulario no puede guardar. Mientras no se sabe cuál de
-              los casos es, el botón no invita a "completar" un perfil que
-              puede existir ya: espera desactivado. */}
-          <Button
-            title={
-              profileUnknown
-                ? t('Cargando…')
-                : isProfileFilled
-                ? t('Editar perfil')
-                : hasAccount
-                ? t('Completar perfil')
-                : t('Crear cuenta')
-            }
-            variant={
-              isProfileFilled || profileUnknown ? 'secondary' : 'primary'
-            }
-            size="medium"
-            disabled={profileUnknown}
-            onPress={() =>
-              hasAccount ? onOpenProfileEdit?.() : onOpenAccount?.()
-            }
-          />
-        </View>
+          {/* Sin cuenta el perfil público no se puede completar: el único
+              botón del cuerpo es el que lleva a crearla. Con cuenta, editar
+              vive en el lápiz de la barra superior. */}
+          {!profileUnknown && !hasAccount && (
+            <Button
+              title={t('Crear cuenta')}
+              variant="primary"
+              size="medium"
+              onPress={() => onOpenAccount?.()}
+            />
+          )}
 
-        {/* ── Tus números ─────────────────────────────────────────────────── */}
-        {/* Sin título: tres cifras rotuladas no necesitan que las presenten, y
-            el "Resumen" con su icono ocupaba una línea entera de la primera
-            pantalla. Los números bajan de 32 a 24: son contexto, no el héroe. */}
-        <View style={styles.summaryCard}>
-          <GradientFill accent={theme.colors.primaryLine} />
+          {/* ── Tus números, en la misma tarjeta ──────────────────────────── */}
+          {/* Sin título: tres cifras rotuladas no necesitan que las presenten.
+              Los números van a 24: son contexto, no el héroe. */}
+          <View style={styles.summaryDividerLine} />
           <View style={styles.summaryRow}>
             <View style={styles.summaryItem}>
               <Text style={styles.summaryValue}>{state.routines.length}</Text>
@@ -238,32 +271,34 @@ export function ProfileScreen({
         </View>
 
         {/* ── A dónde ir ──────────────────────────────────────────────────── */}
-        {menu.map((entry) => (
-          <Pressable
-            key={entry.label}
-            style={({ pressed }) => [
-              styles.menuRow,
-              pressed && styles.menuRowPressed,
-            ]}
-            onPress={entry.onPress}
-          >
-            <View style={styles.menuIconWrap}>
-              <MaterialCommunityIcons
-                name={entry.icon}
-                size={22}
-                color={theme.colors.text}
-              />
-            </View>
-            <View style={styles.menuTextWrap}>
-              <Text style={styles.menuLabel}>{entry.label}</Text>
-              <Text style={styles.menuHint}>{entry.hint}</Text>
-            </View>
-            <MaterialCommunityIcons
-              name="chevron-right"
-              size={22}
-              color={theme.colors.textSecondary}
-            />
-          </Pressable>
+        {menuRows.map((row, rowIndex) => (
+          <View key={rowIndex} style={styles.menuGridRow}>
+            {row.map((entry) => (
+              <Pressable
+                key={entry.label}
+                style={({ pressed }) => [
+                  styles.menuTile,
+                  pressed && styles.menuTilePressed,
+                ]}
+                onPress={entry.onPress}
+                accessibilityRole="button"
+                accessibilityLabel={entry.label}
+              >
+                {/* Icono y texto ocupan la casilla: es lo que se toca a diario. */}
+                <MaterialCommunityIcons
+                  name={entry.icon}
+                  size={38}
+                  color={theme.colors.text}
+                />
+                <Text
+                  style={[styles.menuLabel, { fontSize: menuFontSize }]}
+                  numberOfLines={1}
+                >
+                  {entry.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
         ))}
       </StretchScrollView>
 
@@ -272,6 +307,11 @@ export function ProfileScreen({
         icon="account-circle-outline"
         subtitle={t('Tu rutina, tus datos y la configuración')}
         topInset={insets.top}
+      />
+
+      <ProfileEditModal
+        visible={showProfileEdit}
+        onClose={() => setShowProfileEdit(false)}
       />
 
       <RestTimerModal
@@ -301,7 +341,7 @@ const makeStyles = () =>
       gap: 12,
     },
 
-    // Cabecera: foto + nombre + bio + su botón.
+    // Cabecera: foto + nombre + bio, y debajo las cifras, en una sola tarjeta.
     identityCard: {
       backgroundColor: 'transparent',
       borderRadius: theme.borderRadius.md,
@@ -320,6 +360,8 @@ const makeStyles = () =>
     identityTextWrap: {
       flex: 1,
       gap: 3,
+      // Deja sitio al lápiz de la esquina.
+      paddingRight: 36,
     },
     identityName: {
       fontSize: 22,
@@ -334,16 +376,27 @@ const makeStyles = () =>
       lineHeight: 18,
     },
 
-    // Números. Sin título propio ni icono: los rótulos ya nombran cada cifra.
-    summaryCard: {
-      backgroundColor: 'transparent',
-      borderRadius: theme.borderRadius.md,
+    // Lápiz de la tarjeta: misma píldora que el "Editar" de la ficha de rutina,
+    // en la esquina superior derecha, a la altura del nombre.
+    editButton: {
+      position: 'absolute',
+      top: 12,
+      right: 12,
+      zIndex: 1,
+      width: 34,
+      height: 34,
+      borderRadius: theme.borderRadius.pill,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
       borderWidth: 1,
-      borderColor: theme.colors.border,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: 14,
-      overflow: 'hidden',
-      ...theme.shadow.soft,
+      borderColor: theme.colors.primaryLine,
+    },
+
+    // Números. Sin título propio ni icono: los rótulos ya nombran cada cifra.
+    summaryDividerLine: {
+      height: 1,
+      backgroundColor: theme.colors.border,
     },
     summaryRow: {
       flexDirection: 'row',
@@ -373,42 +426,34 @@ const makeStyles = () =>
       backgroundColor: theme.colors.border,
     },
 
-    // Menú
-    menuRow: {
+    // Menú: cuadrícula de casillas cuadradas, tres por fila, con el mismo
+    // radio, borde y sombra que las tarjetas de arriba.
+    menuGridRow: {
       flexDirection: 'row',
+      gap: MENU_GAP,
+      marginHorizontal: MENU_INSET,
+    },
+    menuTile: {
+      flex: 1,
+      aspectRatio: 1,
       alignItems: 'center',
-      gap: 12,
+      justifyContent: 'center',
+      gap: 6,
       backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      padding: theme.spacing.md,
+      padding: MENU_TILE_PADDING,
       ...theme.shadow.soft,
     },
-    menuRowPressed: {
+    menuTilePressed: {
       opacity: 0.8,
     },
-    menuIconWrap: {
-      width: 40,
-      height: 40,
-      borderRadius: theme.borderRadius.sm,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    menuTextWrap: {
-      flex: 1,
-    },
     menuLabel: {
-      fontSize: 17,
       fontWeight: '800',
       color: theme.colors.text,
-      lineHeight: 22,
-    },
-    menuHint: {
-      fontSize: 12,
-      color: theme.colors.textSecondary,
-      lineHeight: 16,
+      lineHeight: 20,
+      textAlign: 'center',
     },
   });
 

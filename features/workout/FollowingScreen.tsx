@@ -4,7 +4,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  AppModal,
   Avatar,
+  Button,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
@@ -40,6 +42,7 @@ export function FollowingScreen({
 
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
   const [loading, setLoading] = useState(true);
+  const [privateNotice, setPrivateNotice] = useState(false);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   // Misma altura del "Volver" que el resto de pantallas.
@@ -100,27 +103,79 @@ export function FollowingScreen({
               : t('Aún no sigues a nadie. Busca usuarios en Comunidad.')}
           </Text>
         ) : (
-          profiles.map((p) => (
-            <Pressable
-              key={p.id}
-              style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-              onPress={() =>
-                onOpenProfile?.(p.id, p.display_name || t('Anónimo'))
-              }
-            >
-              <Avatar uri={p.avatar_url} size={44} />
-              <Text style={styles.name} numberOfLines={1}>
-                {p.display_name || t('Anónimo')}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-right"
-                size={22}
-                color={theme.colors.textSecondary}
-              />
-            </Pressable>
-          ))
+          profiles.map((p) =>
+            p.private && !p.display_name && !p.avatar_url ? (
+              // Perfil privado SIN relación (la RLS no lo devuelve): sale en
+              // la lista (si no, el contador no cuadra) pero no se puede
+              // abrir; tocarlo lo explica. Con relación llega entero y se
+              // pinta abajo como uno más, con candado.
+              <Pressable
+                key={p.id}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                onPress={() => setPrivateNotice(true)}
+                accessibilityRole="button"
+                accessibilityLabel={t('Perfil privado')}
+              >
+                <Avatar uri={null} size={44} />
+                <Text
+                  style={[styles.name, styles.namePrivate]}
+                  numberOfLines={1}
+                >
+                  {t('Perfil privado')}
+                </Text>
+                <MaterialCommunityIcons
+                  name="lock-outline"
+                  size={20}
+                  color={theme.colors.textSecondary}
+                />
+              </Pressable>
+            ) : (
+              <Pressable
+                key={p.id}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                onPress={() =>
+                  onOpenProfile?.(p.id, p.display_name || t('Anónimo'))
+                }
+              >
+                <Avatar uri={p.avatar_url} size={44} />
+                <Text style={styles.name} numberOfLines={1}>
+                  {p.display_name || t('Anónimo')}
+                </Text>
+                {p.private && (
+                  <MaterialCommunityIcons
+                    name="lock-outline"
+                    size={18}
+                    color={theme.colors.textSecondary}
+                  />
+                )}
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={22}
+                  color={theme.colors.textSecondary}
+                />
+              </Pressable>
+            )
+          )
         )}
       </StretchScrollView>
+
+      <AppModal
+        visible={privateNotice}
+        onRequestClose={() => setPrivateNotice(false)}
+        onOverlayPress={() => setPrivateNotice(false)}
+        icon="lock-outline"
+        title={t('Perfil privado')}
+        message={t(
+          'Esta persona tiene el perfil en privado: solo ella puede verlo.'
+        )}
+        footer={
+          <Button
+            title={t('Entendido')}
+            variant="secondary"
+            onPress={() => setPrivateNotice(false)}
+          />
+        }
+      />
 
       <GlassTopBar
         title={mode === 'followers' ? t('Seguidores') : t('A quién sigo')}
@@ -154,6 +209,7 @@ const makeStyles = () =>
       fontSize: 16,
       fontWeight: '700',
     },
+    namePrivate: { color: theme.colors.textSecondary, fontStyle: 'italic' },
     pressed: { opacity: 0.6 },
     muted: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
   });

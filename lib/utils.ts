@@ -1,5 +1,5 @@
 import { WorkoutLog, WorkoutDay, WorkoutRoutine } from '../types';
-import { dateLocale, localizeDecimals } from './i18n';
+import { dateLocale } from './i18n';
 import { theme } from './theme';
 
 /**
@@ -105,37 +105,6 @@ export function getLogTimestamp(log: WorkoutLog | null | undefined): number {
 }
 
 export type ImprovementKind = 'up' | 'down' | 'neutral';
-
-export interface ImprovementDisplay {
-  symbol: string;
-  display: string | number;
-  kind: ImprovementKind;
-}
-
-/**
- * Normaliza una mejora ({ isImproved, percent }) a símbolo + texto + tipo,
- * para que cada pantalla solo tenga que mapear el tipo a su estilo/color.
- */
-export function getImprovementDisplay(imp: {
-  isImproved: boolean;
-  percent: number;
-}): ImprovementDisplay {
-  // El decimal se pinta con el separador del idioma ("9,1%" en español).
-  const roundedPercent =
-    imp.percent % 1 === 0
-      ? Math.round(imp.percent)
-      : localizeDecimals(imp.percent.toFixed(1));
-
-  if (imp.percent === 0) {
-    return { symbol: '=', display: roundedPercent, kind: 'neutral' };
-  }
-
-  return {
-    symbol: imp.isImproved ? '↑' : '↓',
-    display: roundedPercent,
-    kind: imp.isImproved ? 'up' : 'down',
-  };
-}
 
 /**
  * Color del tema para un tipo de mejora (verde sube / rojo baja / ámbar igual).

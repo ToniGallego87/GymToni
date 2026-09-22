@@ -260,8 +260,19 @@ export function routineIntensity(totalSets: number): RoutineIntensity {
 /** Etiqueta traducida del tramo (la que se pinta en el distintivo y el filtro). */
 export function intensityLabel(level: RoutineIntensity): string {
   if (level === 'soft') return t('Suave');
-  if (level === 'medium') return t('Medio');
-  return t('Intenso');
+  if (level === 'medium') return t('Media');
+  return t('Intensa');
+}
+
+/** Descripción del tramo en series/semana (la que explica el distintivo). */
+export function intensityRange(level: RoutineIntensity): string {
+  if (level === 'soft') return t('Hasta {n} series', { n: INTENSITY_SOFT_MAX });
+  if (level === 'medium')
+    return t('De {a} a {b} series', {
+      a: INTENSITY_SOFT_MAX + 1,
+      b: INTENSITY_MEDIUM_MAX,
+    });
+  return t('Más de {n} series', { n: INTENSITY_MEDIUM_MAX });
 }
 
 // ──────────────── Situación de una rutina y orden de la lista ────────────────

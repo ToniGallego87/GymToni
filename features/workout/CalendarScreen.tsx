@@ -5,6 +5,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Button,
   DayAccentIcon,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -58,11 +59,14 @@ interface CalendarScreenProps {
   onSelectLog: (log: WorkoutLog, day: WorkoutDay) => void;
   // Reabre la inserción de una sesión de solo cardio ya registrada (solo hoy).
   onEditCardioOnly?: (log: WorkoutLog) => void;
+  // Salida del estado vacío: empezar un entreno o crear la primera rutina.
+  emptyAction?: { label: string; onPress: () => void };
 }
 
 export function CalendarScreen({
   onSelectLog,
   onEditCardioOnly,
+  emptyAction,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -269,6 +273,17 @@ export function CalendarScreen({
           <Text style={styles.emptyText}>
             {t('Guarda una sesión para verla reflejada en el calendario.')}
           </Text>
+          {/* Un vacío que solo describe el vacío deja al usuario nuevo
+              tocando pestañas; este apunta al siguiente paso. */}
+          {!!emptyAction && (
+            <Button
+              title={emptyAction.label}
+              onPress={emptyAction.onPress}
+              variant="primary"
+              size="medium"
+              style={styles.emptyButton}
+            />
+          )}
         </View>
 
         {/* Mismo subtítulo que con datos: la pantalla es la misma y el hueco
@@ -815,6 +830,9 @@ const makeStyles = () =>
       alignItems: 'center',
       justifyContent: 'center',
       paddingHorizontal: 32,
+    },
+    emptyButton: {
+      marginTop: 18,
     },
     emptyEmoji: {
       fontSize: 46,

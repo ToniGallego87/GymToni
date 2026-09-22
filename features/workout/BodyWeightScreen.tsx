@@ -1,12 +1,13 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TextInput, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   AppModal,
   Button,
+  Collapsible,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
@@ -15,6 +16,7 @@ import {
   HeroWeightCard,
   StretchScrollView,
   TrendDelta,
+  WeightTrendChart,
 } from '@components';
 import {
   currentBodyWeight,
@@ -54,6 +56,9 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
   const segments = useBodyWeight();
   const [showEditor, setShowEditor] = useState(false);
   const [weightInput, setWeightInput] = useState('');
+  // El histórico nace plegado: la tendencia la cuenta la gráfica de debajo; la
+  // lista de pesadas es para quien quiera el dato exacto.
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     void loadBodyWeight();
@@ -116,31 +121,28 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
             cabecera de su propia pantalla. Trae el peso vigente, el cambio
             respecto al anterior, la evolución y —en palabras, no en un gesto
             adivinado— que pulsándola se actualiza. */}
+        {/* Compacta (sin la altura de las hero de Inicio ni la sparkline) y con
+            la fecha de la última pesada al pie. En ámbar a partir de dos
+            semanas: es cuando las kcal del cardio empiezan a calcularse con un
+            peso que ya no es el tuyo. */}
         <HeroWeightCard
           weight={current}
           history={segments.map((segment) => segment.weight)}
           onPress={openEditor}
+          compact
+          footer={{
+            icon: isStale ? 'alert-circle-outline' : 'clock-outline',
+            warning: isStale,
+            text:
+              daysSince == null
+                ? t('Aún no has anotado tu peso')
+                : daysSince === 0
+                ? t('Actualizado hoy')
+                : daysSince === 1
+                ? t('Actualizado ayer')
+                : t('Actualizado hace {n} días', { n: daysSince }),
+          }}
         />
-
-        {/* Cuándo se anotó por última vez. En ámbar a partir de dos semanas: es
-            cuando las kcal del cardio empiezan a calcularse con un peso que ya
-            no es el tuyo. */}
-        <View style={styles.metaRow}>
-          <MaterialCommunityIcons
-            name={isStale ? 'alert-circle-outline' : 'clock-outline'}
-            size={16}
-            color={isStale ? theme.colors.warning : theme.colors.textSecondary}
-          />
-          <Text style={[styles.metaText, isStale && styles.metaTextStale]}>
-            {daysSince == null
-              ? t('Aún no has anotado tu peso')
-              : daysSince === 0
-              ? t('Actualizado hoy')
-              : daysSince === 1
-              ? t('Actualizado ayer')
-              : t('Actualizado hace {n} días', { n: daysSince })}
-          </Text>
-        </View>
 
         {/* Para qué sirve el dato. No es curiosidad: es lo que hace que las kcal
             del cardio signifiquen algo. */}
@@ -160,38 +162,83 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
         {rows.length > 0 && (
           <View style={styles.historyCard}>
             <GradientFill accent={theme.colors.accentLine} />
-            <View style={styles.historyTitleRow}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.historyTitleRow,
+                pressed && styles.historyTitlePressed,
+              ]}
+              onPress={() => setHistoryOpen((open) => !open)}
+              accessibilityRole="button"
+              accessibilityState={{ expanded: historyOpen }}
+              accessibilityLabel={t('Histórico')}
+            >
               <MaterialCommunityIcons
                 name="history"
                 size={18}
                 color={theme.colors.text}
                 style={styles.historyTitleIcon}
               />
-              <Text style={styles.historyTitle}>{t('Histórico')}</Text>
-            </View>
+              <Text style={styles.historyTitle}>
+                {t('Histórico')}
+                <Text style={styles.historyCount}>
+                  {' · '}
+                  {t('{n} registros', { n: rows.length })}
+                </Text>
+              </Text>
+              <MaterialCommunityIcons
+                name={historyOpen ? 'chevron-up' : 'chevron-down'}
+                size={22}
+                color={theme.colors.textSecondary}
+              />
+            </Pressable>
 
-            {rows.map(({ segment, delta }) => (
-              <View key={segment.setAt} style={styles.historyRow}>
-                <View style={styles.historyTextWrap}>
-                  <Text style={styles.historyWeight}>
-                    {fmtNum(segment.weight)} kg
-                  </Text>
-                  <Text style={styles.historyDate}>
-                    {longDate(segment.setAt)}
-                  </Text>
-                </View>
-                {/* Subir de peso no es "mejorar" ni bajar "empeorar": es un dato
+            <Collapsible open={historyOpen}>
+              {rows.map(({ segment, delta }) => (
+                <View key={segment.setAt} style={styles.historyRow}>
+                  <View style={styles.historyTextWrap}>
+                    <Text style={styles.historyWeight}>
+                      {fmtNum(segment.weight)} kg
+                    </Text>
+                    <Text style={styles.historyDate}>
+                      {longDate(segment.setAt)}
+                    </Text>
+                  </View>
+                  {/* Subir de peso no es "mejorar" ni bajar "empeorar": es un dato
                     que cada uno lee según lo que busque, así que el color va
                     apagado y solo se marca el sentido del cambio. */}
-                {delta != null && delta !== 0 && (
-                  <TrendDelta
-                    value={delta}
-                    suffix=" kg"
-                    color={theme.colors.textSecondary}
-                  />
-                )}
-              </View>
-            ))}
+                  {delta != null && delta !== 0 && (
+                    <TrendDelta
+                      value={delta}
+                      suffix=" kg"
+                      color={theme.colors.textSecondary}
+                    />
+                  )}
+                </View>
+              ))}
+            </Collapsible>
+          </View>
+        )}
+
+        {/* La tendencia, con fechas de verdad en el eje: responde "¿voy
+            bajando?" sin leer filas. */}
+        {segments.length >= 2 && (
+          <View style={styles.chartCard}>
+            <GradientFill accent={theme.colors.primaryLine} />
+            <View style={styles.historyTitleRow}>
+              <MaterialCommunityIcons
+                name="chart-line"
+                size={18}
+                color={theme.colors.text}
+                style={styles.historyTitleIcon}
+              />
+              <Text style={styles.historyTitle}>{t('Evolución')}</Text>
+            </View>
+            <WeightTrendChart
+              points={segments.map((segment) => ({
+                at: segment.setAt,
+                weight: segment.weight,
+              }))}
+            />
           </View>
         )}
       </StretchScrollView>
@@ -263,23 +310,6 @@ const makeStyles = () =>
       paddingHorizontal: theme.spacing.md,
       gap: 12,
     },
-    metaRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-    },
-    metaText: {
-      fontSize: 13,
-      color: theme.colors.textSecondary,
-      lineHeight: 17,
-    },
-    // Dos semanas o más sin tocarlo: el mismo ámbar de "atención" que el resto
-    // de la app, porque a partir de ahí las kcal del cardio empiezan a mentir.
-    metaTextStale: {
-      color: theme.colors.warning,
-      fontWeight: '700',
-    },
     noteCard: {
       flexDirection: 'row',
       alignItems: 'flex-start',
@@ -300,6 +330,20 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
+    chartCard: {
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: theme.spacing.md,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    historyTitlePressed: { opacity: 0.7 },
+    historyCount: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
     historyTitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -311,6 +355,7 @@ const makeStyles = () =>
       marginTop: 4,
     },
     historyTitle: {
+      flex: 1,
       fontSize: 21,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.4,

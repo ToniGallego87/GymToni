@@ -8,6 +8,7 @@ import {
   getOutboxBatch,
   getPendingOutboxIds,
   incrementOutboxAttempts,
+  loadAppDataFromDb,
   type OutboxRow,
   type PendingLocalIds,
   type RemoteChanges,
@@ -366,27 +367,53 @@ async function pushSettings(
   if (error) throw new Error(`user_settings: ${error.message}`);
 }
 
+/**
+ * Plan (rutinas y días) tal cual está AHORA en local, para subirlo en lugar
+ * del snapshot que se guardó al encolar.
+ *
+ * El snapshot del outbox es de cuando se hizo el cambio. Si una entrada de
+ * rutina falla por algo que no es la red y se reintenta DESPUÉS de una entrada
+ * de día más reciente, subía la rutina vieja: `reconcileChildren` marcaba
+ * como borrado en la nube el ejercicio que ese día había añadido y el
+ * siguiente pull lo borraba en local (un ejercicio "desaparecido" de la
+ * rutina con su historial intacto). Subir siempre el estado local actual es
+ * exactamente el last-write-wins que quiere este motor.
+ */
+interface LocalPlan {
+  routines: WorkoutRoutine[];
+}
+
+async function loadLocalPlan(): Promise<LocalPlan> {
+  const data = await loadAppDataFromDb();
+  return { routines: data?.routines ?? [] };
+}
+
 async function applyOutboxEntry(
   entry: OutboxRow,
   userId: string,
-  now: number
+  now: number,
+  plan: LocalPlan
 ): Promise<void> {
   switch (entry.entity) {
-    case 'routine':
+    case 'routine': {
       if (entry.op === 'delete')
         return pushRoutineDelete(entry.entity_id, userId, now);
-      return pushRoutineUpsert(
-        JSON.parse(entry.payload ?? '{}') as WorkoutRoutine,
-        userId,
-        now
-      );
+      // Si ya no está en local, vendrá (o vino) su entrada de borrado: no hay
+      // que resucitarla en la nube con el snapshot.
+      const routine = plan.routines.find((r) => r.id === entry.entity_id);
+      if (!routine) return;
+      return pushRoutineUpsert(routine, userId, now);
+    }
     case 'workout_day': {
       if (entry.op === 'delete') return; // los días se borran vía la rutina
-      const { routineId, day } = JSON.parse(entry.payload ?? '{}') as {
-        routineId: string;
-        day: WorkoutDay;
-      };
-      return pushDayUpsert(routineId, day, userId, now);
+      const owner = plan.routines.find((r) =>
+        r.days.some((d) => d.id === entry.entity_id)
+      );
+      const day = owner?.days.find((d) => d.id === entry.entity_id);
+      // Una rutina enlazada es de otra persona: sus días no se suben (la RLS
+      // los rechazaría y la entrada se envenenaría hasta agotar reintentos).
+      if (!owner || !day || owner.linkedOwnerId) return;
+      return pushDayUpsert(owner.id, day, userId, now);
     }
     case 'workout_log':
       if (entry.op === 'delete')
@@ -419,6 +446,13 @@ async function pushOutbox(userId: string): Promise<number> {
   if (!batch.length) return 0;
 
   const now = Date.now();
+  // El plan se lee UNA vez por push, y solo si hay rutinas o días que subir.
+  const needsPlan = batch.some(
+    (e) =>
+      (e.entity === 'routine' || e.entity === 'workout_day') &&
+      e.op !== 'delete'
+  );
+  const plan: LocalPlan = needsPlan ? await loadLocalPlan() : { routines: [] };
   const done: string[] = []; // subidas OK o descartadas (envenenadas)
   const failed: string[] = []; // fallaron por entrada mala → +1 intento
   for (const entry of batch) {
@@ -429,7 +463,7 @@ async function pushOutbox(userId: string): Promise<number> {
       continue;
     }
     try {
-      await applyOutboxEntry(entry, userId, now);
+      await applyOutboxEntry(entry, userId, now, plan);
       done.push(entry.id);
     } catch (e) {
       // Sin red: abortar el push dejando todo pendiente (se reintenta al volver
@@ -518,6 +552,7 @@ export function dropPendingLocal(
   const routineIds = new Set(pending.routines);
   const dayIds = new Set(pending.days);
   const logIds = new Set(pending.logs);
+  const exerciseIds = new Set(pending.exercises ?? []);
   if (!routineIds.size && !dayIds.size && !logIds.size) return changes;
 
   const idOf = (row: Row): string => String(row.id ?? '');
@@ -546,7 +581,9 @@ export function dropPendingLocal(
       const day = parentOf(r, 'workout_days_id');
       return !dayIds.has(day) && !skippedDays.has(day);
     }),
-    deletes: changes.exercises.deletes,
+    // Un borrado suelto de un ejercicio de un día pendiente es la versión
+    // vieja de la nube: el push del día lo vuelve a subir entero.
+    deletes: changes.exercises.deletes.filter((id) => !exerciseIds.has(id)),
   };
 
   const workoutLogs: RemoteTableChange = {

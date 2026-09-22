@@ -116,7 +116,14 @@ lib/                    → Lógica compartida
   ├── moderation.ts     → Lo reportado se oculta en local (AsyncStorage) sin esperar
   │                       a que nadie revise el parte; lo filtran tablón e hilos
   ├── cardio.ts         → Cardio como experiencia propia: sesiones, semanas ISO, kcal
-  ├── achievements.ts   → Logros semanales (récords, rachas)
+  ├── achievements.ts   → Hitos de UNA semana para el póster (récords, rachas)
+  ├── badges.ts         → Logros (insignias): catálogo fijo derivado del historial
+  ├── challenges.ts     → Retos de la semana (fuerza: semana de la rutina; cardio:
+  │                       semana natural y hoy), derivados de los logs
+  ├── level.ts          → Nivel permanente de la cuenta: retos superados apuntados
+  │                       una vez (ajustes) + logros → puntos y nivel
+  ├── awards.ts         → Cola de premios por avisar (reto, logro, nivel) que
+  │                       consume App.tsx (AwardModal); la llena useAccountLevel
   ├── routineShare.ts   → Compartir rutina (QR / texto plano)
   ├── imageShare.ts     → Compartir imagen de logros
   ├── videoExport.ts    → Vídeo de logros (módulo nativo video-encoder)
@@ -126,8 +133,8 @@ lib/                    → Lógica compartida
   │                       Picture-in-Picture de Android; no-op en iOS/web)
   ├── layoutAnimation.ts→ animateLayout compartido (habilita LayoutAnimation en Android)
   ├── utils.ts          → Utilidades genéricas (generateId, formatDate, getToday,
-  │                       findDayInRoutines, formatRestTime y el formato único del
-  │                       indicador de mejora: getImprovementDisplay/Color)
+  │                       findDayInRoutines, formatRestTime y getImprovementColor;
+  │                       el indicador de mejora se pinta con components/TrendDelta)
   └── theme.ts          → Colores, degradados (gradients), tipografía, spacing
 lib/__tests__/          → Tests Jest de la lógica pura (npm test)
 types/                  → Definiciones TypeScript centralizadas
@@ -157,7 +164,7 @@ Subpantallas (setScreen; se renderizan opacas encima del pager)
     └─→ DetailScreen (ver log; recuerda origen home/calendar/cardio para volver)
   ProfileScreen (identidad pública + números + menú)
     ├─→ RoutineSelectorScreen · ExerciseProgressScreen
-    ├─→ ProfileEditScreen (perfil público propio: foto, bio, público/privado)
+    ├─→ ProfileEditModal (popup: perfil público propio, foto, bio, público/privado)
     └─→ SettingsScreen (tema, idioma, novedades)
           └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
   CommunityScreen (tablón de rutinas públicas)

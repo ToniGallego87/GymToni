@@ -12,6 +12,7 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  LevelPill,
   ReportModal,
   SaveRoutineButton,
   Toast,
@@ -119,7 +120,7 @@ export function UserProfileScreen({
 
   const handleToggleFollow = async () => {
     if (!user) {
-      notifySignIn(t('Inicia sesión para seguir'));
+      notifySignIn(t('Crea una cuenta para seguir'));
       return;
     }
     const next = !following;
@@ -143,7 +144,7 @@ export function UserProfileScreen({
   const handleReport = async (reason: string) => {
     if (!user) {
       setReporting(null);
-      notifySignIn(t('Inicia sesión para reportar'));
+      notifySignIn(t('Crea una cuenta para reportar'));
       return;
     }
     setReporting('busy');
@@ -161,6 +162,11 @@ export function UserProfileScreen({
   // Añadir enlaza la rutina de esta persona (no la copia): se entrena tal cual
   // y sigue siendo suya. La copia se saca luego, al querer editarla.
   const handleSave = async (routineId: string) => {
+    // Sin cuenta no hay sync, y la rutina enlazada vive del sync.
+    if (!user) {
+      notifySignIn(t('Crea una cuenta para añadir rutinas'));
+      return;
+    }
     setSavingId(routineId);
     try {
       const linked = await linkablePublicRoutine(
@@ -208,11 +214,16 @@ export function UserProfileScreen({
               <Text style={styles.name} numberOfLines={1}>
                 {displayName}
               </Text>
-              <Text style={styles.followers}>
-                {followers === 1
-                  ? t('1 seguidor')
-                  : t('{n} seguidores', { n: followers })}
-              </Text>
+              <View style={styles.metaRow}>
+                <Text style={styles.followers}>
+                  {followers === 1
+                    ? t('1 seguidor')
+                    : t('{n} seguidores', { n: followers })}
+                </Text>
+                {/* Nivel de la cuenta (lib/level.ts): lo sube el propio
+                    usuario al superar retos; aquí solo se enseña. */}
+                {!!profile?.level && <LevelPill level={profile.level} />}
+              </View>
             </View>
           </View>
 
@@ -320,7 +331,7 @@ export function UserProfileScreen({
           type={toast.type}
           actionLabel={
             toast.action === 'sign-in' && onOpenAccount
-              ? t('Iniciar sesión')
+              ? t('Crear cuenta')
               : undefined
           }
           onAction={
@@ -352,6 +363,12 @@ const makeStyles = () =>
     cardPressed: { opacity: 0.85 },
     headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
     headerInfo: { flex: 1, minWidth: 0 },
+    metaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      flexWrap: 'wrap',
+    },
     name: {
       color: theme.colors.text,
       fontSize: 20,

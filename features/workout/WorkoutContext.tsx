@@ -2,6 +2,7 @@ import React, {
   createContext,
   ReactNode,
   useCallback,
+  useMemo,
   useReducer,
   useRef,
 } from 'react';
@@ -209,9 +210,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
     persistAction(action, next);
   }, []);
 
+  // Identidad estable del value: sin memo, cada render del Provider creaba un
+  // objeto nuevo y repintaba a TODOS los consumidores aunque el estado fuera
+  // el mismo.
+  const value = useMemo(() => ({ state, dispatch }), [state, dispatch]);
+
   return (
-    <WorkoutContext.Provider value={{ state, dispatch }}>
-      {children}
-    </WorkoutContext.Provider>
+    <WorkoutContext.Provider value={value}>{children}</WorkoutContext.Provider>
   );
 }

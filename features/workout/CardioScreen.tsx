@@ -8,17 +8,18 @@ import {
   TouchableOpacity,
   Pressable,
   useWindowDimensions,
-  Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
+import { useAccountLevel } from '@hooks/useAccountLevel';
+import { challengeProgressLabel } from '@lib/challenges';
 import { getToday } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
-import { dayNameText, weekTitleText } from '@lib/textStyles';
+import { antonCenterNudge, dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale, fmtNum } from '@lib/i18n';
 import {
   buildCardioDays,
@@ -30,12 +31,14 @@ import {
   CardioDay,
   CardioMonth,
   CARDIO_ONLY_DAY,
+  ASSUMED_WEIGHT_KG,
   isCardioOnlyLog,
 } from '@lib/cardio';
 import { loadBodyWeight, useBodyWeight } from '@lib/bodyWeight';
 import {
   BarChart,
   BarChartPoint,
+  ChallengesModal,
   Collapsible,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
@@ -59,6 +62,8 @@ interface CardioScreenProps {
   // Abre la vista de registro del cardio (la usan el hero y el día de hoy, que
   // sigue vivo). Precarga sola todo el cardio que ya tenga ese día.
   onInsertCardioOnly?: () => void;
+  // Abre Perfil → Peso corporal (el aviso "kcal estimadas con 70 kg").
+  onOpenBodyWeight?: () => void;
 }
 
 // Cuántas semanas se muestran de inicio y cuántas añade "Cargar más".
@@ -195,9 +200,15 @@ function buildMetricChart(
 export function CardioScreen({
   onSelectLog,
   onInsertCardioOnly,
+  onOpenBodyWeight,
 }: CardioScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
+  // Retos de cardio (hoy y semana natural), tercer estado de la hero.
+  const { challenges } = useAccountLevel();
+  const heroChallenges = challenges.filter((c) => c.category === 'cardio');
+  const challengesDone = heroChallenges.filter((c) => c.done).length;
+  const [showChallenges, setShowChallenges] = useState(false);
   // El hero se pinta al instante; la gráfica y el historial de semanas (lo caro
   // de Cardio) se difieren un frame para que abrir Cardio sea ágil.
   const ready = useDeferredReady();
@@ -378,7 +389,7 @@ export function CardioScreen({
               key="stats"
               isEmpty={!hasCardio}
               emptyText={t(
-                'Aún no hay cardio. Añádelo dentro de un día de fuerza.'
+                'Aún no hay cardio. Pulsa «Insertar cardio» para apuntar el primero.'
               )}
               kicker={t('Hoy')}
               mainIcon="fire"
@@ -414,8 +425,52 @@ export function CardioScreen({
                 },
               ]}
             />,
+            <HeroStatsCard
+              key="challenges"
+              kicker={t('Retos de cardio')}
+              mainIcon="flag-checkered"
+              mainValue={`${challengesDone}/${heroChallenges.length}`}
+              mainUnit={t('retos')}
+              stats={heroChallenges.map((c) => ({
+                value: challengeProgressLabel(c, true),
+                label: c.name,
+              }))}
+              onPress={() => setShowChallenges(true)}
+            />,
           ]}
         />
+
+        {/* Sin peso anotado, las kcal se estiman con ASSUMED_WEIGHT_KG y nadie
+            lo decía: el recordatorio de peso solo persigue a quien ya lo puso.
+            Una línea, solo mientras haya cardio y ningún tramo de peso, que
+            lleva a Perfil → Peso corporal. Desaparece con el primer peso. */}
+        {hasCardio && weightHistory.length === 0 && !!onOpenBodyWeight && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.weightHint,
+              pressed && styles.weightHintPressed,
+            ]}
+            onPress={onOpenBodyWeight}
+            accessibilityRole="button"
+            accessibilityLabel={t('Poner mi peso')}
+          >
+            <MaterialCommunityIcons
+              name="scale-bathroom"
+              size={16}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.weightHintText}>
+              {t('kcal estimadas con {kg} kg · Pon tu peso', {
+                kg: ASSUMED_WEIGHT_KG,
+              })}
+            </Text>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={16}
+              color={theme.colors.primary}
+            />
+          </Pressable>
+        )}
 
         {ready && kcalMonths.length >= 2 && (
           <View style={[styles.progressCard, { borderColor: progressAccent }]}>
@@ -645,6 +700,13 @@ export function CardioScreen({
         )}
       </StretchScrollView>
 
+      <ChallengesModal
+        visible={showChallenges}
+        onClose={() => setShowChallenges(false)}
+        title={t('Retos de cardio')}
+        challenges={heroChallenges}
+      />
+
       {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
 
       <GlassTopBar
@@ -668,6 +730,28 @@ const makeStyles = () =>
     },
     scrollContent: {
       flexGrow: 1,
+    },
+    // Aviso de peso bajo la hero: píldora pulsable, discreta (es un dato de
+    // contexto, no la acción de la pestaña).
+    weightHint: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'center',
+      gap: 6,
+      marginHorizontal: theme.spacing.md,
+      marginBottom: theme.spacing.sm,
+      paddingHorizontal: 12,
+      paddingVertical: 7,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surface,
+    },
+    weightHintPressed: { opacity: 0.7 },
+    weightHintText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
     },
     progressCard: {
       // Margen propio por tarjeta (misma estrategia que Inicio): el scroll no
@@ -709,7 +793,7 @@ const makeStyles = () =>
       lineHeight: 28,
       includeFontPadding: false,
       textAlignVertical: 'center',
-      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+      ...antonCenterNudge,
     },
     progressLatestKcal: {
       fontSize: 17,

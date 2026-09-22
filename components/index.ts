@@ -3,6 +3,8 @@ export type { HeroVariant } from './HeroCard';
 export { HeroCarousel } from './HeroCarousel';
 export { HeroStatsCard } from './HeroStatsCard';
 export type { HeroStat } from './HeroStatsCard';
+export { ChallengesModal } from './ChallengesModal';
+export { AwardModal } from './AwardModal';
 export { HeroWeightCard } from './HeroWeightCard';
 export {
   AchievementPoster,
@@ -30,21 +32,34 @@ export { GradientCtaButton } from './GradientCtaButton';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export type { InvalidAddReason } from './ExerciseInputField';
-export { ExerciseFormRow, ExerciseSummaryRow } from './ExerciseFormRow';
+export { ExerciseEditorModal, ExerciseSummaryRow } from './ExerciseFormRow';
+export { SortableList } from './SortableList';
+export { WeightTrendChart } from './WeightTrendChart';
 // ExercisePickerModal / GifViewerModal no se re-exportan: son piezas internas
 // que solo consumen otros componentes por ruta relativa. ExerciseGifButton sí,
 // desde que también lo usan pantallas (Progreso por ejercicio) y no solo
 // componentes.
 export { ExerciseGifButton } from './ExerciseGifButton';
+export { ExerciseTileGrid } from './ExerciseTileGrid';
+export { LevelPill } from './LevelPill';
+export type { ExerciseTile } from './ExerciseTileGrid';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
-export { SaveRoutineButton, RoutineOriginPill } from './SaveRoutineButton';
+export {
+  LikeButton,
+  SaveRoutineButton,
+  RoutineOriginPill,
+  StatBubble,
+  seriesExplanation,
+  daysExplanation,
+} from './SaveRoutineButton';
 export { RoutineIntensityPill } from './RoutineIntensityPill';
 export { WhatsNewModal } from './WhatsNewModal';
 export { UpdateAvailableModal } from './UpdateAvailableModal';
 export { ThemeRevealOverlay } from './ThemeRevealOverlay';
 export { PipRestTimer } from './PipRestTimer';
 export { RestTimerBar, REST_TIMER_BAR_HEIGHT } from './RestTimerBar';
+export { RestTimerRing } from './RestTimerRing';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';

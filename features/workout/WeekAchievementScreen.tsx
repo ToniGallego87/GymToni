@@ -304,7 +304,7 @@ export function WeekAchievementScreen({
       if (canShare) {
         await Sharing.shareAsync(outputUri, {
           mimeType: 'video/mp4',
-          dialogTitle: t('Compartir logros de la semana'),
+          dialogTitle: t('Compartir hitos de la semana'),
           UTI: 'public.mpeg-4',
         });
       }
@@ -382,7 +382,7 @@ export function WeekAchievementScreen({
       </StretchScrollView>
 
       <GlassTopBar
-        title={t('Logros de la semana')}
+        title={t('Hitos de la semana')}
         icon="trophy-variant"
         subtitle={t('Comparte tus resultados en redes')}
         topInset={insets.top}

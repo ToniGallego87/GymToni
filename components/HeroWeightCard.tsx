@@ -34,6 +34,14 @@ interface HeroWeightCardProps {
   enterFrom?: 'left' | 'right';
   /** Escala de pulsación del carrusel: si viene, escala él el conjunto. */
   pressScale?: SharedValue<number>;
+  /**
+   * Fuera del carrusel (pantalla Peso): la tarjeta se ajusta a su contenido en
+   * vez de a la altura fija de las hero de Inicio, y no pinta la sparkline (la
+   * gráfica con fechas va debajo, en la pantalla).
+   */
+  compact?: boolean;
+  /** Línea al pie ("Actualizado hace 3 días"); en ámbar si `warning`. */
+  footer?: { icon: string; text: string; warning?: boolean };
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -114,6 +122,8 @@ export function HeroWeightCard({
   onPress,
   enterFrom,
   pressScale,
+  compact = false,
+  footer,
 }: HeroWeightCardProps) {
   const localScale = useSharedValue(1);
   const scale = pressScale ?? localScale;
@@ -137,7 +147,7 @@ export function HeroWeightCard({
   }));
 
   const points = history.slice(-MAX_POINTS);
-  const hasChart = points.length >= MIN_POINTS_FOR_CHART;
+  const hasChart = !compact && points.length >= MIN_POINTS_FOR_CHART;
 
   // Bajo el peso: la diferencia con el anterior del histórico (o la invitación a
   // indicarlo si aún no hay ninguno).
@@ -167,7 +177,7 @@ export function HeroWeightCard({
         colors={theme.gradients.primary}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.gradient}
+        style={[styles.gradient, compact && styles.gradientCompact]}
       >
         <LinearGradient
           colors={theme.gradients.sheen}
@@ -200,6 +210,29 @@ export function HeroWeightCard({
               </Text>
             </View>
           )}
+
+          {!!footer && (
+            <View style={styles.footerRow}>
+              <MaterialCommunityIcons
+                name={
+                  footer.icon as React.ComponentProps<
+                    typeof MaterialCommunityIcons
+                  >['name']
+                }
+                size={14}
+                color={theme.colors.onGold}
+                style={footer.warning ? undefined : styles.footerMuted}
+              />
+              <Text
+                style={[
+                  styles.footerText,
+                  footer.warning && styles.footerWarning,
+                ]}
+              >
+                {footer.text}
+              </Text>
+            </View>
+          )}
         </Animated.View>
       </LinearGradient>
     </AnimatedPressable>
@@ -224,6 +257,34 @@ const makeStyles = () =>
       height: HERO_CARD_HEIGHT,
       justifyContent: 'center',
       overflow: 'hidden',
+    },
+    gradientCompact: {
+      height: undefined,
+      paddingTop: 12,
+      paddingBottom: 12,
+    },
+    footerRow: {
+      marginTop: 8,
+      paddingTop: 8,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.onGoldVeil,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 5,
+    },
+    footerMuted: { opacity: 0.75 },
+    footerText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.onGold,
+      opacity: 0.8,
+    },
+    // Dos semanas o más sin tocarlo: se marca, porque a partir de ahí las kcal
+    // del cardio empiezan a mentir.
+    footerWarning: {
+      opacity: 1,
+      fontWeight: '800',
     },
     sheen: {
       position: 'absolute',

@@ -9,12 +9,13 @@ import {
   Pressable,
   useWindowDimensions,
   Image,
-  Platform,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
+import { useAccountLevel } from '@hooks/useAccountLevel';
+import { challengeProgressLabel } from '@lib/challenges';
 import {
   WorkoutDay,
   WorkoutRoutine,
@@ -22,7 +23,7 @@ import {
   ExerciseLog,
 } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
-import { dayNameText, weekTitleText } from '@lib/textStyles';
+import { antonCenterNudge, dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale } from '@lib/i18n';
 import { buildWorkoutImprovement, ImprovementResult } from '@lib/progress';
 import { findDayInRoutines, getLogTimestamp, getToday } from '@lib/utils';
@@ -45,6 +46,7 @@ import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
   AppModal,
   Button,
+  ChallengesModal,
   Collapsible,
   ConfirmModal,
   DayAccentIcon,
@@ -74,7 +76,11 @@ interface HomeScreenProps {
   onEditLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
+  // Ficha de la rutina ACTIVA desde el ⋯. Sin rutina activa no se pasa.
+  onOpenActiveRoutine?: () => void;
   onCreateRoutine?: () => void;
+  // "Ver la comunidad" de Primeros pasos: salta a la pestaña Comunidad.
+  onOpenCommunity?: () => void;
   onShowWeekAchievement?: (
     achievements: WeekAchievements,
     routineName?: string
@@ -163,11 +169,21 @@ export function HomeScreen({
   onEditLog,
   onOpenDaySelector,
   onOpenRoutineSelector,
+  onOpenActiveRoutine,
   onCreateRoutine,
+  onOpenCommunity,
   onShowWeekAchievement,
 }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
+  // Retos de fuerza de la semana, para el tercer estado de la hero: el reto
+  // solo funciona si se ve donde se decide entrenar.
+  const { challenges } = useAccountLevel();
+  const heroChallenges = challenges.filter(
+    (c) => c.category === 'strength' && c.id !== 'three-days'
+  );
+  const challengesDone = heroChallenges.filter((c) => c.done).length;
+  const [showChallenges, setShowChallenges] = useState(false);
   // La cabecera (hero + barra) se pinta al instante; el historial de semanas y
   // demás secciones pesadas se difieren un frame para que abrir Inicio sea ágil.
   const ready = useDeferredReady();
@@ -449,6 +465,29 @@ export function HomeScreen({
       ),
     [completionLogs]
   );
+
+  // Mejora de cada semana frente a su histórico, calculada UNA vez por cambio
+  // de logs. Antes iba inline en el render de cada tarjeta de semana, así que
+  // cualquier repintado de Inicio (abrir un modal, cambiar de tarjeta la hero)
+  // recorría el historial entero por bloque.
+  const weekImprovementByBlock = useMemo(() => {
+    const result: Record<number, ImprovementResult | null> = {};
+    Object.keys(groupedByBlock).forEach((key) => {
+      const block = Number(key);
+      // Semana de descarga: al margen de las estadísticas. Cada día se compara
+      // contra su sesión anterior (saltando descargas), no contra el mismo
+      // hueco de la semana previa: si esa semana no tuvo ese día, se retrocede
+      // hasta la última en que se hizo. Por eso se pasa TODO el histórico.
+      result[block] = isDeloadBlock(groupedByBlock[block] || [])
+        ? null
+        : getWeekImprovement(
+            completionGroupedByBlock[block] || [],
+            logsBeforeBlock(completionGroupedByBlock, block),
+            activeDays
+          );
+    });
+    return result;
+  }, [groupedByBlock, completionGroupedByBlock, activeDays]);
 
   // Racha de semanas completas y si nunca se ha faltado a un día.
   const streak = useMemo(
@@ -875,15 +914,68 @@ export function HomeScreen({
         showsVerticalScrollIndicator={false}
       >
         {hasNoRoutines ? (
-          // Sin rutinas: un único estado (añadir rutina), sin carrusel.
-          <HeroCard
-            variant={hero.variant}
-            icon={hero.icon}
-            title={hero.title}
-            titleIcon={hero.titleIcon}
-            subtitle={hero.subtitle}
-            onPress={handleStartPress}
-          />
+          // Sin rutinas: un único estado (añadir rutina), sin carrusel, y
+          // debajo "Primeros pasos": es la única pantalla que ve todo usuario
+          // nuevo, y la hero sola no decía qué hace la app ni que la rutina se
+          // puede traer de la Comunidad. Desaparece con la primera rutina.
+          <>
+            <HeroCard
+              variant={hero.variant}
+              icon={hero.icon}
+              title={hero.title}
+              titleIcon={hero.titleIcon}
+              subtitle={hero.subtitle}
+              onPress={handleStartPress}
+            />
+            <View style={styles.firstStepsCard}>
+              <GradientFill accent={theme.colors.accentLine} />
+              <Text style={styles.firstStepsTitle}>{t('Primeros pasos')}</Text>
+              {[
+                {
+                  icon: 'playlist-plus' as const,
+                  text: t('Crea una rutina o trae una de la comunidad'),
+                },
+                {
+                  icon: 'weight-lifter' as const,
+                  text: t('Registra tu primer día, serie a serie'),
+                },
+                {
+                  icon: 'chart-line' as const,
+                  text: t('Mira cómo progresas semana a semana'),
+                },
+              ].map((step, index) => (
+                <View key={step.icon} style={styles.firstStepRow}>
+                  <View style={styles.firstStepNumber}>
+                    <Text style={styles.firstStepNumberText}>{index + 1}</Text>
+                  </View>
+                  <MaterialCommunityIcons
+                    name={step.icon}
+                    size={18}
+                    color={theme.colors.primary}
+                  />
+                  <Text style={styles.firstStepText}>{step.text}</Text>
+                </View>
+              ))}
+              <View style={styles.firstStepsActions}>
+                <Button
+                  title={t('Crear rutina')}
+                  onPress={() => onCreateRoutine?.()}
+                  variant="primary"
+                  size="medium"
+                  style={styles.firstStepsButton}
+                />
+                {!!onOpenCommunity && (
+                  <Button
+                    title={t('Ver la comunidad')}
+                    onPress={onOpenCommunity}
+                    variant="secondary"
+                    size="medium"
+                    style={styles.firstStepsButton}
+                  />
+                )}
+              </View>
+            </View>
+          </>
         ) : (
           // Dos estados con flechas: situación actual y estadísticas de fuerza
           // (volumen semanal). El acceso a rutinas vive en Perfil → Mis rutinas
@@ -930,6 +1022,18 @@ export function HomeScreen({
                     : ''
                 }
                 stats={strengthHeroStats}
+              />,
+              <HeroStatsCard
+                key="challenges"
+                kicker={t('Retos de la semana')}
+                mainIcon="flag-checkered"
+                mainValue={`${challengesDone}/${heroChallenges.length}`}
+                mainUnit={t('retos')}
+                stats={heroChallenges.map((c) => ({
+                  value: challengeProgressLabel(c, true),
+                  label: c.name,
+                }))}
+                onPress={() => setShowChallenges(true)}
               />,
             ]}
           />
@@ -1079,17 +1183,7 @@ export function HomeScreen({
                 // Semana de descarga: al margen de las estadísticas. En la
                 // cabecera, donde va el %, aparece "Descarga" en azul.
                 const isDeloadWeek = isDeloadBlock(groupedByBlock[block] || []);
-                // Cada día se compara contra su sesión anterior (saltando
-                // descargas), no contra el mismo hueco de la semana previa: si
-                // esa semana no tuvo ese día, se retrocede hasta la última en
-                // que se hizo. Por eso se pasa TODO el histórico anterior.
-                const weekImprovement = isDeloadWeek
-                  ? null
-                  : getWeekImprovement(
-                      completionGroupedByBlock[block] || [],
-                      logsBeforeBlock(completionGroupedByBlock, block),
-                      activeDays
-                    );
+                const weekImprovement = weekImprovementByBlock[block] ?? null;
                 const isCurrentWeek =
                   isDisplayedRoutineActive && block === currentWeekBlock;
                 // Tarjeta: acento estructural salvo la semana en curso
@@ -1098,10 +1192,14 @@ export function HomeScreen({
                 const weekAccent = isCurrentWeek
                   ? theme.colors.primaryLine
                   : theme.colors.accentLine;
-                // Los logros solo tienen sentido en una semana ya cerrada: la
-                // que está en curso todavía está sumando.
+                // Los hitos solo tienen sentido en una semana ya cerrada: una
+                // pasada, o la actual si ya tiene todos sus días. Y una semana
+                // cerrada ya no se marca como descarga: los dos botones se
+                // turnan.
+                const weekClosed = !isCurrentWeek || weekCompleted;
                 const canShowWeekAchievement =
-                  !isCurrentWeek && !!onShowWeekAchievement;
+                  weekClosed && !!onShowWeekAchievement;
+                const canToggleDeload = isCurrentWeek && !weekCompleted;
 
                 return (
                   // Sin `Animated.View layout`: un padre con animación de layout
@@ -1151,7 +1249,7 @@ export function HomeScreen({
                       </View>
                       <View style={styles.weekMetaRow}>
                         {/* La cabecera colapsada muestra solo lo esencial (días +
-                            chevron). Descarga y "ver logros" bajan al cuerpo
+                            chevron). Descarga y "ver hitos" bajan al cuerpo
                             desplegado (weekActionsRow), donde caben como botones
                             etiquetados en vez de iconos sueltos junto al chevron. */}
                         <Text style={styles.weekHeaderMeta}>
@@ -1176,12 +1274,12 @@ export function HomeScreen({
                       {/* Las acciones son de la SEMANA, no de su último día: van nada
                           más abrir, bajo la cabecera. Al final del cuerpo quedaban
                           detrás de todas las tarjetas de día (350-450 px de scroll con
-                          una rutina de 4-5 días), y "Ver logros" es la ÚNICA puerta a
+                          una rutina de 4-5 días), y "Ver hitos" es la ÚNICA puerta a
                           compartir los de una semana pasada: la hero solo los ofrece el
                           día en que la semana se cierra. */}
-                      {(isCurrentWeek || canShowWeekAchievement) && (
+                      {(canToggleDeload || canShowWeekAchievement) && (
                         <View style={styles.weekActionsRow}>
-                          {isCurrentWeek && (
+                          {canToggleDeload && (
                             <Pressable
                               style={({ pressed }: { pressed: boolean }) => [
                                 styles.weekActionButton,
@@ -1230,7 +1328,7 @@ export function HomeScreen({
                                 handleShowWeekAchievementForBlock(block)
                               }
                               accessibilityRole="button"
-                              accessibilityLabel={t('Ver logros de la semana')}
+                              accessibilityLabel={t('Ver hitos de la semana')}
                             >
                               <MaterialCommunityIcons
                                 name="trophy-variant-outline"
@@ -1243,7 +1341,7 @@ export function HomeScreen({
                                   { color: theme.colors.primary },
                                 ]}
                               >
-                                {t('Ver logros')}
+                                {t('Ver hitos')}
                               </Text>
                             </Pressable>
                           )}
@@ -1378,6 +1476,13 @@ export function HomeScreen({
         )}
       </StretchScrollView>
 
+      <ChallengesModal
+        visible={showChallenges}
+        onClose={() => setShowChallenges(false)}
+        title={t('Retos de la semana')}
+        challenges={heroChallenges}
+      />
+
       <AppModal
         visible={!!logWithOptionsId}
         onRequestClose={closeLogOptions}
@@ -1489,6 +1594,17 @@ export function HomeScreen({
         // número de versión, que ya vive al pie de Configuración.
         subtitle={displayedRoutine?.name ?? t('Añade tu primera rutina')}
         topInset={insets.top}
+        menuItems={
+          onOpenActiveRoutine
+            ? [
+                {
+                  icon: 'file-document-edit-outline',
+                  label: t('Ir a la rutina'),
+                  onPress: onOpenActiveRoutine,
+                },
+              ]
+            : undefined
+        }
       />
     </View>
   );
@@ -1524,6 +1640,57 @@ const makeStyles = () =>
       overflow: 'hidden',
       alignItems: 'center',
       ...theme.shadow.card,
+    },
+    // "Primeros pasos" (solo sin rutinas): tarjeta de lista con dos salidas.
+    firstStepsCard: {
+      marginHorizontal: theme.spacing.md,
+      marginTop: theme.spacing.sm,
+      marginBottom: theme.spacing.sm,
+      padding: 16,
+      gap: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+      ...theme.shadow.soft,
+    },
+    firstStepsTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    firstStepRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    firstStepNumber: {
+      width: 22,
+      height: 22,
+      borderRadius: 11,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+    },
+    firstStepNumberText: {
+      fontSize: 12,
+      fontWeight: '800',
+      color: theme.colors.onGold,
+    },
+    firstStepText: {
+      flex: 1,
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+      lineHeight: 19,
+    },
+    firstStepsActions: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 4,
+    },
+    firstStepsButton: {
+      flex: 1,
     },
     streakChip: {
       flexDirection: 'row',
@@ -1581,7 +1748,7 @@ const makeStyles = () =>
       includeFontPadding: false,
       textAlignVertical: 'center',
       flexShrink: 1,
-      transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+      ...antonCenterNudge,
     },
     progressEncourage: {
       flexShrink: 1,

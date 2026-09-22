@@ -32,8 +32,8 @@ interface TrendDeltaProps {
  * Chip de tendencia: signo ▲/▼/= + el valor del cambio, animado desde 0. Único
  * componente para el indicador de subida/bajada que Inicio y Cardio repetían
  * con tipografías, colores y animación divergentes (Inicio animaba el número,
- * Cardio lo pintaba estático). Mismo signo, mismos colores y misma animación
- * en las dos pantallas.
+ * Cardio lo pintaba estático). Hoy lo usan también el registro (píldora de
+ * mejora), la tira-resumen del Detalle y cada ejercicio del Detalle.
  *
  * Los TRES estados de la medida viven aquí: sube (verde ▲), baja (rojo ▼) e
  * igual (ámbar =). El "igual" no es una dirección, así que no lleva flecha:

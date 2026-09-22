@@ -16,9 +16,14 @@ import { Platform, TextStyle } from 'react-native';
 import { theme } from './theme';
 
 // Empujón vertical para centrar Anton frente a iconos/texto de sistema (mismo
-// patrón que HeroCard/CardioScreen). No agranda la caja de línea.
-const antonCenterNudge: Pick<TextStyle, 'transform'> = {
-  transform: [{ translateY: Platform.OS === 'android' ? 3 : 5 }],
+// patrón que HeroCard/CardioScreen). No agranda la caja de línea. Se exporta
+// para que los títulos que no pasan por `dayNameText`/`weekTitleText` (p. ej.
+// `progressTitle` en Inicio, Cardio y Datos, con otro fontSize) usen el mismo
+// valor en vez de repetirlo a mano y poder desincronizarse.
+// Medido en dispositivo (captura a 3x): con 3 el "Semana N" quedaba ~2 dp por
+// debajo del centro de su tarjeta; con 1 queda centrado.
+export const antonCenterNudge: Pick<TextStyle, 'transform'> = {
+  transform: [{ translateY: Platform.OS === 'android' ? 1 : 5 }],
 };
 
 // Nombre de un día de rutina. Compartido por la tarjeta de día de Inicio

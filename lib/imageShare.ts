@@ -36,7 +36,7 @@ export async function shareBase64Png(
   if (canShare) {
     await Sharing.shareAsync(fileUri, {
       mimeType: 'image/png',
-      dialogTitle: t('Compartir logros de la semana'),
+      dialogTitle: t('Compartir hitos de la semana'),
       UTI: 'public.png',
     });
     return;

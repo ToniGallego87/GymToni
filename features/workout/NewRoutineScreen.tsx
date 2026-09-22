@@ -7,8 +7,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppModal,
   Button,
-  ExerciseFormRow,
+  ExerciseEditorModal,
   ExerciseSummaryRow,
+  SortableList,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GradientCtaButton,
@@ -42,6 +43,9 @@ interface NewRoutineScreenProps {
   onBack: () => void;
   // Abre el escáner de QR para importar una rutina compartida.
   onScanRoutineQR?: () => void;
+  // Salta a la pestaña Comunidad: la tercera vía de "¿ya tienes la rutina?",
+  // para quien no tiene ninguna y no sabe que hay decenas listas.
+  onOpenCommunity?: () => void;
   // Días con los que arrancar el formulario (importación por QR/deep link).
   initialDays?: { title: string; exercisesText: string; icon?: GymIconName }[];
 }
@@ -51,12 +55,22 @@ interface NewRoutineDayForm {
   title: string;
   exercises: ExerciseForm[];
   // Icono elegido a mano. Si es undefined, se autodetecta por el título; si no
-  // se puede detectar, la creación obliga a elegirlo.
+  // se puede detectar, la creación cae a `fullbody` (nunca bloquea).
   icon?: GymIconName;
 }
 
 // Icono efectivo de un día en el formulario: el elegido a mano o, si no, el
-// autodetectado por el título. null si aún no se puede determinar.
+// autodetectado por el título. null si aún no se puede determinar (el selector
+// lo dice con "Elegir icono"; al crear se usa `fullbody`).
+/** Mueve la fila `from` al hueco `to`; fuera de rango, devuelve la lista tal cual. */
+function moveRow<T>(rows: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= rows.length) return rows;
+  const next = [...rows];
+  const [moved] = next.splice(from, 1);
+  next.splice(Math.min(to, next.length), 0, moved);
+  return next;
+}
+
 function effectiveDayIcon(day: NewRoutineDayForm): GymIconName | null {
   return day.icon ?? detectGymIcon(day.title);
 }
@@ -92,6 +106,7 @@ export function NewRoutineScreen({
   onCreateRoutine,
   onBack,
   onScanRoutineQR,
+  onOpenCommunity,
   initialDays,
 }: NewRoutineScreenProps) {
   const insets = useSafeAreaInsets();
@@ -153,6 +168,20 @@ export function NewRoutineScreen({
     !!day.title.trim() && day.exercises.some((ex) => ex.name.trim());
 
   const canAddNewDay = useMemo(() => days.every(isDayComplete), [days]);
+  // Primera carencia del formulario, para decirla en vivo bajo el CTA. Un
+  // título vacío solo se marca en rojo cuando el día ya tiene ejercicios (si
+  // no, el formulario recién abierto saldría en rojo antes de tocar nada).
+  const firstMissing = useMemo(() => {
+    for (const [index, day] of days.entries()) {
+      if (!day.title.trim())
+        return t('Falta el título del Día {n}', { n: index + 1 });
+      if (!day.exercises.some((ex) => ex.name.trim()))
+        return t('Faltan ejercicios en el Día {n}', { n: index + 1 });
+    }
+    return null;
+  }, [days]);
+  const titleMissing = (day: NewRoutineDayForm) =>
+    !day.title.trim() && day.exercises.some((ex) => ex.name.trim());
   const canRemoveDay = days.length > 1;
   const canAddMoreDays = canAddNewDay && days.length < 7;
 
@@ -194,6 +223,14 @@ export function NewRoutineScreen({
       exercises: [...day.exercises, exercise],
     }));
     setEditingExerciseId(exercise.id);
+  };
+
+  // Arrastre por el asa: la fila `from` cae en el hueco `to`.
+  const handleMoveExerciseTo = (dayId: string, from: number, to: number) => {
+    updateDay(dayId, (day) => ({
+      ...day,
+      exercises: moveRow(day.exercises, from, to),
+    }));
   };
 
   const handleRemoveExercise = (dayId: string, exerciseId: string) => {
@@ -259,10 +296,11 @@ export function NewRoutineScreen({
         throw new Error(t('Faltan ejercicios en el Día {n}', { n: index + 1 }));
       }
 
-      const icon = effectiveDayIcon(entry);
-      if (!icon) {
-        throw new Error(t('Elige un icono para el Día {n}', { n: index + 1 }));
-      }
+      // Sin icono reconocible ("Lunes", "Día A") se cae a `fullbody`, el mismo
+      // fallback que `resolveDayIcon` usa al leer datos: un dato decorativo no
+      // puede bloquear la creación de la primera rutina. El selector sigue ahí
+      // para cambiarlo.
+      const icon = effectiveDayIcon(entry) ?? 'fullbody';
 
       return {
         id: generateId(),
@@ -364,6 +402,24 @@ export function NewRoutineScreen({
               {t('Crear a partir de texto plano')}
             </Text>
           </Pressable>
+          {onOpenCommunity && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.qrButton,
+                pressed && styles.qrButtonPressed,
+              ]}
+              onPress={onOpenCommunity}
+            >
+              <MaterialCommunityIcons
+                name="account-group-outline"
+                size={18}
+                color={theme.colors.primary}
+              />
+              <Text style={styles.qrButtonText}>
+                {t('Elegir una de la comunidad')}
+              </Text>
+            </Pressable>
+          )}
         </View>
 
         <View style={styles.manualDivider}>
@@ -458,77 +514,82 @@ export function NewRoutineScreen({
                 </Pressable>
               </View>
 
-              <View style={styles.dayReorderRow}>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dayReorderButton,
-                    index === 0 && styles.dayReorderButtonDisabled,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => handleMoveDay(day.id, -1)}
-                  disabled={index === 0}
-                  hitSlop={6}
-                  accessibilityLabel={t('Subir día')}
-                >
-                  <MaterialCommunityIcons
-                    name="chevron-up"
-                    size={18}
-                    color={
-                      index === 0
-                        ? theme.colors.textSecondary
-                        : theme.colors.text
-                    }
-                  />
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dayReorderButton,
-                    index === days.length - 1 &&
-                      styles.dayReorderButtonDisabled,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => handleMoveDay(day.id, 1)}
-                  disabled={index === days.length - 1}
-                  hitSlop={6}
-                  accessibilityLabel={t('Bajar día')}
-                >
-                  <MaterialCommunityIcons
-                    name="chevron-down"
-                    size={18}
-                    color={
-                      index === days.length - 1
-                        ? theme.colors.textSecondary
-                        : theme.colors.text
-                    }
-                  />
-                </Pressable>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dayReorderButton,
-                    !canRemoveDay && styles.dayReorderButtonDisabled,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => handleRemoveDay(day.id)}
-                  disabled={!canRemoveDay}
-                  hitSlop={6}
-                  accessibilityLabel={t('Quitar día')}
-                >
-                  <MaterialCommunityIcons
-                    name="trash-can-outline"
-                    size={17}
-                    color={
-                      canRemoveDay
-                        ? theme.colors.error
-                        : theme.colors.textSecondary
-                    }
-                  />
-                </Pressable>
-              </View>
+              {/* Subir/bajar/quitar solo con dos o más días: con uno solo los
+                  tres salían deshabilitados, una fila de controles grises en
+                  el primer formulario que ve un usuario nuevo. */}
+              {days.length > 1 && (
+                <View style={styles.dayReorderRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayReorderButton,
+                      index === 0 && styles.dayReorderButtonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => handleMoveDay(day.id, -1)}
+                    disabled={index === 0}
+                    hitSlop={6}
+                    accessibilityLabel={t('Subir día')}
+                  >
+                    <MaterialCommunityIcons
+                      name="chevron-up"
+                      size={18}
+                      color={
+                        index === 0
+                          ? theme.colors.textSecondary
+                          : theme.colors.text
+                      }
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayReorderButton,
+                      index === days.length - 1 &&
+                        styles.dayReorderButtonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => handleMoveDay(day.id, 1)}
+                    disabled={index === days.length - 1}
+                    hitSlop={6}
+                    accessibilityLabel={t('Bajar día')}
+                  >
+                    <MaterialCommunityIcons
+                      name="chevron-down"
+                      size={18}
+                      color={
+                        index === days.length - 1
+                          ? theme.colors.textSecondary
+                          : theme.colors.text
+                      }
+                    />
+                  </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.dayReorderButton,
+                      !canRemoveDay && styles.dayReorderButtonDisabled,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() => handleRemoveDay(day.id)}
+                    disabled={!canRemoveDay}
+                    hitSlop={6}
+                    accessibilityLabel={t('Quitar día')}
+                  >
+                    <MaterialCommunityIcons
+                      name="trash-can-outline"
+                      size={17}
+                      color={
+                        canRemoveDay
+                          ? theme.colors.error
+                          : theme.colors.textSecondary
+                      }
+                    />
+                  </Pressable>
+                </View>
+              )}
 
               <View style={styles.inputRow}>
                 <TextInput
-                  style={styles.input}
-                  placeholder={t('Ej: Push pesado')}
+                  style={[styles.input, titleMissing(day) && styles.inputError]}
+                  placeholder={t('Ej: Push, Pierna, Torso…')}
                   placeholderTextColor={theme.colors.textSecondary}
                   value={day.title}
                   onChangeText={(value) => handleUpdateTitle(day.id, value)}
@@ -537,32 +598,46 @@ export function NewRoutineScreen({
 
               <Text style={styles.label}>{t('Ejercicios')}</Text>
 
-              {day.exercises.map((exercise) => {
-                const expanded =
-                  editingExerciseId === exercise.id || !exercise.name.trim();
-
-                return expanded ? (
-                  <ExerciseFormRow
-                    key={exercise.id}
-                    exercise={exercise}
-                    accent={accent}
-                    canRemove={day.exercises.length > 1}
-                    onChange={(changes) =>
-                      handleUpdateExercise(day.id, exercise.id, changes)
-                    }
-                    onRemove={() => handleRemoveExercise(day.id, exercise.id)}
-                    onCollapse={() => setEditingExerciseId(null)}
-                  />
-                ) : (
+              <SortableList
+                items={day.exercises}
+                keyOf={(exercise) => exercise.id}
+                onMove={(from, to) => handleMoveExerciseTo(day.id, from, to)}
+                renderItem={(exercise, handle) => (
                   <ExerciseSummaryRow
-                    key={exercise.id}
                     exercise={exercise}
                     canRemove={day.exercises.length > 1}
                     onEdit={() => setEditingExerciseId(exercise.id)}
                     onRemove={() => handleRemoveExercise(day.id, exercise.id)}
+                    dragHandle={handle}
+                  />
+                )}
+              />
+
+              {/* Popup de edición del ejercicio abierto (el lápiz de su fila),
+                  el mismo que en la ficha de una rutina guardada. Cerrarlo sin
+                  nombre descarta la fila si el día tiene otras. */}
+              {(() => {
+                const editing = day.exercises.find(
+                  (exercise) => exercise.id === editingExerciseId
+                );
+                if (!editing) return null;
+                return (
+                  <ExerciseEditorModal
+                    visible
+                    exercise={editing}
+                    accent={accent}
+                    onChange={(changes) =>
+                      handleUpdateExercise(day.id, editing.id, changes)
+                    }
+                    onDone={() => {
+                      if (!editing.name.trim()) {
+                        handleRemoveExercise(day.id, editing.id);
+                      }
+                      setEditingExerciseId(null);
+                    }}
                   />
                 );
-              })}
+              })()}
 
               <Pressable
                 style={({ pressed }) => [
@@ -616,6 +691,18 @@ export function NewRoutineScreen({
           onPress={handleCreate}
           style={styles.createButton}
         />
+        {/* Qué falta, en vivo y bajo el CTA: antes solo se sabía al pulsar,
+            como toast, y había que volver a subir a buscar el hueco. */}
+        {!!firstMissing && (
+          <View style={styles.missingRow}>
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={15}
+              color={theme.colors.textSecondary}
+            />
+            <Text style={styles.missingText}>{firstMissing}</Text>
+          </View>
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -859,6 +946,20 @@ const makeStyles = () =>
     },
     createButton: {
       marginTop: 4,
+    },
+    missingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      marginTop: 8,
+    },
+    missingText: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+    },
+    inputError: {
+      borderColor: theme.colors.error,
     },
     importGroup: {
       gap: 8,

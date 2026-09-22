@@ -8,7 +8,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import {
   countRoutineSets,
-  duplicateRoutine,
   isLinkedRoutine,
   lastTrainedByRoutine,
   routineAuthorId,
@@ -22,7 +21,6 @@ import { dateLocale, t } from '@lib/i18n';
 import {
   ConfirmModal,
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
@@ -31,7 +29,6 @@ import {
   RoutineIntensityPill,
   RoutineOriginPill,
   StretchScrollView,
-  Toast,
 } from '../../components';
 import { WorkoutRoutine } from '../../types';
 
@@ -61,7 +58,6 @@ export function RoutineSelectorScreen({
   const [routineToDeleteId, setRoutineToDeleteId] = useState<
     string | undefined
   >(undefined);
-  const [duplicatedName, setDuplicatedName] = useState<string | null>(null);
 
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
   // Esta vista no es una pestaña de navegación: lleva botón Volver abajo en vez
@@ -88,17 +84,6 @@ export function RoutineSelectorScreen({
   // borrar) y, en las cerradas, cuándo se dejaron. El historial se recorre una
   // sola vez para toda la lista.
   const lastTrained = lastTrainedByRoutine(state.logs);
-
-  // La copia queda "preparada" y seleccionada (ADD_ROUTINE): se ajusta y se
-  // estrena registrando en ella el primer día, sin tocar la rutina en curso.
-  const handleDuplicateRoutine = (routine: WorkoutRoutine) => {
-    const copy = duplicateRoutine(
-      routine,
-      state.routines.map((item) => item.name)
-    );
-    dispatch({ type: 'ADD_ROUTINE', payload: copy });
-    setDuplicatedName(copy.name);
-  };
 
   const handleDeleteRoutine = () => {
     if (!routineToDeleteId) return;
@@ -173,7 +158,6 @@ export function RoutineSelectorScreen({
               onSelect={() =>
                 dispatch({ type: 'SET_SELECTED_ROUTINE', payload: routine.id })
               }
-              onDuplicate={() => handleDuplicateRoutine(routine)}
               // Solo se puede borrar una rutina sin historial.
               onDelete={
                 lastTrainedAt !== undefined
@@ -203,15 +187,6 @@ export function RoutineSelectorScreen({
 
       <FloatingBackButton onPress={onBack} bottom={backBottom} />
 
-      {!!duplicatedName && (
-        <Toast
-          message={t('Copiada como "{name}"', { name: duplicatedName })}
-          type="success"
-          bottom={backBottom + FLOATING_BACK_BUTTON_HEIGHT + 12}
-          onDismiss={() => setDuplicatedName(null)}
-        />
-      )}
-
       <ConfirmModal
         visible={!!routineToDeleteId}
         title={t('¿Eliminar rutina?')}
@@ -238,7 +213,6 @@ interface RoutineCardProps {
   onOpenProfile?: (userId: string, name: string) => void;
   // Botón "Ver en Inicio": marca esta rutina como la que se ve en Inicio.
   onSelect: () => void;
-  onDuplicate: () => void;
   // Sin este handler no se pinta el botón de eliminar.
   onDelete?: () => void;
 }
@@ -258,10 +232,11 @@ function formatShortDate(timestamp: number): string {
  * Antes cada dato ocupaba su propio renglón a ancho completo (nombre, marca de
  * origen, descripción, "N días de entrenamiento" y la fila de estado), así que
  * una tarjeta pasaba de los 170 px y cabían tres rutinas por pantalla en una
- * lista que existe justamente para COMPARARLAS. Ahora el estado, los días y la
- * intensidad viven en un renglón, y la fila de abajo (de quién es la rutina y
- * "Ver en Inicio") solo aparece cuando dice algo: la rutina típica —tuya y ya
- * en Inicio— se queda en dos bloques.
+ * lista que existe justamente para COMPARARLAS. Ahora la intensidad va arriba
+ * a la derecha con el nombre, el estado y los días en un renglón con la casa
+ * de "Ver en Inicio" (solo icono) delante, y la fila de abajo (de quién es la
+ * rutina) solo aparece cuando dice algo: la rutina típica —tuya y ya en
+ * Inicio— se queda en dos bloques.
  *
  * La situación se lee en palabras en vez de en tres señales de color, y la
  * cerrada además dice CUÁNDO se cerró (la fecha de su último entrenamiento):
@@ -277,7 +252,6 @@ function RoutineCard({
   onOpenDetails,
   onOpenProfile,
   onSelect,
-  onDuplicate,
   onDelete,
 }: RoutineCardProps) {
   const statusLabel =
@@ -315,29 +289,17 @@ function RoutineCard({
     >
       <GradientFill accent={theme.colors.primaryLine} />
 
+      {/* Fila del nombre: a la derecha la intensidad (el dato) y, si procede,
+          eliminar. Duplicar ya no vive aquí: está en el ⋯ de la ficha, con
+          confirmación (un toque accidental creaba una rutina sin avisar). */}
       <View style={styles.headerRow}>
         <Text style={styles.routineCardName} numberOfLines={1}>
           {routine.name}
         </Text>
         <View style={styles.routineCardRight}>
-          {/* Duplicar: se parte de una rutina que ya funciona para hacer la
-              siguiente (la copia queda sin estrenar, no toca a la que entrenas). */}
-          <Pressable
-            style={({ pressed }: { pressed: boolean }) => [
-              styles.routineCardIconButton,
-              pressed && styles.routineCardIconButtonPressed,
-            ]}
-            onPress={onDuplicate}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('Duplicar')}
-          >
-            <MaterialCommunityIcons
-              name="content-copy"
-              size={18}
-              color={theme.colors.textSecondary}
-            />
-          </Pressable>
+          {totalSets > 0 && (
+            <RoutineIntensityPill level={routineIntensity(totalSets)} />
+          )}
           {/* Eliminar estaba solo tras un long-press, sin nada que lo indicara. */}
           {!!onDelete && (
             <Pressable
@@ -367,8 +329,10 @@ function RoutineCard({
         </Text>
       )}
 
-      {/* Los tres datos de un vistazo: en qué situación está, cuánto ocupa y
-          cuánta caña lleva. */}
+      {/* Situación y días en un renglón. "Ver en Inicio" es solo la casa, en
+          la esquina inferior DERECHA (donde el resto de tarjetas ponen sus
+          acciones y donde llega el pulgar), y solo cuando NO es la de Inicio:
+          si ya lo es, lo dice el propio texto. */}
       <View style={styles.metaRow}>
         <Text style={styles.metaText} numberOfLines={1}>
           <Text
@@ -381,45 +345,35 @@ function RoutineCard({
           </Text>
           {` · ${daysLabel}`}
         </Text>
-        {totalSets > 0 && (
-          <RoutineIntensityPill level={routineIntensity(totalSets)} />
+        {!isViewed && (
+          <Pressable
+            style={({ pressed }: { pressed: boolean }) => [
+              styles.routineCardHomeButton,
+              pressed && styles.routineCardIconButtonPressed,
+            ]}
+            onPress={onSelect}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('Ver en Inicio')}
+          >
+            <MaterialCommunityIcons
+              name="home-outline"
+              size={15}
+              color={theme.colors.primary}
+            />
+          </Pressable>
         )}
       </View>
 
-      {/* Fila que solo existe cuando tiene algo que decir. */}
-      {(showOrigin || !isViewed) && (
+      {/* De quién es: solo cuando la rutina viene de otra persona. */}
+      {showOrigin && (
         <View style={styles.cardActionsRow}>
-          {showOrigin && (
-            <RoutineOriginPill
-              author={routine.sourceAuthor}
-              copied={!isLinked}
-              ownerId={authorId}
-              onOpenProfile={onOpenProfile}
-            />
-          )}
-          {/* Solo cuando NO es la de Inicio: si ya lo es, lo dice la línea de
-              arriba y el botón sobraba (estaba ahí solo como estado, deshabilitado). */}
-          {!isViewed && (
-            <Pressable
-              style={({ pressed }: { pressed: boolean }) => [
-                styles.routineCardHomeButton,
-                pressed && styles.routineCardIconButtonPressed,
-              ]}
-              onPress={onSelect}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('Ver en Inicio')}
-            >
-              <MaterialCommunityIcons
-                name="home-outline"
-                size={15}
-                color={theme.colors.primary}
-              />
-              <Text style={styles.routineCardHomeText}>
-                {t('Ver en Inicio')}
-              </Text>
-            </Pressable>
-          )}
+          <RoutineOriginPill
+            author={routine.sourceAuthor}
+            copied={!isLinked}
+            ownerId={authorId}
+            onOpenProfile={onOpenProfile}
+          />
         </View>
       )}
     </TouchableOpacity>
@@ -487,7 +441,8 @@ const makeStyles = () =>
     routineCardIconButtonPressed: {
       opacity: 0.6,
     },
-    // Situación + días + intensidad: los tres datos en un renglón.
+    // Situación + días a la izquierda y la casa de "Ver en Inicio" pegada al
+    // borde derecho.
     metaRow: {
       marginTop: 6,
       flexDirection: 'row',
@@ -495,6 +450,7 @@ const makeStyles = () =>
       gap: 8,
     },
     metaText: {
+      flex: 1,
       flexShrink: 1,
       fontSize: 13,
       color: theme.colors.lightGray,
@@ -509,7 +465,7 @@ const makeStyles = () =>
     routineCardStatusActive: {
       color: theme.colors.primary,
     },
-    // Atribución y "Ver en Inicio": la fila desaparece si no aplica ninguna.
+    // Atribución: la fila desaparece si la rutina es tuya de origen.
     cardActionsRow: {
       marginTop: 8,
       flexDirection: 'row',
@@ -517,23 +473,14 @@ const makeStyles = () =>
       gap: 8,
       flexWrap: 'wrap',
     },
-    // "Ver en Inicio": acción rotulada (antes era un icono-casa sin texto que
-    // además hacía de indicador de estado).
+    // "Ver en Inicio": solo la casa, con borde para que se lea como botón y no
+    // como adorno del estado (el rótulo se fue para que la tarjeta sea más baja;
+    // el `accessibilityLabel` lo conserva).
     routineCardHomeButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 10,
-      paddingVertical: 5,
+      padding: 4,
       borderRadius: theme.borderRadius.pill,
       borderWidth: 1,
       borderColor: theme.colors.primaryLine,
-    },
-    routineCardHomeText: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: theme.colors.primary,
-      lineHeight: 16,
     },
     routineCardName: {
       flex: 1,
