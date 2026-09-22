@@ -221,24 +221,43 @@ export function findPersonalRecord(
   return best;
 }
 
+// Mejor sesión de cada ejercicio (clave: exerciseId) medida con la puntuación
+// de fuerza de la app (e1RM sumado de sus series), no con el peso máximo.
+function bestSessionScoreByExercise(logs: WorkoutLog[]): Map<string, number> {
+  const best = new Map<string, number>();
+  logs.forEach((log) => {
+    log.exercises.forEach((exercise) => {
+      const score = getTotalSetsStrengthScore(exercise.parsedSets || []);
+      if (score <= 0) return;
+      if (score > (best.get(exercise.exerciseId) || 0)) {
+        best.set(exercise.exerciseId, score);
+      }
+    });
+  });
+  return best;
+}
+
 /**
- * Cuántos ejercicios de la semana superan su mejor peso histórico (sin
- * histórico no hay récord que batir). Base del reto "Récord personal": un
- * único récord puntual no cierra el reto; se pide que lo batan la mitad o más
- * de los ejercicios previstos por la rutina.
+ * Cuántos ejercicios de la semana superan su mejor SESIÓN histórica (sin
+ * histórico no hay récord que batir). Base del reto "Récord personal".
+ *
+ * Se mide con la puntuación de fuerza del ejercicio (la misma unidad que los
+ * porcentajes de la app), no con el peso máximo: así es récord hacer más reps
+ * con el mismo peso, meter una serie más o subir carga, y no solo colgar más
+ * kilos en una serie. Un único récord puntual no cierra el reto; se pide que
+ * lo batan la mitad o más de los ejercicios previstos por la rutina.
  */
 export function countPersonalRecords(
   currentLogs: WorkoutLog[],
   historyLogs: WorkoutLog[]
 ): number {
-  const historyMax = maxWeightByExercise(historyLogs);
-  const currentMax = maxWeightByExercise(currentLogs);
+  const historyBest = bestSessionScoreByExercise(historyLogs);
+  const currentBest = bestSessionScoreByExercise(currentLogs);
 
   let records = 0;
-  currentMax.forEach((current, exerciseId) => {
-    const previous = historyMax.get(exerciseId);
-    if (!previous || previous.weight <= 0) return;
-    if (current.weight > previous.weight) records += 1;
+  currentBest.forEach((score, exerciseId) => {
+    const previous = historyBest.get(exerciseId);
+    if (previous && score > previous) records += 1;
   });
 
   return records;

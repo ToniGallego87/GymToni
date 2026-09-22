@@ -9,6 +9,7 @@ import {
   WeightSegment,
 } from './cardio';
 import { t } from './i18n';
+import { hasScoringSets } from './progress';
 import { getToday } from './utils';
 import {
   countImprovedDays,
@@ -41,6 +42,8 @@ export type ChallengeId =
   | 'full-week'
   | 'improve-3'
   | 'personal-record'
+  | 'full-days'
+  | 'first-marks'
   | 'kcal-day-100'
   | 'kcal-week-1000'
   | 'two-cardio';
@@ -130,6 +133,26 @@ function strengthChallenges(
   const plannedExercises =
     routine?.days.reduce((sum, day) => sum + day.exercises.length, 0) ?? 0;
 
+  const fullWeek = challenge({
+    id: 'full-week',
+    category: 'strength',
+    icon: 'calendar-check',
+    name: t('Semana completa'),
+    description: t('Entrena todos los días de tu rutina.'),
+    period: 'routine-week',
+    current: routineDays > 0 ? trainedDays : 0,
+    target: Math.max(1, routineDays),
+    unit: t('días'),
+    periodKey,
+  });
+
+  // Primera semana de la rutina (sin histórico): "+3 %" y "Récord" no se
+  // pueden ganar porque no hay nada con lo que comparar, así que en su lugar
+  // van dos retos de estreno que piden dejar la marca de salida bien anotada.
+  if (history.length === 0) {
+    return [fullWeek, ...firstWeekChallenges(weekLogs, routine, periodKey)];
+  }
+
   const improvedDays = countImprovedDays(
     weekLogs,
     history,
@@ -138,18 +161,7 @@ function strengthChallenges(
   const records = countPersonalRecords(weekLogs, history);
 
   return [
-    challenge({
-      id: 'full-week',
-      category: 'strength',
-      icon: 'calendar-check',
-      name: t('Semana completa'),
-      description: t('Entrena todos los días de tu rutina.'),
-      period: 'routine-week',
-      current: routineDays > 0 ? trainedDays : 0,
-      target: Math.max(1, routineDays),
-      unit: t('días'),
-      periodKey,
-    }),
+    fullWeek,
     challenge({
       id: 'improve-3',
       category: 'strength',
@@ -168,11 +180,77 @@ function strengthChallenges(
       icon: 'medal-outline',
       name: t('Récord personal'),
       description: t(
-        'Supera tu mejor peso en la mitad o más de los ejercicios.'
+        'Supera tu mejor sesión en la mitad o más de los ejercicios.'
       ),
       period: 'routine-week',
       current: records,
       target: halfOrMore(plannedExercises),
+      unit: t('ejercicios'),
+      periodKey,
+    }),
+  ];
+}
+
+/**
+ * Retos de la primera semana de una rutina, en lugar de "+3 %" y "Récord":
+ * - "Días completos": la mitad o más de los días con TODOS sus ejercicios
+ *   anotados (series válidas), no a medias.
+ * - "Primeras marcas": todos los ejercicios de la rutina con al menos una
+ *   serie apuntada, para que la semana que viene haya con qué comparar.
+ */
+function firstWeekChallenges(
+  weekLogs: WorkoutLog[],
+  routine: WorkoutRoutine | undefined,
+  periodKey: string
+): Challenge[] {
+  const routineDays = routine?.days.length ?? 0;
+  const plannedExercises =
+    routine?.days.reduce((sum, day) => sum + day.exercises.length, 0) ?? 0;
+
+  // Ejercicios con alguna serie válida, por día de la rutina y en total.
+  const doneByDay = new Map<string, Set<string>>();
+  weekLogs.forEach((log) => {
+    const done = doneByDay.get(log.dayId) ?? new Set<string>();
+    log.exercises.forEach((exercise) => {
+      if (hasScoringSets(exercise)) done.add(exercise.exerciseId);
+    });
+    doneByDay.set(log.dayId, done);
+  });
+
+  let fullDays = 0;
+  let markedExercises = 0;
+  routine?.days.forEach((day) => {
+    const done = doneByDay.get(day.id);
+    if (!done || day.exercises.length === 0) return;
+    const marked = day.exercises.filter((ex) => done.has(ex.id)).length;
+    markedExercises += marked;
+    if (marked === day.exercises.length) fullDays += 1;
+  });
+
+  return [
+    challenge({
+      id: 'full-days',
+      category: 'strength',
+      icon: 'clipboard-check-outline',
+      name: t('Días completos'),
+      description: t(
+        'Anota todos los ejercicios en la mitad o más de los días.'
+      ),
+      period: 'routine-week',
+      current: fullDays,
+      target: halfOrMore(routineDays),
+      unit: t('días'),
+      periodKey,
+    }),
+    challenge({
+      id: 'first-marks',
+      category: 'strength',
+      icon: 'flag-outline',
+      name: t('Primeras marcas'),
+      description: t('Registra una serie en cada ejercicio de tu rutina.'),
+      period: 'routine-week',
+      current: markedExercises,
+      target: Math.max(1, plannedExercises),
       unit: t('ejercicios'),
       periodKey,
     }),

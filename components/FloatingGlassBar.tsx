@@ -1,21 +1,15 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { StyleSheet, View, ViewStyle } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import {
-  GLASS_BLUR_ENABLED,
-  GLASS_BLUR_REDUCTION,
-  GLASS_BLUR_INTENSITY,
   GLASS_FLOATING_BG,
   GLASS_FLOATING_BORDER,
   GLASS_FLOATING_HIGHLIGHT,
   GLASS_FLOATING_INNER_STROKE,
   GLASS_FLOATING_OVERLAY,
-  GLASS_TINT,
 } from './glassTokens';
-
-const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
+import { GlassBlur } from './GlassBlur';
 
 export const FLOATING_GLASS_BAR_HEIGHT = 70;
 export const FLOATING_GLASS_BAR_MARGIN = 12;
@@ -58,15 +52,7 @@ export function FloatingGlassBar({
         style,
       ]}
     >
-      {GLASS_BLUR_ENABLED && (
-        <FrostedBlur
-          tint={GLASS_TINT}
-          intensity={GLASS_BLUR_INTENSITY}
-          blurReductionFactor={GLASS_BLUR_REDUCTION}
-          experimentalBlurMethod="dimezisBlurView"
-          style={styles.blur}
-        />
-      )}
+      <GlassBlur tint={GLASS_FLOATING_BG} style={styles.blur} />
       <View style={styles.overlay} />
       <View style={styles.topHighlight} />
       <View style={styles.innerStroke} />

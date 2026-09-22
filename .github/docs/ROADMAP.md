@@ -38,31 +38,24 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
       para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [ ] **Rendimiento: el blur de las cuatro barras cuesta ~7 ms/frame cada
-      una; buscar cómo abaratarlo** — decisión de producto (2026-09-22): se
-      quieren borrosas la barra superior, la inferior, Volver y descanso.
-      Cada `BlurView` dimezis redibuja la pantalla entera en un bitmap por
-      frame, sea cual sea `blurReductionFactor`: con las cuatro, mediana 28 ms
-      (p90 48, p99 73) frente a 16 ms con una sola. Vías: (1) un ÚNICO
-      `BlurView` a pantalla completa como capa base y que las barras solo lo
-      recorten (`overflow: hidden` + posicionar el hijo), así se paga una
-      pasada; (2) Volver y descanso solo con blur mientras están quietos (no
-      scrollea nada debajo en el registro); (3) Skia `BackdropBlur` (GPU),
-      descartado por dependencia grande salvo que compense. Además de los
-      picos que ya había: Candidatos, por orden: (1) sombra/elevación +
-      `GradientFill` en cada tarjeta del historial de semanas (una por log);
-      (2) `animateLayout` (LayoutAnimation) en los desplegables; (3) el
-      `Anton` con `adjustsFontSizeToFit` en las cabeceras. Medir con el mismo
-      recorrido ([COMMANDS.md](COMMANDS.md#medir-rendimiento)) antes y después
-      de cada uno; si no mueve el p90, no entra.
+- [ ] **Rendimiento: los picos que quedan tras el cristal propio** — con
+      `modules/glass-blur` (una captura por frame para las cuatro barras) la
+      app va a mediana 20 ms / p90 31 en garnet, con las cuatro barras
+      borrosas; antes eran 28 / 48. Lo que queda son picos sueltos (p99 44 ms,
+      22 frames con el hilo UI lento en el recorrido), y el candidato es lo que
+      se dibuja POR TARJETA en el historial de semanas: sombra + elevación +
+      `GradientFill` en cada una, más `animateLayout`
+      (`LayoutAnimation`) al desplegarlas. Medir con el mismo recorrido
+      ([COMMANDS.md](COMMANDS.md#medir-rendimiento)) antes y después de cada
+      cambio; si no mueve el p90, no entra. Segunda vía, si hiciera falta:
+      bajar el radio o subir la reducción del cristal (hoy 12) — el box blur
+      es O(píxeles) del bitmap reducido, así que el coste ya es pequeño.
       **Por qué:** "velocidad de uso" es la prioridad número uno; lo grande ya
-      está, lo que queda son picos que se notan al abrir semanas y al arrastrar
-      entre pestañas.
-      **Archivos:** `components/glassTokens.ts` (`GLASS_BLUR_ENABLED`,
-      `GLASS_TOP_BAR_BLUR_REDUCTION`),
-      `features/workout/HomeScreen.tsx` (tarjetas de semana y de log),
-      `components/GradientFill.tsx`, `lib/theme.ts` (`shadow.soft` /
-      `shadow.card`).
+      está resuelto y estos picos son los que se notan al abrir una semana.
+      **Archivos:** `features/workout/HomeScreen.tsx` (tarjetas de semana y
+      de log), `components/GradientFill.tsx`, `lib/theme.ts` (`shadow.soft` /
+      `shadow.card`), `modules/glass-blur/android/src/main/java/expo/modules/glassblur/SharedBlurSource.kt`
+      (reducción y radio), `components/GlassBlur.tsx`.
       **Esfuerzo:** medio.
 
 ## Funcionalidades a simplificar

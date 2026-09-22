@@ -32,9 +32,12 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 // ejercicio: con cuatro los nombres largos ('Corazón en marcha') se encogían
 // hasta no leerse.
 const TILES_PER_ROW = 3;
-const TILE_ICON_SIZE = 30;
+const TILE_ICON_SIZE = 36;
 // Anillo de progreso alrededor del icono de una insignia aún sin conseguir.
-const TILE_RING_SIZE = 48;
+const TILE_RING_SIZE = 56;
+// Casilla algo más alta que ancha: con el anillo de 56, dos líneas de nombre
+// y la cifra de progreso, el cuadrado exacto (~100 px) se quedaba corto.
+const TILE_ASPECT = 0.88;
 
 /**
  * Logros: catálogo fijo de insignias que se desbloquean con el histórico.
@@ -498,7 +501,7 @@ const makeStyles = () =>
     },
     tile: {
       flex: 1,
-      aspectRatio: 1,
+      aspectRatio: TILE_ASPECT,
       alignItems: 'center',
       justifyContent: 'center',
       gap: 4,
@@ -527,11 +530,11 @@ const makeStyles = () =>
     },
     tilePressed: { opacity: 0.8 },
     tileProgress: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '700',
       color: theme.colors.textSecondary,
       fontVariant: ['tabular-nums'],
-      lineHeight: 13,
+      lineHeight: 15,
     },
     // Hueco de relleno con la MISMA caja que una casilla (borde y padding,
     // invisibles): sin ellos Yoga repartía el ancho distinto y las casillas
@@ -539,16 +542,16 @@ const makeStyles = () =>
     // conseguir) salían más anchas que las de una fila llena.
     tileGap: {
       flex: 1,
-      aspectRatio: 1,
+      aspectRatio: TILE_ASPECT,
       borderWidth: 1,
       borderColor: 'transparent',
       paddingHorizontal: 4,
     },
     tileLabel: {
-      fontSize: 12,
+      fontSize: 14,
       fontWeight: '800',
       color: theme.colors.text,
-      lineHeight: 14,
+      lineHeight: 17,
       textAlign: 'center',
     },
     tileLabelLocked: { color: theme.colors.textSecondary },

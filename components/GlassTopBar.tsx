@@ -7,9 +7,7 @@ import {
   StyleSheet,
   TextStyle,
   ViewStyle,
-  Platform,
 } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme, getModeBackgroundColor } from '@lib/theme';
 import { requestThemeReveal } from '@lib/themeTransition';
@@ -17,17 +15,12 @@ import { t } from '@lib/i18n';
 import { openAchievements } from '@lib/achievementsLink';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { LevelPill } from './LevelPill';
+import { GlassBlur } from './GlassBlur';
 import {
-  GLASS_TINT,
-  GLASS_TOP_BAR_BLUR_ENABLED,
-  GLASS_TOP_BAR_BLUR_REDUCTION,
-  GLASS_TOP_BAR_BLUR_INTENSITY,
   GLASS_TOP_BAR_BG,
   GLASS_TOP_BAR_HAIRLINE,
   GLASS_TOP_BAR_OVERLAY,
 } from './glassTokens';
-
-const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
 
 export const GLASS_TOP_BAR_BASE_HEIGHT = 50;
 
@@ -94,10 +87,6 @@ export function GlassTopBar({
 }: GlassTopBarProps) {
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + topInset;
   const topBarPaddingTop = topInset + 6;
-  const topBarBlurIntensity =
-    Platform.OS === 'android'
-      ? Math.max(GLASS_TOP_BAR_BLUR_INTENSITY, 72)
-      : GLASS_TOP_BAR_BLUR_INTENSITY;
 
   // Menú de tres puntos compartido: el botón va en la fila de la barra, pero el
   // desplegable y su fondo se pintan como HERMANOS de la barra (fuera de su
@@ -149,19 +138,9 @@ export function GlassTopBar({
           containerStyle,
         ]}
       >
-        {/* Desenfoque real con bitmap muy reducido (blurReductionFactor): a
-            reducción 4 los tres blurs de la app costaban 10 ms por frame; uno
-            solo a 12 no se nota en la medida y a ojo desenfoca igual. */}
-        {GLASS_TOP_BAR_BLUR_ENABLED && (
-          <FrostedBlur
-            tint={GLASS_TINT}
-            intensity={topBarBlurIntensity}
-            blurReductionFactor={GLASS_TOP_BAR_BLUR_REDUCTION}
-            experimentalBlurMethod="dimezisBlurView"
-            style={styles.topBarBlur}
-            pointerEvents="none"
-          />
-        )}
+        {/* Cristal esmerilado (modules/glass-blur): una captura por frame
+            compartida con las demás barras. */}
+        <GlassBlur tint={GLASS_TOP_BAR_BG} style={styles.topBarBlur} />
         <View style={styles.topBarGlassOverlay} pointerEvents="none" />
         <View style={styles.topBarContent}>
           <View style={styles.topBarRow}>

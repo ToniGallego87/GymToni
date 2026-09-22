@@ -1,9 +1,10 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
+import { subscribeLevelPulse } from '@lib/levelPulse';
 
 interface LevelPillProps {
   level: number;
@@ -18,16 +19,66 @@ interface LevelPillProps {
  * el perfil propio y en el público de los demás, y en compacto ("N") en la
  * barra superior de todas las pantallas, como acceso a Logros. Oro vivo con
  * tinta oscura, como las insignias: es lo que se enseña.
+ *
+ * La compacta (la de la barra) además se anima al cerrarse un popup de premio
+ * (`lib/levelPulse`): un latido con destello de oro para que se vea de dónde
+ * han ido a parar los puntos que se acaban de ganar.
  */
 export function LevelPill({ level, compact, onPress }: LevelPillProps) {
   const label = t('Nivel {n}', { n: level });
+  const pulse = useRef(new Animated.Value(0)).current;
+
+  // Solo la de la barra superior late: es la que mira quien acaba de cerrar el
+  // popup. Las del perfil se quedan quietas.
+  useEffect(() => {
+    if (!compact) return;
+    return subscribeLevelPulse(() => {
+      pulse.setValue(0);
+      Animated.sequence([
+        // Un respiro: que el popup termine de irse antes del latido.
+        Animated.delay(220),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 280,
+          easing: Easing.out(Easing.back(2.5)),
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 0,
+          duration: 480,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    });
+  }, [compact, pulse]);
+
+  const scale = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 1.3],
+  });
+  const spin = pulse.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '90deg'],
+  });
+
   const body = (
     <>
-      <MaterialCommunityIcons
-        name="star-four-points"
-        size={compact ? 16 : 12}
-        color={theme.colors.onGold}
-      />
+      {/* Destello: capa de oro pleno que aparece y se va con el latido (la
+          opacidad sí va por el hilo nativo; el color de fondo, no). */}
+      {compact && (
+        <Animated.View
+          pointerEvents="none"
+          style={[styles.flash, { opacity: pulse }]}
+        />
+      )}
+      <Animated.View style={compact ? { transform: [{ rotate: spin }] } : null}>
+        <MaterialCommunityIcons
+          name="star-four-points"
+          size={compact ? 16 : 12}
+          color={theme.colors.onGold}
+        />
+      </Animated.View>
       <Text style={[styles.text, compact && styles.textCompact]}>
         {compact ? String(level) : label}
       </Text>
@@ -36,19 +87,21 @@ export function LevelPill({ level, compact, onPress }: LevelPillProps) {
 
   if (onPress) {
     return (
-      <Pressable
-        style={({ pressed }) => [
-          styles.pill,
-          compact && styles.pillCompact,
-          pressed && styles.pressed,
-        ]}
-        onPress={onPress}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`${label}. ${t('Logros')}`}
-      >
-        {body}
-      </Pressable>
+      <Animated.View style={compact ? { transform: [{ scale }] } : null}>
+        <Pressable
+          style={({ pressed }) => [
+            styles.pill,
+            compact && styles.pillCompact,
+            pressed && styles.pressed,
+          ]}
+          onPress={onPress}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`${label}. ${t('Logros')}`}
+        >
+          {body}
+        </Pressable>
+      </Animated.View>
     );
   }
   return (
@@ -74,6 +127,7 @@ const makeStyles = () =>
       backgroundColor: theme.colors.primaryFill,
       borderWidth: 1,
       borderColor: theme.colors.primaryFillDark,
+      overflow: 'hidden',
     },
     // En la barra superior: más grande (es un botón, no una etiqueta) y
     // centrada en la fila (el alignSelf de arriba la pegaba al borde de
@@ -83,6 +137,10 @@ const makeStyles = () =>
       gap: 5,
       paddingHorizontal: 11,
       paddingVertical: 6,
+    },
+    flash: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.colors.primary,
     },
     textCompact: {
       fontSize: 15,

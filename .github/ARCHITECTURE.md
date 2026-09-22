@@ -142,7 +142,8 @@ data/                   → Seed data (rutinas iniciales + logs demo) y changelo
                           (novedades por versión para el popup WhatsNewModal)
 modules/                → Módulos nativos locales (Kotlin/Swift, autolinked por Expo)
   ├── video-encoder/    → Codifica los fotogramas del vídeo de logros a MP4
-  └── pip-timer/        → Ventana flotante del descanso (Picture-in-Picture)
+  ├── pip-timer/        → Ventana flotante del descanso (Picture-in-Picture)
+  └── glass-blur/       → Cristal esmerilado de las barras (una captura por frame)
 ```
 
 ## Pantallas y navegación

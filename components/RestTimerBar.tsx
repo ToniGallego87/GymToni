@@ -1,7 +1,6 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -15,10 +14,8 @@ import {
   GLASS_BACK_BUTTON_BG,
   GLASS_BACK_BUTTON_BORDER,
   GLASS_BACK_BUTTON_OVERLAY,
-  GLASS_SMALL_BLUR_ENABLED,
-  GLASS_BLUR_REDUCTION,
-  GLASS_BLUR_INTENSITY,
 } from './glassTokens';
+import { GlassBlur } from './GlassBlur';
 
 export const REST_TIMER_BAR_HEIGHT = 46;
 
@@ -56,15 +53,7 @@ export function RestTimerBar({ onPress, bottom }: RestTimerBarProps) {
       accessibilityRole="button"
       accessibilityLabel={t('Volver al entreno')}
     >
-      {GLASS_SMALL_BLUR_ENABLED && (
-        <BlurView
-          tint="dark"
-          intensity={GLASS_BLUR_INTENSITY}
-          blurReductionFactor={GLASS_BLUR_REDUCTION}
-          experimentalBlurMethod="dimezisBlurView"
-          style={styles.blur}
-        />
-      )}
+      <GlassBlur tint={GLASS_BACK_BUTTON_BG} style={styles.blur} />
       <View style={styles.overlay} />
 
       <MaterialCommunityIcons

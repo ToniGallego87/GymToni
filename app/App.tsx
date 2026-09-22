@@ -82,6 +82,7 @@ import {
 import { useMyProfile } from '@hooks/useMyProfile';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { shiftAward, useAwards } from '@lib/awards';
+import { requestLevelPulse } from '@lib/levelPulse';
 import { setAchievementsOpener } from '@lib/achievementsLink';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { isAutoBackupDue, runAutoBackup } from '@lib/backup';
@@ -915,7 +916,15 @@ function AppContent() {
         {/* Premios (reto superado, logro nuevo, subida de nivel): un popup por
           premio, en el orden en que cayeron. Ceden el paso a las novedades. */}
         {whatsNewEntry === null && (
-          <AwardModal award={awards[0] ?? null} onClose={shiftAward} />
+          <AwardModal
+            award={awards[0] ?? null}
+            onClose={() => {
+              shiftAward();
+              // Latido de la píldora de nivel de la barra: que se vea dónde
+              // han ido a parar los puntos del premio que se acaba de cerrar.
+              requestLevelPulse();
+            }}
+          />
         )}
 
         {/* Aviso de versión nueva. Cede el paso a las novedades si ambos caen en

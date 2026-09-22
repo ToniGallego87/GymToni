@@ -60,6 +60,7 @@ Referencia 2026-09-22 (garnet, con `TabStateBoundary`):
 - dos blurs (superior + inferior), reducción 12: 998 frames, mediana 23 ms, p90 30, p99 61.
 - cuatro blurs (superior, inferior, Volver, descanso), reducción 12: 1226 frames, mediana 28 ms, p90 48, p99 73.
   → el coste de dimezis es POR `BlurView` (cada uno redibuja la pantalla), no por radio: ~7 ms/frame cada barra.
+- cuatro barras con `modules/glass-blur` (una captura compartida, lo que va en la app): 3501 frames, mediana 20 ms, p90 31, p99 44, 22 frames UI lentos.
 
 ## Verificación
 

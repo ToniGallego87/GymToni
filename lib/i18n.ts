@@ -1032,8 +1032,14 @@ register({
   '+3 %': '+3 %',
   'Mejora un 3 % en la mitad o más de los días.':
     'Improve 3 % on half or more of your days.',
-  'Supera tu mejor peso en la mitad o más de los ejercicios.':
-    'Beat your best weight in half or more of your exercises.',
+  'Supera tu mejor sesión en la mitad o más de los ejercicios.':
+    'Beat your best session in half or more of your exercises.',
+  'Días completos': 'Full days',
+  'Anota todos los ejercicios en la mitad o más de los días.':
+    'Log every exercise on half or more of your days.',
+  'Primeras marcas': 'First marks',
+  'Registra una serie en cada ejercicio de tu rutina.':
+    'Log a set in every exercise of your routine.',
   '100 kcal hoy': '100 kcal today',
   'Quema 100 kcal de cardio en el día.': 'Burn 100 kcal of cardio today.',
   '1000 kcal esta semana': '1000 kcal this week',

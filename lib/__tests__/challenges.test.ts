@@ -154,6 +154,60 @@ describe('computeChallenges', () => {
     expect(c3['personal-record'].done).toBe(false);
   });
 
+  it('récord personal mide la sesión del ejercicio, no solo el peso', () => {
+    // Mismo peso pero una repetición más: la sesión es mejor, cuenta.
+    const moreReps = [
+      makeLog('a', 1, '2026-09-07', [{ weight: 60, reps: 8 }]),
+      makeLog('b', 1, '2026-09-14', [{ weight: 60, reps: 9 }]),
+    ];
+    expect(byId(moreReps, [makeRoutine(1)])['personal-record'].done).toBe(true);
+    // Más peso pero muchas menos reps: la sesión no supera a la anterior.
+    const heavierWorse = [
+      makeLog('a', 1, '2026-09-07', [{ weight: 60, reps: 12 }]),
+      makeLog('b', 1, '2026-09-14', [{ weight: 62, reps: 4 }]),
+    ];
+    expect(byId(heavierWorse, [makeRoutine(1)])['personal-record'].done).toBe(
+      false
+    );
+  });
+
+  it('primera semana: retos de estreno en lugar de +3 % y récord', () => {
+    const routine = makeRoutine(2, 2); // e1, e1-1 / e2, e2-1
+    const empty = byId([], [routine]);
+    expect(empty['improve-3']).toBeUndefined();
+    expect(empty['personal-record']).toBeUndefined();
+    expect(empty['full-days'].target).toBe(1);
+    expect(empty['first-marks'].target).toBe(4);
+
+    // Día 1 con sus dos ejercicios; día 2 solo con uno (el otro a guiones).
+    const day1 = makeLog('a', 1, '2026-09-14');
+    day1.exercises.push({
+      ...day1.exercises[0],
+      id: 'a-ex2',
+      exerciseId: 'e1-1',
+    });
+    const day2 = makeLog('b', 2, '2026-09-16');
+    day2.exercises.push({
+      ...day2.exercises[0],
+      id: 'b-ex2',
+      exerciseId: 'e2-1',
+      parsedSets: [{ weight: -1, reps: -1 }],
+    });
+    const c = byId([day1, day2], [routine]);
+    expect(c['full-days'].current).toBe(1);
+    expect(c['full-days'].done).toBe(true);
+    expect(c['first-marks'].current).toBe(3);
+    expect(c['first-marks'].done).toBe(false);
+
+    // Con histórico vuelven los retos de mejora.
+    const later = byId(
+      [...[day1, day2], makeLog('c', 1, '2026-09-21')],
+      [routine]
+    );
+    expect(later['improve-3']).toBeDefined();
+    expect(later['full-days']).toBeUndefined();
+  });
+
   it('kcal de hoy y de la semana natural, y días con cardio', () => {
     const logs = [
       cardio('x', '2026-09-13', 'Correr: 60min, 10kmh'), // domingo anterior: fuera
@@ -189,9 +243,8 @@ describe('etiquetas', () => {
     const c = byId([], [makeRoutine(4)]);
     expect(challengeProgressLabel(c['full-week'])).toBe('0 / 4 días');
     expect(challengeProgressLabel(c['full-week'], true)).toBe('0/4');
-    expect(challengeProgressLabel(c['personal-record'])).toBe(
-      '0 / 2 ejercicios'
-    );
-    expect(challengeProgressLabel(c['improve-3'], true)).toBe('0/2');
+    // Sin histórico salen los retos de estreno, no "+3 %" ni "Récord".
+    expect(challengeProgressLabel(c['first-marks'])).toBe('0 / 4 ejercicios');
+    expect(challengeProgressLabel(c['full-days'], true)).toBe('0/2');
   });
 });

@@ -6,38 +6,16 @@
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 
-export const GLASS_BLUR_INTENSITY = 82;
-export const GLASS_TOP_BAR_BLUR_INTENSITY = 32;
-
 // Tinta sobre el cristal flotante (botón Volver, barra). El cristal es oscuro
 // TRANSLÚCIDO en ambos temas, así que su texto es SIEMPRE claro: token fijo, no
 // se invierte con el tema (en día `theme.colors.white` sería oscuro y no leería).
 export const GLASS_FLOATING_TEXT = '#F5F7FA';
 
-// Tinte del BlurView acorde al tema.
-/**
- * Desenfoque real (`BlurView` dimezis): cada uno vuelve a dibujar TODA la
- * pantalla en un bitmap por frame, sea cual sea la reducción, así que el coste
- * es POR BARRA (~7 ms/frame cada una en garnet, medido 2026-09-22, ver
- * COMMANDS.md): 1 blur → mediana 16 ms, 2 → 23, 4 → 28. Decisión de producto
- * (2026-09-22): se paga el coste y van los cuatro (barra superior, inferior,
- * Volver y descanso). Los interruptores quedan para apagar la inferior
- * (`GLASS_BLUR_ENABLED`) o Volver / descanso (`GLASS_SMALL_BLUR_ENABLED`) si
- * un móvil flojo lo pide.
- */
-export const GLASS_BLUR_ENABLED = true;
-export const GLASS_SMALL_BLUR_ENABLED = true;
-export const GLASS_BLUR_REDUCTION = 12;
-/**
- * La barra superior sí lleva desenfoque, con el bitmap reducido
- * `GLASS_TOP_BAR_BLUR_REDUCTION` veces (mediana 16 ms, p99 32: igual que sin
- * blur). Se probó también montarlo solo en reposo (apagado al arrastrar):
- * mismo rendimiento y un salto visible al parar, descartado.
- */
-export const GLASS_TOP_BAR_BLUR_ENABLED = true;
-export const GLASS_TOP_BAR_BLUR_REDUCTION = 12;
-
-export let GLASS_TINT: 'light' | 'dark' = 'dark';
+// El desenfoque de las barras es el módulo propio modules/glass-blur
+// (components/GlassBlur.tsx): UNA captura reducida por frame compartida por
+// todas las barras. El BlurView de expo-blur redibujaba la pantalla entera por
+// instancia (~7 ms/frame cada barra en garnet, medido 2026-09-22). El tinte del
+// cristal es el *_BG de cada barra.
 
 export let GLASS_TOP_BAR_BG = 'rgba(30, 34, 44, 0.74)';
 export let GLASS_TOP_BAR_OVERLAY = 'rgba(255, 255, 255, 0.04)';
@@ -66,8 +44,6 @@ export let GLASS_BACK_BUTTON_TEXT = '#ffffff';
 
 function recomputeGlassTokens() {
   const isLight = theme.mode === 'light';
-
-  GLASS_TINT = isLight ? 'light' : 'dark';
 
   GLASS_TOP_BAR_BG = isLight
     ? 'rgba(237, 240, 246, 0.78)'

@@ -1,7 +1,6 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import {
@@ -9,12 +8,8 @@ import {
   GLASS_BACK_BUTTON_BORDER,
   GLASS_BACK_BUTTON_OVERLAY,
   GLASS_BACK_BUTTON_TEXT,
-  GLASS_SMALL_BLUR_ENABLED,
-  GLASS_BLUR_REDUCTION,
-  GLASS_BLUR_INTENSITY,
 } from './glassTokens';
-
-const FrostedBlur = BlurView as unknown as React.ComponentType<any>;
+import { GlassBlur } from './GlassBlur';
 
 export const FLOATING_BACK_BUTTON_HEIGHT = 58;
 export const FLOATING_BACK_BUTTON_MARGIN = 16;
@@ -71,15 +66,7 @@ export function FloatingBackButton({
       ]}
       onPress={onPress}
     >
-      {GLASS_SMALL_BLUR_ENABLED && (
-        <FrostedBlur
-          tint="dark"
-          intensity={GLASS_BLUR_INTENSITY}
-          blurReductionFactor={GLASS_BLUR_REDUCTION}
-          experimentalBlurMethod="dimezisBlurView"
-          style={styles.floatingBackBlur}
-        />
-      )}
+      <GlassBlur tint={GLASS_BACK_BUTTON_BG} style={styles.floatingBackBlur} />
       <View style={styles.floatingBackGlassOverlay} />
       <Text style={styles.backButtonText}>{label}</Text>
     </Pressable>

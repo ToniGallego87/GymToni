@@ -97,7 +97,9 @@
   presentes y justificadas: `react-native-gesture-handler`, `react-native-reanimated`,
   `react-native-pager-view` (pager de pestañas) y `react-native-view-shot` (captura
   de la vista para el revelado del cambio de tema, `ThemeRevealOverlay`; no pinta
-  nada). Añadir otra requiere justificarla.
+  nada). Añadir otra requiere justificarla. `expo-blur` se retiró: su `BlurView`
+  redibujaba la pantalla entera por instancia y por frame; el cristal esmerilado
+  de las barras lo hace `modules/glass-blur` (propio) con UNA captura compartida.
 - No sobre-abstracciones (si solo se usa una vez, no crear helper)
 - Backend/cuentas/sync/social **ya NO están prohibidos**: son el epic de Supabase,
   entregado por fases (offline-first, cuenta opcional). Fuente única del plan:

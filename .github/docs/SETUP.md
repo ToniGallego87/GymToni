@@ -47,6 +47,7 @@ GymToni/
 │   ├── AppModal.tsx          ← Carpintería única de los modales de la app
 │   ├── ConfirmModal.tsx      ← AppModal + par cancelar/confirmar
 │   ├── HeroCard.tsx          ← Tarjeta principal de Inicio
+│   ├── GlassBlur.tsx         ← Cristal esmerilado de las barras (módulo nativo glass-blur; cae a fondo translúcido si no está)
 │   ├── StatsStrip.tsx        ← Fila de cifras (kg / kcal + 3 referencias) de las tarjetas de progreso de Inicio y Cardio
 │   ├── BarChart.tsx          ← Gráfica de barras (Inicio y Cardio)
 │   ├── WeightTrendChart.tsx  ← Línea del peso corporal en el tiempo (pantalla Peso)
@@ -107,6 +108,7 @@ GymToni/
 │   └── social-schema.sql     ← Esquema social (is_public, follows, likes, comentarios, reports, RLS pública)
 ├── modules/                  ← Módulos nativos locales (autolinked por Expo)
 │   ├── pip-timer/            ← Ventana flotante del descanso (PiP de Android)
+│   ├── glass-blur/           ← Cristal esmerilado de las barras (UNA captura desenfocada por frame, compartida)
 │   └── video-encoder/        ← Vídeo de logros (fotogramas → MP4)
 ├── android/                  ← Proyecto nativo Android (build.gradle: versionCode)
 └── assets/                   ← Iconos, wordmark, fuente Anton

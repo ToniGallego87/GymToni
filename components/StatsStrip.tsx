@@ -15,6 +15,11 @@ interface StatsStripProps {
   meta?: string;
   /** Hasta tres referencias (semana pasada / media / mejor). */
   stats: HeroStat[];
+  /**
+   * Centra la línea del dato principal (Cardio: las kcal del día). Sin ella
+   * nace a la izquierda, pegada al título de la tarjeta (Inicio).
+   */
+  centerMain?: boolean;
 }
 
 /**
@@ -30,10 +35,11 @@ export function StatsStrip({
   unit,
   meta,
   stats,
+  centerMain,
 }: StatsStripProps) {
   return (
     <View style={styles.strip}>
-      <View style={styles.mainRow}>
+      <View style={[styles.mainRow, centerMain && styles.mainRowCentered]}>
         <MaterialCommunityIcons
           name={icon as any}
           size={16}

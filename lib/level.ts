@@ -31,14 +31,24 @@ export interface LevelSummary {
   progress: number;
 }
 
-/** Puntos que exige el nivel `n` (1 → 0, 2 → 25, 3 → 100, 4 → 225…). */
+/** Lo que cuesta subir del nivel 1 al 2; cada salto siguiente pide esto más. */
+const LEVEL_STEP_XP = 25;
+
+/**
+ * Puntos que exige el nivel `n` (1 → 0, 2 → 25, 3 → 75, 4 → 150, 5 → 250…):
+ * subir de nivel cuesta 25 puntos más que el salto anterior (25, 50, 75…), así
+ * que el total es cuadrático pero suave.
+ */
 export function xpForLevel(level: number): number {
-  return 25 * (level - 1) * (level - 1);
+  const n = Math.max(0, level - 1);
+  return (LEVEL_STEP_XP * n * (n + 1)) / 2;
 }
 
-/** Nivel que dan `xp` puntos: cuadrático, cada nivel cuesta más que el anterior. */
+/** Nivel que dan `xp` puntos: el mayor cuyo umbral no supera `xp`. */
 export function levelForXp(xp: number): number {
-  return Math.floor(Math.sqrt(Math.max(0, xp) / 25)) + 1;
+  let level = 1;
+  while (xpForLevel(level + 1) <= xp) level += 1;
+  return level;
 }
 
 export function summarizeLevel(xp: number): LevelSummary {
