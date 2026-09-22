@@ -9,6 +9,7 @@ import {
   GLASS_BACK_BUTTON_BORDER,
   GLASS_BACK_BUTTON_OVERLAY,
   GLASS_BACK_BUTTON_TEXT,
+  GLASS_BLUR_ENABLED,
   GLASS_BLUR_INTENSITY,
 } from './glassTokens';
 
@@ -69,12 +70,14 @@ export function FloatingBackButton({
       ]}
       onPress={onPress}
     >
-      <FrostedBlur
-        tint="dark"
-        intensity={GLASS_BLUR_INTENSITY}
-        experimentalBlurMethod="dimezisBlurView"
-        style={styles.floatingBackBlur}
-      />
+      {GLASS_BLUR_ENABLED && (
+        <FrostedBlur
+          tint="dark"
+          intensity={GLASS_BLUR_INTENSITY}
+          experimentalBlurMethod="dimezisBlurView"
+          style={styles.floatingBackBlur}
+        />
+      )}
       <View style={styles.floatingBackGlassOverlay} />
       <Text style={styles.backButtonText}>{label}</Text>
     </Pressable>

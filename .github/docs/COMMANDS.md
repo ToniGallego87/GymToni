@@ -53,8 +53,9 @@ $adb="$env:LOCALAPPDATAAndroidSdkplatform-toolsadb.exe"; $p="com.tonigallego.gym
 & $adb shell dumpsys gfxinfo $p | Select-String "Total frames|Janky|50th|90th|95th|99th|Slow UI|HISTOGRAM"
 ```
 
-Referencia 2026-09-22 (garnet, con `TabStateBoundary`): 3988 frames, mediana
-26 ms, p90 40 ms, p99 69 ms, GPU p50 9 ms.
+Referencia 2026-09-22 (garnet, con `TabStateBoundary`):
+- con blur (`GLASS_BLUR_ENABLED = true`): 3988 frames, mediana 26 ms, p90 40, p99 69, 123 frames UI lentos.
+- sin blur (lo que va en la app): 1278 frames, mediana 15 ms, p90 25, p99 48, 14 frames UI lentos.
 
 ## Verificación
 

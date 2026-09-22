@@ -4,6 +4,7 @@ import { StyleSheet, View, ViewStyle } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import {
+  GLASS_BLUR_ENABLED,
   GLASS_BLUR_INTENSITY,
   GLASS_FLOATING_BG,
   GLASS_FLOATING_BORDER,
@@ -56,12 +57,14 @@ export function FloatingGlassBar({
         style,
       ]}
     >
-      <FrostedBlur
-        tint={GLASS_TINT}
-        intensity={GLASS_BLUR_INTENSITY}
-        experimentalBlurMethod="dimezisBlurView"
-        style={styles.blur}
-      />
+      {GLASS_BLUR_ENABLED && (
+        <FrostedBlur
+          tint={GLASS_TINT}
+          intensity={GLASS_BLUR_INTENSITY}
+          experimentalBlurMethod="dimezisBlurView"
+          style={styles.blur}
+        />
+      )}
       <View style={styles.overlay} />
       <View style={styles.topHighlight} />
       <View style={styles.innerStroke} />

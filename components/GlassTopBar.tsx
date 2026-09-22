@@ -18,6 +18,7 @@ import { openAchievements } from '@lib/achievementsLink';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { LevelPill } from './LevelPill';
 import {
+  GLASS_BLUR_ENABLED,
   GLASS_TINT,
   GLASS_TOP_BAR_BLUR_INTENSITY,
   GLASS_TOP_BAR_BG,
@@ -147,13 +148,15 @@ export function GlassTopBar({
           containerStyle,
         ]}
       >
-        <FrostedBlur
-          tint={GLASS_TINT}
-          intensity={topBarBlurIntensity}
-          experimentalBlurMethod="dimezisBlurView"
-          style={styles.topBarBlur}
-          pointerEvents="none"
-        />
+        {GLASS_BLUR_ENABLED && (
+          <FrostedBlur
+            tint={GLASS_TINT}
+            intensity={topBarBlurIntensity}
+            experimentalBlurMethod="dimezisBlurView"
+            style={styles.topBarBlur}
+            pointerEvents="none"
+          />
+        )}
         <View style={styles.topBarGlassOverlay} pointerEvents="none" />
         <View style={styles.topBarContent}>
           <View style={styles.topBarRow}>

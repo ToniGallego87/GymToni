@@ -38,27 +38,24 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
       para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [ ] **Rendimiento: el hilo UI va a ~38 fps sostenidos; probar sin el blur de
-      la barra** — medido el 2026-09-22 en garnet (`f43d4924`, release, ya con
-      `TabStateBoundary`): recorrido "tres series + cinco pestañas" → 3988
-      frames, mediana 26 ms, p90 40, p99 69, 95 % por encima de 16 ms; GPU p50 9
-      ms (sobra). Es coste POR FRAME sostenido en CPU, no cálculo JS puntual
-      (eso ya está cacheado). Sospechoso principal: el `BlurView` de
-      `GlassTopBar` con `experimentalBlurMethod="dimezisBlurView"`, que
-      re-desenfoca en cada frame que algo se mueve debajo, y todo scrollea
-      debajo. Segundo: sombra/elevación + `GradientFill` por tarjeta. Siguiente
-      paso: A/B con el mismo recorrido (a) sin blur (fondo translúcido plano),
-      (b) blur solo en la barra de Inicio, y decidir con números. Recorrido de
-      medida en [COMMANDS.md](COMMANDS.md#medir-rendimiento).
-      **Por qué:** "velocidad de uso" es la prioridad número uno y la app no
-      llega a 60 fps ni en un móvil de gama media-alta; el blur es lo único que
-      trabaja en cada frame sin que el usuario haga nada con él.
-      **Archivos:** `components/GlassTopBar.tsx:130-137` (`FrostedBlur`,
-      `experimentalBlurMethod`), `components/glassTokens.ts`
-      (`GLASS_TOP_BAR_BLUR_INTENSITY`, `GLASS_TOP_BAR_BG`),
+- [ ] **Rendimiento: afinar lo que queda tras quitar el blur** — sin el
+      desenfoque (`GLASS_BLUR_ENABLED = false`, medido 2026-09-22 en garnet: la
+      mediana bajó de 26 a 15 ms y el p90 de 40 a 25) la app ya va a ~60 fps en
+      uso normal, pero el p99 sigue en 48 ms y hay 14 frames con el hilo UI
+      lento en el recorrido. Candidatos, por orden: (1) sombra/elevación +
+      `GradientFill` en cada tarjeta del historial de semanas (una por log);
+      (2) `animateLayout` (LayoutAnimation) en los desplegables; (3) el
+      `Anton` con `adjustsFontSizeToFit` en las cabeceras. Medir con el mismo
+      recorrido ([COMMANDS.md](COMMANDS.md#medir-rendimiento)) antes y después
+      de cada uno; si no mueve el p90, no entra.
+      **Por qué:** "velocidad de uso" es la prioridad número uno; lo grande ya
+      está, lo que queda son picos que se notan al abrir semanas y al arrastrar
+      entre pestañas.
+      **Archivos:** `components/glassTokens.ts` (`GLASS_BLUR_ENABLED`),
+      `features/workout/HomeScreen.tsx` (tarjetas de semana y de log),
       `components/GradientFill.tsx`, `lib/theme.ts` (`shadow.soft` /
       `shadow.card`).
-      **Esfuerzo:** bajo.
+      **Esfuerzo:** medio.
 
 ## Funcionalidades a simplificar
 
