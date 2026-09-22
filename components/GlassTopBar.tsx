@@ -54,6 +54,11 @@ interface GlassTopBarProps {
    */
   showMenu?: boolean;
   /**
+   * Píldora de nivel (→ Logros) junto al menú. Activa por defecto; Logros la
+   * oculta porque llevaría a la misma pantalla.
+   */
+  showLevelPill?: boolean;
+  /**
    * Opciones propias de la pantalla que se añaden ARRIBA del cambio de tema en
    * el mismo menú de tres puntos (p. ej. "Modificar temporizador" en el
    * registro). Cada una cierra el menú al pulsarse.
@@ -78,6 +83,7 @@ export function GlassTopBar({
   topInset,
   rightElement,
   showMenu = true,
+  showLevelPill = true,
   menuItems,
   titleNumberOfLines = 1,
   subtitleNumberOfLines = 2,
@@ -108,16 +114,19 @@ export function GlassTopBar({
 
   // Dispara el revelado del cambio de tema desde el centro del BOTÓN de tres
   // puntos (measureInWindow da su posición en pantalla); el overlay de la raíz
-  // lo pinta.
+  // lo pinta. El menú se cierra ANTES y se espera un frame: el overlay captura
+  // la pantalla y el menú abierto no debe salir en el pantallazo.
   const handleSelectNextTheme = () => {
+    setMenuOpen(false);
     const fire = (x: number, y: number) => {
-      requestThemeReveal({
-        x,
-        y,
-        mode: nextMode,
-        color: getModeBackgroundColor(nextMode),
-      });
-      setMenuOpen(false);
+      requestAnimationFrame(() =>
+        requestThemeReveal({
+          x,
+          y,
+          mode: nextMode,
+          color: getModeBackgroundColor(nextMode),
+        })
+      );
     };
     const node = menuButtonRef.current;
     if (node && typeof node.measureInWindow === 'function') {
@@ -209,7 +218,7 @@ export function GlassTopBar({
             {rightElement}
             {/* Nivel de la cuenta (solo el número), a la izquierda del menú
                 en TODAS las pantallas: es el acceso permanente a Logros. */}
-            {showMenu && (
+            {showMenu && showLevelPill && (
               <LevelPill
                 level={level.level}
                 compact

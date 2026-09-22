@@ -41,6 +41,14 @@ interface HeroCarouselProps {
   slides: React.ReactElement[];
   /** Color de flechas y puntos (por defecto oscuro, para gradientes dorados). */
   controlColor?: string;
+  /**
+   * Tarjeta a la que el pase automático NO debe renunciar: mientras esté
+   * definida, el carrusel no avanza solo desde ella y, si el usuario ha
+   * saltado a otra, vuelve a ella al agotarse la pausa manual. Inicio la pone
+   * en la tarjeta de "qué toca hoy" mientras el día esté sin entrenar (la
+   * acción principal no puede depender de esperar a que dé la vuelta).
+   */
+  holdIndex?: number;
 }
 
 // Punto indicador que anima (ancho + opacidad) al pasar a activo/inactivo.
@@ -78,7 +86,11 @@ function Dot({ active, color }: { active: boolean; color: string }) {
  * quietos mientras el dorado encoge. Las tarjetas pulsables reciben el
  * `pressScale` y lo animan en vez de aplicarse su propia escala.
  */
-export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
+export function HeroCarousel({
+  slides,
+  controlColor,
+  holdIndex,
+}: HeroCarouselProps) {
   const [index, setIndex] = useState(0);
   const [dir, setDir] = useState<1 | -1>(1);
   const pressScale = useSharedValue(1);
@@ -101,13 +113,23 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
 
   // Pase automático: cada AUTO_ADVANCE_MS avanza a la derecha, como si se
   // hubiera pulsado la flecha. Tras un toque manual espera lo que quede de la
-  // pausa y después retoma la cadencia de 5 s.
+  // pausa y después retoma la cadencia de 5 s. Con `holdIndex`, en vez de
+  // avanzar vuelve a esa tarjeta (y una vez en ella no hay nada que hacer).
+  const holding = holdIndex != null && holdIndex >= 0 && holdIndex < count;
   useEffect(() => {
     if (count <= 1) return;
+    if (holding && safeIndex === holdIndex) return;
     const remainingPause = pausedUntil - Date.now();
     let interval: ReturnType<typeof setInterval> | undefined;
     const startInterval = () => {
-      interval = setInterval(() => go(1), AUTO_ADVANCE_MS);
+      interval = setInterval(() => {
+        if (holding) {
+          setDir(-1);
+          setIndex(holdIndex);
+        } else {
+          go(1);
+        }
+      }, AUTO_ADVANCE_MS);
     };
     const delay =
       remainingPause > 0
@@ -119,7 +141,7 @@ export function HeroCarousel({ slides, controlColor }: HeroCarouselProps) {
       if (interval) clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [safeIndex, count, pausedUntil]);
+  }, [safeIndex, count, pausedUntil, holding, holdIndex]);
 
   if (count === 0) return null;
   if (count === 1) return <View>{slides[0]}</View>;

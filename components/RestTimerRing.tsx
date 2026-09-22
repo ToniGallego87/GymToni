@@ -11,12 +11,14 @@ interface RestTimerRingProps {
   size: number;
   /** Grosor del trazo. */
   strokeWidth?: number;
+  /** Color del trazo (por defecto el acento del descanso). */
+  color?: string;
   /** Lo que va centrado dentro (la cuenta atrás). */
   children?: ReactNode;
 }
 
 /**
- * Rueda del descanso: un anillo que se va completando en el sentido de las
+ * Rueda del descanso (y anillo de progreso de las insignias): un anillo que se va completando en el sentido de las
  * agujas del reloj a medida que pasa el tiempo, con la cuenta atrás en el
  * centro. Pista tenue del acento debajo y trazo del acento encima; el arco se
  * dibuja con `strokeDasharray` sobre la circunferencia y arranca arriba (el
@@ -26,6 +28,7 @@ export function RestTimerRing({
   progress,
   size,
   strokeWidth = 8,
+  color = theme.colors.accentLine,
   children,
 }: RestTimerRingProps) {
   const clamped = Math.min(1, Math.max(0, progress));
@@ -40,7 +43,7 @@ export function RestTimerRing({
           cx={center}
           cy={center}
           r={radius}
-          stroke={theme.colors.accentLine}
+          stroke={color}
           strokeOpacity={0.22}
           strokeWidth={strokeWidth}
           fill="none"
@@ -49,7 +52,7 @@ export function RestTimerRing({
           cx={center}
           cy={center}
           r={radius}
-          stroke={theme.colors.accentLine}
+          stroke={color}
           strokeWidth={strokeWidth}
           strokeLinecap="round"
           fill="none"

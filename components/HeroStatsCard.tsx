@@ -107,7 +107,20 @@ export function HeroStatsCard({
         ) : (
           <>
             <View>
-              <Text style={styles.heroKicker}>{kicker}</Text>
+              {/* Pulsable: el chevron junto al kicker lo delata (las tres
+                  tarjetas del carrusel comparten dorado y dibujo, y sin él
+                  no se sabe cuál responde al toque). */}
+              <View style={styles.heroKickerRow}>
+                <Text style={styles.heroKicker}>{kicker}</Text>
+                {!!onPress && (
+                  <MaterialCommunityIcons
+                    name="chevron-right"
+                    size={16}
+                    color={theme.colors.onGold}
+                    style={styles.heroKickerChevron}
+                  />
+                )}
+              </View>
               <View style={styles.heroMainRow}>
                 <MaterialCommunityIcons
                   name={mainIcon as any}
@@ -181,6 +194,12 @@ const makeStyles = () =>
       right: 0,
       height: '55%',
     },
+    heroKickerRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 2,
+    },
     heroKicker: {
       fontSize: 12,
       fontWeight: '800',
@@ -189,8 +208,8 @@ const makeStyles = () =>
       textAlign: 'center',
       color: theme.colors.onGold,
       opacity: 0.75,
-      marginBottom: 2,
     },
+    heroKickerChevron: { opacity: 0.75, marginLeft: -2 },
     heroMainRow: {
       flexDirection: 'row',
       alignItems: 'center',

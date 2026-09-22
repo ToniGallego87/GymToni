@@ -9,6 +9,7 @@ import {
   challengeProgressLabel,
   daysLeftInWeek,
 } from '@lib/challenges';
+import { XP_PER_CHALLENGE } from '@lib/level';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
 
@@ -82,6 +83,12 @@ export function ChallengesModal({
                 {!!periodLabel(c) && (
                   <Text style={styles.challengePeriod}>{periodLabel(c)}</Text>
                 )}
+                {/* Lo que vale: la regla de puntos, junto a cada reto. */}
+                <Text
+                  style={[styles.challengeXp, c.done && styles.challengeXpDone]}
+                >
+                  +{XP_PER_CHALLENGE}
+                </Text>
               </View>
               <Text style={styles.challengeDescription} numberOfLines={2}>
                 {c.description}
@@ -162,6 +169,20 @@ const makeStyles = () =>
       fontSize: 11,
       fontWeight: '700',
       color: theme.colors.textSecondary,
+    },
+    challengeXp: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      backgroundColor: theme.colors.primaryMuted,
+      borderRadius: theme.borderRadius.pill,
+      paddingHorizontal: 6,
+      paddingVertical: 1,
+      fontVariant: ['tabular-nums'],
+    },
+    challengeXpDone: {
+      color: theme.colors.onGold,
+      backgroundColor: theme.colors.primaryFill,
     },
     challengeDescription: {
       fontSize: 13,

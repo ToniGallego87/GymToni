@@ -94,8 +94,10 @@
 - No Redux ni librerías externas de estado
 - **UI custom por defecto**: nada de librerías de componentes/estilo externas. Las
   únicas dependencias no-custom permitidas son de comportamiento nativo, ya
-  presentes y justificadas: `react-native-gesture-handler`, `react-native-reanimated`
-  y `react-native-pager-view` (pager de pestañas). Añadir otra requiere justificarla.
+  presentes y justificadas: `react-native-gesture-handler`, `react-native-reanimated`,
+  `react-native-pager-view` (pager de pestañas) y `react-native-view-shot` (captura
+  de la vista para el revelado del cambio de tema, `ThemeRevealOverlay`; no pinta
+  nada). Añadir otra requiere justificarla.
 - No sobre-abstracciones (si solo se usa una vez, no crear helper)
 - Backend/cuentas/sync/social **ya NO están prohibidos**: son el epic de Supabase,
   entregado por fases (offline-first, cuenta opcional). Fuente única del plan:

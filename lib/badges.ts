@@ -36,7 +36,10 @@ export type BadgeId =
   | 'cardio-100'
   | 'full-week'
   | 'streak-4'
-  | 'personal-record';
+  | 'streak-8'
+  | 'improved-1'
+  | 'improved-5'
+  | 'improved-20';
 
 /** Tipo de logro: la pantalla los agrupa y ordena por esto. */
 export type BadgeCategory = 'strength' | 'cardio' | 'weeks' | 'progress';
@@ -329,15 +332,43 @@ export function computeBadges(
       dates.bestStreak,
       4
     ),
-    // --- Progreso ---
     badge(
-      'personal-record',
+      'streak-8',
+      'weeks',
+      'lightning-bolt-circle',
+      t('Dos meses'),
+      t('Encadena 8 semanas completas sin faltar a un día.'),
+      dates.bestStreak,
+      8
+    ),
+    // --- Progreso --- (semanas que mejoran a la anterior; NO es el récord de
+    // peso: ese es el reto semanal "Récord personal" y el hito del póster).
+    badge(
+      'improved-1',
       'progress',
       'trending-up',
-      t('Récord personal'),
+      t('Semana mejorada'),
       t('Mejora una semana respecto a la anterior.'),
       dates.improvedWeeks,
       1
+    ),
+    badge(
+      'improved-5',
+      'progress',
+      'chart-line',
+      t('En racha'),
+      t('Mejora 5 semanas respecto a su anterior.'),
+      dates.improvedWeeks,
+      5
+    ),
+    badge(
+      'improved-20',
+      'progress',
+      'rocket-launch-outline',
+      t('Imparable'),
+      t('Mejora 20 semanas respecto a su anterior.'),
+      dates.improvedWeeks,
+      20
     ),
   ];
 }

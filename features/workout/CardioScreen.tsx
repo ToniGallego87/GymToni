@@ -377,6 +377,9 @@ export function CardioScreen({
             horizontal y la tarjeta se posiciona con el margen propio de la
             HeroCard (misma estrategia de márgenes que Inicio, sin heroBleed). */}
         <HeroCarousel
+          // Sin cardio hoy, el pase automático se queda en "Insertar cardio"
+          // (mismo criterio que la tarjeta de entrenar de Inicio).
+          holdIndex={today ? undefined : 0}
           slides={[
             <HeroCard
               key="insert"
@@ -424,6 +427,15 @@ export function CardioScreen({
                   label: t('mejor día'),
                 },
               ]}
+              // Abre la gráfica mensual de abajo (solo si hay dos meses).
+              onPress={
+                kcalMonths.length >= 2
+                  ? () => {
+                      animateLayout();
+                      setShowChart(true);
+                    }
+                  : undefined
+              }
             />,
             <HeroStatsCard
               key="challenges"

@@ -4,6 +4,8 @@ export { HeroCarousel } from './HeroCarousel';
 export { HeroStatsCard } from './HeroStatsCard';
 export type { HeroStat } from './HeroStatsCard';
 export { ChallengesModal } from './ChallengesModal';
+export { AnchorMenu } from './AnchorMenu';
+export type { AnchorMenuItem } from './AnchorMenu';
 export { AwardModal } from './AwardModal';
 export { HeroWeightCard } from './HeroWeightCard';
 export {

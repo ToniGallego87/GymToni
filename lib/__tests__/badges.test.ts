@@ -107,6 +107,28 @@ describe('computeBadges', () => {
     expect(byId['workouts-500']).toMatchObject({ current: 12, target: 500 });
   });
 
+  it('la escalera de Progreso cuenta semanas mejoradas, no récords de peso', () => {
+    const routine = makeRoutine(1);
+    // Cinco semanas seguidas, cada una con más peso que la anterior: cuatro
+    // mejoradas (la primera no tiene con qué compararse).
+    const logs = Array.from({ length: 5 }, (_, i) =>
+      makeLog(`w${i}`, 1, i * 7, [{ weight: 60 + i * 5, reps: 8 }])
+    );
+    const byId = Object.fromEntries(
+      computeBadges(logs, [routine]).map((b) => [b.id, b])
+    );
+    expect(byId['improved-1'].unlocked).toBe(true);
+    expect(byId['improved-1'].unlockedAt).toBe(logs[1].date);
+    expect(byId['improved-5']).toMatchObject({
+      unlocked: false,
+      current: 4,
+      target: 5,
+    });
+    expect(byId['improved-20']).toMatchObject({ current: 4, target: 20 });
+    expect(byId['streak-4'].unlocked).toBe(true);
+    expect(byId['streak-8']).toMatchObject({ current: 5, target: 8 });
+  });
+
   it('fecha la consecución con el entreno que cruzó el objetivo', () => {
     const logs = Array.from({ length: 12 }, (_, i) =>
       makeLog(`l${i}`, (i % 2) + 1, i)
@@ -130,7 +152,7 @@ describe('computeBadges', () => {
 
   it('devuelve el catálogo entero aunque no haya nada', () => {
     const badges = computeBadges([], []);
-    expect(badges).toHaveLength(13);
+    expect(badges).toHaveLength(16);
     expect(badges.every((b) => !b.unlocked && b.current === 0)).toBe(true);
   });
 });

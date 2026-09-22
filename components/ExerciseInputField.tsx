@@ -29,8 +29,7 @@ import { getImprovementColor } from '@lib/utils';
 import { GradientFill } from './GradientFill';
 import { TrendDelta } from './TrendDelta';
 import { ExerciseGifButton } from './ExerciseGifButton';
-import { AppModal } from './AppModal';
-import { Button } from './Button';
+import { AnchorMenu, AnchorMenuItem } from './AnchorMenu';
 
 // Transiciones reutilizables para recolocar y mostrar/ocultar contenido
 const layoutTransition = LinearTransition.duration(220).easing(
@@ -197,6 +196,7 @@ export function ExerciseInputField({
   // Es un botón VISIBLE con su icono, el mismo patrón del ⋯ de `GlassTopBar` y
   // del historial de Inicio; nada queda tras un gesto oculto.
   const [showActions, setShowActions] = useState(false);
+  const actionsButtonRef = useRef<View>(null);
 
   // Cronómetro para ejercicios medidos en tiempo
   const [timerRunning, setTimerRunning] = useState(false);
@@ -549,6 +549,7 @@ export function ExerciseInputField({
             no bajo el CTA: son raras, y aquí siguen accesibles incluso con la
             tarjeta plegada (antes había que desplegarla para tocar la nota). */}
         <Pressable
+          ref={actionsButtonRef}
           style={({ pressed }) => [
             styles.headerAction,
             { borderColor: cardAccent + '40' },
@@ -917,95 +918,47 @@ export function ExerciseInputField({
         />
       </Pressable>
 
-      {/* Acciones raras del ejercicio. Mismo formato que el selector de
-          disciplina de "Añadir" en Cardio: las opciones van en el cuerpo, con
-          su color y su borde propios, y el pie queda solo para "Volver" (gris,
-          secundario). Antes las cuatro se pintaban como `Button` secundario y
-          salir parecía una acción más de la lista. */}
-      <AppModal
+      {/* Acciones raras del ejercicio (nota, cronómetro, saltar): menú
+          desplegable anclado al ⋯ de la cabecera, con el mismo dibujo que el
+          de la barra superior. Antes era un popup centrado con pie 'Volver',
+          que tapaba la tarjeta desde la que se abría y pedía un toque más
+          para no hacer nada; el menú deja ver el ejercicio y se cierra solo. */}
+      <AnchorMenu
         visible={showActions}
-        onRequestClose={() => setShowActions(false)}
-        title={exerciseName}
-        icon="dots-horizontal-circle-outline"
-        footer={
-          <Button
-            title={t('Volver')}
-            variant="secondary"
-            size="medium"
-            onPress={() => setShowActions(false)}
-          />
-        }
-      >
-        <View style={styles.actionsList}>
-          <Pressable
-            style={({ pressed }) => [
-              styles.optionButton,
-              pressed && styles.optionButtonPressed,
-            ]}
-            onPress={() => {
-              setShowActions(false);
-              onNotesPress();
-            }}
-          >
-            <MaterialCommunityIcons
-              name="note-text-outline"
-              size={20}
-              color={theme.colors.white}
-            />
-            <Text style={styles.optionButtonText}>
-              {notes ? t('Editar nota') : t('Añadir nota')}
-            </Text>
-          </Pressable>
-
-          {/* Cronómetro solo en ejercicios medidos en tiempo (plancha, etc.). */}
-          {isTimeBased && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.optionButton,
-                pressed && styles.optionButtonPressed,
-              ]}
-              onPress={() => {
-                setShowActions(false);
-                setShowStopwatch(true);
-              }}
-            >
-              <MaterialCommunityIcons
-                name="timer-outline"
-                size={20}
-                color={theme.colors.white}
-              />
-              <Text style={styles.optionButtonText}>
-                {t('Cronómetro del ejercicio')}
-              </Text>
-            </Pressable>
-          )}
-
-          {/* Cierra el ejercicio rellenando con guiones (series omitidas) las
-              que falten hasta el objetivo. Ya completado no hay nada que
-              saltar, así que no se ofrece. */}
-          {!isMaxSetsReached && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.optionButton,
-                pressed && styles.optionButtonPressed,
-              ]}
-              onPress={() => {
-                setShowActions(false);
-                onFinishExercise();
-              }}
-            >
-              <MaterialCommunityIcons
-                name="skip-forward"
-                size={20}
-                color={theme.colors.white}
-              />
-              <Text style={styles.optionButtonText}>
-                {hasAddedSets ? t('Saltar resto') : t('Saltar ejercicio')}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-      </AppModal>
+        onClose={() => setShowActions(false)}
+        anchorRef={actionsButtonRef}
+        items={[
+          {
+            icon: 'note-text-outline',
+            label: notes ? t('Editar nota') : t('Añadir nota'),
+            onPress: onNotesPress,
+          },
+          // Cronómetro solo en ejercicios medidos en tiempo (plancha, etc.).
+          ...(isTimeBased
+            ? [
+                {
+                  icon: 'timer-outline',
+                  label: t('Cronómetro del ejercicio'),
+                  onPress: () => setShowStopwatch(true),
+                } as AnchorMenuItem,
+              ]
+            : []),
+          // Cierra el ejercicio rellenando con guiones (series omitidas) las
+          // que falten hasta el objetivo. Ya completado no hay nada que
+          // saltar, así que no se ofrece.
+          ...(!isMaxSetsReached
+            ? [
+                {
+                  icon: 'skip-forward',
+                  label: hasAddedSets
+                    ? t('Saltar resto')
+                    : t('Saltar ejercicio'),
+                  onPress: onFinishExercise,
+                } as AnchorMenuItem,
+              ]
+            : []),
+        ]}
+      />
     </Animated.View>
   );
 }
@@ -1342,31 +1295,6 @@ const makeStyles = () =>
       marginTop: 16,
     },
 
-    // Opciones del ⋯ dentro del modal. Copia del selector de disciplina de
-    // Cardio (components/CardioInputField.tsx): si se toca uno, tocar el otro.
-    actionsList: {
-      marginTop: 12,
-    },
-    optionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: theme.colors.primaryMuted,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      marginBottom: 8,
-    },
-    optionButtonPressed: {
-      opacity: 0.8,
-    },
-    optionButtonText: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: theme.colors.white,
-    },
     completedRow: {
       flexDirection: 'row',
       alignItems: 'center',

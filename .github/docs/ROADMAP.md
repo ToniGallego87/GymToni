@@ -15,7 +15,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
 
 ## Mejoras visuales y de UX
 
-- [ ] **La insignia "Récord personal" no mide récords y choca con el reto del
+- [x] **La insignia "Récord personal" no mide récords y choca con el reto del
       mismo nombre** — el logro `personal-record` de Logros se desbloquea al
       "mejorar una semana respecto a la anterior", pero el reto semanal
       "Récord personal" es superar tu mejor peso en la mitad de los ejercicios
@@ -34,7 +34,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       (`improvedWeekDates` y `streakDates`, las cifras ya listas),
       `lib/i18n.ts` (traducciones), `lib/__tests__/badges.test.ts`.
       **Esfuerzo:** bajo.
-- [ ] **Logros: las casillas bloqueadas no dicen cuánto falta y se leen mal** —
+- [x] **Logros: las casillas bloqueadas no dicen cuánto falta y se leen mal** —
       la cuadrícula pinta icono + nombre, en gris si no está; el "37 / 50" y la
       barra solo salen en el popup al tocar, así que para saber por dónde vas
       hay que abrir 13 popups. Poner bajo el nombre de cada casilla bloqueada
@@ -58,7 +58,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `tileLabel`: opacidad y cuerpo del nombre),
       `components/RestTimerRing.tsx` (anillo reutilizable).
       **Esfuerzo:** bajo.
-- [ ] **Nadie explica de dónde salen los puntos ni cuántos retos llevas, y
+- [x] **Nadie explica de dónde salen los puntos ni cuántos retos llevas, y
       desde Logros no se llega a los retos** — la cabecera de Logros dice
       "Nivel 3 · 120 / 225 puntos · 5 / 13 logros" y el popup de premio suelta
       "+10 puntos" o "+25 puntos", pero en ningún sitio se lee la regla (reto
@@ -83,7 +83,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       retos), `components/ChallengesModal.tsx:66-107` (la fila de cada reto),
       `components/GlassTopBar.tsx:212-217` (la píldora).
       **Esfuerzo:** bajo.
-- [ ] **El carrusel de Inicio se lleva la acción principal y no dice qué
+- [x] **El carrusel de Inicio se lleva la acción principal y no dice qué
       tarjeta se puede tocar** — la hero rota entre "qué toca hoy" (con el CTA
       de empezar), "Esta semana" (volumen) y "Retos de la semana"; el pase
       automático se lleva el botón de entrenar dos de cada tres turnos. Y de
@@ -128,7 +128,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `features/workout/CommunityScreen.tsx`,
       `features/workout/ProfileScreen.tsx` (las cinco pantallas de pestaña).
       **Esfuerzo:** medio.
-- [ ] **Dos "⋯" en el registro que abren cosas distintas** — el ⋯ de la barra
+- [x] **Dos "⋯" en el registro que abren cosas distintas** — el ⋯ de la barra
       superior despliega un menú de opciones (Ir a la rutina, temporizador,
       descarga, tema) y el ⋯ de cada tarjeta de ejercicio abre un `AppModal`
       centrado con dos o tres opciones y un pie "Volver". Mismo icono, mismo
@@ -146,7 +146,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `components/GlassTopBar.tsx:235-265` (el menú desplegable a replicar,
       `themeMenu` y `themeMenuItem`).
       **Esfuerzo:** medio.
-- [ ] **Transición de tema que revele el contenido real, no un disco opaco** — el
+- [x] **Transición de tema que revele el contenido real, no un disco opaco** — el
       cambio claro/oscuro anima un círculo de color sólido que tapa la pantalla;
       se pide que ese círculo no sea opaco sino que muestre ya el contenido de la
       vista en el tema de destino, para que sea una transición visual entre las

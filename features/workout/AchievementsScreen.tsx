@@ -7,15 +7,18 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   AppModal,
   Button,
+  ChallengesModal,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  RestTimerRing,
   StretchScrollView,
 } from '@components';
 import { Badge, BADGE_CATEGORY_ORDER, badgeCategoryLabel } from '@lib/badges';
 import { useAccountLevel } from '@hooks/useAccountLevel';
+import { useChallengeWins, XP_PER_BADGE, XP_PER_CHALLENGE } from '@lib/level';
 import { theme } from '@lib/theme';
 import { dateLocale, t } from '@lib/i18n';
 
@@ -25,27 +28,45 @@ interface AchievementsScreenProps {
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-const TILES_PER_ROW = 4;
+// Tres por fila, la misma retícula que el menú de Perfil y las casillas de
+// ejercicio: con cuatro los nombres largos ('Corazón en marcha') se encogían
+// hasta no leerse.
+const TILES_PER_ROW = 3;
+const TILE_ICON_SIZE = 30;
+// Anillo de progreso alrededor del icono de una insignia aún sin conseguir.
+const TILE_RING_SIZE = 48;
 
 /**
  * Logros: catálogo fijo de insignias que se desbloquean con el histórico.
  *
- * El póster semanal (los "hitos") celebra UNA semana; esto acumula: el que
+ * El póster semanal (los 'hitos') celebra UNA semana; esto acumula: el que
  * lleva 60 entrenos lo ve aquí y sabe cuánto le falta para el siguiente. Todo
  * sale de los logs al abrir (lib/badges): nada que guardar ni sincronizar.
  *
  * Misma cuadrícula de casillas que el menú de Perfil: icono + nombre, en color
- * si está conseguido y en gris si no. El detalle (cómo se consigue, cuánto
- * llevas, cuándo cayó) vive en un popup al tocar la casilla.
+ * si está conseguido y, si no, en gris con el progreso a la vista (anillo
+ * alrededor del icono y '37/50' bajo el nombre). El popup al tocar da la
+ * condición completa y la fecha.
+ *
+ * La cabecera enseña las DOS mitades del nivel (retos superados y logros) y
+ * la regla de puntos, y desde aquí se abren todos los retos de la semana
+ * juntos (fuerza + cardio), que en las hero cards van por separado.
  */
 export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
   const insets = useSafeAreaInsets();
   const [selected, setSelected] = useState<Badge | null>(null);
+  const [showChallenges, setShowChallenges] = useState(false);
 
   // Las insignias salen del mismo cálculo compartido que el nivel: antes esta
   // pantalla volvía a recorrer el historial por su cuenta.
-  const { badges, level } = useAccountLevel();
+  const { badges, level, challenges } = useAccountLevel();
   const unlockedCount = badges.filter((b) => b.unlocked).length;
+  // Retos superados en total (claves permanentes): la otra mitad del nivel.
+  const challengeWins = useChallengeWins().length;
+  // Los mismos retos que enseñan las hero cards (sin 'Tres días', que Inicio
+  // no pinta), aquí todos juntos.
+  const weekChallenges = challenges.filter((c) => c.id !== 'three-days');
+  const weekChallengesDone = weekChallenges.filter((c) => c.done).length;
 
   // Grupos por tipo, cada uno en filas de tres (la última se rellena con
   // huecos invisibles para que las casillas no se estiren).
@@ -75,9 +96,11 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
       year: 'numeric',
     });
 
+  // Los de sí/no (objetivo 1) no llevan progreso: o están o no están.
+  const showsProgress = (b: Badge) => !b.unlocked && b.target > 1;
+
   const selectedRatio =
     selected && selected.target > 0 ? selected.current / selected.target : 0;
-  // Los de sí/no (objetivo 1) no necesitan barra: o está o no está.
   const selectedShowsProgress = !!selected && selected.target > 1;
 
   return (
@@ -97,7 +120,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
         showsVerticalScrollIndicator={false}
       >
         {/* Cabecera: el nivel de la cuenta (lo permanente) con su barra hasta
-            el siguiente, y debajo cuántos logros llevas. */}
+            el siguiente, las dos cifras que lo forman y la regla de puntos. */}
         <View style={styles.summaryCard}>
           <GradientFill accent={theme.colors.primaryLine} />
           <Text style={styles.summaryValue}>
@@ -112,14 +135,64 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
             />
           </View>
           <Text style={styles.summaryLabel}>
-            {t('{xp} / {next} puntos · {done} / {total} logros', {
+            {t('{xp} / {next} puntos', {
               xp: level.xp,
               next: level.nextLevelAt,
-              done: unlockedCount,
-              total: badges.length,
+            })}
+          </Text>
+          <View style={styles.summaryStatsRow}>
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryStatValue}>{challengeWins}</Text>
+              <Text style={styles.summaryStatLabel}>
+                {challengeWins === 1
+                  ? t('reto superado')
+                  : t('retos superados')}
+              </Text>
+            </View>
+            <View style={styles.summaryStatDivider} />
+            <View style={styles.summaryStat}>
+              <Text style={styles.summaryStatValue}>
+                {unlockedCount} / {badges.length}
+              </Text>
+              <Text style={styles.summaryStatLabel}>{t('logros')}</Text>
+            </View>
+          </View>
+          <Text style={styles.summaryRule}>
+            {t('Reto +{c} · Logro +{b}', {
+              c: XP_PER_CHALLENGE,
+              b: XP_PER_BADGE,
             })}
           </Text>
         </View>
+
+        {/* Los retos de la semana, todos juntos (fuerza + cardio): la parte
+            del nivel que se renueva cada semana. */}
+        <Pressable
+          style={({ pressed }) => [
+            styles.challengesRow,
+            pressed && styles.challengesRowPressed,
+          ]}
+          onPress={() => setShowChallenges(true)}
+          accessibilityRole="button"
+          accessibilityLabel={t('Retos de la semana')}
+        >
+          <MaterialCommunityIcons
+            name="flag-checkered"
+            size={20}
+            color={theme.colors.primary}
+          />
+          <Text style={styles.challengesRowText}>
+            {t('Retos de la semana')}
+          </Text>
+          <Text style={styles.challengesRowCount}>
+            {weekChallengesDone}/{weekChallenges.length}
+          </Text>
+          <MaterialCommunityIcons
+            name="chevron-right"
+            size={20}
+            color={theme.colors.textSecondary}
+          />
+        </Pressable>
 
         {groups.map(({ category, rows }) => (
           <View key={category} style={styles.group}>
@@ -134,9 +207,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                       key={badge.id}
                       style={({ pressed }) => [
                         styles.tile,
-                        badge.unlocked
-                          ? styles.tileUnlocked
-                          : styles.tileLocked,
+                        badge.unlocked && styles.tileUnlocked,
                         pressed && styles.tilePressed,
                       ]}
                       onPress={() => setSelected(badge)}
@@ -144,28 +215,56 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                       accessibilityLabel={`${badge.name}. ${
                         badge.unlocked
                           ? t('Conseguido')
+                          : showsProgress(badge)
+                          ? `${badge.current} / ${badge.target}`
                           : t('Aún sin conseguir')
                       }`}
                     >
-                      <MaterialCommunityIcons
-                        name={badge.icon as IconName}
-                        size={30}
-                        color={
-                          badge.unlocked
-                            ? theme.colors.primary
-                            : theme.colors.textSecondary
-                        }
-                      />
+                      {/* Sin conseguir: solo el icono va apagado (el nombre
+                          se queda entero, que hay que poder leerlo) y, si es
+                          de recuento, un anillo con lo que llevas. */}
+                      {showsProgress(badge) ? (
+                        <RestTimerRing
+                          progress={badge.current / badge.target}
+                          size={TILE_RING_SIZE}
+                          strokeWidth={3}
+                          color={theme.colors.primary}
+                        >
+                          <MaterialCommunityIcons
+                            name={badge.icon as IconName}
+                            size={TILE_ICON_SIZE - 4}
+                            color={theme.colors.textSecondary}
+                            style={styles.tileIconLocked}
+                          />
+                        </RestTimerRing>
+                      ) : (
+                        <View style={styles.tileIconBox}>
+                          <MaterialCommunityIcons
+                            name={badge.icon as IconName}
+                            size={TILE_ICON_SIZE}
+                            color={
+                              badge.unlocked
+                                ? theme.colors.primary
+                                : theme.colors.textSecondary
+                            }
+                            style={!badge.unlocked && styles.tileIconLocked}
+                          />
+                        </View>
+                      )}
                       <Text
                         style={[
                           styles.tileLabel,
                           !badge.unlocked && styles.tileLabelLocked,
                         ]}
                         numberOfLines={2}
-                        adjustsFontSizeToFit
                       >
                         {badge.name}
                       </Text>
+                      {showsProgress(badge) && (
+                        <Text style={styles.tileProgress}>
+                          {badge.current}/{badge.target}
+                        </Text>
+                      )}
                     </Pressable>
                   ) : (
                     <View key={`gap-${i}`} style={styles.tileGap} />
@@ -177,14 +276,23 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
         ))}
       </StretchScrollView>
 
+      {/* Sin la píldora de nivel: llevaría a esta misma pantalla. */}
       <GlassTopBar
         title={t('Logros')}
         icon="trophy-outline"
         subtitle={t('Insignias y tu nivel')}
         topInset={insets.top}
+        showLevelPill={false}
       />
 
       <FloatingBackButton onPress={onBack} bottom={backBottom} />
+
+      <ChallengesModal
+        visible={showChallenges}
+        onClose={() => setShowChallenges(false)}
+        title={t('Retos de la semana')}
+        challenges={weekChallenges}
+      />
 
       {/* Detalle del logro: cómo se consigue, cuánto llevas y cuándo cayó. */}
       <AppModal
@@ -297,6 +405,67 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
       lineHeight: 16,
     },
+    // Las dos mitades del nivel, una a cada lado de un separador.
+    summaryStatsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      marginTop: 10,
+      paddingTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    summaryStat: { flex: 1, alignItems: 'center' },
+    summaryStatValue: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.colors.text,
+      fontVariant: ['tabular-nums'],
+    },
+    summaryStatLabel: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      marginTop: 1,
+    },
+    summaryStatDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: theme.colors.border,
+    },
+    summaryRule: {
+      marginTop: 8,
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      color: theme.colors.textSecondary,
+    },
+
+    // Fila-enlace a los retos de la semana: misma tarjeta que las casillas.
+    challengesRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+      ...theme.shadow.soft,
+    },
+    challengesRowPressed: { opacity: 0.8 },
+    challengesRowText: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    challengesRowCount: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      fontVariant: ['tabular-nums'],
+    },
 
     levelTrack: {
       alignSelf: 'stretch',
@@ -333,27 +502,38 @@ const makeStyles = () =>
       aspectRatio: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 5,
+      gap: 4,
       backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
       paddingHorizontal: 4,
-      ...theme.shadow.soft,
     },
-    // Sin elevación: la sombra de Android se pintaba como un cuadrado más
-    // oscuro bajo el fondo translúcido del dorado.
+    // Sin sombra en ninguna casilla: la elevación de Android se pintaba como
+    // un cuadrado más oscuro bajo el fondo translúcido del dorado, y si solo
+    // la llevaban las bloqueadas parecían más grandes.
     tileUnlocked: {
       backgroundColor: theme.colors.primaryMuted,
       borderColor: theme.colors.primaryLine,
-      shadowOpacity: 0,
-      elevation: 0,
     },
-    // Bloqueado: en gris, pero legible (hay que poder leer qué es). Sin sombra,
-    // igual que tileUnlocked: si solo una de las dos la lleva, la elevación de
-    // Android pinta un halo que hace parecer la casilla más grande.
-    tileLocked: { opacity: 0.6, shadowOpacity: 0, elevation: 0 },
+    // Bloqueado: se apaga SOLO el icono; el nombre y la cifra van enteros
+    // (en tema claro, gris al 60 % sobre surface rozaba el mínimo de contraste).
+    tileIconLocked: { opacity: 0.55 },
+    // Mismo alto que el anillo, para que icono y nombre caigan igual en todas
+    // las casillas, lleven anillo o no.
+    tileIconBox: {
+      height: TILE_RING_SIZE,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
     tilePressed: { opacity: 0.8 },
+    tileProgress: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
+      fontVariant: ['tabular-nums'],
+      lineHeight: 13,
+    },
     // Hueco de relleno con la MISMA caja que una casilla (borde y padding,
     // invisibles): sin ellos Yoga repartía el ancho distinto y las casillas
     // de una fila incompleta (las de los últimos logros, casi siempre sin
@@ -366,7 +546,7 @@ const makeStyles = () =>
       paddingHorizontal: 4,
     },
     tileLabel: {
-      fontSize: 11,
+      fontSize: 12,
       fontWeight: '800',
       color: theme.colors.text,
       lineHeight: 14,

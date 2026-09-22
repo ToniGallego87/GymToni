@@ -600,6 +600,14 @@ export function HomeScreen({
     [filteredWeeklyProgress]
   );
 
+  // ¿Se puede desplegar la gráfica de progreso? Primera semana de la rutina:
+  // no hay previa con la que comparar. Y puede haber varias semanas y aun así
+  // ninguna barra: si todas las posteriores a la base son de descarga o no
+  // entrenaron el día filtrado, no hay nada que dibujar. Lo usan la tarjeta
+  // de progreso y la hero de estadísticas (que la abre al tocarla).
+  const canOpenProgressChart =
+    filteredWeeklyProgress.length > 1 && progressChart.bars.length > 0;
+
   const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
   // Si la última semana es de descarga, el indicador colapsado hereda el % de la
   // última semana de carga (no baja a 0) y se pinta en azul.
@@ -981,6 +989,10 @@ export function HomeScreen({
           // (volumen semanal). El acceso a rutinas vive en Perfil → Mis rutinas
           // y en el propio héroe de "Rutina cerrada", así que no lleva un slide.
           <HeroCarousel
+            // Con el día de hoy sin entrenar, el pase automático no abandona
+            // la tarjeta del CTA: empezar el entreno es la acción más
+            // frecuente y no debería haber que esperar a que dé la vuelta.
+            holdIndex={todayWorkoutStatus === 'completed' ? undefined : 0}
             slides={[
               <HeroCard
                 key="status"
@@ -1022,6 +1034,16 @@ export function HomeScreen({
                     : ''
                 }
                 stats={strengthHeroStats}
+                // Abre la gráfica de progreso de la tarjeta de abajo (si hay
+                // semanas que comparar; si no, la tarjeta no es pulsable).
+                onPress={
+                  canOpenProgressChart
+                    ? () => {
+                        animateLayout();
+                        setShowWeeklyProgressChart(true);
+                      }
+                    : undefined
+                }
               />,
               <HeroStatsCard
                 key="challenges"
@@ -1059,10 +1081,7 @@ export function HomeScreen({
             // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
             // sin flecha ni porcentaje, solo un mensaje de ánimo.
             const isFirstWeek = filteredWeeklyProgress.length <= 1;
-            // Puede haber varias semanas y aun así ninguna barra: si todas las
-            // posteriores a la base son de descarga o no entrenaron el día
-            // filtrado, no hay nada que dibujar y la tarjeta no se despliega.
-            const canOpenChart = !isFirstWeek && progressChart.bars.length > 0;
+            const canOpenChart = canOpenProgressChart;
             // El borde de la tarjeta de la gráfica es siempre el acento
             // estructural. El verde/rojo solo aparece en el dato de
             // subida/bajada de dentro.

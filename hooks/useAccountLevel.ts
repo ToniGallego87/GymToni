@@ -129,9 +129,13 @@ export function useAccountLevel(options: { record?: boolean } = {}): {
   // silencio para no soltar un popup por cada logro viejo al actualizar.
   useEffect(() => {
     if (!options.record) return;
-    const seen = getStoredSeenBadges();
+    // La insignia "Récord personal" pasó a llamarse `improved-1` (mide semanas
+    // mejoradas): a quien ya la tenía vista no se le vuelve a avisar.
+    const seen = getStoredSeenBadges()?.map((id) =>
+      id === 'personal-record' ? 'improved-1' : id
+    );
     const unlockedIds = unlockedBadges.map((b) => b.id);
-    if (seen === null) {
+    if (seen === undefined) {
       setStoredSeenBadges(unlockedIds);
       return;
     }

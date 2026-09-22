@@ -974,11 +974,21 @@ register({
   'Entrena todos los días de tu rutina en una misma semana.':
     'Train every day of your routine within one week.',
   'Récord personal': 'Personal record',
+  'Semana mejorada': 'Better week',
   'Mejora una semana respecto a la anterior.':
     'Improve one week over the previous one.',
+  'En racha': 'On a roll',
+  'Mejora 5 semanas respecto a su anterior.':
+    'Improve 5 weeks over the one before each.',
+  Imparable: 'Unstoppable',
+  'Mejora 20 semanas respecto a su anterior.':
+    'Improve 20 weeks over the one before each.',
   'Un mes seguido': 'A month straight',
   'Encadena 4 semanas completas sin faltar a un día.':
     'Chain 4 full weeks without missing a day.',
+  'Dos meses': 'Two months',
+  'Encadena 8 semanas completas sin faltar a un día.':
+    'Chain 8 full weeks without missing a day.',
   'Medio centenar': 'Half a hundred',
   'Completa 50 sesiones de fuerza.': 'Complete 50 strength sessions.',
   Centurión: 'Centurion',
@@ -1040,8 +1050,11 @@ register({
     'Do cardio on two different days this week.',
   'Último día': 'Last day',
   'Nivel {n}': 'Level {n}',
-  '{xp} / {next} puntos · {done} / {total} logros':
-    '{xp} / {next} points · {done} / {total} badges',
+  '{xp} / {next} puntos': '{xp} / {next} points',
+  'reto superado': 'challenge completed',
+  'retos superados': 'challenges completed',
+  logros: 'badges',
+  'Reto +{c} · Logro +{b}': 'Challenge +{c} · Badge +{b}',
   'Retos de la semana': 'Weekly challenges',
   'Retos de cardio': 'Cardio challenges',
   'Insignias y tu nivel': 'Badges and your level',

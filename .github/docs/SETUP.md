@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (19 suites, 256 tests)
+npm test           # Jest sobre lib/ (19 suites, 257 tests)
 npm run format     # Prettier
 ```
 
@@ -58,7 +58,9 @@ GymToni/
 │   ├── Avatar.tsx            ← Foto de perfil (fuente única de las pantallas sociales)
 │   ├── AchievementPoster.tsx ← Póster SVG de hitos semanales (imagen/vídeo)
 │   ├── ChallengesModal.tsx / AwardModal.tsx / LevelPill.tsx ← Retos de la semana, popup de premio y píldora de nivel
-│   ├── RestTimerRing.tsx     ← Rueda del descanso (SVG) del temporizador flotante del registro
+│   ├── RestTimerRing.tsx     ← Anillo de progreso (SVG): rueda del descanso y casillas de Logros
+│   ├── AnchorMenu.tsx        ← Menú desplegable anclado a un botón ⋯ (acciones de la tarjeta de ejercicio)
+│   ├── ThemeRevealOverlay.tsx ← Cambio de tema: disco con pantallazo de la piel de destino (react-native-view-shot)
 │   ├── WhatsNewModal.tsx     ← Popup de novedades tras actualizar
 │   └── Toast.tsx, GradientFill.tsx, AnimatedCounter.tsx, StretchScrollView.tsx…
 ├── features/workout/         ← Pantallas + estado global
@@ -72,7 +74,7 @@ GymToni/
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
 │   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y cuadrícula (rutinas, ejercicios, peso, temporizador, configuración, logros)
-│   ├── AchievementsScreen.tsx ← Logros: nivel de la cuenta e insignias (lib/level.ts, badges.ts); los retos se abren desde la hero de Inicio/Cardio (ChallengesModal)
+│   ├── AchievementsScreen.tsx ← Logros: nivel (retos superados + logros, regla de puntos), fila a todos los retos (ChallengesModal) e insignias con progreso en la casilla (lib/level.ts, badges.ts)
 │   ├── SettingsScreen.tsx    ← Configuración: tema, idioma, novedades y acceso a Datos y nube
 │   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
 │   ├── PublicRoutineScreen.tsx ← Rutina ajena en solo lectura (antes de copiarla)

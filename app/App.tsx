@@ -223,6 +223,8 @@ function AppContent() {
   // gestos del dispositivo). `pagerRef.setPageWithoutAnimation` mueve a la
   // pestaña tocada en la barra; el swipe dispara `onPageSelected`.
   const pagerRef = React.useRef<PagerView>(null);
+  // La vista que captura el cambio de tema (toda la app menos el overlay).
+  const themeCaptureRef = React.useRef<View>(null);
   // La barra oculta la pestaña de cardio si no hay ningún cardio.
   const showCardio = hasAnyCardio(state.logs);
   // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
@@ -894,463 +896,467 @@ function AppContent() {
 
   return (
     <View style={styles.container}>
-      <WhatsNewModal
-        visible={whatsNewEntry !== null}
-        entry={whatsNewEntry}
-        onClose={handleCloseWhatsNew}
-      />
-
-      {/* Premios (reto superado, logro nuevo, subida de nivel): un popup por
-          premio, en el orden en que cayeron. Ceden el paso a las novedades. */}
-      {whatsNewEntry === null && (
-        <AwardModal award={awards[0] ?? null} onClose={shiftAward} />
-      )}
-
-      {/* Aviso de versión nueva. Cede el paso a las novedades si ambos caen en
-          el mismo arranque (primero qué ha cambiado, después que hay más). */}
-      {updateRelease && (
-        <UpdateAvailableModal
-          visible={whatsNewEntry === null}
-          currentVersion={Constants.expoConfig?.version ?? ''}
-          latestVersion={updateRelease.version}
-          onUpdate={() => handleOpenStore(updateRelease)}
-          onDismiss={() => dismissUpdate(updateRelease)}
+      <View ref={themeCaptureRef} style={styles.container} collapsable={false}>
+        <WhatsNewModal
+          visible={whatsNewEntry !== null}
+          entry={whatsNewEntry}
+          onClose={handleCloseWhatsNew}
         />
-      )}
 
-      {/* Pager de pestañas NATIVO (react-native-pager-view): las 5 vistas
+        {/* Premios (reto superado, logro nuevo, subida de nivel): un popup por
+          premio, en el orden en que cayeron. Ceden el paso a las novedades. */}
+        {whatsNewEntry === null && (
+          <AwardModal award={awards[0] ?? null} onClose={shiftAward} />
+        )}
+
+        {/* Aviso de versión nueva. Cede el paso a las novedades si ambos caen en
+          el mismo arranque (primero qué ha cambiado, después que hay más). */}
+        {updateRelease && (
+          <UpdateAvailableModal
+            visible={whatsNewEntry === null}
+            currentVersion={Constants.expoConfig?.version ?? ''}
+            latestVersion={updateRelease.version}
+            onUpdate={() => handleOpenStore(updateRelease)}
+            onDismiss={() => dismissUpdate(updateRelease)}
+          />
+        )}
+
+        {/* Pager de pestañas NATIVO (react-native-pager-view): las 5 vistas
           principales. El arrastre y el asentamiento los gestiona ViewPager2 de
           forma nativa. Va lo PRIMERO del árbol: cualquier subpantalla se renderiza
           después (encima) y, siendo opaca a pantalla completa, la tapa. El scroll
           horizontal solo se habilita en pestañas (no en subpantallas). */}
-      <PagerView
-        ref={pagerRef}
-        style={StyleSheet.absoluteFill}
-        initialPage={0}
-        scrollEnabled={isTab}
-        offscreenPageLimit={4}
-        onPageSelected={(e) => {
-          const p = e.nativeEvent.position;
-          pagerPageRef.current = p;
-          if (navTargetRef.current !== null) {
-            // Navegación programática (barra): ignora intermedios; limpia al
-            // llegar al destino. No empuja el estado (ya lo hizo el toque).
-            if (p === navTargetRef.current) navTargetRef.current = null;
-            return;
-          }
-          // Swipe real del usuario: sincroniza el estado con la página.
-          if (isTab && p !== tabIndex) goToTabIndex(p);
-        }}
-      >
-        {tabLayer(
-          'home',
-          <HomeScreen
-            onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
-            onSelectLog={(log, day) =>
-              setScreen({ type: 'detail', log, day, origin: 'home' })
+        <PagerView
+          ref={pagerRef}
+          style={StyleSheet.absoluteFill}
+          initialPage={0}
+          scrollEnabled={isTab}
+          offscreenPageLimit={4}
+          onPageSelected={(e) => {
+            const p = e.nativeEvent.position;
+            pagerPageRef.current = p;
+            if (navTargetRef.current !== null) {
+              // Navegación programática (barra): ignora intermedios; limpia al
+              // llegar al destino. No empuja el estado (ya lo hizo el toque).
+              if (p === navTargetRef.current) navTargetRef.current = null;
+              return;
             }
-            onEditLog={(log, day) =>
-              setScreen({ type: 'workout-log', day, log })
-            }
-            onOpenDaySelector={() => {
-              if (displayedRoutine?.days.length) {
-                setScreen({ type: 'day-selector' });
-              } else {
-                setScreen({ type: 'new-routine' });
+            // Swipe real del usuario: sincroniza el estado con la página.
+            if (isTab && p !== tabIndex) goToTabIndex(p);
+          }}
+        >
+          {tabLayer(
+            'home',
+            <HomeScreen
+              onSelectDay={(day) => setScreen({ type: 'workout-log', day })}
+              onSelectLog={(log, day) =>
+                setScreen({ type: 'detail', log, day, origin: 'home' })
               }
-            }}
-            onOpenRoutineSelector={() =>
-              setScreen({ type: 'routine-selector', origin: 'home' })
-            }
-            // Ficha de la rutina ACTIVA (no la mostrada: es la que se entrena).
-            onOpenActiveRoutine={
-              activeRoutine
-                ? () =>
-                    setScreen({
-                      type: 'routine-details',
-                      routine: activeRoutine,
-                      back: { type: 'home' },
-                    })
-                : undefined
+              onEditLog={(log, day) =>
+                setScreen({ type: 'workout-log', day, log })
+              }
+              onOpenDaySelector={() => {
+                if (displayedRoutine?.days.length) {
+                  setScreen({ type: 'day-selector' });
+                } else {
+                  setScreen({ type: 'new-routine' });
+                }
+              }}
+              onOpenRoutineSelector={() =>
+                setScreen({ type: 'routine-selector', origin: 'home' })
+              }
+              // Ficha de la rutina ACTIVA (no la mostrada: es la que se entrena).
+              onOpenActiveRoutine={
+                activeRoutine
+                  ? () =>
+                      setScreen({
+                        type: 'routine-details',
+                        routine: activeRoutine,
+                        back: { type: 'home' },
+                      })
+                  : undefined
+              }
+              onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+              onOpenCommunity={() => setScreen({ type: 'community' })}
+              onShowWeekAchievement={(achievements, routineName) =>
+                setScreen({
+                  type: 'week-achievement',
+                  achievements,
+                  routineName,
+                })
+              }
+            />
+          )}
+
+          {tabLayer(
+            'cardio',
+            <CardioScreen
+              onSelectLog={(log, day) =>
+                setScreen({ type: 'detail', log, day, origin: 'cardio' })
+              }
+              onInsertCardioOnly={() =>
+                setScreen({
+                  type: 'workout-log',
+                  day: CARDIO_ONLY_DAY,
+                  cardioOnly: true,
+                  origin: 'cardio',
+                })
+              }
+              onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
+            />
+          )}
+
+          {tabLayer(
+            'calendar',
+            <CalendarScreen
+              emptyAction={emptyStateAction}
+              onSelectLog={(log, day) =>
+                setScreen({ type: 'detail', log, day, origin: 'calendar' })
+              }
+              onEditCardioOnly={(log) =>
+                setScreen({
+                  type: 'workout-log',
+                  day: CARDIO_ONLY_DAY,
+                  log,
+                  cardioOnly: true,
+                  origin: 'calendar',
+                })
+              }
+            />
+          )}
+
+          {tabLayer(
+            'community',
+            <CommunityScreen
+              active={screen.type === 'community'}
+              onOpenProfile={(userId, name) =>
+                setScreen({ type: 'user-profile', userId, name })
+              }
+              onOpenRoutine={(routineId, name, authorName, ownerId) =>
+                setScreen({
+                  type: 'public-routine',
+                  routineId,
+                  name,
+                  authorName,
+                  ownerId,
+                  back: { type: 'community' },
+                })
+              }
+              onOpenFollowing={() =>
+                setScreen({ type: 'following', back: 'community' })
+              }
+              onOpenFollowers={() =>
+                setScreen({ type: 'followers', back: 'community' })
+              }
+              onOpenAccount={() => setScreen({ type: 'data' })}
+            />
+          )}
+
+          {tabLayer(
+            'profile',
+            <ProfileScreen
+              onOpenRoutines={() =>
+                setScreen({ type: 'routine-selector', origin: 'profile' })
+              }
+              onOpenExerciseProgress={() =>
+                setScreen({ type: 'exercise-progress' })
+              }
+              onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
+              onOpenAchievements={() => setScreen({ type: 'achievements' })}
+              onOpenSettings={() => setScreen({ type: 'settings' })}
+              onOpenAccount={() => setScreen({ type: 'data' })}
+            />
+          )}
+        </PagerView>
+
+        {screen.type === 'routine-selector' && (
+          <RoutineSelectorScreen
+            onOpenRoutineDetails={(routine) =>
+              setScreen({
+                type: 'routine-details',
+                routine,
+                origin: screen.origin,
+              })
             }
             onCreateRoutine={() => setScreen({ type: 'new-routine' })}
-            onOpenCommunity={() => setScreen({ type: 'community' })}
-            onShowWeekAchievement={(achievements, routineName) =>
+            // Perfil del autor de una rutina traída de la comunidad. Se vuelve
+            // aquí, no al tablón: a Rutinas no se llega desde Comunidad.
+            onOpenProfile={(userId, name) =>
               setScreen({
-                type: 'week-achievement',
-                achievements,
-                routineName,
+                type: 'user-profile',
+                userId,
+                name,
+                back: { type: 'routine-selector', origin: screen.origin },
               })
             }
+            // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
+            onBack={() => backFromRoutineSelector(screen.origin)}
           />
         )}
 
-        {tabLayer(
-          'cardio',
-          <CardioScreen
-            onSelectLog={(log, day) =>
-              setScreen({ type: 'detail', log, day, origin: 'cardio' })
-            }
-            onInsertCardioOnly={() =>
+        {screen.type === 'day-selector' && (
+          <DaySelectorScreen
+            routine={displayedRoutine}
+            onSelectDay={(day) => {
+              // Si el día ya tiene un log de hoy, WorkoutLogScreen lo detecta solo
+              // (getLatestTodayLog) y abre ese registro para seguir metiendo series,
+              // igual que la hero "Continúa tu entrenamiento": no hay que volver a
+              // Inicio en silencio, eso solo confunde ("¿no ha funcionado el toque?").
+              setScreen({ type: 'workout-log', day });
+            }}
+            onSelectCardioOnly={() =>
               setScreen({
                 type: 'workout-log',
                 day: CARDIO_ONLY_DAY,
                 cardioOnly: true,
-                origin: 'cardio',
               })
             }
-            onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
+            onBack={goHome}
           />
         )}
 
-        {tabLayer(
-          'calendar',
-          <CalendarScreen
-            emptyAction={emptyStateAction}
-            onSelectLog={(log, day) =>
-              setScreen({ type: 'detail', log, day, origin: 'calendar' })
-            }
-            onEditCardioOnly={(log) =>
+        {screen.type === 'workout-log' && (
+          <WorkoutLogScreen
+            day={screen.day}
+            log={screen.log}
+            cardioOnly={screen.cardioOnly}
+            onSave={() => backFromWorkoutLog(screen.origin)}
+            onBack={() => backFromWorkoutLog(screen.origin)}
+            onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
+          />
+        )}
+
+        {screen.type === 'detail' && (
+          <DetailScreen
+            log={screen.log}
+            day={screen.day}
+            onBack={() => backFromDetail(screen.origin)}
+            onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
+            onEdit={() =>
               setScreen({
                 type: 'workout-log',
-                day: CARDIO_ONLY_DAY,
-                log,
-                cardioOnly: true,
-                origin: 'calendar',
+                day: screen.day,
+                log: screen.log,
+                cardioOnly: screen.log.cardioOnly || undefined,
+                origin: screen.origin,
+              })
+            }
+            onDelete={() => {
+              dispatch({ type: 'DELETE_WORKOUT_LOG', payload: screen.log.id });
+              backFromDetail(screen.origin);
+            }}
+            onOpenExerciseProgress={(exerciseKey) =>
+              setScreen({
+                type: 'exercise-progress',
+                initialExerciseKey: exerciseKey,
+                detailReturn: {
+                  log: screen.log,
+                  day: screen.day,
+                  origin: screen.origin,
+                },
               })
             }
           />
         )}
 
-        {tabLayer(
-          'community',
-          <CommunityScreen
-            active={screen.type === 'community'}
+        {screen.type === 'body-weight' && (
+          <BodyWeightScreen onBack={goProfile} />
+        )}
+        {screen.type === 'achievements' && (
+          <AchievementsScreen onBack={goProfile} />
+        )}
+
+        {screen.type === 'settings' && (
+          <SettingsScreen
+            onBack={goProfile}
+            onOpenData={() => setScreen({ type: 'data' })}
+          />
+        )}
+
+        {screen.type === 'following' && (
+          <FollowingScreen
+            mode="following"
+            onBack={() => setScreen({ type: screen.back })}
             onOpenProfile={(userId, name) =>
               setScreen({ type: 'user-profile', userId, name })
             }
-            onOpenRoutine={(routineId, name, authorName, ownerId) =>
+          />
+        )}
+
+        {screen.type === 'followers' && (
+          <FollowingScreen
+            mode="followers"
+            onBack={() => setScreen({ type: screen.back })}
+            onOpenProfile={(userId, name) =>
+              setScreen({ type: 'user-profile', userId, name })
+            }
+          />
+        )}
+
+        {screen.type === 'user-profile' && (
+          <UserProfileScreen
+            userId={screen.userId}
+            name={screen.name}
+            onBack={() => setScreen(screen.back ?? { type: 'community' })}
+            onOpenRoutine={(routineId, name, authorName) =>
               setScreen({
                 type: 'public-routine',
                 routineId,
                 name,
                 authorName,
-                ownerId,
-                back: { type: 'community' },
+                ownerId: screen.userId,
+                back: {
+                  type: 'user-profile',
+                  userId: screen.userId,
+                  name: screen.name,
+                },
               })
             }
-            onOpenFollowing={() =>
-              setScreen({ type: 'following', back: 'community' })
-            }
-            onOpenFollowers={() =>
-              setScreen({ type: 'followers', back: 'community' })
+            onOpenAccount={() => setScreen({ type: 'data' })}
+          />
+        )}
+
+        {screen.type === 'public-routine' && (
+          <PublicRoutineScreen
+            routineId={screen.routineId}
+            name={screen.name}
+            authorName={screen.authorName}
+            ownerId={screen.ownerId}
+            onBack={() => setScreen(screen.back)}
+            onOpenProfile={(userId, name) =>
+              setScreen({ type: 'user-profile', userId, name })
             }
             onOpenAccount={() => setScreen({ type: 'data' })}
           />
         )}
 
-        {tabLayer(
-          'profile',
-          <ProfileScreen
-            onOpenRoutines={() =>
-              setScreen({ type: 'routine-selector', origin: 'profile' })
+        {screen.type === 'exercise-progress' && (
+          <ExerciseProgressScreen
+            emptyAction={emptyStateAction}
+            selectedKey={screen.selectedKey ?? screen.initialExerciseKey}
+            focused={!!screen.initialExerciseKey}
+            onSelectExercise={(exerciseKey) =>
+              setScreen({ ...screen, selectedKey: exerciseKey })
             }
-            onOpenExerciseProgress={() =>
-              setScreen({ type: 'exercise-progress' })
+            // El mismo camino que recorre el atrás del móvil (ver
+            // `backFromExerciseProgress`): una sola función para los dos gestos.
+            onBack={() => backFromExerciseProgress(screen)}
+            // Ficha de la rutina que tiene el ejercicio, con su día abierto. Se
+            // vuelve a esta misma ficha del ejercicio, no al selector de rutinas.
+            onOpenRoutine={(routine, dayId) =>
+              setScreen({
+                type: 'routine-details',
+                routine,
+                back: screen,
+                expandDayId: dayId,
+              })
             }
-            onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
-            onOpenAchievements={() => setScreen({ type: 'achievements' })}
-            onOpenSettings={() => setScreen({ type: 'settings' })}
-            onOpenAccount={() => setScreen({ type: 'data' })}
           />
         )}
-      </PagerView>
 
-      {screen.type === 'routine-selector' && (
-        <RoutineSelectorScreen
-          onOpenRoutineDetails={(routine) =>
-            setScreen({
-              type: 'routine-details',
-              routine,
-              origin: screen.origin,
-            })
-          }
-          onCreateRoutine={() => setScreen({ type: 'new-routine' })}
-          // Perfil del autor de una rutina traída de la comunidad. Se vuelve
-          // aquí, no al tablón: a Rutinas no se llega desde Comunidad.
-          onOpenProfile={(userId, name) =>
-            setScreen({
-              type: 'user-profile',
-              userId,
-              name,
-              back: { type: 'routine-selector', origin: screen.origin },
-            })
-          }
-          // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
-          onBack={() => backFromRoutineSelector(screen.origin)}
-        />
-      )}
+        {screen.type === 'data' && (
+          <DataScreen
+            onImportData={handleImportData}
+            onExportData={handleExportData}
+            onBackupNow={handleAutoBackup}
+            onClearData={handleClearData}
+            onBack={() => setScreen({ type: 'settings' })}
+          />
+        )}
 
-      {screen.type === 'day-selector' && (
-        <DaySelectorScreen
-          routine={displayedRoutine}
-          onSelectDay={(day) => {
-            // Si el día ya tiene un log de hoy, WorkoutLogScreen lo detecta solo
-            // (getLatestTodayLog) y abre ese registro para seguir metiendo series,
-            // igual que la hero "Continúa tu entrenamiento": no hay que volver a
-            // Inicio en silencio, eso solo confunde ("¿no ha funcionado el toque?").
-            setScreen({ type: 'workout-log', day });
-          }}
-          onSelectCardioOnly={() =>
-            setScreen({
-              type: 'workout-log',
-              day: CARDIO_ONLY_DAY,
-              cardioOnly: true,
-            })
-          }
-          onBack={goHome}
-        />
-      )}
+        {screen.type === 'new-routine' && (
+          <NewRoutineScreen
+            key={
+              screen.initialDays
+                ? `import-${screen.initialDays.length}-${
+                    screen.initialDays[0]?.title ?? ''
+                  }`
+                : 'blank'
+            }
+            existingRoutineCount={state.routines.length}
+            onCreateRoutine={handleCreateRoutine}
+            onBack={goHome}
+            onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
+            onOpenCommunity={() => setScreen({ type: 'community' })}
+            initialDays={screen.initialDays}
+          />
+        )}
 
-      {screen.type === 'workout-log' && (
-        <WorkoutLogScreen
-          day={screen.day}
-          log={screen.log}
-          cardioOnly={screen.cardioOnly}
-          onSave={() => backFromWorkoutLog(screen.origin)}
-          onBack={() => backFromWorkoutLog(screen.origin)}
-          onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
-        />
-      )}
-
-      {screen.type === 'detail' && (
-        <DetailScreen
-          log={screen.log}
-          day={screen.day}
-          onBack={() => backFromDetail(screen.origin)}
-          onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
-          onEdit={() =>
-            setScreen({
-              type: 'workout-log',
-              day: screen.day,
-              log: screen.log,
-              cardioOnly: screen.log.cardioOnly || undefined,
-              origin: screen.origin,
-            })
-          }
-          onDelete={() => {
-            dispatch({ type: 'DELETE_WORKOUT_LOG', payload: screen.log.id });
-            backFromDetail(screen.origin);
-          }}
-          onOpenExerciseProgress={(exerciseKey) =>
-            setScreen({
-              type: 'exercise-progress',
-              initialExerciseKey: exerciseKey,
-              detailReturn: {
-                log: screen.log,
-                day: screen.day,
+        {screen.type === 'routine-details' && (
+          <RoutineDetailScreen
+            routine={screen.routine}
+            initialExpandedDayId={screen.expandDayId}
+            onBack={() => backFromRoutineDetails(screen)}
+            // Al copiar una rutina ajena se abre la copia: es la que ya se puede
+            // tocar, y dejar al usuario en la de solo lectura sería un callejón.
+            onForked={(copy) =>
+              setScreen({
+                type: 'routine-details',
+                routine: copy,
                 origin: screen.origin,
-              },
-            })
-          }
-        />
-      )}
+                back: screen.back,
+              })
+            }
+            onOpenAccount={() => setScreen({ type: 'data' })}
+            // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
+            // vuelve a esta misma ficha (tal cual: con su propio camino de vuelta).
+            onOpenProfile={(userId, name) =>
+              setScreen({ type: 'user-profile', userId, name, back: screen })
+            }
+          />
+        )}
 
-      {screen.type === 'body-weight' && <BodyWeightScreen onBack={goProfile} />}
-      {screen.type === 'achievements' && (
-        <AchievementsScreen onBack={goProfile} />
-      )}
+        {screen.type === 'qr-scanner' && (
+          <QRScannerScreen
+            onScanSuccess={(shared: SharedRoutine) =>
+              setScreen({ type: 'new-routine', initialDays: shared.days })
+            }
+            onBack={backToNewRoutine}
+          />
+        )}
 
-      {screen.type === 'settings' && (
-        <SettingsScreen
-          onBack={goProfile}
-          onOpenData={() => setScreen({ type: 'data' })}
-        />
-      )}
+        {screen.type === 'week-achievement' && (
+          <WeekAchievementScreen
+            achievements={screen.achievements}
+            routineName={screen.routineName}
+            onBack={goHome}
+          />
+        )}
 
-      {screen.type === 'following' && (
-        <FollowingScreen
-          mode="following"
-          onBack={() => setScreen({ type: screen.back })}
-          onOpenProfile={(userId, name) =>
-            setScreen({ type: 'user-profile', userId, name })
-          }
-        />
-      )}
-
-      {screen.type === 'followers' && (
-        <FollowingScreen
-          mode="followers"
-          onBack={() => setScreen({ type: screen.back })}
-          onOpenProfile={(userId, name) =>
-            setScreen({ type: 'user-profile', userId, name })
-          }
-        />
-      )}
-
-      {screen.type === 'user-profile' && (
-        <UserProfileScreen
-          userId={screen.userId}
-          name={screen.name}
-          onBack={() => setScreen(screen.back ?? { type: 'community' })}
-          onOpenRoutine={(routineId, name, authorName) =>
-            setScreen({
-              type: 'public-routine',
-              routineId,
-              name,
-              authorName,
-              ownerId: screen.userId,
-              back: {
-                type: 'user-profile',
-                userId: screen.userId,
-                name: screen.name,
-              },
-            })
-          }
-          onOpenAccount={() => setScreen({ type: 'data' })}
-        />
-      )}
-
-      {screen.type === 'public-routine' && (
-        <PublicRoutineScreen
-          routineId={screen.routineId}
-          name={screen.name}
-          authorName={screen.authorName}
-          ownerId={screen.ownerId}
-          onBack={() => setScreen(screen.back)}
-          onOpenProfile={(userId, name) =>
-            setScreen({ type: 'user-profile', userId, name })
-          }
-          onOpenAccount={() => setScreen({ type: 'data' })}
-        />
-      )}
-
-      {screen.type === 'exercise-progress' && (
-        <ExerciseProgressScreen
-          emptyAction={emptyStateAction}
-          selectedKey={screen.selectedKey ?? screen.initialExerciseKey}
-          focused={!!screen.initialExerciseKey}
-          onSelectExercise={(exerciseKey) =>
-            setScreen({ ...screen, selectedKey: exerciseKey })
-          }
-          // El mismo camino que recorre el atrás del móvil (ver
-          // `backFromExerciseProgress`): una sola función para los dos gestos.
-          onBack={() => backFromExerciseProgress(screen)}
-          // Ficha de la rutina que tiene el ejercicio, con su día abierto. Se
-          // vuelve a esta misma ficha del ejercicio, no al selector de rutinas.
-          onOpenRoutine={(routine, dayId) =>
-            setScreen({
-              type: 'routine-details',
-              routine,
-              back: screen,
-              expandDayId: dayId,
-            })
-          }
-        />
-      )}
-
-      {screen.type === 'data' && (
-        <DataScreen
-          onImportData={handleImportData}
-          onExportData={handleExportData}
-          onBackupNow={handleAutoBackup}
-          onClearData={handleClearData}
-          onBack={() => setScreen({ type: 'settings' })}
-        />
-      )}
-
-      {screen.type === 'new-routine' && (
-        <NewRoutineScreen
-          key={
-            screen.initialDays
-              ? `import-${screen.initialDays.length}-${
-                  screen.initialDays[0]?.title ?? ''
-                }`
-              : 'blank'
-          }
-          existingRoutineCount={state.routines.length}
-          onCreateRoutine={handleCreateRoutine}
-          onBack={goHome}
-          onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
-          onOpenCommunity={() => setScreen({ type: 'community' })}
-          initialDays={screen.initialDays}
-        />
-      )}
-
-      {screen.type === 'routine-details' && (
-        <RoutineDetailScreen
-          routine={screen.routine}
-          initialExpandedDayId={screen.expandDayId}
-          onBack={() => backFromRoutineDetails(screen)}
-          // Al copiar una rutina ajena se abre la copia: es la que ya se puede
-          // tocar, y dejar al usuario en la de solo lectura sería un callejón.
-          onForked={(copy) =>
-            setScreen({
-              type: 'routine-details',
-              routine: copy,
-              origin: screen.origin,
-              back: screen.back,
-            })
-          }
-          onOpenAccount={() => setScreen({ type: 'data' })}
-          // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
-          // vuelve a esta misma ficha (tal cual: con su propio camino de vuelta).
-          onOpenProfile={(userId, name) =>
-            setScreen({ type: 'user-profile', userId, name, back: screen })
-          }
-        />
-      )}
-
-      {screen.type === 'qr-scanner' && (
-        <QRScannerScreen
-          onScanSuccess={(shared: SharedRoutine) =>
-            setScreen({ type: 'new-routine', initialDays: shared.days })
-          }
-          onBack={backToNewRoutine}
-        />
-      )}
-
-      {screen.type === 'week-achievement' && (
-        <WeekAchievementScreen
-          achievements={screen.achievements}
-          routineName={screen.routineName}
-          onBack={goHome}
-        />
-      )}
-
-      {/* Barra de navegación FIJA (fuera del pager): solo en pestañas. El
+        {/* Barra de navegación FIJA (fuera del pager): solo en pestañas. El
           contenido de cada pestaña desliza por debajo; la barra no se mueve. */}
-      {isTab && (
-        <FloatingPrimaryNav
-          bottom={getFloatingPrimaryNavMetrics(insets.bottom).bottom}
-          activeTab={screen.type as TabType}
-          showCardio={showCardio}
-          onPressHome={() => setScreen({ type: 'home' })}
-          onPressCardio={() => setScreen({ type: 'cardio' })}
-          onPressCalendar={() => setScreen({ type: 'calendar' })}
-          onPressCommunity={() => setScreen({ type: 'community' })}
-          onPressProfile={() => setScreen({ type: 'profile' })}
-          profileAvatarUri={myProfile?.avatar_url}
-        />
-      )}
+        {isTab && (
+          <FloatingPrimaryNav
+            bottom={getFloatingPrimaryNavMetrics(insets.bottom).bottom}
+            activeTab={screen.type as TabType}
+            showCardio={showCardio}
+            onPressHome={() => setScreen({ type: 'home' })}
+            onPressCardio={() => setScreen({ type: 'cardio' })}
+            onPressCalendar={() => setScreen({ type: 'calendar' })}
+            onPressCommunity={() => setScreen({ type: 'community' })}
+            onPressProfile={() => setScreen({ type: 'profile' })}
+            profileAvatarUri={myProfile?.avatar_url}
+          />
+        )}
 
-      {/* El descanso en curso, cuando NO se está en el registro que lo lanzó.
+        {/* El descanso en curso, cuando NO se está en el registro que lo lanzó.
           Antes salir de esa pantalla lo mataba (vivía en su estado); ahora vive
           en el store y sigue contando mientras miras el calendario o el
           histórico, con esta barra para volver al entreno de un toque. */}
-      {!!restTimer && !isRestTimerScreen && (
-        <RestTimerBar
-          bottom={restBarBottom}
-          onPress={() => {
-            const day = findDayInRoutines(state.routines, restTimer.dayId);
-            if (day) setScreen({ type: 'workout-log', day, origin: 'home' });
-          }}
-        />
-      )}
+        {!!restTimer && !isRestTimerScreen && (
+          <RestTimerBar
+            bottom={restBarBottom}
+            onPress={() => {
+              const day = findDayInRoutines(state.routines, restTimer.dayId);
+              if (day) setScreen({ type: 'workout-log', day, origin: 'home' });
+            }}
+          />
+        )}
+      </View>
 
       {/* Encima de todo (incluidas las barras flotantes): el círculo del cambio
-          de tema en caliente. */}
-      <ThemeRevealOverlay />
+          de tema en caliente, con un pantallazo de la vista de arriba. */}
+      <ThemeRevealOverlay captureTarget={themeCaptureRef} />
     </View>
   );
 }
