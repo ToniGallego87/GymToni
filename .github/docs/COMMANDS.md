@@ -57,6 +57,9 @@ Referencia 2026-09-22 (garnet, con `TabStateBoundary`):
 - con blur (`GLASS_BLUR_ENABLED = true`): 3988 frames, mediana 26 ms, p90 40, p99 69, 123 frames UI lentos.
 - sin ningún blur: 1278 frames, mediana 15 ms, p90 25, p99 48, 14 frames UI lentos.
 - un blur en la barra superior, `blurReductionFactor={12}` (lo que va en la app): 2704 frames, mediana 16 ms, p90 22, p99 32, 6 frames UI lentos.
+- dos blurs (superior + inferior), reducción 12: 998 frames, mediana 23 ms, p90 30, p99 61.
+- cuatro blurs (superior, inferior, Volver, descanso), reducción 12: 1226 frames, mediana 28 ms, p90 48, p99 73.
+  → el coste de dimezis es POR `BlurView` (cada uno redibuja la pantalla), no por radio: ~7 ms/frame cada barra.
 
 ## Verificación
 

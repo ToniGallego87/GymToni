@@ -15,7 +15,8 @@ import {
   GLASS_BACK_BUTTON_BG,
   GLASS_BACK_BUTTON_BORDER,
   GLASS_BACK_BUTTON_OVERLAY,
-  GLASS_BLUR_ENABLED,
+  GLASS_SMALL_BLUR_ENABLED,
+  GLASS_BLUR_REDUCTION,
   GLASS_BLUR_INTENSITY,
 } from './glassTokens';
 
@@ -55,10 +56,11 @@ export function RestTimerBar({ onPress, bottom }: RestTimerBarProps) {
       accessibilityRole="button"
       accessibilityLabel={t('Volver al entreno')}
     >
-      {GLASS_BLUR_ENABLED && (
+      {GLASS_SMALL_BLUR_ENABLED && (
         <BlurView
           tint="dark"
           intensity={GLASS_BLUR_INTENSITY}
+          blurReductionFactor={GLASS_BLUR_REDUCTION}
           experimentalBlurMethod="dimezisBlurView"
           style={styles.blur}
         />

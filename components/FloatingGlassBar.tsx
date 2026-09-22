@@ -5,6 +5,7 @@ import { BlurView } from 'expo-blur';
 import { theme } from '@lib/theme';
 import {
   GLASS_BLUR_ENABLED,
+  GLASS_BLUR_REDUCTION,
   GLASS_BLUR_INTENSITY,
   GLASS_FLOATING_BG,
   GLASS_FLOATING_BORDER,
@@ -61,6 +62,7 @@ export function FloatingGlassBar({
         <FrostedBlur
           tint={GLASS_TINT}
           intensity={GLASS_BLUR_INTENSITY}
+          blurReductionFactor={GLASS_BLUR_REDUCTION}
           experimentalBlurMethod="dimezisBlurView"
           style={styles.blur}
         />

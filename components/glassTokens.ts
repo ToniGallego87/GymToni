@@ -16,19 +16,22 @@ export const GLASS_FLOATING_TEXT = '#F5F7FA';
 
 // Tinte del BlurView acorde al tema.
 /**
- * Desenfoque real (`BlurView` dimezis) de la barra inferior, el botón Volver
- * y la barra de descanso: APAGADO. El blur re-desenfoca en cada frame que algo
- * se mueve debajo; con los tres encendidos a la reducción por defecto (4) la
- * mediana de frame en garnet era 26 ms (medido 2026-09-22, ver COMMANDS.md).
- * Ahí basta el fondo translúcido: son pequeños.
+ * Desenfoque real (`BlurView` dimezis): cada uno vuelve a dibujar TODA la
+ * pantalla en un bitmap por frame, sea cual sea la reducción, así que el coste
+ * es POR BARRA (~7 ms/frame cada una en garnet, medido 2026-09-22, ver
+ * COMMANDS.md): 1 blur → mediana 16 ms, 2 → 23, 4 → 28. Solo la barra superior
+ * lo lleva; la inferior (`GLASS_BLUR_ENABLED`) y Volver / descanso
+ * (`GLASS_SMALL_BLUR_ENABLED`) van con fondo translúcido opaco. Los
+ * interruptores quedan por si algún día se quiere pagar el coste.
  */
 export const GLASS_BLUR_ENABLED = false;
+export const GLASS_SMALL_BLUR_ENABLED = false;
+export const GLASS_BLUR_REDUCTION = 12;
 /**
- * La barra superior sí lleva desenfoque, pero con el bitmap reducido
- * `GLASS_TOP_BAR_BLUR_REDUCTION` veces: a 12 cuesta lo mismo que no tenerlo
- * (mediana 16 ms, p99 32) y a ojo desenfoca igual. Se probó también montarlo
- * solo en reposo (apagado al arrastrar): mismo rendimiento y un salto visible
- * al parar, descartado.
+ * La barra superior sí lleva desenfoque, con el bitmap reducido
+ * `GLASS_TOP_BAR_BLUR_REDUCTION` veces (mediana 16 ms, p99 32: igual que sin
+ * blur). Se probó también montarlo solo en reposo (apagado al arrastrar):
+ * mismo rendimiento y un salto visible al parar, descartado.
  */
 export const GLASS_TOP_BAR_BLUR_ENABLED = true;
 export const GLASS_TOP_BAR_BLUR_REDUCTION = 12;
@@ -75,9 +78,8 @@ function recomputeGlassTokens() {
     ? 'rgba(21, 25, 34, 0.14)'
     : 'rgba(255, 255, 255, 0.08)';
 
-  // Sin desenfoque (GLASS_BLUR_ENABLED), el fondo hace todo el trabajo de
-  // separar la barra del contenido que pasa por debajo: cristal ahumado, no
-  // cristal transparente.
+  // Sin blur debajo, el fondo hace todo el trabajo de separar la barra del
+  // contenido que pasa por debajo: cristal ahumado, no transparente.
   GLASS_FLOATING_BG = isLight
     ? 'rgba(255, 255, 255, 0.9)'
     : 'rgba(28, 32, 42, 0.88)';
@@ -101,6 +103,7 @@ function recomputeGlassTokens() {
     ? 'rgba(21, 25, 34, 0.14)'
     : 'rgba(255, 255, 255, 0.14)';
 
+  // Sin blur debajo: cristal ahumado que tapa el contenido.
   GLASS_BACK_BUTTON_BG = isLight
     ? 'rgba(18, 22, 30, 0.82)'
     : 'rgba(28, 32, 42, 0.88)';
