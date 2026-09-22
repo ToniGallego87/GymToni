@@ -38,24 +38,26 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
       para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [ ] **Rendimiento: medir en el móvil lo ya hecho** — queda la medida: con la
-      app abierta en el móvil garnet (`f43d4924`, el único que admite
-      `adb install`; bloquea `adb shell input`, así que la interacción la hace
-      la persona), `adb shell dumpsys gfxinfo com.tonigallego.gymbro reset` →
-      recorrido fijo (abrir Inicio, meter tres series en el registro, volver,
-      pasar por las cinco pestañas) → `dumpsys gfxinfo` y leer frames lentos y
-      percentiles; y, si hace falta detalle por componente, un build de
-      desarrollo con el Profiler de React DevTools. Lo que se mide: el cálculo
-      único de retos/logros, miniaturas JPG en vez de GIF, mejora por semana
-      memoizada, `value` del Provider estable y el `TabStateBoundary`
-      (`useDeferredValue` en las pestañas no activas), ya aplicado.
-      **Por qué:** "velocidad de uso" es la prioridad número uno; sin medir no
-      se sabe si lo hecho basta ni si queda algo que compense (desmontar
-      pestañas, `React.memo` con props estables).
-      **Archivos:** `app/App.tsx` (`TabStateBoundary`, `tabLayer`),
-      `hooks/useAccountLevel.ts` (caché), `features/workout/HomeScreen.tsx`,
-      `features/workout/CardioScreen.tsx`, `.github/docs/COMMANDS.md`
-      (añadir el recorrido de medida cuando se fije).
+- [ ] **Rendimiento: el hilo UI va a ~38 fps sostenidos; probar sin el blur de
+      la barra** — medido el 2026-09-22 en garnet (`f43d4924`, release, ya con
+      `TabStateBoundary`): recorrido "tres series + cinco pestañas" → 3988
+      frames, mediana 26 ms, p90 40, p99 69, 95 % por encima de 16 ms; GPU p50 9
+      ms (sobra). Es coste POR FRAME sostenido en CPU, no cálculo JS puntual
+      (eso ya está cacheado). Sospechoso principal: el `BlurView` de
+      `GlassTopBar` con `experimentalBlurMethod="dimezisBlurView"`, que
+      re-desenfoca en cada frame que algo se mueve debajo, y todo scrollea
+      debajo. Segundo: sombra/elevación + `GradientFill` por tarjeta. Siguiente
+      paso: A/B con el mismo recorrido (a) sin blur (fondo translúcido plano),
+      (b) blur solo en la barra de Inicio, y decidir con números. Recorrido de
+      medida en [COMMANDS.md](COMMANDS.md#medir-rendimiento).
+      **Por qué:** "velocidad de uso" es la prioridad número uno y la app no
+      llega a 60 fps ni en un móvil de gama media-alta; el blur es lo único que
+      trabaja en cada frame sin que el usuario haga nada con él.
+      **Archivos:** `components/GlassTopBar.tsx:130-137` (`FrostedBlur`,
+      `experimentalBlurMethod`), `components/glassTokens.ts`
+      (`GLASS_TOP_BAR_BLUR_INTENSITY`, `GLASS_TOP_BAR_BG`),
+      `components/GradientFill.tsx`, `lib/theme.ts` (`shadow.soft` /
+      `shadow.card`).
       **Esfuerzo:** bajo.
 
 ## Funcionalidades a simplificar

@@ -41,6 +41,21 @@ Solo válido si `app.json` no ha cambiado desde el último `clean` (ver aviso ar
 adb devices
 ```
 
+## Medir rendimiento
+
+Frames del proceso con `gfxinfo` (release, sin Metro). El móvil garnet bloquea
+`adb shell input`: el recorrido lo hace la persona.
+
+```powershell
+$adb="$env:LOCALAPPDATAAndroidSdkplatform-toolsadb.exe"; $p="com.tonigallego.gymbro"
+& $adb shell dumpsys gfxinfo $p reset
+# Recorrido fijo: registro de hoy → tres series → volver → las cinco pestañas arrastrando
+& $adb shell dumpsys gfxinfo $p | Select-String "Total frames|Janky|50th|90th|95th|99th|Slow UI|HISTOGRAM"
+```
+
+Referencia 2026-09-22 (garnet, con `TabStateBoundary`): 3988 frames, mediana
+26 ms, p90 40 ms, p99 69 ms, GPU p50 9 ms.
+
 ## Verificación
 
 ```bash
