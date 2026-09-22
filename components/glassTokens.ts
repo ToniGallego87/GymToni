@@ -19,13 +19,14 @@ export const GLASS_FLOATING_TEXT = '#F5F7FA';
  * Desenfoque real (`BlurView` dimezis): cada uno vuelve a dibujar TODA la
  * pantalla en un bitmap por frame, sea cual sea la reducción, así que el coste
  * es POR BARRA (~7 ms/frame cada una en garnet, medido 2026-09-22, ver
- * COMMANDS.md): 1 blur → mediana 16 ms, 2 → 23, 4 → 28. Solo la barra superior
- * lo lleva; la inferior (`GLASS_BLUR_ENABLED`) y Volver / descanso
- * (`GLASS_SMALL_BLUR_ENABLED`) van con fondo translúcido opaco. Los
- * interruptores quedan por si algún día se quiere pagar el coste.
+ * COMMANDS.md): 1 blur → mediana 16 ms, 2 → 23, 4 → 28. Decisión de producto
+ * (2026-09-22): se paga el coste y van los cuatro (barra superior, inferior,
+ * Volver y descanso). Los interruptores quedan para apagar la inferior
+ * (`GLASS_BLUR_ENABLED`) o Volver / descanso (`GLASS_SMALL_BLUR_ENABLED`) si
+ * un móvil flojo lo pide.
  */
-export const GLASS_BLUR_ENABLED = false;
-export const GLASS_SMALL_BLUR_ENABLED = false;
+export const GLASS_BLUR_ENABLED = true;
+export const GLASS_SMALL_BLUR_ENABLED = true;
 export const GLASS_BLUR_REDUCTION = 12;
 /**
  * La barra superior sí lleva desenfoque, con el bitmap reducido
@@ -44,7 +45,7 @@ export let GLASS_TOP_BAR_OVERLAY = 'rgba(255, 255, 255, 0.04)';
 // por debajo (en noche el contraste del blur ya lo hace y no lleva borde).
 export let GLASS_TOP_BAR_HAIRLINE = 'rgba(255, 255, 255, 0.08)';
 
-export let GLASS_FLOATING_BG = 'rgba(28, 32, 42, 0.88)';
+export let GLASS_FLOATING_BG = 'rgba(28, 32, 42, 0.4)';
 export let GLASS_FLOATING_OVERLAY = 'rgba(8, 12, 16, 0)';
 export let GLASS_FLOATING_BORDER = 'rgba(255, 255, 255, 0.12)';
 export let GLASS_FLOATING_HIGHLIGHT = 'rgba(255, 255, 255, 0.1)';
@@ -58,7 +59,7 @@ export let GLASS_ACTIVE_ITEM_BORDER = 'rgba(255, 255, 255, 0.14)';
 // barra es cristal CLARO, mientras el "Volver" sigue siendo cristal OSCURO
 // translúcido (un ahumado que se lee sobre el lienzo claro sin opacarlo). Por
 // eso lleva su propia terna, y su tinta es clara en ambos temas.
-export let GLASS_BACK_BUTTON_BG = 'rgba(28, 32, 42, 0.88)';
+export let GLASS_BACK_BUTTON_BG = 'rgba(28, 32, 42, 0.4)';
 export let GLASS_BACK_BUTTON_BORDER = 'rgba(255, 255, 255, 0.12)';
 export let GLASS_BACK_BUTTON_OVERLAY = 'rgba(8, 12, 16, 0.05)';
 export let GLASS_BACK_BUTTON_TEXT = '#ffffff';
@@ -78,11 +79,11 @@ function recomputeGlassTokens() {
     ? 'rgba(21, 25, 34, 0.14)'
     : 'rgba(255, 255, 255, 0.08)';
 
-  // Sin blur debajo, el fondo hace todo el trabajo de separar la barra del
-  // contenido que pasa por debajo: cristal ahumado, no transparente.
+  // Con blur reducido debajo, el fondo solo tiñe: algo más denso que el
+  // cristal original (0.24) porque el desenfoque a reducción 12 es más suave.
   GLASS_FLOATING_BG = isLight
-    ? 'rgba(255, 255, 255, 0.9)'
-    : 'rgba(28, 32, 42, 0.88)';
+    ? 'rgba(255, 255, 255, 0.55)'
+    : 'rgba(28, 32, 42, 0.4)';
   GLASS_FLOATING_OVERLAY = isLight
     ? 'rgba(255, 255, 255, 0)'
     : 'rgba(8, 12, 16, 0)';
@@ -103,10 +104,9 @@ function recomputeGlassTokens() {
     ? 'rgba(21, 25, 34, 0.14)'
     : 'rgba(255, 255, 255, 0.14)';
 
-  // Sin blur debajo: cristal ahumado que tapa el contenido.
   GLASS_BACK_BUTTON_BG = isLight
-    ? 'rgba(18, 22, 30, 0.82)'
-    : 'rgba(28, 32, 42, 0.88)';
+    ? 'rgba(18, 22, 30, 0.45)'
+    : 'rgba(28, 32, 42, 0.4)';
   GLASS_BACK_BUTTON_BORDER = isLight
     ? 'rgba(255, 255, 255, 0.16)'
     : 'rgba(255, 255, 255, 0.12)';

@@ -38,11 +38,18 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
       para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [ ] **Rendimiento: afinar lo que queda tras arreglar el blur** — con un solo
-      blur (barra superior, `blurReductionFactor` 12; medido 2026-09-22 en
-      garnet: mediana 26 → 16 ms, p90 40 → 22, p99 69 → 32) la app ya va a
-      ~60 fps en uso normal; quedan picos sueltos (p99 32 ms, 6 frames con el
-      hilo UI lento en el recorrido). Candidatos, por orden: (1) sombra/elevación +
+- [ ] **Rendimiento: el blur de las cuatro barras cuesta ~7 ms/frame cada
+      una; buscar cómo abaratarlo** — decisión de producto (2026-09-22): se
+      quieren borrosas la barra superior, la inferior, Volver y descanso.
+      Cada `BlurView` dimezis redibuja la pantalla entera en un bitmap por
+      frame, sea cual sea `blurReductionFactor`: con las cuatro, mediana 28 ms
+      (p90 48, p99 73) frente a 16 ms con una sola. Vías: (1) un ÚNICO
+      `BlurView` a pantalla completa como capa base y que las barras solo lo
+      recorten (`overflow: hidden` + posicionar el hijo), así se paga una
+      pasada; (2) Volver y descanso solo con blur mientras están quietos (no
+      scrollea nada debajo en el registro); (3) Skia `BackdropBlur` (GPU),
+      descartado por dependencia grande salvo que compense. Además de los
+      picos que ya había: Candidatos, por orden: (1) sombra/elevación +
       `GradientFill` en cada tarjeta del historial de semanas (una por log);
       (2) `animateLayout` (LayoutAnimation) en los desplegables; (3) el
       `Anton` con `adjustsFontSizeToFit` en las cabeceras. Medir con el mismo
