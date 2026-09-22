@@ -34,6 +34,9 @@ import { subscribeThemeReveal, ThemeRevealRequest } from '@lib/themeTransition';
 // la app menos este overlay, y bloquea los toques mientras dura.
 const DURATION = 620;
 const FADE_DURATION = 200;
+// Respaldo sin círculo: si la captura de la piel de destino falla, la tapa
+// saliente se disuelve sobre la UI real (que ya lleva el tema nuevo).
+const DISSOLVE_DURATION = 260;
 // Escala mínima del disco: la inversa (1/s) del hijo no puede irse a infinito.
 const MIN_SCALE = 0.004;
 
@@ -51,6 +54,10 @@ interface RevealState extends ThemeRevealRequest {
   discUri: string | null;
   // Listo para animar (las imágenes ya están decodificadas).
   ready: boolean;
+  // Sin círculo: la tapa se disuelve y ya. Se activa cuando el pantallazo de la
+  // piel de destino no ha salido; crecer un disco de color liso y fundirlo al
+  // final se veía como un fogonazo blanco.
+  dissolve: boolean;
 }
 
 interface ThemeRevealOverlayProps {
@@ -86,6 +93,9 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
   const [request, setRequest] = useState<RevealState | null>(null);
   const scale = useSharedValue(0);
   const opacity = useSharedValue(1);
+  // Opacidad de la tapa (la piel saliente a pantalla completa). Solo se anima
+  // en el respaldo por disolución.
+  const coverOpacity = useSharedValue(1);
   // Evita solapar dos revelados si se pulsa muy rápido.
   const animating = useRef(false);
   // Cuántas imágenes faltan por decodificar antes de arrancar.
@@ -106,6 +116,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
         // noche un par de frames antes de que el disco la tapara).
         scale.value = expanding ? MIN_SCALE : 1;
         opacity.value = 1;
+        coverOpacity.value = 1;
 
         void (async () => {
           const outgoing = await snapshot(captureTarget);
@@ -119,6 +130,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
               coverUri: null,
               discUri: null,
               ready: true,
+              dissolve: false,
             });
             return;
           }
@@ -133,6 +145,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
               coverUri: outgoing,
               discUri: null,
               ready: false,
+              dissolve: false,
             });
           } else {
             // La noche se aplica ya (queda viva debajo) y el disco lleva el
@@ -146,6 +159,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
               coverUri: null,
               discUri: outgoing,
               ready: false,
+              dissolve: false,
             });
           }
         })();
@@ -167,8 +181,11 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
           ? {
               ...r,
               discUri: incoming,
-              // Sin captura nueva, el disco de color de destino crece sobre
-              // la tapa: el respaldo de siempre.
+              // Sin captura nueva no hay círculo: la tapa se disuelve sobre la
+              // UI real, que ya lleva el tema puesto. Antes crecía un disco del
+              // color de destino y se fundía al final, y eso se veía como un
+              // fogonazo (el color liso tapaba la pantalla entera).
+              dissolve: !incoming,
               ready: !incoming,
             }
           : r
@@ -203,6 +220,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
 
   const endReveal = () => {
     animating.current = false;
+    coverOpacity.value = 1;
     setRequest(null);
   };
 
@@ -221,9 +239,20 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
 
   const ready = !!request?.ready;
   const expanding = !!request?.expanding;
+  const dissolve = !!request?.dissolve;
   useEffect(() => {
     if (!request || !ready) return;
     opacity.value = 1;
+    if (dissolve) {
+      coverOpacity.value = withTiming(
+        0,
+        { duration: DISSOLVE_DURATION, easing: Easing.out(Easing.quad) },
+        (finished) => {
+          if (finished) runOnJS(endReveal)();
+        }
+      );
+      return;
+    }
     if (expanding) {
       scale.value = MIN_SCALE;
       scale.value = withTiming(
@@ -244,7 +273,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
       );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, expanding]);
+  }, [ready, expanding, dissolve]);
 
   const discStyle = useAnimatedStyle(() => ({
     opacity: opacity.value,
@@ -254,6 +283,7 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
   const innerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: 1 / Math.max(scale.value, MIN_SCALE) }],
   }));
+  const coverStyle = useAnimatedStyle(() => ({ opacity: coverOpacity.value }));
 
   if (!request || !geometry) return null;
 
@@ -278,9 +308,9 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
     <View style={StyleSheet.absoluteFill} pointerEvents="auto">
       {/* Tapa con la piel saliente (solo al crecer), bajo el disco. */}
       {!!request.coverUri && (
-        <Image
+        <Animated.Image
           source={{ uri: request.coverUri }}
-          style={StyleSheet.absoluteFill}
+          style={[StyleSheet.absoluteFill, coverStyle]}
           onLoad={handleCoverLoaded}
           onError={handleCoverLoaded}
           fadeDuration={0}
@@ -288,35 +318,38 @@ export function ThemeRevealOverlay({ captureTarget }: ThemeRevealOverlayProps) {
       )}
       {/* El disco: mientras no esté listo, al crecer no se ve (escala mínima)
           y al encoger cubre la pantalla entera (escala 1), que es justo lo que
-          hace falta en cada caso. */}
-      <Animated.View
-        style={[
-          {
-            position: 'absolute',
-            left: geometry.left,
-            top: geometry.top,
-            width: geometry.size,
-            height: geometry.size,
-            borderRadius: geometry.radius,
-            overflow: 'hidden',
-            backgroundColor: request.discUri
-              ? 'transparent'
-              : request.discColor,
-          },
-          discStyle,
-        ]}
-      >
-        {!!request.discUri && (
-          <Animated.View
-            style={[
-              { width: geometry.size, height: geometry.size },
-              innerStyle,
-            ]}
-          >
-            {screenImage(request.discUri, handleDiscLoaded)}
-          </Animated.View>
-        )}
-      </Animated.View>
+          hace falta en cada caso. En el respaldo por disolución no se pinta:
+          solo se desvanece la tapa. */}
+      {!request.dissolve && (
+        <Animated.View
+          style={[
+            {
+              position: 'absolute',
+              left: geometry.left,
+              top: geometry.top,
+              width: geometry.size,
+              height: geometry.size,
+              borderRadius: geometry.radius,
+              overflow: 'hidden',
+              backgroundColor: request.discUri
+                ? 'transparent'
+                : request.discColor,
+            },
+            discStyle,
+          ]}
+        >
+          {!!request.discUri && (
+            <Animated.View
+              style={[
+                { width: geometry.size, height: geometry.size },
+                innerStyle,
+              ]}
+            >
+              {screenImage(request.discUri, handleDiscLoaded)}
+            </Animated.View>
+          )}
+        </Animated.View>
+      )}
     </View>
   );
 }

@@ -1,5 +1,16 @@
 # UPDATES
 
+## Sin publicar
+
+### Correcciones
+
+- **El cambio de tema ya no parpadea ni se come las flechas de la hero card.** Validado en garnet (23122PCD1G) grabando la pantalla a 720p y mirando los fotogramas uno a uno: antes, durante ~1 s la pantalla estaba tapada por un pantallazo SIN las flechas ni los puntos del carrusel, el círculo crecía como un bloque de color liso (sin UI dentro) y el fundido final de 200 ms de ese color plano era el parpadeo. La causa estaba en `react-native-view-shot` 3.8.0: su `ViewShot.execute()` recibe el control del UIManager en el hilo de UI y se lo pasa a un executor de fondo, así que `view.draw(canvas)` recorría el árbol MIENTRAS React Native lo mutaba. De ahí salían las dos cosas: capturas a medias y, en la segunda captura (la del tema recién aplicado, con el árbol en plena mutación), un `IndexOutOfBoundsException` en `ViewGroup.getAndVerifyPreorderedView` que la tiraba entera y activaba el respaldo. Tres arreglos:
+  - `patches/react-native-view-shot+3.8.0.patch` (nuevo): el dibujado vuelve al hilo de UI (`runOnUiThread`, en el sitio si ya se está en él). Se paga con el encode y la escritura del fichero también en el hilo de UI; en las dos transiciones medidas no aparece ni un `Skipped frames` de Choreographer.
+  - `ThemeRevealOverlay`: respaldo nuevo `dissolve`. Si la captura de destino no sale, la tapa saliente se desvanece en 260 ms sobre la UI real (que ya lleva el tema puesto) en vez de crecer un disco de color liso y fundirlo al final, que era el fogonazo.
+  - `HeroCarousel`: `elevation: 12` en `arrow` y `dots`, por encima del `elevation: 10` de `shadow.card`. En pantalla mandaba el orden del árbol y las flechas salían igual, pero en un dibujado por software manda la Z y la tarjeta elevada se las comía. Los contenedores son transparentes, así que la elevación no proyecta sombra.
+
+  Medición después del parche: 0 errores de ViewShot (antes 1 por transición), flechas y puntos presentes en todos los fotogramas en los dos sentidos, y el círculo con el pantallazo real dentro. Queda sin probar el póster de logros, que usa el mismo `captureRef` con la pantalla a la vista.
+
 ## Version 0.8.0 - 2026-09-22
 
 ### Nuevas funcionalidades

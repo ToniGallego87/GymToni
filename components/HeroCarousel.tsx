@@ -251,6 +251,13 @@ const makeStyles = () =>
     },
     arrow: {
       position: 'absolute',
+      // Por encima de la hero card, que lleva `shadow.card` (elevation 10). En
+      // pantalla mandaba el orden del árbol y las flechas salían igualmente,
+      // pero en un dibujado por software (react-native-view-shot) mandaba la Z
+      // y la tarjeta elevada se las comía: en la animación de cambio de tema el
+      // pantallazo salía sin flechas ni puntos. El contenedor es transparente y
+      // sin fondo, así que la elevación no proyecta sombra.
+      elevation: 12,
       top: 0,
       // Excluye el margen inferior de la hero card para abarcar justo su altura.
       bottom: theme.spacing.md,
@@ -292,6 +299,8 @@ const makeStyles = () =>
     // (spacing.md + 10 - 8) para que el punto siga cayendo donde caía.
     dots: {
       position: 'absolute',
+      // Misma razón que `arrow`: por encima de la tarjeta elevada.
+      elevation: 12,
       left: 0,
       right: 0,
       bottom: theme.spacing.md + 2,
