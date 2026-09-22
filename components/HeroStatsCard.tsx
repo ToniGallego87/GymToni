@@ -13,11 +13,23 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { HERO_ARROW_INSET } from './HeroCarousel';
 import { HERO_CARD_HEIGHT } from './HeroCard';
+import { RestTimerRing } from './RestTimerRing';
 
 export interface HeroStat {
+  /** Cifra ('820', '1/3'). Si viene `progress`, se ignora: se pinta el anillo. */
   value: string;
   label: string;
+  /**
+   * 0..1: en vez de la cifra, un anillo que se rellena con el progreso y lleva
+   * `icon` dentro (los retos de la hero card). Superado (>= 1) el icono pasa a
+   * ser un check.
+   */
+  progress?: number;
+  icon?: string;
 }
+
+// Anillo de progreso de un stat (retos): cabe en el alto de la cifra.
+const STAT_RING_SIZE = 30;
 
 interface HeroStatsCardProps {
   /** Etiqueta superior (ej: "Esta semana"). */
@@ -139,7 +151,26 @@ export function HeroStatsCard({
                   <React.Fragment key={stat.label}>
                     {index > 0 && <View style={styles.heroStatDivider} />}
                     <View style={styles.heroStat}>
-                      <Text style={styles.heroStatValue}>{stat.value}</Text>
+                      {stat.progress != null ? (
+                        <RestTimerRing
+                          progress={stat.progress}
+                          size={STAT_RING_SIZE}
+                          strokeWidth={3}
+                          color={theme.colors.onGold}
+                        >
+                          <MaterialCommunityIcons
+                            name={
+                              (stat.progress >= 1
+                                ? 'check-bold'
+                                : stat.icon ?? 'flag-checkered') as any
+                            }
+                            size={14}
+                            color={theme.colors.onGold}
+                          />
+                        </RestTimerRing>
+                      ) : (
+                        <Text style={styles.heroStatValue}>{stat.value}</Text>
+                      )}
                       <Text style={styles.heroStatLabel}>{stat.label}</Text>
                     </View>
                   </React.Fragment>

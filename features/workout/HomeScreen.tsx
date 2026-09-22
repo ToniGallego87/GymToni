@@ -56,6 +56,7 @@ import {
   HeroCard,
   HeroCarousel,
   HeroStatsCard,
+  StatsStrip,
   HeroStat,
   HeroVariant,
   GradientFill,
@@ -179,9 +180,7 @@ export function HomeScreen({
   // Retos de fuerza de la semana, para el tercer estado de la hero: el reto
   // solo funciona si se ve donde se decide entrenar.
   const { challenges } = useAccountLevel();
-  const heroChallenges = challenges.filter(
-    (c) => c.category === 'strength' && c.id !== 'three-days'
-  );
+  const heroChallenges = challenges.filter((c) => c.category === 'strength');
   const challengesDone = heroChallenges.filter((c) => c.done).length;
   const [showChallenges, setShowChallenges] = useState(false);
   // La cabecera (hero + barra) se pinta al instante; el historial de semanas y
@@ -689,13 +688,12 @@ export function HomeScreen({
   // subtítulo es el nombre del día que toca.
   const canPickAnotherDay = !!hero.subtitleIsDay && !!onOpenDaySelector;
 
-  // Estadísticas de fuerza para el estado "estadísticas" de la hero card
-  // (carrusel). Espejo de la hero de Cardio pero con volumen (kg levantados)
-  // por semana de la rutina mostrada. El volumen ignora el peso corporal
+  // Estadísticas de fuerza de la fila de cifras de la tarjeta de progreso.
+  // Espejo de las de Cardio pero con volumen (kg levantados) por semana de la
+  // rutina mostrada. El volumen ignora el peso corporal
   // (series sin carga) por definición de "kg levantados".
   const strengthStats = useMemo(() => {
-    // Diferido hasta `ready`: alimenta la tarjeta de estadísticas del hero
-    // (segunda diapositiva del carrusel), no la vista inicial.
+    // Diferido hasta `ready`: alimenta la tarjeta de progreso, no la hero.
     if (!ready) return { hasData: false as const };
     const workoutVolume = (log: WorkoutLog): number =>
       log.exercises.reduce(
@@ -795,7 +793,7 @@ export function HomeScreen({
   const fmtPct = (v: number | null) =>
     v == null ? '—' : `${v >= 0 ? '+' : ''}${Math.round(v)}%`;
 
-  // Fila de 3 datos de la hero de Fuerza, adaptada a las semanas disponibles
+  // Fila de 3 referencias de la tarjeta de progreso, adaptada a las semanas disponibles
   // (comparativa progresiva): en la primera semana no hay con qué comparar, así
   // que se muestra la composición del entreno; en la segunda, la semana pasada y
   // el cambio; a partir de la tercera, las referencias históricas.
@@ -985,9 +983,10 @@ export function HomeScreen({
             </View>
           </>
         ) : (
-          // Dos estados con flechas: situación actual y estadísticas de fuerza
-          // (volumen semanal). El acceso a rutinas vive en Perfil → Mis rutinas
-          // y en el propio héroe de "Rutina cerrada", así que no lleva un slide.
+          // Dos estados con flechas: situación actual y retos de la semana. Las
+          // cifras de volumen viven en la tarjeta de progreso de abajo, y el
+          // acceso a rutinas en Perfil → Mis rutinas y en el propio héroe de
+          // "Rutina cerrada", así que no llevan slide.
           <HeroCarousel
             // Con el día de hoy sin entrenar, el pase automático no abandona
             // la tarjeta del CTA: empezar el entreno es la acción más
@@ -1013,39 +1012,6 @@ export function HomeScreen({
                 subtitleAccessibilityLabel={t('Elegir otro día')}
               />,
               <HeroStatsCard
-                key="stats"
-                isEmpty={!strengthStats.hasData}
-                emptyText={t('Aún no hay entrenamientos registrados.')}
-                kicker={t('Esta semana')}
-                mainIcon="weight-lifter"
-                mainValue={fmtKg(
-                  strengthStats.hasData ? strengthStats.currentVol : null
-                )}
-                mainUnit="kg"
-                subline={
-                  strengthStats.hasData
-                    ? `${strengthStats.entrenos} ${
-                        strengthStats.entrenos === 1
-                          ? t('entreno')
-                          : t('entrenos')
-                      } · ${strengthStats.series} ${
-                        strengthStats.series === 1 ? t('serie') : t('series')
-                      }`
-                    : ''
-                }
-                stats={strengthHeroStats}
-                // Abre la gráfica de progreso de la tarjeta de abajo (si hay
-                // semanas que comparar; si no, la tarjeta no es pulsable).
-                onPress={
-                  canOpenProgressChart
-                    ? () => {
-                        animateLayout();
-                        setShowWeeklyProgressChart(true);
-                      }
-                    : undefined
-                }
-              />,
-              <HeroStatsCard
                 key="challenges"
                 kicker={t('Retos de la semana')}
                 mainIcon="flag-checkered"
@@ -1054,6 +1020,10 @@ export function HomeScreen({
                 stats={heroChallenges.map((c) => ({
                   value: challengeProgressLabel(c, true),
                   label: c.name,
+                  // Anillo por reto en vez de la cifra: se lee de un vistazo.
+                  progress:
+                    c.target > 0 ? c.current / c.target : c.done ? 1 : 0,
+                  icon: c.icon,
                 }))}
                 onPress={() => setShowChallenges(true)}
               />,
@@ -1150,6 +1120,24 @@ export function HomeScreen({
                     // realidad no había nada que comparar.
                     null}
                   </View>
+                  {/* Cifras de la semana (kg levantados, entrenos · series y
+                      sus referencias): antes eran la tarjeta "Esta semana" del
+                      carrusel; aquí quedan fijas junto a la gráfica. */}
+                  {strengthStats.hasData && (
+                    <StatsStrip
+                      icon="weight-lifter"
+                      value={fmtKg(strengthStats.currentVol)}
+                      unit="kg"
+                      meta={`${strengthStats.entrenos} ${
+                        strengthStats.entrenos === 1
+                          ? t('entreno')
+                          : t('entrenos')
+                      } · ${strengthStats.series} ${
+                        strengthStats.series === 1 ? t('serie') : t('series')
+                      }`}
+                      stats={strengthHeroStats}
+                    />
+                  )}
                 </TouchableOpacity>
 
                 {canOpenChart && showWeeklyProgressChart && (

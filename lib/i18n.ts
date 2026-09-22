@@ -333,12 +333,9 @@ register({
   Minutos: 'Minutes',
   'Pendiente %': 'Incline %',
   'Consulta tus resultados': 'Check your results',
-  'Aún no hay cardio. Pulsa «Insertar cardio» para apuntar el primero.':
-    'No cardio yet. Tap «Add cardio» to add the first one.',
   'kcal estimadas con {kg} kg · Pon tu peso':
     'kcal estimated at {kg} kg · Set your weight',
   'Poner mi peso': 'Set my weight',
-  'Esta semana': 'This week',
   'semana pasada': 'last week',
   'media semanal': 'weekly average',
   'mejor semana': 'best week',
@@ -646,7 +643,6 @@ register({
   '{r} reps': '{r} reps',
 
   // Hero cards (carrusel de estados)
-  'Aún no hay entrenamientos registrados.': 'No workouts logged yet.',
   'Insertar cardio': 'Add cardio',
 
   // Iconos de día (GYM_ICON_LABELS)
@@ -1038,8 +1034,6 @@ register({
     'Improve 3 % on half or more of your days.',
   'Supera tu mejor peso en la mitad o más de los ejercicios.':
     'Beat your best weight in half or more of your exercises.',
-  'Tres días': 'Three days',
-  'Entrena en tres fechas distintas.': 'Train on three different dates.',
   '100 kcal hoy': '100 kcal today',
   'Quema 100 kcal de cardio en el día.': 'Burn 100 kcal of cardio today.',
   '1000 kcal esta semana': '1000 kcal this week',

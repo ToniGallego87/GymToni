@@ -47,6 +47,7 @@ import {
   HeroCard,
   HeroCarousel,
   HeroStatsCard,
+  StatsStrip,
   SEGMENTED_FILTER_CHART_GAP,
   SegmentedFilter,
   SegmentedOption,
@@ -348,6 +349,8 @@ export function CardioScreen({
 
   // La tarjeta de la gráfica lleva siempre el acento estructural.
   const progressAccent = theme.colors.accentLine;
+  // La gráfica mensual necesita dos meses con kcal para tener algo que comparar.
+  const canOpenChart = kcalMonths.length >= 2;
 
   return (
     <View style={styles.container}>
@@ -389,55 +392,6 @@ export function CardioScreen({
               onPress={() => onInsertCardioOnly?.()}
             />,
             <HeroStatsCard
-              key="stats"
-              isEmpty={!hasCardio}
-              emptyText={t(
-                'Aún no hay cardio. Pulsa «Insertar cardio» para apuntar el primero.'
-              )}
-              kicker={t('Hoy')}
-              mainIcon="fire"
-              mainValue={String(Math.round(today?.totalKcal ?? 0))}
-              mainUnit="kcal"
-              subline={
-                today
-                  ? `${today.disciplines.length} ${
-                      today.disciplines.length === 1
-                        ? t('disciplina')
-                        : t('disciplinas')
-                    } · ${Math.round(today.totalMinutes)} min · ${fmtNum(
-                      today.totalKm
-                    )} km`
-                  : t('Aún sin cardio hoy')
-              }
-              stats={[
-                {
-                  value: sameDayLastWeek
-                    ? String(Math.round(sameDayLastWeek.totalKcal))
-                    : '—',
-                  label: t('hace 7 días'),
-                },
-                {
-                  value:
-                    avgDayKcal != null ? String(Math.round(avgDayKcal)) : '—',
-                  label: t('media diaria'),
-                },
-                {
-                  value:
-                    bestDayKcal != null ? String(Math.round(bestDayKcal)) : '—',
-                  label: t('mejor día'),
-                },
-              ]}
-              // Abre la gráfica mensual de abajo (solo si hay dos meses).
-              onPress={
-                kcalMonths.length >= 2
-                  ? () => {
-                      animateLayout();
-                      setShowChart(true);
-                    }
-                  : undefined
-              }
-            />,
-            <HeroStatsCard
               key="challenges"
               kicker={t('Retos de cardio')}
               mainIcon="flag-checkered"
@@ -446,6 +400,9 @@ export function CardioScreen({
               stats={heroChallenges.map((c) => ({
                 value: challengeProgressLabel(c, true),
                 label: c.name,
+                // Anillo por reto en vez de la cifra: se lee de un vistazo.
+                progress: c.target > 0 ? c.current / c.target : c.done ? 1 : 0,
+                icon: c.icon,
               }))}
               onPress={() => setShowChallenges(true)}
             />,
@@ -484,12 +441,15 @@ export function CardioScreen({
           </Pressable>
         )}
 
-        {ready && kcalMonths.length >= 2 && (
+        {ready && hasCardio && (
+          // Con cardio siempre (lleva las cifras de hoy); la gráfica mensual
+          // solo se despliega a partir de dos meses.
           <View style={[styles.progressCard, { borderColor: progressAccent }]}>
             <GradientFill accent={progressAccent} />
             <TouchableOpacity
               style={styles.progressToggle}
               activeOpacity={0.85}
+              disabled={!canOpenChart}
               onPress={() => {
                 animateLayout();
                 setShowChart((prev) => !prev);
@@ -505,11 +465,13 @@ export function CardioScreen({
                   <Text style={styles.progressTitle}>
                     {metric.label} / {t('mes')}
                   </Text>
-                  <MaterialCommunityIcons
-                    name={showChart ? 'chevron-up' : 'chevron-down'}
-                    size={20}
-                    color={theme.colors.text}
-                  />
+                  {canOpenChart && (
+                    <MaterialCommunityIcons
+                      name={showChart ? 'chevron-up' : 'chevron-down'}
+                      size={20}
+                      color={theme.colors.text}
+                    />
+                  )}
                 </View>
                 {latestMonthValue != null && (
                   <Text style={styles.progressLatestKcal}>
@@ -517,9 +479,47 @@ export function CardioScreen({
                   </Text>
                 )}
               </View>
+              {/* Cifras de hoy (kcal, disciplinas · min · km y sus
+                  referencias): antes eran la tarjeta "Hoy" del carrusel. */}
+              <StatsStrip
+                icon="fire"
+                value={String(Math.round(today?.totalKcal ?? 0))}
+                unit="kcal"
+                meta={
+                  today
+                    ? `${today.disciplines.length} ${
+                        today.disciplines.length === 1
+                          ? t('disciplina')
+                          : t('disciplinas')
+                      } · ${Math.round(today.totalMinutes)} min · ${fmtNum(
+                        today.totalKm
+                      )} km`
+                    : t('Aún sin cardio hoy')
+                }
+                stats={[
+                  {
+                    value: sameDayLastWeek
+                      ? String(Math.round(sameDayLastWeek.totalKcal))
+                      : '—',
+                    label: t('hace 7 días'),
+                  },
+                  {
+                    value:
+                      avgDayKcal != null ? String(Math.round(avgDayKcal)) : '—',
+                    label: t('media diaria'),
+                  },
+                  {
+                    value:
+                      bestDayKcal != null
+                        ? String(Math.round(bestDayKcal))
+                        : '—',
+                    label: t('mejor día'),
+                  },
+                ]}
+              />
             </TouchableOpacity>
 
-            {showChart && (
+            {canOpenChart && showChart && (
               // Centrado: el `progressCard` no puede llevar alignItems:'center'
               // (su cabecera usa space-between y necesita el ancho completo), así
               // que la gráfica y su selector —ambos de ancho fijo `chartWidth`—

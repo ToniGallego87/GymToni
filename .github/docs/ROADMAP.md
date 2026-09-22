@@ -15,154 +15,52 @@ Supabase (cuentas, sync y social) está entregado; plan en
 
 ## Mejoras visuales y de UX
 
-- [x] **La insignia "Récord personal" no mide récords y choca con el reto del
-      mismo nombre** — el logro `personal-record` de Logros se desbloquea al
-      "mejorar una semana respecto a la anterior", pero el reto semanal
-      "Récord personal" es superar tu mejor peso en la mitad de los ejercicios
-      y el póster de hitos tiene otro "récord" (mayor peso movido). Tres cosas
-      distintas con el mismo rótulo. Renombrar la insignia a lo que mide
-      ("Semana mejorada") y, ya que la categoría "Progreso" tiene una sola
-      insignia y "Semanas" dos, darle escalera como a Fuerza y Cardio: 1 / 5 /
-      20 semanas mejoradas y 8 semanas seguidas ("Dos meses") junto a las 4.
-      Las cifras (`improvedWeeks`, `bestStreak`) ya se calculan con fechas.
-      **Por qué:** el que supera un récord de peso en el gym y ve "Récord
-      personal" bloqueado en Logros no entiende qué le falta; y dos categorías
-      con una y dos insignias se agotan la primera semana buena, cuando lo que
-      sostiene es tener siempre el siguiente escalón a la vista.
-      **Archivos:** `lib/badges.ts:322-333` (la insignia `personal-record`:
-      id, nombre, descripción), `:26-39` (`BadgeId`), `:157-172`
-      (`improvedWeekDates` y `streakDates`, las cifras ya listas),
-      `lib/i18n.ts` (traducciones), `lib/__tests__/badges.test.ts`.
+- [x] **El progreso de cada reto en la hero card, como ruedecita y no como
+      "1/3"** — la tarjeta "Retos de la semana" de Inicio (y "Retos de cardio")
+      pinta bajo cada reto una cifra compacta (`challengeProgressLabel(c, true)`:
+      "1/3", "2/2", "340/1000 kcal", "✓"), tres números pequeños que hay que
+      leer y comparar con su objetivo. Sustituir cada cifra por un anillo fino
+      (`RestTimerRing`, el mismo que ya llevan las casillas de Logros y el
+      descanso) con el icono del reto dentro, que se rellena con
+      `current / target` y se pinta entero (o con el check) al superarlo; el
+      nombre del reto queda debajo. `HeroStat` hoy solo admite `value` +
+      `label`: necesita una variante con `progress` + `icon` (o un
+      `renderValue`) y el anillo en `onGold` sobre el dorado.
+      **Por qué:** una rueda se lee de un vistazo desde el otro lado del gym
+      ("me falta poco") sin descifrar tres fracciones con unidades distintas;
+      y es el mismo lenguaje de progreso que ya usan Logros y el descanso.
+      **Archivos:** `features/workout/HomeScreen.tsx:1049-1060` (la tarjeta
+      de retos: `stats` con `challengeProgressLabel`),
+      `features/workout/CardioScreen.tsx:441-452` (la gemela de cardio),
+      `components/HeroStatsCard.tsx:17-20` (`HeroStat`) y `:258-290`
+      (`heroStatsRow` / `heroStatValue`, donde iría el anillo),
+      `components/RestTimerRing.tsx` (prop `color` ya existe),
+      `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
+      para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [x] **Logros: las casillas bloqueadas no dicen cuánto falta y se leen mal** —
-      la cuadrícula pinta icono + nombre, en gris si no está; el "37 / 50" y la
-      barra solo salen en el popup al tocar, así que para saber por dónde vas
-      hay que abrir 13 popups. Poner bajo el nombre de cada casilla bloqueada
-      el progreso en pequeño ("37/50") o un anillo fino alrededor del icono
-      (el `RestTimerRing` ya dibuja ese anillo), y dejar el popup para la
-      condición completa y la fecha. Además: con **cuatro** casillas por fila,
-      nombres de 11 pt y `adjustsFontSizeToFit`, "Corazón en marcha" o
-      "Medio centenar" se encogen hasta lo ilegible: pasar a **tres** por fila
-      (la misma retícula que el menú de Perfil y las casillas de ejercicio).
-      Las bloqueadas van a `opacity: 0.6` sobre `surface`: en tema claro
-      (blanco sobre casi blanco con texto secundario al 60 %) rozan el mínimo
-      de contraste; bajar la opacidad solo del icono y dejar el texto entero.
-      Y la categoría "Progreso" es una casilla sola con tres huecos vacíos
-      (ver la ficha de la insignia "Récord personal", que le da escalera).
-      **Por qué:** una pantalla de logros vive de "me falta poco"; escondido
-      tras un toque por insignia, el progreso no empuja, y un nombre que no se
-      lee no se recuerda.
-      **Archivos:** `features/workout/AchievementsScreen.tsx:140-180` (la
-      casilla), `:36` (`TILES_PER_ROW = 4`), `:214-232` (la barra que hoy
-      solo vive en el popup), `:331-372` (`tile`, `tileLocked`,
-      `tileLabel`: opacidad y cuerpo del nombre),
-      `components/RestTimerRing.tsx` (anillo reutilizable).
-      **Esfuerzo:** bajo.
-- [x] **Nadie explica de dónde salen los puntos ni cuántos retos llevas, y
-      desde Logros no se llega a los retos** — la cabecera de Logros dice
-      "Nivel 3 · 120 / 225 puntos · 5 / 13 logros" y el popup de premio suelta
-      "+10 puntos" o "+25 puntos", pero en ningún sitio se lee la regla (reto
-      superado +10, logro +25) ni el total de retos superados, que es la mitad
-      del nivel y hoy es invisible. Y los retos, la otra mitad, no tienen
-      entrada desde la pantalla que explica el nivel: solo desde la hero de
-      Inicio (fuerza) y la de Cardio (cardio), cada una con su mitad. Añadir a
-      la cabecera "N retos superados" (ya está en `useChallengeWins`) y la
-      regla ("Reto +10 · Logro +25"); debajo, una fila "Retos de la semana
-      2/6 →" que abra `ChallengesModal` con **todos** (fuerza + cardio, único
-      sitio donde se verían juntos); en `ChallengesModal`, el "+10" junto a
-      cada reto. Detalle: la barra superior de Logros pinta la píldora de nivel
-      que lleva… a Logros (`showMenu` por defecto); ocultarla ahí.
-      **Por qué:** un sistema de puntos que no se puede predecir no motiva; ver
-      "23 retos superados" da valor a las semanas pasadas, que hoy se esfuman
-      al cambiar de bloque; y la pantalla del nivel debería enseñar las dos
-      cosas que lo forman.
-      **Archivos:** `features/workout/AchievementsScreen.tsx:116-134` (la
-      `summaryCard`) y `:183-188` (el `GlassTopBar` sin `showMenu={false}`),
-      `lib/level.ts:18-21` (`XP_PER_CHALLENGE`, `XP_PER_BADGE`) y `:77-80`
-      (`useChallengeWins`), `hooks/useAccountLevel.ts` (ya devuelve los siete
-      retos), `components/ChallengesModal.tsx:66-107` (la fila de cada reto),
-      `components/GlassTopBar.tsx:212-217` (la píldora).
-      **Esfuerzo:** bajo.
-- [x] **El carrusel de Inicio se lleva la acción principal y no dice qué
-      tarjeta se puede tocar** — la hero rota entre "qué toca hoy" (con el CTA
-      de empezar), "Esta semana" (volumen) y "Retos de la semana"; el pase
-      automático se lleva el botón de entrenar dos de cada tres turnos. Y de
-      las tres tarjetas, la primera es un botón entero, la segunda no responde
-      al toque y la tercera abre el popup de retos sin ninguna señal de que sea
-      pulsable: el mismo dorado, el mismo dibujo, tres comportamientos. Que el
-      pase automático no abandone la primera tarjeta mientras el día de hoy
-      esté sin entrenar (o vuelva a ella tras dar la vuelta) y rote libremente
-      cuando ya se ha entrenado; y que las tarjetas pulsables lo digan (un
-      chevron o "Ver retos ›" en el `kicker`), con la de estadísticas abriendo
-      la gráfica de progreso de abajo. Mismo tratamiento en Cardio, que
-      comparte carrusel y tarjetas.
-      **Por qué:** la acción más frecuente de la app es empezar el entreno y
-      no debería haber que esperar o pulsar una flecha para verla; y una
-      tarjeta que se puede tocar sin parecerlo es una función que no existe
-      para quien no la descubre.
-      **Archivos:** `components/HeroCarousel.tsx:98-125` (el efecto del pase
-      automático; haría falta una prop `autoAdvance` o `holdIndex`),
-      `features/workout/HomeScreen.tsx:960-1020` (las tres tarjetas; la de
-      retos con `onPress`, la de stats sin él) y `:274` (`todayWorkoutStatus`,
-      que ya sabe si hoy está entrenado), `components/HeroStatsCard.tsx:24-38`
-      (props: falta una señal visual cuando hay `onPress`),
-      `features/workout/CardioScreen.tsx:379-445` (el carrusel gemelo).
-      **Esfuerzo:** bajo.
-- [ ] **Rendimiento: medir en el móvil y decidir sobre las cinco pestañas
-      montadas** — de la revisión de rendimiento quedan dos cosas: (1) medir con
-      el Profiler de React DevTools en el móvil redwood (MIUI) el efecto de lo
-      ya hecho (cálculo único de retos/logros, miniaturas JPG en vez de GIF,
-      mejora por semana memoizada, `value` del Provider estable) y (2) las cinco
-      pestañas quedan montadas a la vez (`offscreenPageLimit={4}` +
-      `warmTabs`), así que un cambio de logs repinta las cinco aunque se esté
-      en una. Alternativas sin perder el cambio de pestaña instantáneo:
-      `React.memo` en las pantallas de pestaña con props estables, o que las
-      pestañas no activas reciban el estado con un frame de retraso
-      (`useDeferredValue`).
+- [ ] **Rendimiento: medir en el móvil lo ya hecho** — queda la medida: con la
+      app abierta en el móvil garnet (`f43d4924`, el único que admite
+      `adb install`; bloquea `adb shell input`, así que la interacción la hace
+      la persona), `adb shell dumpsys gfxinfo com.tonigallego.gymbro reset` →
+      recorrido fijo (abrir Inicio, meter tres series en el registro, volver,
+      pasar por las cinco pestañas) → `dumpsys gfxinfo` y leer frames lentos y
+      percentiles; y, si hace falta detalle por componente, un build de
+      desarrollo con el Profiler de React DevTools. Lo que se mide: el cálculo
+      único de retos/logros, miniaturas JPG en vez de GIF, mejora por semana
+      memoizada, `value` del Provider estable y el `TabStateBoundary`
+      (`useDeferredValue` en las pestañas no activas), ya aplicado.
       **Por qué:** "velocidad de uso" es la prioridad número uno; sin medir no
-      se sabe si lo hecho basta ni si desmontar pestañas compensa el coste de
-      volver a montarlas.
-      **Archivos:** `app/App.tsx:886-892` y `:926-931` (montaje de pestañas),
-      `features/workout/HomeScreen.tsx`, `features/workout/CardioScreen.tsx`,
-      `features/workout/CalendarScreen.tsx`,
-      `features/workout/CommunityScreen.tsx`,
-      `features/workout/ProfileScreen.tsx` (las cinco pantallas de pestaña).
-      **Esfuerzo:** medio.
-- [x] **Dos "⋯" en el registro que abren cosas distintas** — el ⋯ de la barra
-      superior despliega un menú de opciones (Ir a la rutina, temporizador,
-      descarga, tema) y el ⋯ de cada tarjeta de ejercicio abre un `AppModal`
-      centrado con dos o tres opciones y un pie "Volver". Mismo icono, mismo
-      significado ("más acciones"), dos superficies. Pasar las acciones del
-      ejercicio (nota, cronómetro, saltar) a un menú desplegable anclado al
-      ⋯ de la tarjeta, con el mismo dibujo que el de `GlassTopBar`
-      (`themeMenu`: lista de icono + texto, cierre al tocar fuera).
-      **Por qué:** el modal exige un toque más ("Volver") para no hacer nada y
-      tapa la tarjeta desde la que se abrió; el menú anclado deja ver el
-      ejercicio al que pertenece y se cierra solo. Y un ⋯ que se comporta
-      distinto según dónde esté es una regla menos que el usuario puede
-      aprender.
-      **Archivos:** `components/ExerciseInputField.tsx:553-572` (el ⋯ de la
-      tarjeta) y `:944-1027` (el `AppModal` de acciones),
-      `components/GlassTopBar.tsx:235-265` (el menú desplegable a replicar,
-      `themeMenu` y `themeMenuItem`).
-      **Esfuerzo:** medio.
-- [x] **Transición de tema que revele el contenido real, no un disco opaco** — el
-      cambio claro/oscuro anima un círculo de color sólido que tapa la pantalla;
-      se pide que ese círculo no sea opaco sino que muestre ya el contenido de la
-      vista en el tema de destino, para que sea una transición visual entre las
-      dos pieles y no un barrido de color plano.
-      **Por qué:** el disco de color maciza la transición; ver la UI de destino
-      crecer desde el punto pulsado haría el cambio de tema mucho más pulido.
-      **Archivos:** `components/ThemeRevealOverlay.tsx:132-148` (hoy pinta un
-      `Animated.View` con `backgroundColor: request.discColor`; para revelar
-      contenido real haría falta una captura/snapshot de la vista en el tema de
-      destino recortada por el círculo, sin librerías UI externas). Requiere
-      validar rendimiento a 60 fps.
-      **Esfuerzo:** alto.
+      se sabe si lo hecho basta ni si queda algo que compense (desmontar
+      pestañas, `React.memo` con props estables).
+      **Archivos:** `app/App.tsx` (`TabStateBoundary`, `tabLayer`),
+      `hooks/useAccountLevel.ts` (caché), `features/workout/HomeScreen.tsx`,
+      `features/workout/CardioScreen.tsx`, `.github/docs/COMMANDS.md`
+      (añadir el recorrido de medida cuando se fije).
+      **Esfuerzo:** bajo.
 
 ## Funcionalidades a simplificar
 
-- [ ] **Inicio enseña el progreso de la semana en dos sitios** — la segunda
+- [x] **Inicio enseña el progreso de la semana en dos sitios** — la segunda
       tarjeta del carrusel ("Esta semana": kg levantados, entrenos · series, y
       semana pasada / media / mejor) y, justo debajo, la tarjeta de progreso
       de la rutina (nombre, % de mejora y, desplegada, la gráfica por semanas
@@ -184,7 +82,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       cabecera), `features/workout/CardioScreen.tsx:379-445` (el par gemelo
       de Cardio).
       **Esfuerzo:** medio.
-- [ ] **El reto "Tres días" da puntos pero no se ve en ningún sitio** — se
+- [x] **El reto "Tres días" da puntos pero no se ve en ningún sitio** — se
       calcula, se apunta como superado (+10) y sube el nivel, pero la hero de
       Inicio lo filtra (`c.id !== 'three-days'`) y el popup de retos recibe esa
       misma lista, así que el usuario recibe "¡Reto superado! Tres días" de un

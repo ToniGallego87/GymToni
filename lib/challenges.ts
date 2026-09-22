@@ -29,6 +29,10 @@ import {
  * - Los de CARDIO viven en la semana natural (lunes-domingo) y en el día de
  *   hoy, que es como los cuenta la pestaña de Cardio.
  *
+ * (Hubo un cuarto reto de fuerza, "Tres días", que ninguna pantalla pintaba:
+ * se quitó del catálogo. Sus victorias ya apuntadas siguen contando para el
+ * nivel, porque son claves guardadas, no recalculadas.)
+ *
  * Lo que se guarda de forma permanente es cuántos retos se han superado
  * (`lib/level.ts`), que es lo que alimenta el nivel de la cuenta.
  */
@@ -37,7 +41,6 @@ export type ChallengeId =
   | 'full-week'
   | 'improve-3'
   | 'personal-record'
-  | 'three-days'
   | 'kcal-day-100'
   | 'kcal-week-1000'
   | 'two-cardio';
@@ -82,7 +85,6 @@ function halfOrMore(total: number): number {
 }
 export const KCAL_DAY_TARGET = 100;
 export const KCAL_WEEK_TARGET = 1000;
-export const THREE_DAYS_TARGET = 3;
 export const TWO_CARDIO_TARGET = 2;
 
 export interface ChallengesInput {
@@ -172,18 +174,6 @@ function strengthChallenges(
       current: records,
       target: halfOrMore(plannedExercises),
       unit: t('ejercicios'),
-      periodKey,
-    }),
-    challenge({
-      id: 'three-days',
-      category: 'strength',
-      icon: 'calendar-multiselect',
-      name: t('Tres días'),
-      description: t('Entrena en tres fechas distintas.'),
-      period: 'routine-week',
-      current: new Set(weekLogs.map((log) => log.date)).size,
-      target: THREE_DAYS_TARGET,
-      unit: t('días'),
       periodKey,
     }),
   ];

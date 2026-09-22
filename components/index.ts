@@ -3,6 +3,7 @@ export type { HeroVariant } from './HeroCard';
 export { HeroCarousel } from './HeroCarousel';
 export { HeroStatsCard } from './HeroStatsCard';
 export type { HeroStat } from './HeroStatsCard';
+export { StatsStrip } from './StatsStrip';
 export { ChallengesModal } from './ChallengesModal';
 export { AnchorMenu } from './AnchorMenu';
 export type { AnchorMenuItem } from './AnchorMenu';

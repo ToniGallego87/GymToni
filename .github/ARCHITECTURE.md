@@ -194,6 +194,12 @@ el dedo, estilo Telegram) o tocando la barra.
 - **Transición de barra de duración constante:** como `setPage` va a velocidad
   fija, en saltos de más de una pestaña se salta sin animación a la contigua y se
   anima solo el último tramo.
+- **Las cinco montadas, la activa primero:** `offscreenPageLimit={4}` + `warmTabs`
+  mantienen las cinco pestañas vivas (cambio instantáneo, sin remontar). Para que
+  un cambio de logs no repinte las cinco delante del usuario, cada pestaña lee el
+  `WorkoutContext` a través de `TabStateBoundary` (`app/App.tsx`): la activa al
+  momento, las demás con `useDeferredValue` (React las pinta después, en
+  prioridad baja e interrumpible).
 - **Convivencia con scroll:** `StretchScrollView` (el scroll con rubber-band de
   casi todas las vistas) declara su gesto **solo vertical** (`activeOffsetY` +
   `failOffsetX`) para ceder el arrastre horizontal al pager.

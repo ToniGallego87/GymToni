@@ -47,6 +47,7 @@ GymToni/
 │   ├── AppModal.tsx          ← Carpintería única de los modales de la app
 │   ├── ConfirmModal.tsx      ← AppModal + par cancelar/confirmar
 │   ├── HeroCard.tsx          ← Tarjeta principal de Inicio
+│   ├── StatsStrip.tsx        ← Fila de cifras (kg / kcal + 3 referencias) de las tarjetas de progreso de Inicio y Cardio
 │   ├── BarChart.tsx          ← Gráfica de barras (Inicio y Cardio)
 │   ├── WeightTrendChart.tsx  ← Línea del peso corporal en el tiempo (pantalla Peso)
 │   ├── SortableList.tsx      ← Lista reordenable arrastrando por un asa (ejercicios del día)

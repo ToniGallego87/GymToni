@@ -63,9 +63,8 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
   const unlockedCount = badges.filter((b) => b.unlocked).length;
   // Retos superados en total (claves permanentes): la otra mitad del nivel.
   const challengeWins = useChallengeWins().length;
-  // Los mismos retos que enseñan las hero cards (sin 'Tres días', que Inicio
-  // no pinta), aquí todos juntos.
-  const weekChallenges = challenges.filter((c) => c.id !== 'three-days');
+  // Los mismos retos que enseñan las hero cards, aquí todos juntos.
+  const weekChallenges = challenges;
   const weekChallengesDone = weekChallenges.filter((c) => c.done).length;
 
   // Grupos por tipo, cada uno en filas de tres (la última se rellena con

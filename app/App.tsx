@@ -1,4 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, {
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react';
 import {
   BackHandler,
   InteractionManager,
@@ -38,6 +44,7 @@ import {
   RoutineDetailScreen,
   RoutineSelectorScreen,
   WeekAchievementScreen,
+  WorkoutContext,
   WorkoutProvider,
   WorkoutLogScreen,
   useWorkout,
@@ -889,7 +896,9 @@ function AppContent() {
     const active = screen.type === type;
     return (
       <View key={type} style={styles.pagerPage} collapsable={false}>
-        {active || warmTabs ? node : null}
+        {active || warmTabs ? (
+          <TabStateBoundary active={active}>{node}</TabStateBoundary>
+        ) : null}
       </View>
     );
   };
@@ -1358,6 +1367,32 @@ function AppContent() {
           de tema en caliente, con un pantallazo de la vista de arriba. */}
       <ThemeRevealOverlay captureTarget={themeCaptureRef} />
     </View>
+  );
+}
+
+/**
+ * Las cinco pestañas están montadas a la vez, así que un cambio de logs
+ * (guardar una serie, importar) repintaba las cinco en el mismo commit aunque
+ * solo se viera una. Cada pestaña recibe el contexto a través de esta frontera:
+ * la activa lo lee al momento y las demás con `useDeferredValue`, que React
+ * pinta después y en prioridad baja (interrumpible si hay un toque). El trabajo
+ * total es el mismo, pero deja de estar delante de lo que el usuario mira; y
+ * al cambiar de pestaña no hay nada que remontar. Los stores de módulo (peso,
+ * retos superados, tema) no pasan por aquí: son baratos.
+ */
+function TabStateBoundary({
+  active,
+  children,
+}: {
+  active: boolean;
+  children: React.ReactNode;
+}) {
+  const value = useContext(WorkoutContext);
+  const deferred = useDeferredValue(value);
+  return (
+    <WorkoutContext.Provider value={active ? value : deferred}>
+      {children}
+    </WorkoutContext.Provider>
   );
 }
 

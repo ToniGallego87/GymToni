@@ -95,7 +95,6 @@ describe('computeChallenges', () => {
     const c = byId(logs, [makeRoutine(2)]);
     expect(c['full-week'].current).toBe(1);
     expect(c['full-week'].done).toBe(false);
-    expect(c['three-days'].current).toBe(1);
   });
 
   it('+3 % y récord personal salen del bloque anterior', () => {
