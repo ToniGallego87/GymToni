@@ -38,7 +38,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `lib/challenges.ts:287` (`challengeProgressLabel`, que quedaría solo
       para `ChallengesModal`).
       **Esfuerzo:** bajo.
-- [ ] **Rendimiento: los picos que quedan tras el cristal propio** — con
+- [x] **Rendimiento: los picos que quedan tras el cristal propio** — con
       `modules/glass-blur` (una captura por frame para las cuatro barras) la
       app va a mediana 20 ms / p90 31 en garnet, con las cuatro barras
       borrosas; antes eran 28 / 48. Lo que queda son picos sueltos (p99 44 ms,

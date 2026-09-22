@@ -13,6 +13,9 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
+  MENU_TILE_GAP,
+  MENU_TILE_INSET,
+  MENU_TILE_PADDING,
   RestTimerRing,
   StretchScrollView,
 } from '@components';
@@ -32,12 +35,13 @@ type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 // ejercicio: con cuatro los nombres largos ('Corazón en marcha') se encogían
 // hasta no leerse.
 const TILES_PER_ROW = 3;
-const TILE_ICON_SIZE = 36;
+const TILE_ICON_SIZE = 33;
 // Anillo de progreso alrededor del icono de una insignia aún sin conseguir.
-const TILE_RING_SIZE = 56;
-// Casilla algo más alta que ancha: con el anillo de 56, dos líneas de nombre
-// y la cifra de progreso, el cuadrado exacto (~100 px) se quedaba corto.
-const TILE_ASPECT = 0.88;
+const TILE_RING_SIZE = 44;
+// Cuadrada y con las mismas medidas que el menú de Perfil (`menuTileTokens`):
+// las dos cuadrículas se ven una detrás de otra y no pueden desencajar. Lo que
+// se encoge para que quepa todo dentro del cuadrado es el contenido: anillo,
+// icono y letra (antes la casilla era más ancha y más alta, `TILE_ASPECT` 0,88).
 
 /**
  * Logros: catálogo fijo de insignias que se desbloquean con el histórico.
@@ -494,22 +498,24 @@ const makeStyles = () =>
       paddingHorizontal: 2,
     },
 
-    // Cuadrícula: las mismas casillas cuadradas del menú de Perfil.
+    // Cuadrícula: las mismas casillas cuadradas del menú de Perfil, con sus
+    // mismas medidas (separación, margen a los lados y aire interior).
     gridRow: {
       flexDirection: 'row',
-      gap: 10,
+      gap: MENU_TILE_GAP,
+      marginHorizontal: MENU_TILE_INSET,
     },
     tile: {
       flex: 1,
-      aspectRatio: TILE_ASPECT,
+      aspectRatio: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 4,
+      gap: 3,
       backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.md,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      paddingHorizontal: 4,
+      padding: MENU_TILE_PADDING,
     },
     // Sin sombra en ninguna casilla: la elevación de Android se pintaba como
     // un cuadrado más oscuro bajo el fondo translúcido del dorado, y si solo
@@ -530,11 +536,11 @@ const makeStyles = () =>
     },
     tilePressed: { opacity: 0.8 },
     tileProgress: {
-      fontSize: 12,
+      fontSize: 11,
       fontWeight: '700',
       color: theme.colors.textSecondary,
       fontVariant: ['tabular-nums'],
-      lineHeight: 15,
+      lineHeight: 13,
     },
     // Hueco de relleno con la MISMA caja que una casilla (borde y padding,
     // invisibles): sin ellos Yoga repartía el ancho distinto y las casillas
@@ -542,16 +548,16 @@ const makeStyles = () =>
     // conseguir) salían más anchas que las de una fila llena.
     tileGap: {
       flex: 1,
-      aspectRatio: TILE_ASPECT,
+      aspectRatio: 1,
       borderWidth: 1,
       borderColor: 'transparent',
-      paddingHorizontal: 4,
+      padding: MENU_TILE_PADDING,
     },
     tileLabel: {
-      fontSize: 14,
+      fontSize: 12,
       fontWeight: '800',
       color: theme.colors.text,
-      lineHeight: 17,
+      lineHeight: 15,
       textAlign: 'center',
     },
     tileLabelLocked: { color: theme.colors.textSecondary },

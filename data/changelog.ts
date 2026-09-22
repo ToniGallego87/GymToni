@@ -9,6 +9,31 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.0',
+    items: [
+      'Ahora ganas puntos y subes de nivel. Cada semana tienes retos (completar la semana, mejorar un 3 %, superar tu mejor sesión, quemar kcal…) y al superarlos sumas puntos, igual que al conseguir una insignia. Tu nivel se ve junto a tu nombre, y también lo ven los demás en Comunidad.',
+      'Cuando superas un reto, consigues un logro o subes de nivel te sale un aviso en el momento con lo que has ganado. Al cerrarlo, la chapa de tu nivel de arriba da un latido dorado.',
+      'Logros renovado: muchas más insignias (de fuerza, de cardio, de semanas seguidas y de progreso), ordenadas por tipo, y en las que aún te faltan un anillo con el "37 / 50" para ver cuánto queda. Tocando una te dice cómo se consigue y qué día la lograste.',
+      'Los retos de la semana se abren desde la tarjeta de Inicio y de Cardio, con un anillo que se va llenando por cada reto.',
+      'Puedes ordenar los ejercicios de un día arrastrándolos por el asa de la izquierda, y también los días de la rutina cuando están todos plegados.',
+      'Los ejercicios de un día se ven como casillas grandes con su dibujo animado entero, en lugar de una lista de texto.',
+      'Editar un ejercicio se hace en una ventanita: nombre, buscador de ejercicios, dibujo, series y repeticiones. Y antes de borrar uno, te pregunta.',
+      'Cambiar entre claro y oscuro ahora revela la pantalla de verdad desde el punto que tocas, como una cortina circular.',
+      'El descanso entre series aparece flotando al pie de la pantalla, con una rueda que se completa sola, sin moverse de sitio ni empujar la lista.',
+      'En Peso corporal tienes una gráfica con tu evolución en el tiempo, y la tarjeta ocupa menos con el histórico plegado.',
+      'Inicio te echa una mano si aún no tienes nada: primeros pasos para crear o traer una rutina, y las pantallas vacías te llevan directas a donde toca.',
+      'Perfil más limpio: una sola tarjeta, el lápiz para editar dentro de ella y las opciones en una cuadrícula de seis casillas.',
+      'Desde el menú de un día, del registro o de Inicio puedes ir directo a la rutina que lo contiene, con ese día ya abierto.',
+      'Si estrenas un ejercicio en una rutina, "Anterior" ya te enseña la última vez que lo hiciste en cualquier otra.',
+      'Puedes copiar una rutina de la comunidad sin tener cuenta. Y cuando algo sí necesita cuenta, la app te lo dice claro y te lleva a crearla.',
+      'En Comunidad, tocar la intensidad o las burbujas de series y días te explica qué significan, y los seguidores con perfil privado ya salen con su foto y su nombre.',
+      'La app va más fluida: las barras de cristal esmerilado y el cambio de pestañas pesan bastante menos que antes.',
+      'Corregido: un día de la rutina podía quedarse en blanco al desplegarlo, y un ejercicio podía desaparecer después de sincronizar.',
+      'Corregido: el código de confirmación por correo y el aviso cuando intentas crear una cuenta con un email que ya tiene una.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.7.5-a',
     items: [
       'Confirmar la cuenta al registrarte ahora es más fácil: en vez de un enlace por correo (que a veces no funcionaba con el correo del trabajo), te enviamos un código de 6 dígitos que escribes en la app. También puedes pedir que te lo reenvíen o cambiar el email si te equivocaste.',

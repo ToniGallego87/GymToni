@@ -483,6 +483,7 @@ export function CardioScreen({
                   referencias): antes eran la tarjeta "Hoy" del carrusel. */}
               <StatsStrip
                 icon="fire"
+                centerMain
                 value={String(Math.round(today?.totalKcal ?? 0))}
                 unit="kcal"
                 meta={

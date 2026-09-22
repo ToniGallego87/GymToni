@@ -1,6 +1,13 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -21,8 +28,8 @@ interface LevelPillProps {
  * tinta oscura, como las insignias: es lo que se enseña.
  *
  * La compacta (la de la barra) además se anima al cerrarse un popup de premio
- * (`lib/levelPulse`): un latido con destello de oro para que se vea de dónde
- * han ido a parar los puntos que se acaban de ganar.
+ * (`lib/levelPulse`): un latido que la agranda y la blanquea para que se vea
+ * de dónde han ido a parar los puntos que se acaban de ganar.
  */
 export function LevelPill({ level, compact, onPress }: LevelPillProps) {
   const label = t('Nivel {n}', { n: level });
@@ -55,7 +62,7 @@ export function LevelPill({ level, compact, onPress }: LevelPillProps) {
 
   const scale = pulse.interpolate({
     inputRange: [0, 1],
-    outputRange: [1, 1.3],
+    outputRange: [1, 1.6],
   });
   const spin = pulse.interpolate({
     inputRange: [0, 1],
@@ -64,7 +71,8 @@ export function LevelPill({ level, compact, onPress }: LevelPillProps) {
 
   const body = (
     <>
-      {/* Destello: capa de oro pleno que aparece y se va con el latido (la
+      {/* Destello: capa blanca que aparece según crece la píldora y se va
+          según encoge, así el latido va del oro al blanco y vuelta (la
           opacidad sí va por el hilo nativo; el color de fondo, no). */}
       {compact && (
         <Animated.View
@@ -138,9 +146,12 @@ const makeStyles = () =>
       paddingHorizontal: 11,
       paddingVertical: 6,
     },
+    // Blanco literal (no `theme.colors.white`, que en tema claro es la tinta
+    // oscura): la píldora se va blanqueando según crece y recupera su oro al
+    // encoger, porque la opacidad sigue al mismo valor que la escala.
     flash: {
       ...StyleSheet.absoluteFillObject,
-      backgroundColor: theme.colors.primary,
+      backgroundColor: '#ffffff',
     },
     textCompact: {
       fontSize: 15,

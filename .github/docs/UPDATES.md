@@ -1,6 +1,6 @@
 # UPDATES
 
-## Sin publicar
+## Version 0.8.0 - 2026-09-22
 
 ### Nuevas funcionalidades
 
@@ -34,6 +34,10 @@
 - **`LikeButton` compartido.** El corazón + recuento de "me gusta" que montaban a mano la tarjeta del tablón (`CommunityScreen`) y la ficha pública (`PublicRoutineScreen`), con los mismos estilos duplicados, pasa a `components/SaveRoutineButton.tsx` junto al marcador (misma píldora, mismo fondo). Sin cambio de comportamiento. Revisión completa de la app (ROADMAP reescrito, `Última revisión completa: 2026-09-17`) con foco en el primer uso sin datos; `ARCHITECTURE.md` y `SETUP.md` puestos al día (`getImprovementDisplay` ya no existe, duplicar vive en la ficha, 237 tests).
 
 ### Cambios
+
+- **La píldora de nivel late al cerrar un popup de premio.** `lib/levelPulse.ts` (nuevo, canal mínimo como `themeTransition`): `requestLevelPulse()` / `subscribeLevelPulse()`. `App.tsx` lo dispara al cerrar `AwardModal` (reto, logro o subida de nivel) y `LevelPill` en modo `compact` (la de la barra superior) se anima: espera 220 ms a que se vaya el popup y hace un latido —escala 1 → 1,6 con rebote, blanqueo progresivo (capa blanca absoluta cuya opacidad sigue a la escala: blanca del todo en el pico, oro otra vez al encoger; todo por el hilo nativo) y giro de 90° de la estrella—. Las píldoras del perfil no se suscriben.
+- **Las kcal de hoy, centradas en la tarjeta de Cardio.** `StatsStrip` gana `centerMain` (centra la línea del dato principal, que nacía pegada a la izquierda bajo la cabecera) y Cardio la pasa: la cifra de kcal queda alineada con la gráfica y con la fila de referencias de debajo. Inicio (kg levantados) sigue como estaba.
+- **Las casillas de Logros, del tamaño de los botones de Perfil.** `components/menuTileTokens.ts` (nuevo, como `glassTokens`): separación (12), margen a los lados (8) y aire interior (8) de la cuadrícula de tres casillas, que ahora comparten `ProfileScreen` y `AchievementsScreen`. La casilla de Logros vuelve a ser cuadrada (adiós `TILE_ASPECT` 0,88) y con el mismo ancho que la del menú; para que quepa todo dentro se encoge el contenido: anillo 56 → 44, nombre 14 → 12 y cifra 12 → 11 (el icono baja solo de 36 a 33, que es el que se mira).
 
 - **Retos de estreno en la primera semana de una rutina.** Sin histórico, "+3 %" y "Récord personal" no se podían ganar (no hay con qué comparar). `lib/challenges.ts`: si el bloque en curso no tiene bloques anteriores (`history.length === 0`), en su lugar salen "Días completos" (la mitad o más de los días con TODOS sus ejercicios con serie válida, `hasScoringSets`) y "Primeras marcas" (cada ejercicio previsto por la rutina con al menos una serie). Ids nuevos `full-days` / `first-marks`; desde la segunda semana vuelven los de mejora. +2 tests.
 - **"Récord personal" mide la sesión del ejercicio, no el peso máximo.** `countPersonalRecords` (`lib/achievements.ts`) compara la puntuación de fuerza del ejercicio (e1RM sumado de sus series, la misma unidad que los porcentajes) contra su mejor sesión histórica: cuenta más reps con el mismo peso o una serie más, y no cuenta subir 2 kg cayendo de 12 a 4 reps. Texto del reto: "Supera tu mejor sesión…". El póster semanal (`findPersonalRecord`, en kg) sigue igual.

@@ -88,3 +88,8 @@ export { SegmentedFilter, SEGMENTED_FILTER_CHART_GAP } from './SegmentedFilter';
 export type { SegmentedOption } from './SegmentedFilter';
 export { OptionToggle } from './OptionToggle';
 export type { OptionToggleOption } from './OptionToggle';
+export {
+  MENU_TILE_GAP,
+  MENU_TILE_INSET,
+  MENU_TILE_PADDING,
+} from './menuTileTokens';

@@ -83,6 +83,9 @@ const makeStyles = () =>
       alignItems: 'baseline',
       gap: 5,
     },
+    mainRowCentered: {
+      justifyContent: 'center',
+    },
     mainValue: {
       fontSize: 18,
       fontWeight: '800',

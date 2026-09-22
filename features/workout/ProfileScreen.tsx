@@ -18,6 +18,9 @@ import {
   GLASS_TOP_BAR_BASE_HEIGHT,
   GradientFill,
   LevelPill,
+  MENU_TILE_GAP,
+  MENU_TILE_INSET,
+  MENU_TILE_PADDING,
   RestTimerModal,
   StretchScrollView,
 } from '@components';
@@ -45,13 +48,13 @@ interface ProfileScreenProps {
   onOpenAccount?: () => void;
 }
 
-// Cuadrícula del menú: separación entre casillas, margen a los lados (para
-// que el cuadrado sea algo más pequeño que el ancho del tercio) y el rango de
-// letra. `MENU_CHAR_WIDTH` es el ancho medio de un carácter en em con la
-// negrita del sistema: sirve para estimar cuánto ocupa la etiqueta.
-const MENU_GAP = 12;
-const MENU_INSET = 8;
-const MENU_TILE_PADDING = 8;
+// Cuadrícula del menú: las medidas de la casilla (separación, margen a los
+// lados y aire interior) vienen de `menuTileTokens`, compartidas con la
+// cuadrícula de Logros. Aquí solo queda el rango de letra: `MENU_CHAR_WIDTH`
+// es el ancho medio de un carácter en em con la negrita del sistema, y sirve
+// para estimar cuánto ocupa la etiqueta.
+const MENU_GAP = MENU_TILE_GAP;
+const MENU_INSET = MENU_TILE_INSET;
 const MENU_FONT_MIN = 12;
 const MENU_FONT_MAX = 16;
 const MENU_CHAR_WIDTH = 0.6;
