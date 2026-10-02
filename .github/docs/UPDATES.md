@@ -55,7 +55,17 @@
   versiones superadas que dejaba el autoguardado antiguo al borrar y reinsertar
   el log con un id NUEVO en cada guardado (ver `mergeDuplicateDayLogs`). Se
   notaba en Inicio, que suma por fecha: un día con 5 copias marcaba 325 minutos
-  en vez de 65. Total final: **107 sesiones, una fila de cardio cada una**.
+  en vez de 65.
+  Hubo dos vueltas más, las dos por criterios de rescate demasiado anchos: (a)
+  filtrar por el sufijo `-cardio` del id dejó fuera 28 sesiones creadas desde
+  "Insertar cardio", que llevan id propio —el discriminador bueno es la columna
+  `cardio_only`—; y (b) quedaban 18 entrenos MIXTOS cuyo cardio estaba entero
+  bajo lápida y sin hermano `-cardio`: la pérdida original de la separación, que
+  no se veía porque las comprobaciones miraban cardio VIVO colgando de un log de
+  fuerza. Al restaurarlos aparecieron 11 días con dos registros vivos, porque esa
+  restauración corrió después de la deduplicación y se saltó ese filtro.
+  Estado final: **una fila de cardio por sesión y un único registro por día**,
+  que es el invariante del modelo (ver la ficha del ROADMAP).
 
   Aprendizaje de proceso, por si vuelve a pasar: **vaciar el `sync_outbox` del
   dispositivo ANTES de reparar la nube**. El outbox es una tabla SQLite
