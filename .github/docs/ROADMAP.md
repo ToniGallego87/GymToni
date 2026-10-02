@@ -296,7 +296,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       garantiza nadie** — al insertar cardio, el registro REUTILIZA el log que ya
       existe ese día (`existingLog = log || getLatestTodayLog()`) y precarga su
       texto, así que por diseño una fecha tiene un único registro al que se le
-      van sumando disciplinas con ` | `. Nada lo impone: basta un log suelto de
+      van sumando disciplinas unidas por `" | "`. Nada lo impone: basta un log suelto de
       la misma fecha —churn del autoguardado viejo, o una bajada de la nube— para
       que convivan dos. Consolidarlos en `normalizeAppData`, quedándose con el
       más reciente.
