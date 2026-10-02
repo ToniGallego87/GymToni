@@ -1,6 +1,6 @@
 # UPDATES
 
-## Sin publicar
+## Version 0.8.2 - 2026-10-02
 
 ### Cambios
 
@@ -40,6 +40,8 @@
     mover de semana se calculan ya sin las sesiones de cardio, igual que en el
     resto de la app.
   Tres tests nuevos de `topDisciplineIconName` en `cardio.test.ts`.
+- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.2;
+  `versionCode` 30 → 31.
 
 ### Correcciones
 

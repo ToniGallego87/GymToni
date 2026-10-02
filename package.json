@@ -1,6 +1,6 @@
 {
   "name": "gymbro",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "private": true,
   "description": "App para registrar entrenamientos de gimnasio de forma rápida",
   "main": "expo-router/entry",

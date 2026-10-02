@@ -9,6 +9,17 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.2',
+    items: [
+      'Tus sesiones de cardio están a salvo. Por un fallo de la versión anterior, algunas desaparecían de la pestaña Cardio; ya está arreglado y se han recuperado todas.',
+      'Al ver un día de cardio, cada actividad sale en una sola tarjeta con sus minutos y calorías sumados, igual que en la lista de Cardio.',
+      'El total del día se distingue de un vistazo: va destacado arriba y con números más grandes.',
+      'El nombre de cada actividad se lee mejor, y la cabecera muestra el icono de la que más hiciste ese día, el mismo que ves en el calendario.',
+      'En un día de cardio ya no aparece la opción de moverlo de semana, que no tenía sentido.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.1',
     items: [
       'El cardio y la fuerza ya son dos sesiones distintas. Antes el cardio de un día acababa metido dentro del entreno de pesas; ahora cada uno tiene su registro, su nota y se borra por separado. Tus entrenos antiguos se separan solos la primera vez que abres la app.',
