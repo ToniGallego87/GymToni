@@ -1,7 +1,7 @@
 import {
   dedupeExerciseLogs,
   mergeDuplicateDayLogs,
-  mergeSameDayCardio,
+  normalizeAppData,
   repairDuplicatedSets,
 } from '../normalize';
 import { CARDIO_ONLY_DAY_ID } from '../cardio';
@@ -22,58 +22,6 @@ const makeLog = (
   createdAt: new Date(`${date}T00:00:00`).valueOf(),
   updatedAt: 0,
   ...(opts.cardioOnly ? { cardioOnly: true } : {}),
-});
-
-describe('mergeSameDayCardio', () => {
-  it('mete el cardio suelto dentro del día de fuerza de esa fecha', () => {
-    const logs = mergeSameDayCardio([
-      makeLog('fuerza', '2026-07-16', 'Andar en cinta: 20min, 6kmh, 5%'),
-      makeLog('suelto', '2026-07-16', 'Correr: 10min, 12kmh', {
-        cardioOnly: true,
-      }),
-    ]);
-    expect(logs).toHaveLength(1);
-    expect(logs[0].id).toBe('fuerza');
-    expect(logs[0].cardio!.rawInput).toBe(
-      'Andar en cinta: 20min, 6kmh, 5% | Correr: 10min, 12kmh'
-    );
-  });
-
-  it('respeta el solo cardio de un día sin fuerza', () => {
-    const logs = mergeSameDayCardio([
-      makeLog('fuerza', '2026-07-16', 'Correr: 10min, 12kmh'),
-      makeLog('suelto', '2026-07-15', 'Bici: 30min, 20kmh', {
-        cardioOnly: true,
-      }),
-    ]);
-    expect(logs).toHaveLength(2);
-    expect(logs[1].cardio!.rawInput).toBe('Bici: 30min, 20kmh');
-  });
-
-  it('no toca dos días de fuerza distintos de la misma fecha', () => {
-    const a = makeLog('a', '2026-07-16', 'Correr: 10min, 12kmh');
-    const b = {
-      ...makeLog('b', '2026-07-16', 'Bici: 20min, 20kmh'),
-      dayId: 'd2',
-    };
-    expect(mergeSameDayCardio([a, b])).toEqual([a, b]);
-  });
-
-  it('es idempotente: sin sueltos que fusionar devuelve los mismos logs', () => {
-    const logs = [makeLog('fuerza', '2026-07-16', 'Correr: 10min, 12kmh')];
-    expect(mergeSameDayCardio(logs)).toBe(logs);
-  });
-
-  it('absorbe el día de fuerza que aún no tenía cardio', () => {
-    const logs = mergeSameDayCardio([
-      makeLog('fuerza', '2026-07-16', ''),
-      makeLog('suelto', '2026-07-16', 'Bici: 30min, 20kmh', {
-        cardioOnly: true,
-      }),
-    ]);
-    expect(logs).toHaveLength(1);
-    expect(logs[0].cardio!.rawInput).toBe('Bici: 30min, 20kmh');
-  });
 });
 
 // Duplicados heredados del restore de la nube (bug 0.7.0).
@@ -304,11 +252,53 @@ describe('mergeDuplicateDayLogs', () => {
     expect(mergeDuplicateDayLogs(logs)).toBe(logs);
   });
 
-  it('deja en paz las sesiones de solo cardio (las fusiona mergeSameDayCardio)', () => {
+  it('deja en paz las sesiones de solo cardio (son registros propios)', () => {
     const logs = [
       makeLog('cardio1', '2026-08-25', 'Correr: 10min', { cardioOnly: true }),
       makeLog('cardio2', '2026-08-25', 'Bici: 20min', { cardioOnly: true }),
     ];
     expect(mergeDuplicateDayLogs(logs)).toBe(logs);
+  });
+});
+
+// Regresión de 0.8.1: la normalización NO puede deshacer la separación de
+// cardio y fuerza. Hasta aquí `mergeSameDayCardio` absorbía el log de solo
+// cardio en el de fuerza del mismo día y lo descartaba; como `loadAppData`
+// normaliza en CADA arranque y storage.ts reescribe la BD al ver que faltan
+// logs, el borrado acababa subiendo a la nube y la sesión se perdía.
+describe('normalizeAppData y el cardio suelto', () => {
+  const base = { routines: [], activeRoutineId: undefined, logs: [] };
+
+  it('conserva la sesión de solo cardio del mismo día que un entreno de fuerza', () => {
+    const fuerza = makeLog('log1', '2026-10-02', '');
+    const cardio = makeLog(
+      'log1-cardio',
+      '2026-10-02',
+      'Cinta: 15mins 11.5kmh',
+      {
+        cardioOnly: true,
+      }
+    );
+
+    const { logs } = normalizeAppData(
+      { ...base, logs: [fuerza, cardio] },
+      base
+    );
+
+    expect(logs.map((l) => l.id).sort()).toEqual(['log1', 'log1-cardio']);
+    expect(logs.find((l) => l.id === 'log1-cardio')?.cardio?.rawInput).toBe(
+      'Cinta: 15mins 11.5kmh'
+    );
+    // Y el de fuerza no se queda con el cardio del otro.
+    expect(logs.find((l) => l.id === 'log1')?.cardio).toBeUndefined();
+  });
+
+  it('no fusiona varias sesiones de solo cardio del mismo día', () => {
+    const logs = [
+      makeLog('c1', '2026-10-02', 'Correr: 10min', { cardioOnly: true }),
+      makeLog('c2', '2026-10-02', 'Bici: 20min', { cardioOnly: true }),
+    ];
+
+    expect(normalizeAppData({ ...base, logs }, base).logs).toHaveLength(2);
   });
 });

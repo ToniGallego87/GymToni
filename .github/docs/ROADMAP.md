@@ -229,6 +229,22 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `accessibilityLabel`), `features/workout/HomeScreen.tsx:271` (el filtro
       `!log.cardioOnly`).
       **Esfuerzo:** bajo.
+- [ ] **Cada guardado del cardio acuña una fila nueva y deja la anterior de
+      lápida** — el registro construye el cardio con `generateId()` en cada
+      guardado en vez de conservar el id del que el log ya tenía. Como autoguarda
+      serie a serie, una misma sesión deja decenas de filas: al subir,
+      `reconcileChildren` marca borrada la anterior. Reutilizar `log.cardio?.id`
+      cuando exista y, aparte, purgar las lápidas viejas de la nube.
+      **Por qué:** de las 681 filas de cardio marcadas que había en Supabase al
+      diagnosticar la pérdida de 0.8.1, **531 eran exactamente esto** — hasta 42
+      versiones superadas del mismo "Andar en cinta: 53min, 3kmh". Engordan cada
+      pull y, sobre todo, fueron el ruido que tapó el daño real: obligaron a
+      distinguir a mano qué lápida era una pérdida y cuál basura histórica.
+      **Archivos:** `features/workout/WorkoutLogScreen.tsx:798-802` (el
+      `generateId()` incondicional), `lib/db/mappers.ts:225`
+      (`log.cardio.id || newId()`), `lib/cloud/sync.ts:305`
+      (`reconcileChildren`, el que pone la lápida).
+      **Esfuerzo:** bajo.
 - [ ] **El sync tarda 8,5 s en un arranque en frío para no traer nada** — medido
       en garnet con sondas en release: `syncNow` tarda **8,1-8,6 s** y devuelve
       `pulled=0`. `pullDelta` ya lanza las siete tablas en paralelo, así que el
@@ -243,8 +259,8 @@ Supabase (cuentas, sync y social) está entregado; plan en
       continuaciones compiten por el hilo JS con lo que el usuario está tocando:
       es lo que obligó a mover el sync a la fase 2 del arranque
       (`background` en `app/App.tsx`), que lo esconde pero no lo arregla.
-      **Archivos:** `lib/cloud/sync.ts:728` (`syncNow`), `:645` (`pullDelta`,
-      las siete tablas) y `:671` (el `user_settings` de después),
+      **Archivos:** `lib/cloud/sync.ts:750` (`syncNow`), `:667` (`pullDelta`,
+      las siete tablas) y `:693` (el `user_settings` de después),
       `supabase/schema.sql` (haría falta el sello).
       **Esfuerzo:** medio.
 - [ ] **Inicio sin rutinas: un solo "Crear rutina"** — la primera pantalla de
@@ -265,6 +281,20 @@ Supabase (cuentas, sync y social) está entregado; plan en
 
 Candidatas (compatibles con las restricciones):
 
+- [ ] **Restaurar un backup automático desde la app** — la app ya escribe 7
+      backups diarios rotativos en `documentDirectory/backups`, pero no hay
+      ninguna forma de volver a uno: `listLocalBackups` solo la usa la rotación y
+      Datos y nube ni los menciona. Listarlos (fecha y tamaño) con un "Restaurar"
+      por entrada, reutilizando el importador que ya existe.
+      **Por qué:** es la única red de seguridad que no depende de tener cuenta, y
+      hoy es inalcanzable: viven en almacenamiento privado y el APK de release no
+      es debuggable, así que ni siquiera se pueden sacar por USB. En la pérdida
+      de cardio de 0.8.1 habrían sido la recuperación inmediata; en su lugar hubo
+      que reconstruir las sesiones a mano desde las tablas espejo de Supabase.
+      **Archivos:** `lib/backup.ts:21` (`AUTO_BACKUP_DIR`, `MAX_AUTO_BACKUPS`),
+      `lib/fileIO.ts:140` (`listLocalBackups`), `features/workout/DataScreen.tsx:603`
+      (donde están Exportar e Importar).
+      **Esfuerzo:** bajo.
 - [ ] **Recordatorio de entrenamiento** — notificación local programable por
       día de la semana (la infraestructura de notificaciones ya existe para el
       timer de descanso).

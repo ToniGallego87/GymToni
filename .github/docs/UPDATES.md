@@ -1,5 +1,69 @@
 # UPDATES
 
+## Sin publicar
+
+### Correcciones
+
+- **La normalización deshacía la separación de cardio y fuerza, y el cardio
+  acababa borrado.** Fallo de datos en producción salido de 0.8.1: 124 sesiones
+  de cardio desaparecieron de la pestaña Cardio. Tres piezas encadenadas.
+
+  (1) **La causa raíz, `mergeSameDayCardio` en `lib/normalize.ts`.** 0.8.1 separó
+  cardio y fuerza, pero `normalize.ts` NO se tocó (su último cambio era de 0.7.3)
+  y seguía dentro del pipeline de `normalizeAppData` la función que hace lo
+  contrario: coge cada log de solo cardio, lo absorbe en el log de fuerza del
+  mismo día y lo descarta. Como `loadAppData` normaliza en CADA arranque y justo
+  después la autorreparación de `storage.ts` ve que han desaparecido logs y
+  **reescribe la BD**, el borrado se consolidaba en local y subía a la nube. Es
+  decir: `splitMixedCardioLogs` separaba en la fase 2 del arranque y el arranque
+  siguiente lo deshacía. Firma que lo delata: la función acuña el id
+  `cardio-${log.id}`, y así aparecían las filas en las tablas espejo.
+  Se elimina `mergeSameDayCardio` y sale del pipeline. Con el modelo nuevo un
+  cardio suelto es un registro legítimo, no un resto que fusionar. Dos tests de
+  regresión en `normalize.test.ts` cubren que una sesión de solo cardio sobrevive
+  junto a un entreno de fuerza del mismo día y que no se fusionan entre ellas.
+
+  (2) **El pull aplicaba los tombstones de los hijos sin filtrarlos
+  (`dropPendingLocal`, `lib/cloud/sync.ts`).** Los upserts sí se descartaban
+  cuando el log padre tenía cambios locales pendientes de subir, pero los
+  borrados se aplicaban siempre — y es el lado que no perdona: un upsert mal
+  aplicado lo corrige el push siguiente, pero el `DELETE` contra el SQLite local
+  no tiene vuelta atrás. No se filtraban porque no se podía: `pullTable` tiraba
+  la fila y dejaba solo el id, así que no había forma de saber el log padre.
+  Ahora `RemoteTableChange.deletes` viaja como **fila completa**
+  (`Record<string, unknown>[]`, ver `lib/db/index.ts`) y `applyRemoteChanges`
+  extrae el id al aplicar. Con eso, los borrados se filtran igual que los altas
+  en las tres tablas hijas: `exercise_logs`, `log_sets` y `cardio_logs`.
+
+  (3) **El pull corría aunque el push se hubiera cortado a medias.**
+  `pushOutbox` devuelve ahora `{ pushed, aborted }` y `syncNow` no baja nada si
+  el push abortó por falta de red; el cursor tampoco se mueve, así que se
+  reintenta entero al volver la cobertura. Antes se bajaba un estado intermedio
+  subido por el propio dispositivo: al separar el cardio, el log de fuerza subía
+  sin él y marcaba borrada su fila (`reconcileChildren`), y el log de solo cardio
+  que la revivía se quedaba sin subir.
+
+- **Datos recuperados (nota de operación).** Las filas no se borran en la nube,
+  se marcan (`cloudMarkDeleted` hace `update deleted = true`), así que todo el
+  contenido seguía ahí y se recuperó con SQL: 107 sesiones revividas en dos
+  tandas (79 con id derivado `<id>-cardio` + 28 creadas desde "Insertar cardio"),
+  4 entrenos mixtos que la separación nunca llegó a partir —la contrapartida
+  documentada en 0.8.1: un log mixto que llega por sync tras marcar
+  `cardioSplitDone` ya no se separa— y 13 que nunca se rompieron: **124**.
+  Después hubo que **quitar 17 duplicados**: el criterio de rescate ("toda lápida
+  con contenido") era demasiado ancho y resucitó también logs borrados con razón,
+  versiones superadas que dejaba el autoguardado antiguo al borrar y reinsertar
+  el log con un id NUEVO en cada guardado (ver `mergeDuplicateDayLogs`). Se
+  notaba en Inicio, que suma por fecha: un día con 5 copias marcaba 325 minutos
+  en vez de 65. Total final: **107 sesiones, una fila de cardio cada una**.
+
+  Aprendizaje de proceso, por si vuelve a pasar: **vaciar el `sync_outbox` del
+  dispositivo ANTES de reparar la nube**. El outbox es una tabla SQLite
+  persistente y sobrevive a la actualización del APK, así que seguía conteniendo
+  los borrados que encoló el build viejo; al abrir la app, el push los subía otra
+  vez y tumbaba lo reparado (pasó dos veces, una de ellas con 31 sesiones). La
+  vía es "Restaurar desde la nube", que llama a `clearOutbox()`.
+
 ## Version 0.8.1 - 2026-10-02
 
 ### Nuevas funcionalidades

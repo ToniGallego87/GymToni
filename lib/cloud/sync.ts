@@ -441,9 +441,11 @@ function isNetworkError(e: unknown): boolean {
   );
 }
 
-async function pushOutbox(userId: string): Promise<number> {
+async function pushOutbox(
+  userId: string
+): Promise<{ pushed: number; aborted: boolean }> {
   const batch = await getOutboxBatch();
-  if (!batch.length) return 0;
+  if (!batch.length) return { pushed: 0, aborted: false };
 
   const now = Date.now();
   // El plan se lee UNA vez por push, y solo si hay rutinas o días que subir.
@@ -455,6 +457,7 @@ async function pushOutbox(userId: string): Promise<number> {
   const plan: LocalPlan = needsPlan ? await loadLocalPlan() : { routines: [] };
   const done: string[] = []; // subidas OK o descartadas (envenenadas)
   const failed: string[] = []; // fallaron por entrada mala → +1 intento
+  let aborted = false;
   for (const entry of batch) {
     // Una entrada que agota los reintentos se descarta para no bloquear la cola
     // detrás de ella (un cambio corrupto no debe congelar todo el sync).
@@ -469,13 +472,16 @@ async function pushOutbox(userId: string): Promise<number> {
       // Sin red: abortar el push dejando todo pendiente (se reintenta al volver
       // la cobertura), sin penalizar intentos. Entrada mala: contar el intento y
       // seguir con las demás en vez de abortar el push entero.
-      if (isNetworkError(e)) break;
+      if (isNetworkError(e)) {
+        aborted = true;
+        break;
+      }
       failed.push(entry.id);
     }
   }
   await deleteOutboxEntries(done);
   await incrementOutboxAttempts(failed);
-  return done.length;
+  return { pushed: done.length, aborted };
 }
 
 // ─────────────────────────── PULL (nube → local) ───────────────────────────
@@ -500,7 +506,7 @@ async function pullTable(
   cursor: number
 ): Promise<PulledTable> {
   const upserts: Row[] = [];
-  const deletes: string[] = [];
+  const deletes: Row[] = [];
   let maxUpdated = cursor;
 
   for (let from = 0; ; from += PULL_PAGE) {
@@ -521,7 +527,7 @@ async function pullTable(
       const row = coerceRow(raw as Row);
       const u = row.updated_at as number;
       if (u > maxUpdated) maxUpdated = u;
-      if (row.deleted) deletes.push(row.id as string);
+      if (row.deleted) deletes.push(row);
       else upserts.push(row);
     }
     if (page.length < PULL_PAGE) break;
@@ -544,6 +550,11 @@ async function pullTable(
  * sube, que es exactamente el last-write-wins de este motor ("gana el último en
  * subir"). Los hijos de un padre saltado se saltan también: si no, el pull
  * reinsertaría los ejercicios y series de la versión vieja del entreno.
+ *
+ * Vale igual para los UPSERTS y para los BORRADOS. Hasta 0.8.1 solo se filtraban
+ * los upserts y los tombstones se aplicaban siempre, que es justo el lado que no
+ * perdona: un upsert mal aplicado lo corrige el push siguiente, pero el borrado
+ * es un DELETE real contra el SQLite local y no hay de dónde recuperarlo.
  */
 export function dropPendingLocal(
   changes: RemoteChanges,
@@ -563,7 +574,7 @@ export function dropPendingLocal(
 
   const routines: RemoteTableChange = {
     upserts: changes.routines.upserts.filter((r) => !routineIds.has(idOf(r))),
-    deletes: changes.routines.deletes.filter((id) => !routineIds.has(id)),
+    deletes: changes.routines.deletes.filter((r) => !routineIds.has(idOf(r))),
   };
 
   const workoutDays: RemoteTableChange = {
@@ -573,7 +584,7 @@ export function dropPendingLocal(
       if (skip) skippedDays.add(idOf(r));
       return !skip;
     }),
-    deletes: changes.workoutDays.deletes.filter((id) => !dayIds.has(id)),
+    deletes: changes.workoutDays.deletes.filter((r) => !dayIds.has(idOf(r))),
   };
 
   const exercises: RemoteTableChange = {
@@ -583,35 +594,46 @@ export function dropPendingLocal(
     }),
     // Un borrado suelto de un ejercicio de un día pendiente es la versión
     // vieja de la nube: el push del día lo vuelve a subir entero.
-    deletes: changes.exercises.deletes.filter((id) => !exerciseIds.has(id)),
+    deletes: changes.exercises.deletes.filter((r) => !exerciseIds.has(idOf(r))),
   };
 
   const workoutLogs: RemoteTableChange = {
     upserts: changes.workoutLogs.upserts.filter((r) => !logIds.has(idOf(r))),
-    deletes: changes.workoutLogs.deletes.filter((id) => !logIds.has(id)),
+    deletes: changes.workoutLogs.deletes.filter((r) => !logIds.has(idOf(r))),
   };
 
+  // Los hijos se filtran por el log padre TAMBIÉN al borrar, no solo al
+  // insertar. Si el log tiene cambios locales sin subir, el tombstone que baja
+  // es la versión vieja de la nube y el push pendiente ya lo corrige: aplicarlo
+  // borra en local algo que localmente está vivo, y sin vuelta atrás (el DELETE
+  // es real, no una marca). Es lo que vació el cardio al separarlo de la fuerza.
   const exerciseLogs: RemoteTableChange = {
     upserts: changes.exerciseLogs.upserts.filter((r) => {
       const skip = logIds.has(parentOf(r, 'workout_logs_id'));
       if (skip) skippedExerciseLogs.add(idOf(r));
       return !skip;
     }),
-    deletes: changes.exerciseLogs.deletes,
+    deletes: changes.exerciseLogs.deletes.filter(
+      (r) => !logIds.has(parentOf(r, 'workout_logs_id'))
+    ),
   };
 
   const logSets: RemoteTableChange = {
     upserts: changes.logSets.upserts.filter(
       (r) => !skippedExerciseLogs.has(parentOf(r, 'exercise_logs_id'))
     ),
-    deletes: changes.logSets.deletes,
+    deletes: changes.logSets.deletes.filter(
+      (r) => !skippedExerciseLogs.has(parentOf(r, 'exercise_logs_id'))
+    ),
   };
 
   const cardioLogs: RemoteTableChange = {
     upserts: changes.cardioLogs.upserts.filter(
       (r) => !logIds.has(parentOf(r, 'workout_logs_id'))
     ),
-    deletes: changes.cardioLogs.deletes,
+    deletes: changes.cardioLogs.deletes.filter(
+      (r) => !logIds.has(parentOf(r, 'workout_logs_id'))
+    ),
   };
 
   return {
@@ -730,7 +752,18 @@ export async function syncNow(userId: string): Promise<SyncResult> {
   running = true;
   try {
     const cursor = await getCursor(userId);
-    const pushed = await pushOutbox(userId);
+    const { pushed, aborted } = await pushOutbox(userId);
+    // Push cortado a medias (sin red): NO se baja nada. Lo que hay arriba es un
+    // estado intermedio de este mismo dispositivo —una operación subió y la que
+    // la completaba no—, y bajarlo es importar esa incoherencia. Un ejemplo real
+    // (0.8.1): al separar el cardio de la fuerza, el log de fuerza subía sin
+    // cardio y marcaba borrada su fila; el log de cardio nuevo, que la revivía,
+    // se quedaba sin subir. El cursor tampoco se mueve: se reintenta entero al
+    // volver la cobertura.
+    if (aborted) {
+      await AsyncStorage.setItem(lastSyncKey(userId), String(Date.now()));
+      return { pushed, pulled: 0 };
+    }
     const { pulled, newCursor } = await pullDelta(userId, cursor);
     await setCursor(userId, newCursor);
     await AsyncStorage.setItem(lastSyncKey(userId), String(Date.now()));

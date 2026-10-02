@@ -917,9 +917,15 @@ export async function clearOutbox(): Promise<void> {
 
 // Cambios que trae el pull para una tabla: filas a insertar/actualizar y filas a
 // borrar (tombstones de la nube). Los settings viajan aparte (tabla settings).
+//
+// Los tombstones viajan como FILA COMPLETA, no como id suelto: `dropPendingLocal`
+// necesita la columna del padre (`workout_logs_id`…) para descartar el borrado de
+// un hijo cuyo log tiene cambios locales sin subir, igual que ya hace con los
+// upserts. Con solo el id esa comprobación era imposible y el borrado se aplicaba
+// siempre: así se perdió el cardio al separarlo de la fuerza en 0.8.1.
 export interface RemoteTableChange {
   upserts: Record<string, unknown>[];
-  deletes: string[];
+  deletes: Record<string, unknown>[];
 }
 
 export interface RemoteChanges {
@@ -1059,8 +1065,9 @@ export async function applyRemoteChanges(
     for (const { key, table, cols } of REMOTE_TABLES) {
       const change = changes[key];
       if (change.deletes.length) {
-        for (let i = 0; i < change.deletes.length; i += 300) {
-          const slice = change.deletes.slice(i, i + 300);
+        const ids = change.deletes.map((row) => String(row.id));
+        for (let i = 0; i < ids.length; i += 300) {
+          const slice = ids.slice(i, i + 300);
           const placeholders = slice.map(() => '?').join(', ');
           await txn.runAsync(
             `DELETE FROM ${table} WHERE id IN (${placeholders})`,
