@@ -9,6 +9,12 @@ interface AvatarProps {
   uri?: string | null;
   /** Diámetro en px. 40 en listas, 52-60 en cabeceras de perfil. */
   size?: number;
+  /**
+   * Aún no se sabe si tiene foto: círculo neutro en vez del marcador de
+   * persona. Sin esto, mientras baja el perfil se enseña el marcador —que
+   * significa "no tiene foto"— y la foto aparece después de golpe.
+   */
+  loading?: boolean;
 }
 
 /**
@@ -19,9 +25,12 @@ interface AvatarProps {
  * en su perfil, de otro tamaño en las listas de seguir). Aquí solo cambia el
  * diámetro.
  */
-export function Avatar({ uri, size = 40 }: AvatarProps) {
+export function Avatar({ uri, size = 40, loading }: AvatarProps) {
   const round = { width: size, height: size, borderRadius: size / 2 };
 
+  if (loading && !uri) {
+    return <View style={[styles.loading, round]} />;
+  }
   if (uri) {
     return <Image source={{ uri }} style={[styles.photo, round]} />;
   }
@@ -38,6 +47,7 @@ export function Avatar({ uri, size = 40 }: AvatarProps) {
 
 const makeStyles = () =>
   StyleSheet.create({
+    loading: { backgroundColor: theme.colors.border },
     photo: { backgroundColor: theme.colors.surfaceAlt },
     placeholder: {
       alignItems: 'center',

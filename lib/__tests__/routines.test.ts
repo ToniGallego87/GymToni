@@ -5,10 +5,10 @@ import {
   findSavedRoutine,
   intensityLabel,
   isLinkedRoutine,
+  lastTrainedByRoutine,
   linkPublicRoutine,
   refreshLinkedRoutine,
   routineAuthorId,
-  routineClosedAt,
   routineIntensity,
   routineStatus,
   sortRoutinesForList,
@@ -341,27 +341,25 @@ describe('situación, cierre y orden de la lista', () => {
   });
 
   it('la fecha de cierre es la del último entrenamiento', () => {
-    const cerrada = makeRoutine('cerrada', 20);
     const logs = [
       makeLog('l1', 'cerrada', 100),
       makeLog('l2', 'cerrada', 300),
       makeLog('l3', 'otra', 900),
     ];
 
-    expect(routineClosedAt(cerrada, logs)).toBe(300);
+    expect(lastTrainedByRoutine(logs).get('cerrada')).toBe(300);
   });
 
   it('una rutina sin entrenamientos no tiene fecha de cierre', () => {
-    expect(routineClosedAt(makeRoutine('nueva', 20), [])).toBeUndefined();
+    expect(lastTrainedByRoutine([]).get('nueva')).toBeUndefined();
   });
 
   it('sin createdAt la fecha de cierre cae en la del log', () => {
-    const cerrada = makeRoutine('cerrada', 20);
     const log = { ...makeLog('l1', 'cerrada', 0), createdAt: undefined };
 
-    expect(routineClosedAt(cerrada, [log as unknown as WorkoutLog])).toBe(
-      new Date('2025-03-12T00:00:00').getTime()
-    );
+    expect(
+      lastTrainedByRoutine([log as unknown as WorkoutLog]).get('cerrada')
+    ).toBe(new Date('2025-03-12T00:00:00').getTime());
   });
 
   it('ordena: la que entrenas, las sin estrenar y al final las cerradas', () => {

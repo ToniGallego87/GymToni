@@ -190,6 +190,11 @@ function getDb(): Promise<SQLiteDatabase> {
         // columna `timer_duration` se queda (SQLite no la borra barato) y a
         // partir de aquí se escribe null.
         await seedRestDurationFromRoutines(db);
+        // v8: nota de la SESIÓN (distinta de las notas por ejercicio). Explica
+        // los datos raros del día al revisar el histórico.
+        try {
+          await db.execAsync('ALTER TABLE workout_logs ADD COLUMN notes TEXT');
+        } catch {}
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -224,7 +229,7 @@ function insertWorkoutLog(
   row: WorkoutLogRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only, is_deload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only, is_deload, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.routines_id,
@@ -235,6 +240,7 @@ function insertWorkoutLog(
       row.starts_new_week,
       row.cardio_only,
       row.is_deload,
+      row.notes,
     ]
   );
 }
@@ -322,21 +328,37 @@ export async function loadAppDataFromDb(): Promise<WorkoutAppData | null> {
     return null;
   }
 
+  // Las siete tablas se piden A LA VEZ: son lecturas independientes y en
+  // secuencia sumaban siete idas y vueltas al hilo nativo, que es lo que el
+  // arranque espera con el splash puesto (la hidratación no puede empezar a
+  // pintar hasta tenerlas todas).
+  const [
+    routines,
+    workoutDays,
+    exercises,
+    workoutLogs,
+    exerciseLogs,
+    logSets,
+    cardioLogs,
+  ] = await Promise.all([
+    db.getAllAsync<RoutineRow>('SELECT * FROM routines'),
+    db.getAllAsync<WorkoutDayRow>('SELECT * FROM workout_days'),
+    db.getAllAsync<ExerciseRow>('SELECT * FROM exercises'),
+    db.getAllAsync<WorkoutLogRow>('SELECT * FROM workout_logs'),
+    db.getAllAsync<ExerciseLogRow>('SELECT * FROM exercise_logs'),
+    db.getAllAsync<LogSetRow>('SELECT * FROM log_sets'),
+    db.getAllAsync<CardioLogRow>('SELECT * FROM cardio_logs'),
+  ]);
+
   const rows: DbRows = {
     settings,
-    routines: await db.getAllAsync<RoutineRow>('SELECT * FROM routines'),
-    workoutDays: await db.getAllAsync<WorkoutDayRow>(
-      'SELECT * FROM workout_days'
-    ),
-    exercises: await db.getAllAsync<ExerciseRow>('SELECT * FROM exercises'),
-    workoutLogs: await db.getAllAsync<WorkoutLogRow>(
-      'SELECT * FROM workout_logs'
-    ),
-    exerciseLogs: await db.getAllAsync<ExerciseLogRow>(
-      'SELECT * FROM exercise_logs'
-    ),
-    logSets: await db.getAllAsync<LogSetRow>('SELECT * FROM log_sets'),
-    cardioLogs: await db.getAllAsync<CardioLogRow>('SELECT * FROM cardio_logs'),
+    routines,
+    workoutDays,
+    exercises,
+    workoutLogs,
+    exerciseLogs,
+    logSets,
+    cardioLogs,
   };
 
   return rowsToAppData(rows);
@@ -418,7 +440,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     );
     await bulkInsert(
       txn,
-      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only, is_deload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO workout_logs (id, routines_id, workout_days_id, date, created_at, updated_at, starts_new_week, cardio_only, is_deload, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       rows.workoutLogs,
       (row) => [
         row.id,
@@ -430,6 +452,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.starts_new_week,
         row.cardio_only,
         row.is_deload,
+        row.notes,
       ]
     );
     await bulkInsert(
@@ -979,6 +1002,7 @@ const REMOTE_TABLES: {
       'starts_new_week',
       'cardio_only',
       'is_deload',
+      'notes',
     ],
   },
   {

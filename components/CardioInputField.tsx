@@ -20,12 +20,22 @@ import {
 } from '@lib/cardio';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
+import {
+  MENU_TILE_GAP,
+  MENU_TILE_INSET,
+  MENU_TILE_PADDING,
+} from './menuTileTokens';
 
 interface CardioInputFieldProps {
   value: string;
   onChangeText: (text: string) => void;
   // Color de acento del día (push/pull/pierna). Tiñe el borde izquierdo.
   accent?: string;
+  // Disciplinas a la vista como casillas (icono + nombre, como el menú de
+  // Perfil) en vez del botón "Añadir cardio" + lista en el modal. Lo usa
+  // "Insertar cardio" (solo cardio), donde elegir disciplina es LA acción: la
+  // casilla abre directamente el popup de detalles.
+  inlinePicker?: boolean;
 }
 
 type CardioType =
@@ -62,6 +72,7 @@ export function CardioInputField({
   value,
   onChangeText,
   accent = theme.colors.primaryLine,
+  inlinePicker = false,
 }: CardioInputFieldProps) {
   const [cardioEntries, setCardioEntries] = useState<string[]>(() => {
     if (!value) return [];
@@ -96,24 +107,25 @@ export function CardioInputField({
     setCustomCardioType('');
   };
 
-  // Cerrar la tarjeta (back de Android / gesto de cierre): si en el paso de
-  // datos hay minutos válidos, se confirma el cardio en vez de perderlo; si no,
-  // se descarta. Junto al "hecho" del teclado, quita el botón Guardar.
-  const handleModalDismiss = () => {
-    if (isDetailsStep && cardioMinutes) {
-      handleSaveCardio();
-    } else {
-      closeCardioModal();
-    }
-  };
+  // Cerrar la tarjeta (back de Android, gesto de cierre o toque en el velo)
+  // DESCARTA, como en cualquier otro modal de la app. Antes guardaba si había
+  // minutos, que es lo contrario de lo que significa tocar fuera en el resto de
+  // la app; confirmar es ahora el botón "Guardar" del pie (o el ✓ del teclado).
+  const handleModalDismiss = () => closeCardioModal();
 
-  // Vuelve al primer paso descartando lo tecleado (botón "Atrás").
+  // Vuelve al primer paso para corregir la disciplina. Los datos ya tecleados
+  // (minutos, velocidad, pendiente) se CONSERVAN: quien pulsa "Atrás" casi
+  // siempre se equivocó de disciplina, no de números, y volver a teclearlos era
+  // un castigo silencioso.
+  // Con las casillas fuera del modal no hay paso de disciplina al que volver:
+  // "Atrás" cierra y se elige otra casilla.
   const resetToTypeStep = () => {
+    if (inlinePicker) {
+      closeCardioModal();
+      return;
+    }
     setSelectedCardioType(null);
     setCustomCardioType('');
-    setCardioMinutes('');
-    setCardioSpeed('');
-    setCardioPendiente('');
     setStep('type');
   };
 
@@ -125,6 +137,17 @@ export function CardioInputField({
       setStep('details');
     }
   };
+
+  // Casilla de disciplina (modo inlinePicker): abre el popup ya en su paso.
+  const handleTilePress = (typeId: string) => {
+    handleSelectCardioType(typeId);
+    setShowCardioModal(true);
+  };
+
+  const optionRows: (typeof CARDIO_OPTIONS)[] = [];
+  for (let i = 0; i < CARDIO_OPTIONS.length; i += 3) {
+    optionRows.push(CARDIO_OPTIONS.slice(i, i + 3));
+  }
 
   const handleCardioTypeConfirm = () => {
     if (customCardioType.trim()) {
@@ -172,7 +195,7 @@ export function CardioInputField({
 
   return (
     <>
-      {!isExpanded ? (
+      {!isExpanded && !inlinePicker ? (
         <Pressable
           style={({ pressed }) => [
             styles.collapsedButton,
@@ -192,7 +215,7 @@ export function CardioInputField({
             <Text style={styles.collapsedButtonText}>{t('Añadir cardio')}</Text>
           </View>
         </Pressable>
-      ) : (
+      ) : isExpanded ? (
         <View style={[styles.container, { borderLeftColor: accent }]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -248,59 +271,120 @@ export function CardioInputField({
               </View>
             );
           })}
-          <Pressable
-            style={({ pressed }) => [
-              styles.addCardioButton,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={() => {
-              setShowCardioModal(true);
-              setStep('type');
-            }}
-          >
-            <View style={styles.buttonContent}>
-              <MaterialCommunityIcons
-                name="plus"
-                size={16}
-                color={theme.colors.onGold}
-              />
-              <Text style={styles.addCardioText}>{t('Añadir')}</Text>
+          {/* Con casillas a la vista, añadir otra disciplina es pulsar otra
+              casilla: el botón sobra. */}
+          {!inlinePicker && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.addCardioButton,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => {
+                setShowCardioModal(true);
+                setStep('type');
+              }}
+            >
+              <View style={styles.buttonContent}>
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={16}
+                  color={theme.colors.onGold}
+                />
+                <Text style={styles.addCardioText}>{t('Añadir')}</Text>
+              </View>
+            </Pressable>
+          )}
+        </View>
+      ) : null}
+
+      {/* Disciplinas como casillas (mismo dibujo que el menú de Perfil): un
+          toque abre el popup de detalles de esa disciplina. Con su rótulo: la
+          rejilla salía a pelo y no decía qué se esperaba de ella. */}
+      {inlinePicker && (
+        <Text style={styles.pickerTitle}>{t('Selecciona la disciplina')}</Text>
+      )}
+      {inlinePicker && (
+        <View style={styles.tileGrid}>
+          {optionRows.map((row, rowIndex) => (
+            <View key={rowIndex} style={styles.tileRow}>
+              {row.map((option) => (
+                <Pressable
+                  key={option.id}
+                  style={({ pressed }) => [
+                    styles.tile,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => handleTilePress(option.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                >
+                  <MaterialCommunityIcons
+                    name={optionIconName(option) as any}
+                    size={34}
+                    color={theme.colors.text}
+                  />
+                  <Text style={styles.tileLabel} numberOfLines={2}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
-          </Pressable>
+          ))}
         </View>
       )}
 
       {/* Asistente en tres pasos dentro del mismo modal: elegir disciplina,
-          nombrarla si es "Otro", y sus datos. En el paso de datos no hay botón
-          Guardar: el cardio se confirma solo al pulsar "hecho" en el teclado o
-          al cerrar la tarjeta (handleModalDismiss). */}
+          nombrarla si es "Otro", y sus datos. El paso de datos se confirma con
+          su botón "Guardar" (o con el ✓ del teclado, que hace lo mismo); antes
+          no había botón y había que adivinarlo leyendo una nota. */}
       <AppModal
         visible={showCardioModal}
         onRequestClose={handleModalDismiss}
-        onOverlayPress={isDetailsStep ? handleModalDismiss : undefined}
+        onOverlayPress={handleModalDismiss}
         title={modalTitle}
         icon="run-fast"
         align={isDetailsStep ? 'left' : 'center'}
         footer={
-          <>
-            {isCustomTypeStep && (
+          isDetailsStep ? (
+            <View style={styles.modalButtons}>
               <Button
-                title={t('Continuar')}
-                onPress={handleCardioTypeConfirm}
-                disabled={!customCardioType}
+                title={t('Atrás')}
+                onPress={resetToTypeStep}
+                variant="secondary"
+                size="medium"
+                style={styles.modalButton}
+              />
+              <Button
+                title={t('Guardar')}
+                onPress={handleSaveCardio}
+                disabled={!cardioMinutes}
+                variant="primary"
+                size="medium"
+                style={styles.modalButton}
+              />
+            </View>
+          ) : (
+            <>
+              {isCustomTypeStep && (
+                <Button
+                  title={t('Continuar')}
+                  onPress={handleCardioTypeConfirm}
+                  disabled={!customCardioType}
+                  size="medium"
+                />
+              )}
+              <Button
+                title={isTypeStep ? t('Cancelar') : t('Atrás')}
+                onPress={isTypeStep ? closeCardioModal : resetToTypeStep}
+                variant="secondary"
                 size="medium"
               />
-            )}
-            <Button
-              title={isTypeStep ? t('Cancelar') : t('Atrás')}
-              onPress={isTypeStep ? closeCardioModal : resetToTypeStep}
-              variant="secondary"
-              size="medium"
-            />
-          </>
+            </>
+          )
         }
       >
-        {isTypeStep && (
+        {/* Con casillas no hay paso de lista (y así no asoma al cerrar). */}
+        {isTypeStep && !inlinePicker && (
           <ScrollView
             style={styles.optionsScroll}
             showsVerticalScrollIndicator={false}
@@ -383,12 +467,6 @@ export function CardioInputField({
               </View>
             )}
           </View>
-        )}
-
-        {isDetailsStep && (
-          <Text style={styles.saveHint}>
-            {t('Se guarda solo: pulsa ✓ en el teclado o toca fuera.')}
-          </Text>
         )}
       </AppModal>
     </>
@@ -502,6 +580,48 @@ const makeStyles = () =>
     buttonPressed: {
       opacity: 0.8,
     },
+    // Casillas de disciplina: copia del `menuTile` de Perfil (superficie,
+    // borde, sombra suave, cuadradas). `flexBasis: 0` + `flexGrow: 1` para que
+    // todas midan lo mismo tenga la etiqueta la longitud que tenga.
+    // Rótulo de la rejilla de disciplinas (modo inlinePicker).
+    pickerTitle: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginBottom: 2,
+    },
+    tileGrid: {
+      gap: MENU_TILE_GAP,
+      marginVertical: 12,
+      marginHorizontal: MENU_TILE_INSET,
+    },
+    tileRow: {
+      flexDirection: 'row',
+      gap: MENU_TILE_GAP,
+    },
+    tile: {
+      flexGrow: 1,
+      flexBasis: 0,
+      aspectRatio: 1,
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: MENU_TILE_PADDING,
+      ...theme.shadow.soft,
+    },
+    tileLabel: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.text,
+      lineHeight: 16,
+      textAlign: 'center',
+    },
     optionsScroll: {
       marginTop: 12,
       maxHeight: 300,
@@ -542,12 +662,14 @@ const makeStyles = () =>
       flexDirection: 'row',
       gap: 8,
     },
-    saveHint: {
-      marginTop: 14,
-      fontSize: 13,
-      color: theme.colors.textSecondary,
-      fontStyle: 'italic',
-      lineHeight: 17,
+    // Pie del paso de datos: "Atrás" y "Guardar" a la par, como el resto de
+    // modales de la app (ver AppModal / ConfirmModal).
+    modalButtons: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    modalButton: {
+      flex: 1,
     },
     inputGroupCardio: {
       flex: 1,

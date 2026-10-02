@@ -209,3 +209,77 @@ create policy "insert own reports" on public.reports
 drop policy if exists "read own reports" on public.reports;
 create policy "read own reports" on public.reports
   for select using (reporter_id = auth.uid());
+
+-- ─────────────────────────── activity (Actividad) ───────────────────────────
+-- Trayectoria pública de una persona: los hitos que su perfil enseña (insignias
+-- desbloqueadas, retos superados y días entrenados, cada día con la rutina de la
+-- que salió, para poder enlazarla si es pública).
+--
+-- Decisiones:
+--   · La escribe el PROPIO cliente cuando detecta un hito nuevo, igual que ya
+--     sube `level`/`xp` al perfil (hooks/useAccountLevel.ts). No hay trigger:
+--     el cálculo de insignias y retos vive en el dispositivo (lib/badges.ts,
+--     lib/challenges.ts) y no se va a duplicar en SQL.
+--   · `unique (user_id, kind, ref)` hace la publicación IDEMPOTENTE: subir dos
+--     veces el mismo hito no duplica nada (upsert con ignoreDuplicates).
+--   · El historial de entrenos (`workout_logs`) sigue siendo privado: esto NO lo
+--     abre. Aquí solo viaja "entrené el día X de la rutina Y", sin series, pesos
+--     ni nada medible.
+--   · Visibilidad: la MISMA regla que el perfil (público, propio, o hay relación
+--     de seguimiento), y además `profiles.share_activity`, que permite apagar
+--     solo la actividad sin volver el perfil entero privado.
+alter table public.profiles
+  add column if not exists share_activity boolean not null default true;
+
+create table if not exists public.activity (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  kind         text not null check (kind in ('badge', 'challenge', 'day')),
+  -- Identidad del hito dentro de su tipo: id de insignia, `reto@periodo`
+  -- (lib/level.ts) o id del log del día. Con `kind` forma la clave única.
+  ref          text not null,
+  -- Cómo se enseña, ya resuelto por el cliente (que es quien tiene el catálogo
+  -- traducido): nombre del hito y su icono de MaterialCommunityIcons.
+  title        text not null,
+  icon         text,
+  -- Solo en los días: de qué rutina salió, para enlazarla si es pública. El
+  -- nombre se guarda porque la rutina puede dejar de ser pública o borrarse.
+  routine_id   text,
+  routine_name text,
+  -- Fecha del hito (`YYYY-MM-DD`), que es por la que se ordena: no la de subida.
+  happened_on  date not null,
+  created_at   bigint not null default 0,
+  unique (user_id, kind, ref)
+);
+create index if not exists idx_activity_user
+  on public.activity(user_id, happened_on desc);
+
+alter table public.activity enable row level security;
+
+drop policy if exists "insert own activity" on public.activity;
+create policy "insert own activity" on public.activity
+  for insert with check (user_id = auth.uid());
+
+-- Apagar el interruptor BORRA lo publicado (no basta con ocultarlo).
+drop policy if exists "delete own activity" on public.activity;
+create policy "delete own activity" on public.activity
+  for delete using (user_id = auth.uid());
+
+drop policy if exists "read visible activity" on public.activity;
+create policy "read visible activity" on public.activity
+  for select using (
+    user_id = auth.uid()
+    or exists (
+      select 1 from public.profiles p
+      where p.id = activity.user_id
+        and p.share_activity = true
+        and (
+          p.is_public = true
+          or exists (
+            select 1 from public.follows f
+            where (f.follower_id = p.id and f.following_id = auth.uid())
+               or (f.following_id = p.id and f.follower_id = auth.uid())
+          )
+        )
+    )
+  );

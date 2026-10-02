@@ -4,7 +4,9 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
+import Animated from 'react-native-reanimated';
 import { useRestSecondsLeft, useRestTimer } from '@lib/restTimerStore';
+import { useRestFillStyle } from '@lib/restFill';
 import { formatRestTime } from '@lib/utils';
 
 // Contenido de la ventanita flotante del descanso (Picture-in-Picture, ver
@@ -26,9 +28,16 @@ export function PipRestTimer() {
   // tres restan contra el `endAt` del store, así que no pueden discrepar.
   const remaining = useRestSecondsLeft();
   const finished = !restTimer || remaining <= 0;
+  // El mismo relleno de izquierda a derecha que la tarjeta del registro y la
+  // barra flotante (ver `lib/restFill`): aquí no hay botones ni anillo, así que
+  // sin él la ventanita era un número pelado que no decía cuánto falta.
+  const fillStyle = useRestFillStyle(!finished);
 
   return (
     <View style={styles.container}>
+      {!finished && (
+        <Animated.View style={[styles.fill, fillStyle]} pointerEvents="none" />
+      )}
       {finished ? (
         <>
           <MaterialCommunityIcons
@@ -72,6 +81,13 @@ const makeStyles = () =>
       justifyContent: 'center',
       paddingHorizontal: 12,
       gap: 2,
+    },
+    fill: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      bottom: 0,
+      backgroundColor: theme.colors.accentLine + '3D',
     },
     countdownRow: {
       flexDirection: 'row',

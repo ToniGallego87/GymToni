@@ -18,7 +18,7 @@ import { t } from '@lib/i18n';
 import {
   CatalogExercise,
   CATEGORY_LABELS,
-  EXERCISE_CATALOG,
+  getExerciseCatalog,
   categoryLabel,
   equipmentLabel,
   exerciseName,
@@ -93,7 +93,7 @@ export function ExercisePickerModal({
 
   const results = useMemo(() => {
     const q = query.trim();
-    return EXERCISE_CATALOG.filter((ex) => {
+    return getExerciseCatalog().filter((ex) => {
       if (category && ex.category !== category) return false;
       return matchesExercise(ex, q);
     });

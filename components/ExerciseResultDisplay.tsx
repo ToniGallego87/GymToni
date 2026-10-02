@@ -170,7 +170,7 @@ export function ExerciseResultDisplay({
           "Anterior". */}
       <View style={styles.columnHeader}>
         <Text style={[styles.columnLabel, styles.columnLeft]}>
-          {t('Actual')}
+          {t('Esta sesión')}
         </Text>
         {hasPrevious ? (
           <>

@@ -13,8 +13,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { fmtNum, t } from '@lib/i18n';
-import { HERO_ARROW_INSET } from './HeroCarousel';
 import { HERO_CARD_HEIGHT } from './HeroCard';
+
+// Sangría lateral de la fila de datos: la misma que tenía cuando la tarjeta
+// vivía en el carrusel de la hero, para no mover nada al retirarlo.
+const STATS_ROW_INSET = 26;
 
 // A partir de cuántos pesos del histórico tiene sentido dibujar la evolución, y
 // cuántos de los últimos se pintan como máximo.
@@ -114,7 +117,7 @@ function WeightSparkline({ values }: { values: number[] }) {
  * Estado de la hero card de Cardio dedicado al peso corporal: muestra el peso
  * vigente, al pulsar abre su edición y, si hay histórico suficiente, dibuja la
  * evolución de los últimos pesos. Comparte frame (gradiente dorado, márgenes y
- * altura) con HeroCard/HeroStatsCard para que el carrusel no salte.
+ * altura) con HeroCard, de la que es hermana.
  */
 export function HeroWeightCard({
   weight,
@@ -250,8 +253,7 @@ const makeStyles = () =>
     gradient: {
       borderRadius: theme.borderRadius.lg,
       paddingHorizontal: 20,
-      // Mismo ritmo vertical que HeroStatsCard (ver allí): el extra de abajo sube
-      // el bloque y aparta la gráfica de los puntitos del carrusel.
+      // El extra de abajo sube el bloque dentro de la altura fija de la hero.
       paddingTop: 14,
       paddingBottom: 24,
       height: HERO_CARD_HEIGHT,
@@ -312,7 +314,8 @@ const makeStyles = () =>
     mainValue: {
       fontFamily: theme.fonts.display,
       fontSize: 34,
-      // Mismos lineHeight y compensación que HeroStatsCard (el porqué, allí).
+      // Display de dígitos: lineHeight corto con su compensación, verificado a
+      // ojo (ver la excepción en lib/__tests__/antonLineHeight.test.ts).
       lineHeight: 44,
       includeFontPadding: false,
       transform: [{ translateY: 4 }],
@@ -339,8 +342,9 @@ const makeStyles = () =>
       paddingTop: 4,
       borderTopWidth: 1,
       borderTopColor: theme.colors.onGoldVeil,
-      // Deja hueco a las flechas del carrusel, pegadas a los lados de la tarjeta.
-      marginHorizontal: HERO_ARROW_INSET,
+      // Sangría de la fila de datos dentro del oro (heredada de cuando la
+      // tarjeta compartía carrusel y dejaba sitio a sus flechas).
+      marginHorizontal: STATS_ROW_INSET,
     },
     chartWrap: {
       height: CHART_HEIGHT,

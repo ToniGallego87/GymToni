@@ -24,7 +24,8 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   GymIconGrid,
   resolveDayIcon,
@@ -32,6 +33,7 @@ import {
   RoutineOriginPill,
   StretchScrollView,
   Toast,
+  TopBarActionButton,
 } from '../../components';
 import type { GymIconName } from '../../components';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
@@ -55,6 +57,7 @@ import {
   isLinkedRoutine,
   routineAuthorId,
   routineIntensity,
+  routineStatus,
 } from '@lib/routines';
 import { useSession } from '@lib/cloud/auth';
 import {
@@ -96,6 +99,8 @@ interface RoutineDetailScreenProps {
   onOpenAccount?: () => void;
   // Perfil del autor de una rutina traída de la comunidad.
   onOpenProfile?: (userId: string, name: string) => void;
+  // La rutina se ha borrado desde su ⋮: la pantalla no puede seguir abierta.
+  onDeleted?: () => void;
   // Día que nace desplegado: se llega desde la ficha de un ejercicio (Progreso)
   // y lo que se quiere ver es ESE ejercicio, no una lista de días plegados.
   initialExpandedDayId?: string;
@@ -107,6 +112,7 @@ export function RoutineDetailScreen({
   onForked,
   onOpenAccount,
   onOpenProfile,
+  onDeleted,
   initialExpandedDayId,
 }: RoutineDetailScreenProps) {
   const insets = useSafeAreaInsets();
@@ -142,6 +148,7 @@ export function RoutineDetailScreen({
   // Duplicar pide confirmación: antes un toque en la tarjeta de Rutinas creaba
   // una copia sin avisar.
   const [showDuplicateModal, setShowDuplicateModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [nameInput, setNameInput] = useState('');
   const [descriptionInput, setDescriptionInput] = useState('');
   const [toast, setToast] = useState<{
@@ -164,7 +171,7 @@ export function RoutineDetailScreen({
   const [showAnonModal, setShowAnonModal] = useState(false);
   const [visibleNameInput, setVisibleNameInput] = useState('');
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -187,6 +194,27 @@ export function RoutineDetailScreen({
     [currentRoutine]
   );
   const canEdit = !isLinked;
+  // Se borra con la regla de la lista de Rutinas: solo sin entrenamientos.
+  const canDelete = !state.logs.some(
+    (log) => log.routineId === currentRoutine.id
+  );
+  // Subtítulo de la barra: el estado de la rutina (el rótulo de su tarjeta en
+  // Rutinas) y cuántos días tiene.
+  const status = routineStatus(
+    currentRoutine,
+    state.logs,
+    state.activeRoutineId
+  );
+  const statusLabel =
+    status === 'active'
+      ? t('La que entrenas')
+      : status === 'prepared'
+      ? t('Sin estrenar')
+      : t('Cerrada');
+  const daysCount = currentRoutine.days.length;
+  const statusSubtitle = `${statusLabel} · ${
+    daysCount === 1 ? t('1 día') : t('{n} días', { n: daysCount })
+  }`;
 
   // Filas de un día: el borrador si lo hay, y si no el plan tal cual.
   const dayRows = (day: WorkoutDay): ExerciseForm[] =>
@@ -793,7 +821,7 @@ export function RoutineDetailScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -877,7 +905,7 @@ export function RoutineDetailScreen({
         )}
 
         {/* El descanso entre series ya no es de la rutina: es un ajuste de la
-            persona y se toca desde Perfil (o desde el ⋯ del registro). */}
+            persona y se toca desde Configuración (o desde el ⋯ del registro). */}
 
         {/* Una sola acción de compartir: la hoja de dentro ofrece QR y texto. */}
         <Pressable
@@ -965,58 +993,51 @@ export function RoutineDetailScreen({
         )}
       </StretchScrollView>
 
+      {/* La misma barra que el Detalle de una sesión: título = qué es (el
+          nombre, como la ficha de una rutina pública), subtítulo = un dato vivo
+          (su estado y sus días), la acción principal a la vista y lo raro en el
+          ⋮. Antes titulaba "Rutina" a secas con un eslogan debajo. */}
       <GlassTopBar
-        title={t('Rutina')}
-        icon="file-document-edit-outline"
-        subtitle={t('Consulta o edita tu rutina')}
+        title={currentRoutine.name}
+        icon="book-open-variant"
+        subtitle={statusSubtitle}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         menuItems={[
           {
             icon: 'content-copy',
             label: t('Duplicar rutina'),
             onPress: () => setShowDuplicateModal(true),
           },
+          // Borrar, con la misma regla que la lista de Rutinas: solo una
+          // rutina sin entrenamientos (con historial se borraría también).
+          ...(canDelete
+            ? [
+                {
+                  icon: 'delete-outline' as const,
+                  label: t('Eliminar rutina'),
+                  onPress: () => setShowDeleteModal(true),
+                },
+              ]
+            : []),
         ]}
         rightElement={
           // Lo ajeno no se edita: en su lugar, el botón ofrece la salida real
           // (sacar una copia tuya, que sí se puede tocar).
-          <Pressable
-            style={({ pressed }) => [
-              styles.editToggle,
-              isEditing && canEdit && styles.editToggleActive,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={
-              canEdit ? toggleEditing : () => setShowDuplicateModal(true)
-            }
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={
-              !canEdit ? t('Hacer copia') : isEditing ? t('Hecho') : t('Editar')
-            }
-          >
-            <MaterialCommunityIcons
-              name={!canEdit ? 'content-copy' : isEditing ? 'check' : 'pencil'}
-              size={16}
-              color={
-                isEditing && canEdit
-                  ? theme.colors.onGold
-                  : theme.colors.primary
-              }
+          canEdit ? (
+            <TopBarActionButton
+              label={isEditing ? t('Hecho') : t('Editar')}
+              icon={isEditing ? 'check' : 'pencil'}
+              active={isEditing}
+              onPress={toggleEditing}
             />
-            <Text
-              style={[
-                styles.editToggleText,
-                isEditing && canEdit && styles.editToggleTextActive,
-              ]}
-            >
-              {!canEdit
-                ? t('Hacer copia')
-                : isEditing
-                ? t('Hecho')
-                : t('Editar')}
-            </Text>
-          </Pressable>
+          ) : (
+            <TopBarActionButton
+              label={t('Hacer copia')}
+              icon="content-copy"
+              onPress={() => setShowDuplicateModal(true)}
+            />
+          )
         }
       />
 
@@ -1232,6 +1253,22 @@ export function RoutineDetailScreen({
       />
 
       <ConfirmModal
+        visible={showDeleteModal}
+        icon="delete-outline"
+        title={t('¿Eliminar rutina?')}
+        message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
+        confirmLabel={t('Eliminar')}
+        onConfirm={() => {
+          setShowDeleteModal(false);
+          // El reducer reajusta la rutina activa y la seleccionada si era una
+          // de ellas; la pantalla se cierra porque ya no hay nada que enseñar.
+          dispatch({ type: 'DELETE_ROUTINE', payload: currentRoutine.id });
+          onDeleted?.();
+        }}
+        onCancel={() => setShowDeleteModal(false)}
+      />
+
+      <ConfirmModal
         visible={showDuplicateModal}
         icon="content-copy"
         title={t('¿Duplicar la rutina?')}
@@ -1277,32 +1314,6 @@ const makeStyles = () =>
     content: {
       paddingHorizontal: theme.spacing.md,
       marginTop: 0,
-    },
-    // Toggle lectura/edición en la barra superior. Editable = oro vivo con
-    // tinta oscura (activo); lectura = superficie con borde y tinta dorada.
-    editToggle: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 5,
-      paddingHorizontal: 12,
-      height: 34,
-      borderRadius: theme.borderRadius.pill,
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-    },
-    editToggleActive: {
-      backgroundColor: theme.colors.primaryFill,
-      borderColor: theme.colors.primaryFillDark,
-    },
-    editToggleText: {
-      fontSize: 13,
-      fontWeight: '800',
-      color: theme.colors.primary,
-      lineHeight: 16,
-    },
-    editToggleTextActive: {
-      color: theme.colors.onGold,
     },
     // Cabecera de la rutina: banner con fondo dorado tenue, insignia e "eyebrow".
     // Deliberadamente distinto de las tarjetas de día (que son transparentes con

@@ -16,6 +16,12 @@ interface DatePickerModalProps {
   onRequestClose: () => void;
   /** Fecha máxima seleccionable (YYYY-MM-DD). Por defecto, hoy: no se registra a futuro. */
   maxDate?: string;
+  /**
+   * Días que ya tienen entreno (YYYY-MM-DD): se pintan tachados y no se pueden
+   * elegir. Solo hay un entrenamiento por día (ver `takenStrengthDates`), así
+   * que mover uno encima de otro no es una opción que deba ofrecerse.
+   */
+  takenDates?: string[];
 }
 
 const toKey = (year: number, month: number, day: number) =>
@@ -36,7 +42,9 @@ export function DatePickerModal({
   onSelect,
   onRequestClose,
   maxDate = getToday(),
+  takenDates,
 }: DatePickerModalProps) {
+  const taken = useMemo(() => new Set(takenDates || []), [takenDates]);
   const MONTH_NAMES = [
     t('Enero'),
     t('Febrero'),
@@ -174,7 +182,9 @@ export function DatePickerModal({
             return <View key={`empty-${index}`} style={styles.cell} />;
           }
           const key = toKey(view.year, view.month, dayNumber);
-          const disabled = key > maxKey;
+          // Ocupado por otro entreno: se ve (punto bajo el número) y no se elige.
+          const isTaken = taken.has(key) && key !== value;
+          const disabled = key > maxKey || isTaken;
           const selected = key === pending;
           // El día que tenía el entreno se marca (oro tenue) cuando se elige
           // otro distinto, para que se entienda el cambio de una fecha a otra.
@@ -208,6 +218,7 @@ export function DatePickerModal({
                 >
                   {dayNumber}
                 </Text>
+                {isTaken && <View style={styles.takenDot} />}
               </View>
             </Pressable>
           );
@@ -297,6 +308,16 @@ const makeStyles = () =>
     dayTextDisabled: {
       color: theme.colors.textMuted,
       opacity: 0.4,
+    },
+    // Día que ya tiene entreno: punto bajo el número. El día apagado a secas se
+    // confundía con una fecha futura; el punto dice que ahí ya hay algo.
+    takenDot: {
+      position: 'absolute',
+      bottom: 6,
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.colors.primary,
     },
     dayTextSelected: {
       color: theme.colors.onGold,

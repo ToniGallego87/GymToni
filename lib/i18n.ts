@@ -27,6 +27,11 @@ export let dateLocale = language === 'en' ? 'en-GB' : 'es-ES';
 // (canonicalDecimals / parseTypedNumber).
 export let decimalSeparator = language === 'en' ? '.' : ',';
 
+// Separador de MILES del idioma: punto en español (12.450), coma en inglés
+// (12,450). Es el espejo del decimal y viaja con él: pintar "12.450" en inglés
+// se lee como doce coma cuarenta y cinco.
+export let thousandsSeparator = language === 'en' ? ',' : '.';
+
 // --- Store de idioma (versión + suscriptores), espejo de themeStore ---
 type LangListener = () => void;
 const langListeners = new Set<LangListener>();
@@ -50,6 +55,7 @@ export function setLanguage(next: Language): void {
   language = next;
   dateLocale = next === 'en' ? 'en-GB' : 'es-ES';
   decimalSeparator = next === 'en' ? '.' : ',';
+  thousandsSeparator = next === 'en' ? ',' : '.';
   setStoredLanguage(next);
   langVersion += 1;
   for (const listener of Array.from(langListeners)) listener();
@@ -92,6 +98,17 @@ export function localizeDecimals(text: string): string {
 export function fmtNum(n: number): string {
   const r = Math.round(n * 10) / 10;
   return localizeDecimals(Number.isInteger(r) ? String(r) : r.toFixed(1));
+}
+
+/**
+ * Entero con el separador de MILES del idioma: 12450 → "12.450" (es) /
+ * "12,450" (en). A mano y no con `toLocaleString`, que en el runtime de
+ * Android puede venir sin datos de ICU y devolver el número pelado.
+ */
+export function fmtInt(n: number): string {
+  return Math.round(n)
+    .toString()
+    .replace(/\B(?=(\d{3})+(?!\d))/g, thousandsSeparator);
 }
 
 /** Pasa a punto lo tecleado por el usuario, que puede venir con coma. */
@@ -151,6 +168,10 @@ register({
   // Perfil
   'Progreso por ejercicio': 'Progress by exercise',
   'Datos y nube': 'Data & cloud',
+  'Temporizador de descanso': 'Rest timer',
+  'Entre series': 'Between sets',
+  'Entre series, en saltos de 30 s (de 0:00 a 5:00)':
+    'Between sets, in 30 s steps (from 0:00 to 5:00)',
   'Sin perfil': 'No profile',
   'Editar perfil': 'Edit profile',
   'Completar perfil': 'Complete profile',
@@ -205,6 +226,9 @@ register({
   'Entrenamiento completado': 'Workout completed',
   'Empezar entrenamiento': 'Start workout',
   '{n} semanas seguidas': '{n} weeks in a row',
+  'semanas seguidas': 'weeks in a row',
+  'semana seguida': 'week in a row',
+  'completa la semana para empezarla': 'complete the week to start it',
   Semana: 'Week',
   Descarga: 'Deload',
   'Marcar semana de descarga': 'Mark as deload week',
@@ -226,10 +250,7 @@ register({
     'This move reorganizes an already completed week and recalculates streak, progress and achievements. Continue?',
   'Ver hitos de la semana': "See the week's milestones",
   'Más opciones': 'More options',
-  '¿Qué deseas hacer?': 'What do you want to do?',
-  'Puedes editar o eliminar el registro': 'You can edit or delete the entry',
-  'Puedes continuar o eliminar el registro':
-    'You can continue or delete the entry',
+  'Ver detalle': 'View details',
   Editar: 'Edit',
   Eliminar: 'Delete',
   Volver: 'Back',
@@ -253,6 +274,7 @@ register({
   '(copia {n})': '(copy {n})',
   'Copiada como "{name}"': 'Copied as "{name}"',
   '¿Eliminar rutina?': 'Delete routine?',
+  'Eliminar rutina': 'Delete routine',
   '¿Eliminar entrenamiento?': 'Delete workout?',
   'Esta acción no se puede deshacer. ¿Estás seguro?':
     'This cannot be undone. Are you sure?',
@@ -272,7 +294,7 @@ register({
   'Entreno completado · {n} ejercicios': 'Workout complete · {n} exercises',
   'Ya está guardado en tu historial.': 'It is already saved in your history.',
   'Buscar GIF': 'Search GIF',
-  'Cronómetro del ejercicio': 'Exercise stopwatch',
+  'Cronometrar el ejercicio': 'Time this exercise',
   Cancelar: 'Cancel',
   Borrar: 'Clear',
   'Error al guardar.': 'Could not save.',
@@ -286,6 +308,11 @@ register({
   'Desplegar día': 'Expand day',
   'Notas del ejercicio': 'Exercise notes',
   'Ver la nota del ejercicio': 'See the exercise note',
+  // Nota de la SESIÓN (el contexto del día), distinta de la del ejercicio
+  'Nota de la sesión': 'Session note',
+  'Añadir nota de la sesión': 'Add a session note',
+  'Ej: gym lleno, cambié banca por mancuernas':
+    'E.g.: gym was packed, swapped bench for dumbbells',
   'Añade una nota (ej: muy cansado, fallo en última serie)':
     'Add a note (e.g. very tired, failed last set)',
   'Descanso finalizado': 'Rest over',
@@ -295,10 +322,12 @@ register({
   Objetivo: 'Target',
   Anterior: 'Previous',
   Actual: 'Current',
+  'Esta sesión': 'This session',
   'Peso · kg': 'Weight · kg',
   Repeticiones: 'Reps',
   Segundos: 'Seconds',
   'Añadir serie': 'Add set',
+  'Añadir serie {n}/{total}': 'Add set {n}/{total}',
   'Saltar resto': 'Skip remaining',
   'Saltar ejercicio': 'Skip exercise',
   Nota: 'Note',
@@ -306,6 +335,8 @@ register({
   Iniciar: 'Start',
   Parar: 'Stop',
   'Saltar descanso': 'Skip rest',
+  'Tiempo hasta la siguiente serie': 'Time until next set',
+  'Tiempo hasta el siguiente ejercicio': 'Time until next exercise',
   'Añadir 30 segundos': 'Add 30 seconds',
   'Usar {n}s': 'Use {n}s',
   'Borrar serie {n}': 'Delete set {n}',
@@ -316,6 +347,7 @@ register({
   // Cardio
   'Añadir cardio': 'Add cardio',
   Añadir: 'Add',
+  'Selecciona la disciplina': 'Pick the discipline',
   'Selecciona el tipo de cardio': 'Choose the cardio type',
   'Correr en cinta': 'Treadmill run',
   'Andar en cinta': 'Treadmill walk',
@@ -328,8 +360,6 @@ register({
   Continuar: 'Continue',
   Atrás: 'Back',
   'Detalles del cardio': 'Cardio details',
-  'Se guarda solo: pulsa ✓ en el teclado o toca fuera.':
-    'Saves itself: tap ✓ on the keyboard or tap outside.',
   Minutos: 'Minutes',
   'Pendiente %': 'Incline %',
   'Consulta tus resultados': 'Check your results',
@@ -350,7 +380,24 @@ register({
   'hace 7 días': '7 days ago',
   'media diaria': 'daily average',
   'mejor día': 'best day',
-  'vs mismos días': 'vs same days',
+  'kg vs mismos días': 'kg vs same days',
+  'desde la semana 1': 'since week 1',
+  Historial: 'History',
+  'este mes': 'this month',
+  'Quién sigue tus entrenos': 'Who follows your workouts',
+  'Perfiles que sigues': 'Profiles you follow',
+  '1 persona te sigue': '1 person follows you',
+  '{n} personas te siguen': '{n} people follow you',
+  'Sigues a 1 persona': 'You follow 1 person',
+  'Sigues a {n} personas': 'You follow {n} people',
+  'Sin entrenar': 'Not trained',
+  '{day}: sin entrenar': '{day}: not trained',
+  'Día sin entrenar': 'Day not trained',
+  'Esa semana se cerró sin «{day}», así que no cuenta como completa ni suma en la racha. Un hueco de una semana pasada no se rellena desde aquí: registra el día y cámbiale la fecha en su Detalle.':
+    'That week closed without «{day}», so it does not count as complete and adds nothing to your streak. A gap in a past week cannot be filled from here: log the day and change its date from its Detail view.',
+  'Semana completa: {n} días': 'Full week: {n} days',
+  'Semana incompleta: {n} de {total} días': 'Incomplete week: {n} of {total} days',
+  '% frente a la vez anterior': '% vs the previous time',
   ejercicios: 'exercises',
   'Pulsa para indicar tu peso': 'Tap to set your weight',
   'Pulsa para actualizarlo': 'Tap to update it',
@@ -502,6 +549,11 @@ register({
   'Añadir ejercicio': 'Add exercise',
   'Añadir día': 'Add day',
   'Quitar día': 'Remove day',
+  // Quitar un día del formulario de "Nueva rutina" (se confirma antes)
+  '¿Quitar el día?': 'Remove the day?',
+  'Se quitará del formulario junto con los ejercicios que le hayas puesto. ¿Continuar?':
+    'It will be removed from the form along with the exercises you gave it. Continue?',
+  Quitar: 'Remove',
   'Quitar ejercicio': 'Remove exercise',
   'Editar {name}': 'Edit {name}',
   // Editar un día de la rutina: nombre e icono en el mismo modal
@@ -521,7 +573,6 @@ register({
   'Registra tu primer día, serie a serie': 'Log your first day, set by set',
   'Mira cómo progresas semana a semana': 'See how you progress week by week',
   'Ver la comunidad': 'See the community',
-  'Crear a partir de QR': 'Create from QR',
   'Crear a partir de texto plano': 'Create from plain text',
   'Un día por bloque (sepáralos con una línea en blanco). La primera línea es el nombre del día; debajo, un ejercicio por línea. Añade una "s" tras las reps para marcar segundos (ej: Plancha 3x30s).':
     'One day per block (separate them with a blank line). The first line is the day name; below it, one exercise per line. Add an "s" after the reps for seconds (e.g. Plank 3x30s).',
@@ -544,26 +595,19 @@ register({
   'Nombre:': 'Name:',
   'Descripción:': 'Description:',
   'Nombre de la rutina': 'Routine name',
-  'Editar Temporizador': 'Edit Timer',
   'Modificar temporizador': 'Change timer',
-  'Duración en segundos:': 'Duration in seconds:',
-  'Equivalente:': 'Equivalent:',
   'Compartir por QR': 'Share via QR',
   'Compartir rutina': 'Share routine',
   'Rutina copiada al portapapeles': 'Routine copied to clipboard',
   'No se pudo copiar la rutina': 'Could not copy the routine',
 
-  // Importar por QR
-  'Importar rutina por QR': 'Import routine via QR',
-  'Escanea con la cámara del móvil': "Scan with your phone's camera",
-  'Abre la cámara de tu móvil, apunta al código QR de la rutina y GymBro se abrirá automáticamente con la rutina importada.':
-    "Open your phone's camera, point it at the routine QR code and GymBro will open automatically with the imported routine.",
-  'o pega el enlace': 'or paste the link',
-  'Enlace del QR': 'QR link',
+  // Importar por enlace (el que viaja dentro del QR)
+  'Pegar el enlace de una rutina': 'Paste a routine link',
+  'Si tienes el código QR delante, apunta con la cámara del móvil y GymBro se abrirá solo con la rutina. Si te han pasado el enlace, pégalo aquí.':
+    "If you have the QR code in front of you, point your phone's camera at it and GymBro will open with the routine. If someone sent you the link, paste it here.",
   'Pega el enlace del QR aquí.': 'Paste the QR link here.',
   'Enlace no válido. Usa el enlace copiado desde "Compartir por QR".':
     'Invalid link. Use the link copied from "Share via QR".',
-  'Importar rutina': 'Import routine',
 
   // Logros / póster
   'Hitos de la semana': "This week's milestones",
@@ -615,6 +659,7 @@ register({
 
   // Progreso por ejercicio
   Progreso: 'Progress',
+  'Progreso / semana': 'Progress / week',
   'Elige un ejercicio para ver su evolución':
     'Pick an exercise to see how it evolved',
   'Tu evolución': 'Your progress',
@@ -677,7 +722,6 @@ register({
   'Añadida a tus rutinas': 'Added to your routines',
   'Esta rutina ya no está disponible': 'This routine is no longer available',
   'Rutina de la comunidad': 'Community routine',
-  'Consulta o edita tu rutina': 'View or edit your routine',
   'Ver rutina': 'View routine',
   'Ir a la rutina': 'Go to routine',
   'A quién sigo': 'Who I follow',
@@ -833,6 +877,7 @@ register({
   'Ver GIF': 'View GIF',
   'Todos los ejercicios': 'All exercises',
   'Cargar más ({n})': 'Load more ({n})',
+  'Cargar más (+{n})': 'Load more (+{n})',
   'Ver tarjeta {n} de {total}': 'View card {n} of {total}',
   'Fecha del entreno': 'Workout date',
   '1RM': '1RM',
@@ -870,10 +915,9 @@ register({
     'That date falls in a week that already has this day. It will be split in two, which may affect your streak and progress. Continue?',
 
   // Calendario
-  'Semana de la rutina': 'Week of the routine',
+  'Sem {n}': 'Wk {n}',
   'La disciplina que más calorías quemó ese día':
     'The discipline that burned the most calories that day',
-  'Minutos de cardio del día': 'Minutes of cardio that day',
 
   // Compartir una rutina (QR y texto plano)
   'Copiar en texto plano': 'Copy as plain text',
@@ -951,7 +995,12 @@ register({
   'Te toca': 'Up next',
   'Te toca este': 'This one is up next',
   'Ya entrenado esta semana': 'Already trained this week',
+  'Hoy ya entrenaste {day}. Un entreno por día':
+    'You already trained {day} today. One workout per day',
+  'Hoy ya tienes un entreno. Un entreno por día':
+    'You already have a workout today. One workout per day',
   'Elegir otro día': 'Pick another day',
+  Cambiar: 'Change',
   'Volver al entreno': 'Back to the workout',
 });
 
@@ -1004,8 +1053,6 @@ register({
   'Aún sin conseguir': 'Not unlocked yet',
   Conseguido: 'Unlocked',
   'Arrastra para reordenar': 'Drag to reorder',
-  'Subir día': 'Move day up',
-  'Bajar día': 'Move day down',
   'Pliega todos los días para ordenarlos arrastrando':
     'Collapse every day to reorder them by dragging',
   'Series de la rutina': 'Routine sets',
@@ -1050,13 +1097,32 @@ register({
     'Do cardio on two different days this week.',
   'Último día': 'Last day',
   'Nivel {n}': 'Level {n}',
+  Actividad: 'Activity',
+  '1 rutina': '1 routine',
+  '{n} rutinas': '{n} routines',
+  '1 insignia': '1 badge',
+  '{n} insignias': '{n} badges',
+  '1 reto': '1 challenge',
+  '{n} retos': '{n} challenges',
+  insignia: 'badge',
+  'Así te ve la gente': 'This is how people see you',
+  'Reto superado': 'Challenge completed',
+  Entreno: 'Workout',
+  'Ver la rutina {name}': 'View the routine {name}',
+  Compartir: 'Share',
+  'No compartir': 'Do not share',
+  'Tu perfil enseña tus insignias, retos superados y días entrenados.':
+    'Your profile shows your badges, completed challenges and training days.',
+  'Nadie verá tu actividad, y se retira la ya publicada.':
+    'Nobody will see your activity, and what you already published is removed.',
   '{xp} / {next} puntos': '{xp} / {next} points',
   'reto superado': 'challenge completed',
   'retos superados': 'challenges completed',
   logros: 'badges',
   'Reto +{c} · Logro +{b}': 'Challenge +{c} · Badge +{b}',
   'Retos de la semana': 'Weekly challenges',
-  'Retos de cardio': 'Cardio challenges',
+  completados: 'completed',
+  '{n} de {total} completados': '{n} of {total} completed',
   'Insignias y tu nivel': 'Badges and your level',
   retos: 'challenges',
   // Popup de premio (lib/awards)

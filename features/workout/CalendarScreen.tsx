@@ -9,7 +9,8 @@ import {
   DayAccentIcon,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   OptionToggle,
   OptionToggleOption,
@@ -99,7 +100,7 @@ export function CalendarScreen({
   const [monthOffset, setMonthOffset] = useState(0);
   const [mode, setMode] = useState<CalendarMode>('fuerza');
   const cardioAvailable = hasAnyCardio(state.logs);
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
 
   const getDayById = (dayId: string) =>
@@ -200,15 +201,17 @@ export function CalendarScreen({
     );
   }, [state.logs, state.routines]);
 
-  // Rutinas que aparecen en el mes visible. Las celdas de fuerza rotulan la suya
-  // como "R1", "R2"… (su posición en la lista de rutinas), un código que sin
-  // leyenda no dice nada: aquí se resuelve a su nombre real.
+  // Rutinas que aparecen en el mes visible. La celda de fuerza rotula la suya
+  // con su inicial numerada ("R1", "R2"…) y la leyenda de debajo la resuelve a
+  // su nombre. Sale SIEMPRE que haya alguna, también con una sola en el mes: el
+  // chip no solo distingue entre rutinas, también dice DE QUÉ rutina es ese
+  // entreno (y su color, si sigue activa o ya está cerrada).
   const monthRoutines = useMemo(() => {
     const prefix = `${currentYear}-${String(currentMonth + 1).padStart(
       2,
       '0'
     )}-`;
-    const found = new Map<string, { index: number; name: string }>();
+    const found = new Map<string, { id: string; index: number; name: string }>();
     state.logs.forEach((log: WorkoutLog) => {
       if (!log.date?.startsWith(prefix)) return;
       // Solo los logs de fuerza: son los únicos que pintan el chip.
@@ -218,10 +221,16 @@ export function CalendarScreen({
         (routine: WorkoutRoutine) => routine.id === log.routineId
       );
       if (index < 0) return;
-      found.set(log.routineId, { index, name: state.routines[index].name });
+      found.set(log.routineId, {
+        id: log.routineId,
+        index,
+        name: state.routines[index].name,
+      });
     });
     return [...found.values()].sort((a, b) => a.index - b.index);
   }, [state.logs, state.routines, currentYear, currentMonth]);
+
+  const showRoutineChip = monthRoutines.length > 0;
 
   // ¿Hay cardio en el mes visible? Decide si el modo cardio pinta su leyenda,
   // igual que `monthRoutines` decide la del modo fuerza.
@@ -262,7 +271,12 @@ export function CalendarScreen({
           backgroundColor="transparent"
         />
 
-        <View style={[styles.emptyState, { paddingTop: topBarHeight + 24 }]}>
+        <View
+          style={[
+            styles.emptyState,
+            { paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP },
+          ]}
+        >
           <MaterialCommunityIcons
             name="inbox-outline"
             size={44}
@@ -293,6 +307,7 @@ export function CalendarScreen({
           icon="calendar-month-outline"
           subtitle={t('Repasa tus ejercicios mes por mes')}
           topInset={insets.top}
+          onLayout={onTopBarLayout}
         />
 
         {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
@@ -313,7 +328,7 @@ export function CalendarScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -529,7 +544,7 @@ export function CalendarScreen({
                       >
                         {dayNumber}
                       </Text>
-                      {routineIndex >= 0 && (
+                      {showRoutineChip && routineIndex >= 0 && (
                         <Text
                           style={[
                             styles.dayRoutineChip,
@@ -550,7 +565,10 @@ export function CalendarScreen({
                         color={theme.colors.white}
                       />
                     </View>
-                    {/* Pie: semana (bloque) dentro de la rutina. */}
+                    {/* Pie: semana (bloque) dentro de la rutina. Rotulada
+                        ("Sem 3", no "S3"): el hueco lo comparte con los minutos
+                        del modo cardio, así que cada uno dice su unidad y
+                        ninguno necesita chuleta. */}
                     {typeof weekNumber === 'number' ? (
                       <Text
                         style={[
@@ -561,7 +579,7 @@ export function CalendarScreen({
                         adjustsFontSizeToFit
                         minimumFontScale={0.6}
                       >
-                        S{weekNumber}
+                        {t('Sem {n}', { n: weekNumber })}
                       </Text>
                     ) : (
                       <View style={styles.dayWeekSpacer} />
@@ -580,31 +598,37 @@ export function CalendarScreen({
           })}
         </View>
 
-        {/* Leyenda de los códigos de la celda. "R1" y "S3" eran crípticos: no
-            había en toda la pantalla nada que dijera qué significaban. Solo en
-            modo fuerza, que es donde se pintan. */}
-        {mode === 'fuerza' && monthRoutines.length > 0 && (
+        {/* Chuleta de lo que rotula la celda, justo DEBAJO de la rejilla (decisión
+            de producto: primero el mes, luego su explicación). Solo aparece
+            cuando hay algo que descifrar (varias rutinas en el mes). */}
+        {mode === 'fuerza' && showRoutineChip && (
           <View style={styles.legend}>
-            {monthRoutines.map((routine) => (
-              <View key={routine.index} style={styles.legendRow}>
-                <Text style={styles.legendCode}>R{routine.index + 1}</Text>
-                <Text style={styles.legendText} numberOfLines={1}>
-                  {routine.name}
-                </Text>
-              </View>
-            ))}
-            <View style={styles.legendRow}>
-              <Text style={[styles.legendCode, styles.legendCodeMuted]}>
-                S#
-              </Text>
-              <Text style={styles.legendText}>{t('Semana de la rutina')}</Text>
-            </View>
+            {monthRoutines.map((routine) => {
+              // El mismo color que el chip de la celda: la rutina activa en oro
+              // y las cerradas en gris. Antes la leyenda pintaba todas en oro,
+              // así que una rutina vieja salía gris arriba y amarilla aquí.
+              const isActive = routine.id === state.activeRoutineId;
+              return (
+                <View key={routine.index} style={styles.legendRow}>
+                  <Text
+                    style={[
+                      styles.legendCode,
+                      !isActive && styles.legendCodeInactive,
+                    ]}
+                  >
+                    R{routine.index + 1}
+                  </Text>
+                  <Text style={styles.legendText} numberOfLines={1}>
+                    {routine.name}
+                  </Text>
+                </View>
+              );
+            })}
           </View>
         )}
 
-        {/* El modo cardio también tiene su leyenda: antes solo la tenía fuerza,
-            así que el icono de la celda —que NO es "el cardio" sino la
-            disciplina que más quemó ese día— no lo explicaba nada. */}
+        {/* El modo cardio también tiene su chuleta: el icono de la celda NO es
+            "el cardio" sino la disciplina que más quemó ese día. */}
         {mode === 'cardio' && monthHasCardio && (
           <View style={styles.legend}>
             <View style={styles.legendRow}>
@@ -619,14 +643,6 @@ export function CalendarScreen({
                 {t('La disciplina que más calorías quemó ese día')}
               </Text>
             </View>
-            <View style={styles.legendRow}>
-              <Text style={[styles.legendCode, styles.legendCodeMuted]}>
-                min
-              </Text>
-              <Text style={styles.legendText}>
-                {t('Minutos de cardio del día')}
-              </Text>
-            </View>
           </View>
         )}
       </StretchScrollView>
@@ -636,6 +652,7 @@ export function CalendarScreen({
         icon="calendar-month-outline"
         subtitle={t('Repasa tus ejercicios mes por mes')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
@@ -765,10 +782,9 @@ const makeStyles = () =>
       includeFontPadding: false,
     },
     // Pie de la celda: metadato discreto y centrado. Lo comparten los dos
-    // modos —"S3" (semana de la rutina) en fuerza y "45 min" en cardio—, así
-    // que cada uno tiene que decir su unidad: el mismo hueco con la misma letra
-    // no puede significar dos magnitudes sin rotularlas (la leyenda cubre las
-    // dos, ver el bloque `legend`).
+    // modos —"Sem 3" en fuerza y "45 min" en cardio—, así que cada uno dice su
+    // unidad en la propia celda: el mismo hueco con la misma letra no puede
+    // significar dos magnitudes sin rotularlas.
     dayWeekLabel: {
       fontFamily: theme.fonts.display,
       fontSize: 15,
@@ -785,7 +801,7 @@ const makeStyles = () =>
     modeToggle: {
       marginBottom: 14,
     },
-    // Leyenda de los códigos de la celda (R# = rutina, S# = semana).
+    // Chuleta de lo que rotula la celda (R# = rutina), bajo la rejilla.
     legend: {
       marginTop: 14,
       gap: 6,
@@ -809,7 +825,8 @@ const makeStyles = () =>
       letterSpacing: 0.2,
       lineHeight: 15,
     },
-    legendCodeMuted: {
+    // Rutina ya cerrada: el gris del chip de su celda.
+    legendCodeInactive: {
       color: theme.colors.textSecondary,
       backgroundColor: theme.colors.surfaceAlt,
     },

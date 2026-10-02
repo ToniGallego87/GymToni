@@ -106,6 +106,21 @@ export function RoutineIntensityPill({
   );
 }
 
+/**
+ * Hueco de la píldora mientras no se sabe la intensidad (el tablón la calcula
+ * con una consulta posterior al primer pintado). Ocupa el mismo sitio para que
+ * el nombre de la rutina no cambie de ancho —y con él el ALTO de la tarjeta—
+ * cuando el dato llega tarde.
+ */
+export function RoutineIntensityPillSkeleton({ style }: { style?: ViewStyle }) {
+  return (
+    <View
+      style={[styles.pill, styles.pillSkeleton, style]}
+      pointerEvents="none"
+    />
+  );
+}
+
 const makeStyles = () =>
   StyleSheet.create({
     pill: {
@@ -119,6 +134,15 @@ const makeStyles = () =>
       borderWidth: 1,
     },
     pressed: { opacity: 0.7 },
+    // Ancho del tramo más largo ("Intensa"), para que el hueco y la píldora
+    // definitiva ocupen lo mismo.
+    pillSkeleton: {
+      width: 82,
+      height: 22,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      opacity: 0.5,
+    },
     text: { fontSize: 12, fontWeight: '800' },
     rows: { gap: 6, marginTop: 14 },
     row: {

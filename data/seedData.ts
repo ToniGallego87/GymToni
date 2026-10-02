@@ -2140,16 +2140,22 @@ const ROUTINE_3_LOGS = [
   },
 ];
 
-export const INITIAL_LOGS: WorkoutLog[] = [
-  ...ROUTINE_3_LOGS.map((log) => createSeedLog(log)),
-  ...ROUTINE_2_HISTORY.map((item) =>
-    createLogFromDayInputs(
-      item.id,
-      'routine2',
-      item.dayId,
-      item.date,
-      [...item.sets],
-      item.cardio || null
-    )
-  ),
-];
+// Historial de ejemplo. Solo existe en DESARROLLO: en release la app arranca
+// vacía (ver `getSeedAppData`), pero construirlo costaba igual en cada arranque
+// —cada entrada pasa por `parseSeriesString`/`parseCardioString`— para tirarlo
+// después. Con `__DEV__` en falso, Metro además puede eliminar la rama entera.
+export const INITIAL_LOGS: WorkoutLog[] = !__DEV__
+  ? []
+  : [
+      ...ROUTINE_3_LOGS.map((log) => createSeedLog(log)),
+      ...ROUTINE_2_HISTORY.map((item) =>
+        createLogFromDayInputs(
+          item.id,
+          'routine2',
+          item.dayId,
+          item.date,
+          [...item.sets],
+          item.cardio || null
+        )
+      ),
+    ];

@@ -108,16 +108,16 @@ export function FloatingPrimaryNav({
             // texto no se reajustan al cambiar de pestaña.
             style={styles.item}
             onPress={item.onPress}
-            // La pestaña activa sigue siendo pulsable: las subpantallas de
-            // Perfil (Rutinas/Datos) la marcan activa y pulsar vuelve a Perfil.
+            // La pestaña activa sigue siendo pulsable (no hace nada nuevo, pero
+            // un toque en la pestaña en la que ya estás no debe parecer roto).
             disabled={!item.onPress}
             activeOpacity={0.88}
           >
             {isActive && (
               <Animated.View
-                // Aparece creciendo desde muy pequeño hasta su tamaño. Como cada
-                // pantalla monta su propia barra, al pulsar una opción se navega
-                // y la nueva barra reproduce esta entrada.
+                // Aparece creciendo desde muy pequeño hasta su tamaño: la barra es
+                // una sola (vive en app/App.tsx), y al cambiar de pestaña el fondo
+                // activo se monta en la nueva y reproduce esta entrada.
                 entering={ZoomIn.springify().damping(14).stiffness(180)}
                 style={styles.itemActiveBg}
                 pointerEvents="none"

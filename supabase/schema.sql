@@ -86,8 +86,16 @@ create table if not exists public.workout_logs (
   starts_new_week integer not null default 0,
   cardio_only     integer not null default 0,
   is_deload       integer not null default 0,
+  -- Nota de la SESIÓN (el contexto del día). Distinta de exercise_logs.notes
+  -- y de cardio_logs.notes, que son de un ejercicio y del cardio.
+  notes           text,
   deleted         boolean not null default false
 );
+
+-- Para bases ya creadas: la columna de la nota de sesión se añade aparte
+-- (create table if not exists no altera una tabla que ya existe).
+alter table public.workout_logs
+  add column if not exists notes text;
 
 create table if not exists public.exercise_logs (
   id              text primary key,

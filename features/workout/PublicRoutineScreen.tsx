@@ -28,7 +28,8 @@ import {
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   LikeButton,
   ReportModal,
@@ -54,6 +55,7 @@ import {
   routineIntensity,
 } from '@lib/routines';
 import { useSession } from '@lib/cloud/auth';
+import { readSocialCache, writeSocialCache } from '@lib/socialCache';
 import { useMyProfile } from '@hooks/useMyProfile';
 import {
   addRoutineComment,
@@ -177,14 +179,25 @@ export function PublicRoutineScreen({
     action?: 'sign-in';
   } | null>(null);
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom } = getFloatingBackButtonMetrics(
     insets.bottom
   );
   const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
 
   const load = useCallback(async () => {
-    setLoading(true);
+    // La copia del último arranque, ya: entrar en una rutina del tablón volvía a
+    // esperar su plan entero cada vez, también la segunda y la tercera vez que
+    // se abría la misma. El refresco de abajo la confirma.
+    const stored = await readSocialCache<WorkoutRoutine>(
+      `routine_${routineId}`
+    );
+    if (stored) {
+      setRoutine(stored);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError(null);
     try {
       const fetched = await fetchPublicRoutine(routineId);
@@ -193,6 +206,7 @@ export function PublicRoutineScreen({
         return;
       }
       setRoutine(fetched);
+      writeSocialCache(`routine_${routineId}`, fetched);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -471,7 +485,7 @@ export function PublicRoutineScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: backButtonSpace + 24,
           },
         ]}
@@ -897,6 +911,7 @@ export function PublicRoutineScreen({
         icon="book-open-variant"
         subtitle={t('Rutina de la comunidad')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         menuItems={
           routine && ownerId
             ? [

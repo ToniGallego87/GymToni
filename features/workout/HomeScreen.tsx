@@ -5,7 +5,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Pressable,
   useWindowDimensions,
   Image,
@@ -15,7 +14,6 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
 import { useAccountLevel } from '@hooks/useAccountLevel';
-import { challengeProgressLabel } from '@lib/challenges';
 import {
   WorkoutDay,
   WorkoutRoutine,
@@ -23,11 +21,15 @@ import {
   ExerciseLog,
 } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
-import { antonCenterNudge, dayNameText, weekTitleText } from '@lib/textStyles';
+import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale } from '@lib/i18n';
 import { buildWorkoutImprovement, ImprovementResult } from '@lib/progress';
-import { findDayInRoutines, getLogTimestamp, getToday } from '@lib/utils';
-import { toCardioOnlyLog } from '@lib/cardio';
+import {
+  findDayInRoutines,
+  getLogTimestamp,
+  getToday,
+  logDateKey,
+} from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import {
   buildWeekProgress,
@@ -44,27 +46,31 @@ import {
 } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
 import {
-  AppModal,
+  AnchorMenu,
   Button,
   ChallengesModal,
   Collapsible,
   ConfirmModal,
+  AppModal,
   DayAccentIcon,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   HeroCard,
-  HeroCarousel,
-  HeroStatsCard,
+  ChallengesStrip,
   StatsStrip,
-  HeroStat,
+  ProgressRing,
   HeroVariant,
   GradientFill,
   TrendDelta,
   BarChart,
+  ChartCard,
   BarChartPoint,
+  getChartWidth,
   resolveDayIcon,
   SEGMENTED_FILTER_CHART_GAP,
+  SectionLegend,
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
@@ -144,8 +150,12 @@ function buildProgressChart(points: WeekProgressPoint[]): {
 
   return {
     bars,
+    // El eje ARRANCA en 0 mientras no haya ninguna semana por debajo de la base:
+    // el margen inferior se aplicaba siempre y pintaba marcas negativas ("−10 %")
+    // bajo unas barras que solo subían. Si alguna semana empeora sí hay que bajar
+    // del cero, y entonces esa parte del eje se dibuja con su margen.
     domain: {
-      min: Math.min(minValue - domainPadding, 0),
+      min: minValue < 0 ? minValue - domainPadding : 0,
       max: Math.max(maxValue + domainPadding, 0),
     },
   };
@@ -163,6 +173,8 @@ function buildProgressChart(points: WeekProgressPoint[]): {
 // Semanas que se muestran de inicio y cuántas añade "Cargar más" (misma
 // paginación que Cardio, para no montar todo el histórico en rutinas largas).
 const WEEKS_PAGE = 5;
+// Disco de cada día en la fila de la semana en curso.
+const WEEK_DAY_DOT_SIZE = 26;
 
 export function HomeScreen({
   onSelectDay,
@@ -177,11 +189,10 @@ export function HomeScreen({
 }: HomeScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
-  // Retos de fuerza de la semana, para el tercer estado de la hero: el reto
-  // solo funciona si se ve donde se decide entrenar.
+  // Retos de fuerza de la semana, en la tira bajo la hero: el reto solo
+  // funciona si se ve donde se decide entrenar.
   const { challenges } = useAccountLevel();
   const heroChallenges = challenges.filter((c) => c.category === 'strength');
-  const challengesDone = heroChallenges.filter((c) => c.done).length;
   const [showChallenges, setShowChallenges] = useState(false);
   // La cabecera (hero + barra) se pinta al instante; el historial de semanas y
   // demás secciones pesadas se difieren un frame para que abrir Inicio sea ágil.
@@ -201,13 +212,17 @@ export function HomeScreen({
   );
   // Al eliminar un día con cardio: marcado borra el log entero, desmarcado (por
   // defecto) conserva el cardio degradando el día a "Solo cardio".
-  const [deleteCardioToo, setDeleteCardioToo] = useState(false);
   const [logWithOptionsId, setLogWithOptionsId] = useState<string | undefined>(
     undefined
   );
   const [selectedLogDayForOptions, setSelectedLogDayForOptions] = useState<
     WorkoutDay | undefined
   >(undefined);
+  // Día de una semana pasada que no se entrenó, cuando se toca su tarjeta: el
+  // aviso explica que ese hueco no se puede rellenar desde aquí.
+  const [missingDayInfo, setMissingDayInfo] = useState<WorkoutDay | undefined>(
+    undefined
+  );
   // Marcar/quitar descarga en una semana pide confirmación (cambia estadísticas).
   const [pendingWeekDeload, setPendingWeekDeload] = useState<{
     block: number;
@@ -263,18 +278,13 @@ export function HomeScreen({
   // deje de ser "hoy" (ver `completionLogs`/`completionGroupedByBlock` más abajo).
   const todayLog = useMemo(() => {
     const todayKey = getToday();
-    return displayedRoutineLogs.find((log) =>
-      log.date
-        ? log.date === todayKey
-        : new Date(log.createdAt).toISOString().split('T')[0] === todayKey
-    );
+    return displayedRoutineLogs.find((log) => logDateKey(log) === todayKey);
   }, [displayedRoutineLogs]);
 
-  const todayWorkoutStatus = useMemo(():
-    | 'none'
-    | 'in-progress'
-    | 'completed' => {
-    if (!todayLog) return 'none';
+  // Fracción (0..1) de ejercicios completados del log de hoy; null sin log.
+  // Alimenta el estado del día y el anillo que se va llenando en la semana.
+  const todayExerciseProgress = useMemo((): number | null => {
+    if (!todayLog) return null;
 
     let todayDay: WorkoutDay | undefined;
     for (const routine of state.routines) {
@@ -285,22 +295,29 @@ export function HomeScreen({
       }
     }
 
-    if (!todayDay || todayDay.exercises.length === 0) return 'completed';
+    if (!todayDay || todayDay.exercises.length === 0) return 1;
 
     // Un ejercicio está completo cuando alcanza su número de series objetivo
     // (mismo criterio que `isTargetCompleted` en WorkoutLogScreen), no con que
     // tenga solo una serie metida: si falta una serie del objetivo, el
     // entrenamiento sigue en progreso.
-    const allFilled = todayDay.exercises.every((ex) => {
+    const filled = todayDay.exercises.filter((ex) => {
       const exLog = todayLog.exercises.find(
         (e: ExerciseLog) => e.exerciseId === ex.id
       );
       const setsCount = exLog?.parsedSets?.length ?? 0;
       const targetSets = ex.targetSets && ex.targetSets > 0 ? ex.targetSets : 1;
       return setsCount >= targetSets;
-    });
-    return allFilled ? 'completed' : 'in-progress';
+    }).length;
+    return filled / todayDay.exercises.length;
   }, [todayLog, state.routines]);
+
+  const todayWorkoutStatus: 'none' | 'in-progress' | 'completed' =
+    todayExerciseProgress == null
+      ? 'none'
+      : todayExerciseProgress >= 1
+      ? 'completed'
+      : 'in-progress';
 
   // Logs "de completitud": iguales a los reales salvo que excluyen el de hoy
   // mientras esté a medias, para que streak/semana/gráfica no lo cuenten como
@@ -332,10 +349,7 @@ export function HomeScreen({
         : [],
     [ready, activeDays, completionStateLogs, displayedRoutineId]
   );
-  const chartWidth = Math.max(
-    250,
-    Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
-  );
+  const chartWidth = getChartWidth(windowWidth);
   const hasNoRoutines = activeDays.length === 0;
   // El día que toca en la semana en curso (el primero que aún no se ha
   // entrenado). La hero lo NOMBRA y lleva directa a él, en vez de mandar
@@ -345,7 +359,7 @@ export function HomeScreen({
     () => currentWeekDayState(displayedRoutine, state.logs),
     [displayedRoutine, state.logs]
   );
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding: homeScrollBottomPadding } =
     getFloatingPrimaryNavMetrics(insets.bottom);
 
@@ -402,6 +416,37 @@ export function HomeScreen({
 
   const getDay = (dayId: string): WorkoutDay | undefined =>
     findDayInRoutines(state.routines, dayId);
+
+  /**
+   * Las tarjetas del cuerpo de una semana: sus entrenos y, si la semana ya está
+   * cerrada sin completarse (`skipMissing` false), también los días de la
+   * rutina que no se hicieron. Cada hueco se cuela antes del primer día
+   * entrenado con un número mayor que el suyo (y al final si no hay ninguno),
+   * así que queda donde le tocaba sin reordenar lo que sí se hizo.
+   */
+  const buildWeekEntries = (
+    weekLogs: WorkoutLog[],
+    skipMissing: boolean
+  ): { key: string; day: WorkoutDay; log?: WorkoutLog }[] => {
+    const entries: { key: string; day: WorkoutDay; log?: WorkoutLog }[] =
+      weekLogs.flatMap((log) => {
+        const day = getDay(log.dayId);
+        return day ? [{ key: log.id, day, log }] : [];
+      });
+    if (skipMissing) return entries;
+
+    activeDays
+      .filter((day) => !weekLogs.some((log) => log.dayId === day.id))
+      .forEach((day) => {
+        const entry = { key: `missing-${day.id}`, day };
+        const at = entries.findIndex(
+          (e) => (e.day.dayNumber ?? 0) > (day.dayNumber ?? 0)
+        );
+        if (at < 0) entries.push(entry);
+        else entries.splice(at, 0, entry);
+      });
+    return entries;
+  };
 
   const getPreviousFilledLogForSameDay = (currentLog: WorkoutLog) => {
     const currentTs = getLogTimestamp(currentLog);
@@ -488,12 +533,6 @@ export function HomeScreen({
     return result;
   }, [groupedByBlock, completionGroupedByBlock, activeDays]);
 
-  // Racha de semanas completas y si nunca se ha faltado a un día.
-  const streak = useMemo(
-    () => computeStreak(completionGroupedByBlock, activeDays),
-    [completionGroupedByBlock, activeDays]
-  );
-
   // Semana en curso completada: todos los días de la rutina activa entrenados en
   // el bloque más reciente. Es la condición que convierte la tarjeta principal en
   // "¡Semana completada!" y habilita la imagen de logros. Usa el bloque de
@@ -512,11 +551,7 @@ export function HomeScreen({
   const isCurrentWeekCompletedToday = useMemo(() => {
     if (!isCurrentWeekCompleted) return false;
     const todayKey = getToday();
-    return currentWeekLogsBlock.some(
-      (log) =>
-        (log.date ?? new Date(log.createdAt).toISOString().split('T')[0]) ===
-        todayKey
-    );
+    return currentWeekLogsBlock.some((log) => logDateKey(log) === todayKey);
   }, [isCurrentWeekCompleted, currentWeekLogsBlock]);
 
   // Logros de una semana concreta. Reconstruye racha y serie de progreso tal
@@ -619,6 +654,26 @@ export function HomeScreen({
     return 0;
   })();
 
+  // Resumen del entreno de hoy para la hero de "completado": ejercicios hechos
+  // y, si hay con qué comparar, el % frente a la vez anterior (el mismo dato
+  // que su tarjeta del historial). En descarga no se compara.
+  const todayResultLabel = (): string | undefined => {
+    if (!todayLog) return undefined;
+    const done = todayLog.exercises.filter((ex) =>
+      (ex.parsedSets || []).some((set) => set.weight !== -1 && set.reps !== -1)
+    ).length;
+    const parts = [
+      done === 1 ? t('1 ejercicio') : t('{n} ejercicios', { n: done }),
+    ];
+    const improvement = todayLog.isDeload ? null : getLogImprovement(todayLog);
+    if (improvement) {
+      const pct = Math.round(improvement.percent);
+      const sign = pct === 0 ? '' : improvement.isImproved ? '+' : '-';
+      parts.push(`${sign}${pct} %`);
+    }
+    return parts.join(' · ');
+  };
+
   // Estado visual de la tarjeta principal según la situación de la rutina/día.
   const getHeroState = (): {
     variant: HeroVariant;
@@ -656,10 +711,20 @@ export function HomeScreen({
       };
     }
     if (todayWorkoutStatus === 'in-progress') {
+      // El día que se está entrenando, igual que cuando aún no se ha empezado:
+      // es lo que la hero abre al tocarla. Sin "Cambiar": ya hay datos metidos
+      // en este día, así que cambiarlo no es una opción (se elige otro desde
+      // "Elige la sesión", no desde aquí).
+      const inProgressDay = todayLog ? getDay(todayLog.dayId) : undefined;
       return {
         variant: 'start',
         icon: 'weight-lifter',
         title: t('Continúa tu entrenamiento'),
+        subtitle: inProgressDay
+          ? `${t('Día')} ${inProgressDay.dayNumber} · ${getDisplayDayName(
+              inProgressDay.name
+            )}`
+          : undefined,
       };
     }
     if (todayWorkoutStatus === 'completed') {
@@ -667,6 +732,9 @@ export function HomeScreen({
         variant: 'completed',
         icon: 'check-bold',
         title: t('Entrenamiento completado'),
+        // El resultado de hoy: es la recompensa del momento y dice qué hay
+        // detrás del toque (abre el registro de hoy para revisarlo).
+        subtitle: todayResultLabel(),
       };
     }
     return {
@@ -688,135 +756,13 @@ export function HomeScreen({
   // subtítulo es el nombre del día que toca.
   const canPickAnotherDay = !!hero.subtitleIsDay && !!onOpenDaySelector;
 
-  // Estadísticas de fuerza de la fila de cifras de la tarjeta de progreso.
-  // Espejo de las de Cardio pero con volumen (kg levantados) por semana de la
-  // rutina mostrada. El volumen ignora el peso corporal
-  // (series sin carga) por definición de "kg levantados".
-  const strengthStats = useMemo(() => {
-    // Diferido hasta `ready`: alimenta la tarjeta de progreso, no la hero.
-    if (!ready) return { hasData: false as const };
-    const workoutVolume = (log: WorkoutLog): number =>
-      log.exercises.reduce(
-        (sum, ex) =>
-          sum +
-          (ex.parsedSets || []).reduce(
-            (a, set) =>
-              a + (set.weight > 0 && set.reps > 0 ? set.weight * set.reps : 0),
-            0
-          ),
-        0
-      );
-
-    const blockNums = Object.keys(groupedByBlock)
-      .map(Number)
-      .sort((a, b) => a - b);
-    if (blockNums.length === 0) {
-      return { hasData: false as const };
-    }
-
-    const weekVolume = (block: number) =>
-      (groupedByBlock[block] || []).reduce((s, l) => s + workoutVolume(l), 0);
-
-    const latest = blockNums[blockNums.length - 1];
-    const prev = blockNums.length > 1 ? blockNums[blockNums.length - 2] : null;
-    const currentVol = weekVolume(latest);
-    const lastVol = prev != null ? weekVolume(prev) : null;
-    const completed = blockNums.filter((b) => b !== latest);
-    const avgVol = completed.length
-      ? completed.reduce((s, b) => s + weekVolume(b), 0) / completed.length
-      : null;
-    const bestVol = Math.max(...blockNums.map(weekVolume));
-
-    const currentLogs = groupedByBlock[latest] || [];
-    const entrenos = new Set(currentLogs.map((l) => l.dayId).filter(Boolean))
-      .size;
-    const series = currentLogs.reduce(
-      (s, l) =>
-        s + l.exercises.reduce((a, ex) => a + (ex.parsedSets?.length || 0), 0),
-      0
-    );
-    // Repeticiones y ejercicios distintos de la semana en curso: datos que
-    // siempre tienen sentido (también en la primera semana, cuando media/mejor
-    // no aportan nada).
-    const reps = currentLogs.reduce(
-      (s, l) =>
-        s +
-        l.exercises.reduce(
-          (a, ex) =>
-            a +
-            (ex.parsedSets || []).reduce(
-              (r, set) => r + (set.reps > 0 ? set.reps : 0),
-              0
-            ),
-          0
-        ),
-      0
-    );
-    const ejercicios = new Set(
-      currentLogs.flatMap((l) => l.exercises.map((ex) => ex.exerciseId))
-    ).size;
-    // % de cambio de volumen vs la semana pasada. La semana en curso está a
-    // medias, así que compararla con la anterior ENTERA daría un -X% que solo
-    // mide los días que faltan (el lunes, -100%). Se compara contra los mismos
-    // días que ya se han entrenado esta semana: pera con pera desde el primer
-    // día, y al completar la semana converge solo al % de semana entera.
-    const doneDayIds = new Set(currentLogs.map((l) => l.dayId).filter(Boolean));
-    const lastVolSameDays =
-      prev != null
-        ? (groupedByBlock[prev] || [])
-            .filter((l) => !!l.dayId && doneDayIds.has(l.dayId))
-            .reduce((s, l) => s + workoutVolume(l), 0)
-        : null;
-    const deltaPct =
-      lastVolSameDays != null && lastVolSameDays > 0
-        ? ((currentVol - lastVolSameDays) / lastVolSameDays) * 100
-        : null;
-
-    return {
-      hasData: true as const,
-      weeksCount: blockNums.length,
-      currentVol,
-      lastVol,
-      avgVol,
-      bestVol,
-      deltaPct,
-      entrenos,
-      series,
-      reps,
-      ejercicios,
-    };
-  }, [ready, groupedByBlock]);
-
-  const fmtKg = (v: number | null | undefined) =>
-    v == null ? '—' : Math.round(v).toLocaleString(dateLocale);
-  const fmtInt = (v: number) => Math.round(v).toLocaleString(dateLocale);
-  const fmtPct = (v: number | null) =>
-    v == null ? '—' : `${v >= 0 ? '+' : ''}${Math.round(v)}%`;
-
-  // Fila de 3 referencias de la tarjeta de progreso, adaptada a las semanas disponibles
-  // (comparativa progresiva): en la primera semana no hay con qué comparar, así
-  // que se muestra la composición del entreno; en la segunda, la semana pasada y
-  // el cambio; a partir de la tercera, las referencias históricas.
-  const strengthHeroStats: HeroStat[] = !strengthStats.hasData
-    ? []
-    : strengthStats.weeksCount >= 3
-    ? [
-        { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
-        { value: fmtKg(strengthStats.avgVol), label: t('media semanal') },
-        { value: fmtKg(strengthStats.bestVol), label: t('mejor semana') },
-      ]
-    : strengthStats.weeksCount === 2
-    ? [
-        { value: fmtKg(strengthStats.lastVol), label: t('semana pasada') },
-        { value: fmtPct(strengthStats.deltaPct), label: t('vs mismos días') },
-        { value: fmtInt(strengthStats.reps), label: t('reps') },
-      ]
-    : [
-        { value: fmtInt(strengthStats.series), label: t('series') },
-        { value: fmtInt(strengthStats.reps), label: t('reps') },
-        { value: fmtInt(strengthStats.ejercicios), label: t('ejercicios') },
-      ];
-
+  // Racha de semanas completas (la semana en curso no la rompe) y días
+  // entrenados en ella. Ocupa en la tarjeta de progreso el sitio de las cifras
+  // de volumen (kg levantados), que se quitaron.
+  const streak = useMemo(
+    () => computeStreak(completionGroupedByBlock, activeDays),
+    [completionGroupedByBlock, activeDays]
+  );
   const getExecutionDateLabel = (log: WorkoutLog): string => {
     if (log.date) {
       return new Date(`${log.date}T00:00:00`).toLocaleDateString(dateLocale);
@@ -825,26 +771,21 @@ export function HomeScreen({
     return new Date(log.createdAt).toLocaleDateString(dateLocale);
   };
 
-  const isLogFromToday = (log: WorkoutLog): boolean => {
-    const todayKey = getToday();
-    return log.date
-      ? log.date === todayKey
-      : getExecutionDateLabel(log) ===
-          new Date().toLocaleDateString(dateLocale);
-  };
+  // Una sola forma de responder "¿es de hoy?" en toda la pantalla: la clave
+  // de día del log contra la de hoy (ambas locales, `logDateKey`/`getToday`).
+  // Antes los logs sin `date` se comparaban por su fecha FORMATEADA, así que
+  // convivían dos criterios y de madrugada podían no coincidir: la tarjeta se
+  // marcaba como de hoy (con su ⋯ y su borde dorado) mientras la hero ya lo
+  // contaba como de ayer. Y es la marca que decide si tocarla EDITA el entreno.
+  const isLogFromToday = (log: WorkoutLog): boolean =>
+    logDateKey(log) === getToday();
 
-  // El modal de opciones ("¿Qué deseas hacer?") se abre tanto al pulsar el
-  // registro de hoy como al mantener pulsado cualquier otro día pasado. Solo
-  // en el primer caso, y si aún quedan ejercicios sin rellenar, el botón
-  // "Editar" pasa a "Continuar" (misma acción: abre el registro para seguir
-  // metiendo series).
-  const optionsLog = displayedRoutineLogs.find(
-    (l) => l.id === logWithOptionsId
-  );
-  const isTodayLogInProgress =
-    !!optionsLog &&
-    isLogFromToday(optionsLog) &&
-    todayWorkoutStatus === 'in-progress';
+  // El ⋯ de la tarjeta del entreno de HOY abre un menú anclado (los días
+  // pasados van directos al Detalle). Solo lleva lo que el toque en la tarjeta
+  // no da: ver su Detalle y eliminarlo. Antes era un popup centrado "¿Qué deseas
+  // hacer?" con "Continuar" (lo mismo que tocar la tarjeta), "Eliminar" y
+  // "Volver". Solo hay una tarjeta de hoy, así que basta un ref.
+  const todayOptionsRef = React.useRef<View>(null);
 
   // Marca/desmarca una semana como descarga (deload). La marca vive en cada log
   // del bloque (semanas derivadas, no guardadas): al margen de las estadísticas.
@@ -869,33 +810,20 @@ export function HomeScreen({
     (l: WorkoutLog) => l.id === logToDeleteId
   );
   // El check del cardio solo se ofrece si el día tiene cardio que salvar.
-  const logToDeleteHasCardio = !!logToDelete?.cardio?.rawInput?.trim();
 
-  const closeDeleteLogModal = () => {
-    setLogToDeleteId(undefined);
-    setDeleteCardioToo(false);
-  };
+  const closeDeleteLogModal = () => setLogToDeleteId(undefined);
 
   const closeLogOptions = () => {
     setLogWithOptionsId(undefined);
     setSelectedLogDayForOptions(undefined);
   };
 
+  // Borrar un entreno borra el entreno, y nada más: su cardio es otra sesión
+  // (y los registros viejos que lo llevaban dentro se separaron al arrancar,
+  // ver splitMixedCardioLogs), así que ya no hay nada que negociar.
   const handleDeleteLog = () => {
     if (!logToDelete) return;
-
-    // Sin marcar el check, el cardio sobrevive: el log se queda sin la fuerza y
-    // pasa a ser una sesión de "Solo cardio" de ese mismo día (toCardioOnlyLog,
-    // la misma degradación que usa el Detalle).
-    if (logToDeleteHasCardio && !deleteCardioToo) {
-      dispatch({
-        type: 'UPDATE_WORKOUT_LOG',
-        payload: toCardioOnlyLog(logToDelete),
-      });
-    } else {
-      dispatch({ type: 'DELETE_WORKOUT_LOG', payload: logToDelete.id });
-    }
-
+    dispatch({ type: 'DELETE_WORKOUT_LOG', payload: logToDelete.id });
     closeDeleteLogModal();
   };
 
@@ -912,7 +840,7 @@ export function HomeScreen({
         contentContainerStyle={[
           styles.homeScrollContent,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: homeScrollBottomPadding,
           },
         ]}
@@ -983,65 +911,31 @@ export function HomeScreen({
             </View>
           </>
         ) : (
-          // Dos estados con flechas: situación actual y retos de la semana. Las
-          // cifras de volumen viven en la tarjeta de progreso de abajo, y el
-          // acceso a rutinas en Perfil → Mis rutinas y en el propio héroe de
-          // "Rutina cerrada", así que no llevan slide.
-          <HeroCarousel
-            // Con el día de hoy sin entrenar, el pase automático no abandona
-            // la tarjeta del CTA: empezar el entreno es la acción más
-            // frecuente y no debería haber que esperar a que dé la vuelta.
-            holdIndex={todayWorkoutStatus === 'completed' ? undefined : 0}
-            slides={[
-              <HeroCard
-                key="status"
-                variant={hero.variant}
-                icon={hero.icon}
-                title={hero.title}
-                titleIcon={hero.titleIcon}
-                subtitle={hero.subtitle}
-                onPress={handleStartPress}
-                // El subtítulo nombra el día que toca, así que es él quien
-                // lleva a cambiarlo: la tarjeta entra a ese día y su subtítulo
-                // abre "Elige la sesión". Antes era una pastilla bajo la hero
-                // que empujaba racha, progreso e historial hacia abajo por una
-                // opción de uso raro.
-                onSubtitlePress={
-                  canPickAnotherDay ? onOpenDaySelector : undefined
-                }
-                subtitleAccessibilityLabel={t('Elegir otro día')}
-              />,
-              <HeroStatsCard
-                key="challenges"
-                kicker={t('Retos de la semana')}
-                mainIcon="flag-checkered"
-                mainValue={`${challengesDone}/${heroChallenges.length}`}
-                mainUnit={t('retos')}
-                stats={heroChallenges.map((c) => ({
-                  value: challengeProgressLabel(c, true),
-                  label: c.name,
-                  // Anillo por reto en vez de la cifra: se lee de un vistazo.
-                  progress:
-                    c.target > 0 ? c.current / c.target : c.done ? 1 : 0,
-                  icon: c.icon,
-                }))}
-                onPress={() => setShowChallenges(true)}
-              />,
-            ]}
-          />
-        )}
-
-        {ready && isDisplayedRoutineActive && streak.weeks >= 2 && (
-          <View style={styles.streakChip}>
-            <MaterialCommunityIcons
-              name="fire"
-              size={16}
-              color={theme.colors.emoji_orange}
+          // Una sola hero (lo que toca hoy) y, debajo, la tira con la racha y
+          // los retos de la semana, siempre a la vista. Antes era un carrusel de
+          // dos tarjetas doradas que, mientras hoy no se había entrenado, se
+          // quedaba en la de empezar: los retos no se veían justo al decidir
+          // entrenar. Las cifras de volumen viven en la tarjeta de progreso.
+          <>
+            <HeroCard
+              variant={hero.variant}
+              icon={hero.icon}
+              title={hero.title}
+              titleIcon={hero.titleIcon}
+              subtitle={hero.subtitle}
+              onPress={handleStartPress}
+              // El subtítulo nombra el día que toca (tocar la tarjeta entra en
+              // él); su botón "Cambiar" abre "Elige la sesión" para coger otro.
+              onSubtitlePress={
+                canPickAnotherDay ? onOpenDaySelector : undefined
+              }
+              subtitleAccessibilityLabel={t('Elegir otro día')}
             />
-            <Text style={styles.streakText}>
-              {t('{n} semanas seguidas', { n: streak.weeks })}
-            </Text>
-          </View>
+            <ChallengesStrip
+              challenges={heroChallenges}
+              onPress={() => setShowChallenges(true)}
+            />
+          </>
         )}
 
         {ready &&
@@ -1057,52 +951,31 @@ export function HomeScreen({
             // subida/bajada de dentro.
             const progressAccent = theme.colors.accentLine;
             return (
-              <View
-                style={[styles.progressCard, { borderColor: progressAccent }]}
-              >
-                <GradientFill accent={progressAccent} />
-                <TouchableOpacity
-                  style={styles.progressToggleButton}
-                  onPress={
-                    !canOpenChart
-                      ? undefined
-                      : () => {
-                          animateLayout();
-                          setShowWeeklyProgressChart((prev: boolean) => !prev);
-                        }
-                  }
-                  disabled={!canOpenChart}
-                  activeOpacity={0.85}
-                >
-                  <View style={styles.progressHeaderRow}>
-                    <View style={styles.progressTitleRow}>
-                      <MaterialCommunityIcons
-                        name="chart-bar"
-                        size={18}
-                        style={styles.progressTitleIcon}
-                      />
-                      {/* El nombre que puso el usuario, no "Rutina N" (que era
-                          el índice del array y no decía qué rutina es). */}
-                      <Text style={styles.progressTitle} numberOfLines={1}>
-                        {displayedRoutine?.name ?? t('Rutina')}
-                      </Text>
-                      {canOpenChart && (
-                        <MaterialCommunityIcons
-                          name={
-                            showWeeklyProgressChart
-                              ? 'chevron-up'
-                              : 'chevron-down'
-                          }
-                          size={20}
-                          color={theme.colors.text}
-                        />
-                      )}
-                    </View>
-                    {isFirstWeek ? (
-                      <Text style={styles.progressEncourage} numberOfLines={2}>
-                        {t('¡Ánimo con tu nueva rutina!')}
-                      </Text>
-                    ) : latestPoint ? (
+              /* Qué MIDE la gráfica, no el nombre de la rutina: ese ya lo dice
+                 el subtítulo de la barra superior dos dedos más arriba. Se
+                 titula como su gemela de Cardio ("kcal / mes"). */
+              <ChartCard
+                style={styles.progressCard}
+                accent={progressAccent}
+                icon="chart-bar"
+                title={t('Progreso / semana')}
+                expandable={canOpenChart}
+                expanded={showWeeklyProgressChart}
+                onToggle={() => {
+                  animateLayout();
+                  setShowWeeklyProgressChart((prev: boolean) => !prev);
+                }}
+                right={
+                  isFirstWeek ? (
+                    <Text style={styles.progressEncourage} numberOfLines={2}>
+                      {t('¡Ánimo con tu nueva rutina!')}
+                    </Text>
+                  ) : latestPoint ? (
+                    // Este % es ACUMULADO: lo subido desde la primera semana de
+                    // la rutina (cada día contra su primera sesión), no contra la
+                    // semana anterior como el de las cabeceras del historial. Se
+                    // dice debajo para que las dos cifras no parezcan la misma.
+                    <View style={styles.progressDeltaWrap}>
                       <TrendDelta
                         value={
                           latestIsDeload
@@ -1114,57 +987,60 @@ export function HomeScreen({
                           latestIsDeload ? theme.colors.emoji_blue : undefined
                         }
                       />
-                    ) : // Sin punto que mostrar no se inventa un dato: antes caía a
-                    // un "0%" verde en texto plano —una TERCERA forma de pintar
-                    // la mejora— que además decía "no has progresado" donde en
-                    // realidad no había nada que comparar.
-                    null}
-                  </View>
-                  {/* Cifras de la semana (kg levantados, entrenos · series y
-                      sus referencias): antes eran la tarjeta "Esta semana" del
-                      carrusel; aquí quedan fijas junto a la gráfica. */}
-                  {strengthStats.hasData && (
+                      <Text style={styles.progressDeltaBase}>
+                        {t('desde la semana 1')}
+                      </Text>
+                    </View>
+                  ) : // Sin punto que mostrar no se inventa un dato: antes caía a
+                  // un "0%" verde en texto plano —una TERCERA forma de pintar
+                  // la mejora— que además decía "no has progresado" donde en
+                  // realidad no había nada que comparar.
+                  null
+                }
+                summary={
+                  /* La racha de semanas completas (antes un chip suelto sobre
+                     la tarjeta). Sustituye a las cifras de kg levantados. Solo
+                     con la rutina activa: una cerrada ya no suma racha. */
+                  isDisplayedRoutineActive ? (
                     <StatsStrip
-                      icon="weight-lifter"
-                      value={fmtKg(strengthStats.currentVol)}
-                      unit="kg"
-                      meta={`${strengthStats.entrenos} ${
-                        strengthStats.entrenos === 1
-                          ? t('entreno')
-                          : t('entrenos')
-                      } · ${strengthStats.series} ${
-                        strengthStats.series === 1 ? t('serie') : t('series')
-                      }`}
-                      stats={strengthHeroStats}
+                      icon="fire"
+                      iconColor={theme.colors.emoji_orange}
+                      value={String(streak.weeks)}
+                      unit={
+                        streak.weeks === 1
+                          ? t('semana seguida')
+                          : t('semanas seguidas')
+                      }
+                      meta={
+                        streak.weeks > 0
+                          ? t('{n} días entrenados', { n: streak.days })
+                          : t('completa la semana para empezarla')
+                      }
                     />
-                  )}
-                </TouchableOpacity>
-
-                {canOpenChart && showWeeklyProgressChart && (
-                  <>
-                    <BarChart
-                      points={progressChart.bars}
-                      domain={progressChart.domain}
-                      width={chartWidth}
-                      formatYTick={(value) => `${Math.round(value)}%`}
-                      signed
-                    />
-                    <SegmentedFilter
-                      style={{
-                        width: chartWidth,
-                        marginTop: SEGMENTED_FILTER_CHART_GAP,
-                      }}
-                      options={dayFilterOptions}
-                      labelMode="below"
-                      value={chartDayFilter}
-                      onChange={(id) => {
-                        animateLayout();
-                        setChartDayFilter(id);
-                      }}
-                    />
-                  </>
-                )}
-              </View>
+                  ) : null
+                }
+              >
+                <BarChart
+                  points={progressChart.bars}
+                  domain={progressChart.domain}
+                  width={chartWidth}
+                  formatYTick={(value) => `${Math.round(value)}%`}
+                  signed
+                />
+                <SegmentedFilter
+                  style={{
+                    width: chartWidth,
+                    marginTop: SEGMENTED_FILTER_CHART_GAP,
+                  }}
+                  options={dayFilterOptions}
+                  labelMode="below"
+                  value={chartDayFilter}
+                  onChange={(id) => {
+                    animateLayout();
+                    setChartDayFilter(id);
+                  }}
+                />
+              </ChartCard>
             );
           })()}
 
@@ -1173,6 +1049,14 @@ export function HomeScreen({
           // semana (bordes duros) e interfería con el colapsable. Las semanas
           // scrollean con la vista principal, como en Cardio.
           <View style={styles.weeksSection}>
+            {/* Qué miden los % del historial (cabecera de cada semana y de cada
+                día): contra la vez anterior. Una línea para toda la lista en vez de
+                repetirlo en cada cabecera; el acumulado de la tarjeta de arriba
+                lleva su propio rótulo. */}
+            <SectionLegend
+              title={t('Historial')}
+              hint={t('% frente a la vez anterior')}
+            />
             <View>
               {blocks.slice(0, visibleWeekCount).map((block: number) => {
                 const weekLogs = groupedByBlock[block].slice().reverse();
@@ -1180,13 +1064,11 @@ export function HomeScreen({
                   completionGroupedByBlock[block] || [],
                   activeDays
                 );
-                // Si la rutina no es activa, todas las semanas están colapsadas
-                // Si es activa y la semana no está completada, la última semana está expandida por defecto
-                // Las semanas completadas están colapsadas por defecto, pero se pueden expandir/colapsar manualmente
-                const isExpanded =
-                  isDisplayedRoutineActive && !weekCompleted
-                    ? expandedWeekBlocks[block] ?? block === currentWeekBlock
-                    : expandedWeekBlocks[block] ?? false;
+                // TODAS las semanas arrancan colapsadas, también la que está en
+                // curso: el historial se abre para consultar algo concreto, y la
+                // semana desplegada de entrada empujaba el resto de la lista
+                // fuera de la pantalla. Se despliega con un toque.
+                const isExpanded = expandedWeekBlocks[block] ?? false;
                 // Semana de descarga: al margen de las estadísticas. En la
                 // cabecera, donde va el %, aparece "Descarga" en azul.
                 const isDeloadWeek = isDeloadBlock(groupedByBlock[block] || []);
@@ -1259,16 +1141,124 @@ export function HomeScreen({
                             chevron). Descarga y "ver hitos" bajan al cuerpo
                             desplegado (weekActionsRow), donde caben como botones
                             etiquetados en vez de iconos sueltos junto al chevron. */}
-                        <Text style={styles.weekHeaderMeta}>
-                          {isCurrentWeek && activeDays.length > 0
-                            ? t('{n} de {total} días', {
-                                n: weekLogs.length,
-                                total: activeDays.length,
-                              })
-                            : weekLogs.length === 1
-                            ? t('1 día')
-                            : t('{n} días', { n: weekLogs.length })}
-                        </Text>
+                        {/* Semana en curso: los días de la rutina dibujados, no
+                            "2 de 4 días". Encendido en verde lo hecho, con aro
+                            dorado el que toca y apagado lo que falta: responde
+                            "¿qué me queda?" sin abrir nada. Con más de seis
+                            días no caben junto al título y vuelve el texto. */}
+                        {isCurrentWeek &&
+                        activeDays.length > 0 &&
+                        activeDays.length <= 6 ? (
+                          <View
+                            style={styles.weekDaysRow}
+                            accessible
+                            accessibilityLabel={t('{n} de {total} días', {
+                              n: weekLogs.length,
+                              total: activeDays.length,
+                            })}
+                          >
+                            {activeDays.map((day: WorkoutDay) => {
+                              const dayLog = weekLogs.find(
+                                (l: WorkoutLog) => l.dayId === day.id
+                              );
+                              // El día de HOY a medias no se enciende entero:
+                              // un anillo verde se va llenando con los
+                              // ejercicios completados. Solo se cierra al
+                              // completarlos (o al pasar el día, cuando ya no
+                              // es el log de hoy).
+                              const dayInProgress =
+                                !!dayLog &&
+                                dayLog.id === todayLog?.id &&
+                                todayWorkoutStatus === 'in-progress';
+                              const dayDone = !!dayLog && !dayInProgress;
+                              // El aro dorado marca el día que TOCA INSERTAR.
+                              // Con el de hoy a medias no toca ningún otro
+                              // todavía: seguimos dentro de ese, así que nadie
+                              // se lleva el dorado hasta cerrarlo.
+                              const dayNext =
+                                !dayLog &&
+                                day.id === suggestedDay?.id &&
+                                todayWorkoutStatus !== 'in-progress';
+                              if (dayInProgress) {
+                                return (
+                                  <ProgressRing
+                                    key={day.id}
+                                    progress={todayExerciseProgress ?? 0}
+                                    size={WEEK_DAY_DOT_SIZE}
+                                    strokeWidth={2}
+                                    color={theme.colors.success}
+                                  >
+                                    <DayAccentIcon
+                                      emoji={day.emoji}
+                                      name={day.name}
+                                      size={15}
+                                      color={theme.colors.text}
+                                    />
+                                  </ProgressRing>
+                                );
+                              }
+                              return (
+                                <View
+                                  key={day.id}
+                                  style={[
+                                    styles.weekDayDot,
+                                    dayDone && styles.weekDayDotDone,
+                                    dayNext && styles.weekDayDotNext,
+                                  ]}
+                                >
+                                  <DayAccentIcon
+                                    emoji={day.emoji}
+                                    name={day.name}
+                                    size={15}
+                                    color={
+                                      dayDone
+                                        ? theme.colors.success
+                                        : dayNext
+                                        ? theme.colors.primary
+                                        : theme.colors.textSecondary
+                                    }
+                                  />
+                                </View>
+                              );
+                            })}
+                          </View>
+                        ) : isCurrentWeek && activeDays.length > 0 ? (
+                          <Text style={styles.weekHeaderMeta}>
+                            {t('{n} de {total} días', {
+                              n: weekLogs.length,
+                              total: activeDays.length,
+                            })}
+                          </Text>
+                        ) : (
+                          /* Semana cerrada: el veredicto, no el recuento. Un
+                             check verde si se hicieron todos los días de la
+                             rutina y un aviso gris si faltó alguno (al
+                             desplegar se ve cuál). Antes ponía "4 días", que
+                             no decía si eran todos los que tocaban. */
+                          <MaterialCommunityIcons
+                            name={
+                              weekCompleted
+                                ? 'check-circle'
+                                : 'alert-circle-outline'
+                            }
+                            size={20}
+                            color={
+                              weekCompleted
+                                ? theme.colors.success
+                                : theme.colors.textSecondary
+                            }
+                            accessibilityLabel={
+                              weekCompleted
+                                ? t('Semana completa: {n} días', {
+                                    n: weekLogs.length,
+                                  })
+                                : t('Semana incompleta: {n} de {total} días', {
+                                    n: weekLogs.length,
+                                    total: activeDays.length,
+                                  })
+                            }
+                          />
+                        )}
                         <MaterialCommunityIcons
                           name={isExpanded ? 'chevron-up' : 'chevron-down'}
                           size={20}
@@ -1354,14 +1344,73 @@ export function HomeScreen({
                           )}
                         </View>
                       )}
-                      {weekLogs.map((log: WorkoutLog) => {
-                        const day = getDay(log.dayId);
+                      {buildWeekEntries(
+                        weekLogs,
+                        isCurrentWeek || weekCompleted
+                      ).map(({ key, day, log }) => {
+                        // Día que no se hizo: tarjeta apagada en el hueco que
+                        // le tocaba, con un toque que lo explica. Antes la
+                        // semana solo tenía menos tarjetas y no se veía CUÁL
+                        // faltó.
+                        if (!log) {
+                          return (
+                            <Pressable
+                              key={key}
+                              style={({ pressed }: { pressed: boolean }) => [
+                                styles.historyLogCard,
+                                styles.historyLogCardMissing,
+                                pressed && styles.historyLogCardPressed,
+                              ]}
+                              onPress={() => setMissingDayInfo(day)}
+                              accessibilityRole="button"
+                              accessibilityLabel={t('{day}: sin entrenar', {
+                                day: getDisplayDayName(day.name),
+                              })}
+                            >
+                              <View style={styles.historyLogHeader}>
+                                <View style={styles.historyLogLeft}>
+                                  <View
+                                    style={[
+                                      styles.historyLogAccent,
+                                      styles.historyLogAccentMissing,
+                                    ]}
+                                  >
+                                    <DayAccentIcon
+                                      emoji={day.emoji}
+                                      name={day.name}
+                                      size={36}
+                                      color={theme.colors.textMuted}
+                                    />
+                                  </View>
+                                  <View style={styles.historyLogInfo}>
+                                    <Text
+                                      style={[
+                                        styles.historyLogDayName,
+                                        styles.historyLogDayNameMissing,
+                                      ]}
+                                      numberOfLines={1}
+                                    >
+                                      {getDisplayDayName(day.name)}
+                                    </Text>
+                                    <Text style={styles.historyLogMissingText}>
+                                      {t('Sin entrenar')}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <MaterialCommunityIcons
+                                  name="minus-circle-outline"
+                                  size={20}
+                                  color={theme.colors.textMuted}
+                                />
+                              </View>
+                            </Pressable>
+                          );
+                        }
                         const improvement = getLogImprovement(log);
                         const isToday = isLogFromToday(log);
-                        if (!day) return null;
 
                         return (
-                          <View key={log.id}>
+                          <View key={key}>
                             <Pressable
                               style={({ pressed }: { pressed: boolean }) => [
                                 styles.historyLogCard,
@@ -1415,9 +1464,11 @@ export function HomeScreen({
                                     descarga no lo llevan: la cabecera ya rotula "Descarga",
                                     así que sus días se ven como el resto.
 
-                                    Es el MISMO dato que el de la cabecera de la semana y el
-                                    de la tarjeta de progreso, así que se pinta con el mismo
-                                    TrendDelta. Antes era una píldora con fondo de color y el
+                                    Mide lo mismo que el de la cabecera de la semana (contra
+                                    la vez anterior), así que se pinta con el mismo
+                                    TrendDelta. OJO: el de la tarjeta de progreso NO es este
+                                    dato, es el acumulado desde la semana 1, y por eso lleva
+                                    su rótulo debajo. Antes era una píldora con fondo de color y el
                                     número en Anton, con cuatro paletas: nadie podía saber
                                     que medía lo mismo que la flecha de la semana. El "igual"
                                     (el "=" en ámbar) lo cubre ya el propio TrendDelta, y
@@ -1431,12 +1482,13 @@ export function HomeScreen({
                                       improved={improvement.isImproved}
                                     />
                                   )}
-                                {/* Solo el día de HOY lleva el ⋯ aquí (Continuar/
+                                {/* Solo el día de HOY lleva el ⋯ aquí (Ver detalle /
                                     Eliminar): un toque en un día pasado ya abre el
                                     Detalle, la única superficie de acciones del log
                                     (editar, fecha, mover semana, borrar). */}
                                 {isToday && (
                                   <Pressable
+                                    ref={todayOptionsRef}
                                     style={({
                                       pressed,
                                     }: {
@@ -1490,52 +1542,52 @@ export function HomeScreen({
         challenges={heroChallenges}
       />
 
-      <AppModal
+      <AnchorMenu
         visible={!!logWithOptionsId}
-        onRequestClose={closeLogOptions}
-        title={t('¿Qué deseas hacer?')}
-        icon="dots-horizontal-circle-outline"
-        message={
-          isTodayLogInProgress
-            ? t('Puedes continuar o eliminar el registro')
-            : t('Puedes editar o eliminar el registro')
-        }
+        onClose={closeLogOptions}
+        anchorRef={todayOptionsRef}
+        items={[
+          {
+            icon: 'file-document-outline',
+            label: t('Ver detalle'),
+            onPress: () => {
+              const log = displayedRoutineLogs.find(
+                (l) => l.id === logWithOptionsId
+              );
+              if (log && selectedLogDayForOptions) {
+                onSelectLog?.(log, selectedLogDayForOptions);
+              }
+            },
+          },
+          {
+            icon: 'delete-outline',
+            label: t('Eliminar'),
+            onPress: () => setLogToDeleteId(logWithOptionsId),
+          },
+        ]}
+      />
+
+      {/* Toque en el hueco de un día que no se entrenó. Es informativo (un solo
+          botón): explica qué significa el hueco y que una semana cerrada no se
+          rellena desde el historial. Para meter ese día a posteriori hay que
+          registrarlo y cambiarle la fecha desde su Detalle. */}
+      <AppModal
+        visible={!!missingDayInfo}
+        onRequestClose={() => setMissingDayInfo(undefined)}
+        onOverlayPress={() => setMissingDayInfo(undefined)}
+        icon="calendar-remove-outline"
+        title={t('Día sin entrenar')}
+        message={t(
+          'Esa semana se cerró sin «{day}», así que no cuenta como completa ni suma en la racha. Un hueco de una semana pasada no se rellena desde aquí: registra el día y cámbiale la fecha en su Detalle.',
+          { day: getDisplayDayName(missingDayInfo?.name ?? '') }
+        )}
         footer={
-          <>
-            <View style={styles.modalButtonRow}>
-              <Button
-                title={isTodayLogInProgress ? t('Continuar') : t('Editar')}
-                onPress={() => {
-                  const log = displayedRoutineLogs.find(
-                    (l) => l.id === logWithOptionsId
-                  );
-                  if (log && selectedLogDayForOptions && onEditLog) {
-                    onEditLog(log, selectedLogDayForOptions);
-                  }
-                  closeLogOptions();
-                }}
-                variant="primary"
-                size="medium"
-                style={styles.modalButton}
-              />
-              <Button
-                title={t('Eliminar')}
-                onPress={() => {
-                  setLogToDeleteId(logWithOptionsId);
-                  closeLogOptions();
-                }}
-                variant="danger"
-                size="medium"
-                style={styles.modalButton}
-              />
-            </View>
-            <Button
-              title={t('Volver')}
-              onPress={closeLogOptions}
-              variant="secondary"
-              size="medium"
-            />
-          </>
+          <Button
+            title={t('Entendido')}
+            onPress={() => setMissingDayInfo(undefined)}
+            variant="primary"
+            size="medium"
+          />
         }
       />
 
@@ -1570,11 +1622,6 @@ export function HomeScreen({
         title={t('¿Eliminar entrenamiento?')}
         message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
         confirmLabel={t('Eliminar')}
-        checkLabel={
-          logToDeleteHasCardio ? t('Borrar también el cardio') : undefined
-        }
-        checked={deleteCardioToo}
-        onToggleCheck={() => setDeleteCardioToo((prev) => !prev)}
         onConfirm={handleDeleteLog}
         onCancel={closeDeleteLogModal}
       />
@@ -1601,6 +1648,7 @@ export function HomeScreen({
         // número de versión, que ya vive al pie de Configuración.
         subtitle={displayedRoutine?.name ?? t('Añade tu primera rutina')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         menuItems={
           onOpenActiveRoutine
             ? [
@@ -1634,19 +1682,14 @@ const makeStyles = () =>
       height: 24,
       alignSelf: 'flex-start',
     },
+    // Solo márgenes: la piel de la tarjeta (borde, degradado, paddings y el
+    // centrado de la gráfica) vive en `ChartCard`, compartida con Cardio.
+    // Sin marginTop propio: la separa de los retos el marginBottom de la tira
+    // (md), el mismo que separa los retos de la hero. Antes sumaba un xs y el
+    // hueco de arriba y el de abajo de los retos no coincidían.
     progressCard: {
       marginHorizontal: theme.spacing.md,
-      marginTop: theme.spacing.xs,
       marginBottom: 0,
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 2,
-      borderColor: theme.colors.primaryLine,
-      paddingVertical: 16,
-      paddingHorizontal: 0,
-      overflow: 'hidden',
-      alignItems: 'center',
-      ...theme.shadow.card,
     },
     // "Primeros pasos" (solo sin rutinas): tarjeta de lista con dos salidas.
     firstStepsCard: {
@@ -1699,63 +1742,22 @@ const makeStyles = () =>
     firstStepsButton: {
       flex: 1,
     },
-    streakChip: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      alignSelf: 'center',
-      gap: 7,
-      marginHorizontal: theme.spacing.md,
-      marginBottom: theme.spacing.sm,
-      paddingHorizontal: 14,
-      paddingVertical: 8,
-      borderRadius: theme.borderRadius.pill,
-      backgroundColor: theme.colors.emoji_orangeMuted,
-      borderWidth: 1,
-      borderColor: theme.colors.emoji_orangeMutedBorder,
-    },
-    streakText: {
-      color: theme.colors.emoji_orange,
-      fontSize: 14,
-      fontWeight: '800',
-      lineHeight: 18,
-    },
-    progressHeaderRow: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    },
-    progressTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-      // El nombre de la rutina lo pone el usuario: puede ser largo, así que la
-      // fila cede antes que el dato de mejora de la derecha.
-      flexShrink: 1,
-      minWidth: 0,
-    },
     weekMetaRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 2,
     },
-    progressTitleIcon: {
-      color: theme.colors.text,
+    // La cifra de la tarjeta de progreso con su base debajo ("desde la
+    // semana 1"): es otro dato que el % de las semanas y tiene que verse.
+    progressDeltaWrap: {
+      alignItems: 'flex-end',
+      marginLeft: 12,
     },
-    progressToggleButton: {
-      paddingVertical: 0,
-      paddingHorizontal: 16,
-      width: '100%',
-    },
-    progressTitle: {
-      fontSize: 20,
-      fontFamily: theme.fonts.display,
-      letterSpacing: 0.5,
-      color: theme.colors.text,
-      lineHeight: 28,
-      includeFontPadding: false,
-      textAlignVertical: 'center',
-      flexShrink: 1,
-      ...antonCenterNudge,
+    progressDeltaBase: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      lineHeight: 14,
     },
     progressEncourage: {
       flexShrink: 1,
@@ -1768,8 +1770,8 @@ const makeStyles = () =>
     },
     weeksSection: {
       marginHorizontal: theme.spacing.md,
-      // Misma separación que hay entre la HeroCard y la tarjeta de la gráfica
-      // (HeroCard marginBottom md=16 + progressCard marginTop xs=6 = 22 = lg).
+      // Un poco más de aire que entre las tarjetas de arriba (md): aquí empieza
+      // otra cosa, una lista con su propia cabecera.
       marginTop: theme.spacing.lg,
       marginBottom: theme.spacing.md,
     },
@@ -1811,6 +1813,32 @@ const makeStyles = () =>
       borderRadius: theme.borderRadius.pill,
       overflow: 'hidden',
       lineHeight: 18,
+    },
+    // Los días de la semana en curso, uno por disco pequeño.
+    weekDaysRow: {
+      flexDirection: 'row',
+      gap: 4,
+      marginRight: 2,
+    },
+    // Pendiente: aro y fondo suaves pero legibles (con `border` a secas y el
+    // icono en `textMuted` casi no se distinguía del fondo de la tarjeta).
+    weekDayDot: {
+      width: WEEK_DAY_DOT_SIZE,
+      height: WEEK_DAY_DOT_SIZE,
+      borderRadius: WEEK_DAY_DOT_SIZE / 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: theme.colors.textMuted + '99',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    weekDayDotDone: {
+      borderColor: theme.colors.success,
+      backgroundColor: theme.colors.success + '22',
+    },
+    weekDayDotNext: {
+      borderColor: theme.colors.primaryLine,
+      borderWidth: 2,
     },
     weekHeaderMeta: {
       fontSize: 14,
@@ -1880,6 +1908,30 @@ const makeStyles = () =>
     historyLogCardPressed: {
       opacity: 0.8,
     },
+    // Día que no se entrenó: misma caja, sin relleno ni sombra y con el borde
+    // a trazos, para que se lea como un hueco y no como una sesión más.
+    historyLogCardMissing: {
+      backgroundColor: 'transparent',
+      borderStyle: 'dashed',
+      borderColor: theme.colors.textMuted,
+      // Sin elevación: una sombra haría flotar un hueco (en Android la sombra
+      // la da `elevation`, así que no basta con shadowOpacity).
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    historyLogAccentMissing: {
+      opacity: 0.55,
+    },
+    historyLogDayNameMissing: {
+      color: theme.colors.textSecondary,
+    },
+    historyLogMissingText: {
+      fontSize: 14,
+      color: theme.colors.textMuted,
+      marginTop: 2,
+      lineHeight: 16,
+      fontWeight: '600',
+    },
     historyLogHeader: {
       flexDirection: 'row',
       justifyContent: 'space-between',
@@ -1913,20 +1965,18 @@ const makeStyles = () =>
       lineHeight: 16,
       fontWeight: '500',
     },
+    // Zona de toque de 36 (icono de 20 + 8 por lado) más su hitSlop: dentro de
+    // una tarjeta que también se pulsa, quedarse corto abría el registro.
     logOptionsButton: {
-      padding: 2,
-      marginRight: -4,
+      padding: 8,
+      // Los márgenes negativos devuelven el padding: el botón crece hacia
+      // fuera sin empujar la fila ni hacer más alta la tarjeta.
+      margin: -6,
+      marginRight: -10,
       borderRadius: theme.borderRadius.sm,
     },
     logOptionsButtonPressed: {
       opacity: 0.6,
-    },
-    modalButtonRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    modalButton: {
-      flex: 1,
     },
   });
 

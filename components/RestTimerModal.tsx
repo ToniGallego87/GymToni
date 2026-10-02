@@ -1,81 +1,63 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { formatRestTime } from '@lib/utils';
+import {
+  MAX_REST_SECONDS,
+  MIN_REST_SECONDS,
+  stepRestDuration,
+  useRestDuration,
+} from '@lib/restTimerStore';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
+import { ValueStepper } from './ValueStepper';
 
 interface RestTimerModalProps {
   visible: boolean;
-  /**
-   * Segundos tecleados, en crudo: el campo puede quedarse vacío o a medias
-   * mientras se escribe, así que el valor es texto y no número.
-   */
-  value: string;
-  onChangeValue: (value: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
+  onClose: () => void;
 }
 
 /**
- * "Editar Temporizador": el descanso por defecto entre series, que es un
- * ajuste de la PERSONA (lib/restTimerStore `setRestDuration`), no de cada
- * rutina. Es el MISMO ajuste se abra desde Perfil o desde el ⋯ de la pantalla
- * de registro, así que vive en un solo sitio (misma especialización de
- * `AppModal` que `ConfirmModal`).
+ * El descanso por defecto entre series desde el ⋯ del registro, que es donde se
+ * nota que se queda corto. Es un ajuste de la PERSONA (lib/restTimerStore), el
+ * MISMO que Configuración, y se toca con el MISMO control: flechas ‹ 2:30 › a
+ * saltos de 30 s entre 0:00 y 5:00, que cambian el valor al momento. Antes era
+ * un campo de texto en segundos con "Guardar": otro editor con otras reglas, y
+ * obligaba a convertir minutos a segundos de cabeza en mitad de una serie.
  *
- * Antes eran dos copias con dos aspectos: el campo a 16 px en una y a 18 en
- * negrita en la otra, el "Equivalente" centrado aquí y en cursiva allá.
+ * No toca el descanso en curso (para eso están +30s y la ×): ajusta el de las
+ * próximas series.
  */
-export function RestTimerModal({
-  visible,
-  value,
-  onChangeValue,
-  onSave,
-  onCancel,
-}: RestTimerModalProps) {
+export function RestTimerModal({ visible, onClose }: RestTimerModalProps) {
+  const restDuration = useRestDuration();
+
   return (
     <AppModal
       visible={visible}
-      onRequestClose={onCancel}
-      title={t('Editar Temporizador')}
+      onRequestClose={onClose}
+      title={t('Temporizador de descanso')}
       icon="timer-sand"
-      align="left"
       footer={
-        <View style={styles.buttonRow}>
-          <Button
-            title={t('Cancelar')}
-            onPress={onCancel}
-            variant="secondary"
-            size="medium"
-            style={styles.button}
-          />
-          <Button
-            title={t('Guardar')}
-            onPress={onSave}
-            variant="primary"
-            size="medium"
-            style={styles.button}
-          />
-        </View>
+        <Button
+          title={t('Hecho')}
+          onPress={onClose}
+          variant="primary"
+          size="medium"
+        />
       }
     >
-      <Text style={styles.label}>{t('Duración en segundos:')}</Text>
-      <TextInput
-        style={styles.input}
-        keyboardType="number-pad"
-        placeholder="150"
-        placeholderTextColor={theme.colors.textSecondary}
-        value={value}
-        onChangeText={onChangeValue}
+      <ValueStepper
+        label={t('Temporizador de descanso')}
+        value={formatRestTime(restDuration)}
+        atMin={restDuration <= MIN_REST_SECONDS}
+        atMax={restDuration >= MAX_REST_SECONDS}
+        onDecrement={() => stepRestDuration(-1)}
+        onIncrement={() => stepRestDuration(1)}
       />
-      {/* Lo que significan esos segundos, en el mismo margen que el campo: el
-          modal va alineado a la izquierda y una línea centrada bajo un campo
-          de ancho completo se leía como otra cosa. */}
-      <Text style={styles.equivalent}>
-        {t('Equivalente:')} {formatRestTime(parseInt(value, 10) || 0)}
+      <Text style={styles.hint}>
+        {t('Entre series, en saltos de 30 s (de 0:00 a 5:00)')}
       </Text>
     </AppModal>
   );
@@ -83,35 +65,12 @@ export function RestTimerModal({
 
 const makeStyles = () =>
   StyleSheet.create({
-    label: {
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.colors.text,
-      marginBottom: 8,
-    },
-    // Campo numérico grande: se abre para teclear un número corto y volver.
-    input: {
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.sm,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      fontSize: 18,
-      fontWeight: '700',
-      color: theme.colors.text,
-      backgroundColor: theme.colors.inputBg,
-    },
-    equivalent: {
+    hint: {
       marginTop: 10,
       fontSize: 13,
+      lineHeight: 18,
       color: theme.colors.textSecondary,
-    },
-    buttonRow: {
-      flexDirection: 'row',
-      gap: 10,
-    },
-    button: {
-      flex: 1,
+      textAlign: 'center',
     },
   });
 

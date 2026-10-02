@@ -38,8 +38,6 @@ const ALLOWLIST: Record<string, string> = {
   // Displays hero de solo dígitos (kcal/volumen/peso semanal): lineHeight 44
   // para fontSize 34 (ratio 1.29) ajustado a mano con translateY, verificado sin
   // recorte porque los dígitos no suben tanto como mayúsculas y tildes.
-  'components/HeroStatsCard.tsx::heroMainValue':
-    'display de dígitos, verificado',
   'components/HeroWeightCard.tsx::mainValue': 'display de dígitos, verificado',
 };
 

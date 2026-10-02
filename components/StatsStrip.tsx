@@ -3,47 +3,46 @@ import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
-import { HeroStat } from './HeroStatsCard';
+/** Una referencia de la fila (valor + rótulo: "11.200" / "semana pasada"). */
+export interface StatsStripStat {
+  value: string;
+  label: string;
+}
 
 interface StatsStripProps {
   /** Icono del dato principal ("weight-lifter", "fire"). */
   icon: string;
+  /** Color del icono (por defecto el dorado `primary`). */
+  iconColor?: string;
   /** Dato principal ("1.240") y su unidad ("kg", "kcal"). */
   value: string;
   unit: string;
   /** Detalle tras el dato principal ("3 entrenos · 12 series"). */
   meta?: string;
   /** Hasta tres referencias (semana pasada / media / mejor). */
-  stats: HeroStat[];
-  /**
-   * Centra la línea del dato principal (Cardio: las kcal del día). Sin ella
-   * nace a la izquierda, pegada al título de la tarjeta (Inicio).
-   */
-  centerMain?: boolean;
+  stats?: StatsStripStat[];
 }
 
 /**
- * Fila de cifras de la semana dentro de la tarjeta de progreso de Inicio (kg
- * levantados) y de Cardio (kcal de hoy). Antes eran la segunda tarjeta dorada
- * del carrusel ("Esta semana"), que rotaba y desaparecía sola a los 5 s:
- * aquí el dato queda fijo junto a la gráfica que lo explica, y el carrusel se
- * queda con dos tarjetas (qué toca hoy y los retos).
+ * Fila de cifras dentro de la tarjeta de progreso de Inicio (la racha de
+ * semanas). Antes era una tarjeta dorada de un carrusel, que rotaba y
+ * desaparecía sola: aquí el dato queda fijo junto a la gráfica.
  */
 export function StatsStrip({
   icon,
+  iconColor,
   value,
   unit,
   meta,
-  stats,
-  centerMain,
+  stats = [],
 }: StatsStripProps) {
   return (
     <View style={styles.strip}>
-      <View style={[styles.mainRow, centerMain && styles.mainRowCentered]}>
+      <View style={styles.mainRow}>
         <MaterialCommunityIcons
           name={icon as any}
           size={16}
-          color={theme.colors.primary}
+          color={iconColor ?? theme.colors.primary}
         />
         <Text style={styles.mainValue}>{value}</Text>
         <Text style={styles.mainUnit}>{unit}</Text>
@@ -78,13 +77,13 @@ const makeStyles = () =>
       marginTop: 10,
       gap: 8,
     },
+    // Centrada: es el único dato de la tira, así que sentarla a la izquierda
+    // la dejaba descolgada bajo el título de la tarjeta.
     mainRow: {
       flexDirection: 'row',
       alignItems: 'baseline',
-      gap: 5,
-    },
-    mainRowCentered: {
       justifyContent: 'center',
+      gap: 5,
     },
     mainValue: {
       fontSize: 18,

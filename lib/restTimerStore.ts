@@ -110,22 +110,42 @@ export function useRestSecondsLeft(): number {
 // Cuánto dura un descanso al arrancarlo. Es un ajuste del USUARIO, no de cada
 // rutina: nadie descansa distinto según el plan, y tenerlo por rutina obligaba
 // a repetirlo al crear o copiar una, lo dejaba bajo candado en las enlazadas de
-// la comunidad y viajaba dentro del QR al compartir. Se edita desde Perfil y
-// desde el ⋯ del registro, y las dos escriben AQUÍ. Persiste con los demás
-// ajustes de la app (appSettings), no en la BD de dominio.
+// la comunidad y viajaba dentro del QR al compartir. Se edita desde
+// Configuración (con el tema y el idioma) y desde el ⋯ del registro, y las dos
+// escriben AQUÍ. Persiste con los demás ajustes de la app (appSettings), no en
+// la BD de dominio.
 
 export const DEFAULT_REST_SECONDS = 150;
+
+// Topes y salto del ajuste. El descanso se toca con dos flechas (Configuración,
+// `ValueStepper`), así que el rango tiene que ser cerrado: medio minuto por
+// pulsación, de 0 (sin descanso) a 5 minutos. Más allá de 5 no hay descanso
+// entre series que se cuente en minutos, y el paso de 30 s es el mismo que el
+// "+30 s" de la cuenta atrás.
+export const REST_STEP_SECONDS = 30;
+export const MIN_REST_SECONDS = 0;
+export const MAX_REST_SECONDS = 300;
+
+/** Ajusta el descanso por defecto en pasos de 30 s dentro del rango. */
+export function stepRestDuration(steps: number): void {
+  const next =
+    Math.round(getRestDuration() / REST_STEP_SECONDS) * REST_STEP_SECONDS +
+    steps * REST_STEP_SECONDS;
+  setRestDuration(Math.min(MAX_REST_SECONDS, Math.max(MIN_REST_SECONDS, next)));
+}
 
 const durationListeners = new Set<Listener>();
 let restDuration = getStoredRestTimerSeconds() ?? DEFAULT_REST_SECONDS;
 
-/** Descanso por defecto, en segundos. Siempre > 0. */
+/** Descanso por defecto, en segundos (0 = sin descanso). */
 export function getRestDuration(): number {
   return restDuration;
 }
 
 export function setRestDuration(seconds: number): void {
-  if (!Number.isFinite(seconds) || seconds <= 0) return;
+  // 0 es un valor válido (quien no descansa entre series lo baja a 0:00); lo
+  // que no se acepta es un negativo ni un NaN del campo de texto del registro.
+  if (!Number.isFinite(seconds) || seconds < 0) return;
   const next = Math.round(seconds);
   setStoredRestTimerSeconds(next);
   if (next === restDuration) return;

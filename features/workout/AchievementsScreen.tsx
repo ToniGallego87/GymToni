@@ -1,6 +1,12 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useMemo, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  useWindowDimensions,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -11,19 +17,23 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
+  getMenuTileWidth,
   MENU_TILE_GAP,
   MENU_TILE_INSET,
   MENU_TILE_PADDING,
-  RestTimerRing,
+  MENU_TILES_PER_ROW,
+  ProgressRing,
   StretchScrollView,
 } from '@components';
 import { Badge, BADGE_CATEGORY_ORDER, badgeCategoryLabel } from '@lib/badges';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useChallengeWins, XP_PER_BADGE, XP_PER_CHALLENGE } from '@lib/level';
 import { theme } from '@lib/theme';
-import { dateLocale, t } from '@lib/i18n';
+import { t } from '@lib/i18n';
+import { longDate } from '@lib/utils';
 
 interface AchievementsScreenProps {
   onBack: () => void;
@@ -32,9 +42,9 @@ interface AchievementsScreenProps {
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // Tres por fila, la misma retícula que el menú de Perfil y las casillas de
-// ejercicio: con cuatro los nombres largos ('Corazón en marcha') se encogían
-// hasta no leerse.
-const TILES_PER_ROW = 3;
+// ejercicio (`menuTileTokens`): con cuatro los nombres largos ('Corazón en
+// marcha') se encogían hasta no leerse.
+const TILES_PER_ROW = MENU_TILES_PER_ROW;
 const TILE_ICON_SIZE = 33;
 // Anillo de progreso alrededor del icono de una insignia aún sin conseguir.
 const TILE_RING_SIZE = 44;
@@ -91,16 +101,13 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
     [badges]
   );
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: backBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
-
-  const longDate = (iso: string) =>
-    new Date(`${iso}T12:00:00`).toLocaleDateString(dateLocale, {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
+  // Ancho FIJO de la casilla (misma fuente que el menú de Perfil): con
+  // `flex: 1` las casillas de una fila con nombres largos salían más anchas.
+  const { width: windowWidth } = useWindowDimensions();
+  const tileWidth = getMenuTileWidth(windowWidth);
 
   // Los de sí/no (objetivo 1) no llevan progreso: o están o no están.
   const showsProgress = (b: Badge) => !b.unlocked && b.target > 1;
@@ -121,7 +128,10 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: topBarHeight + 28, paddingBottom: scrollBottomPadding },
+          {
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
+            paddingBottom: scrollBottomPadding,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -140,10 +150,12 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
               ]}
             />
           </View>
+          {/* Puntos DENTRO del nivel actual (no el acumulado total): lo que
+              llena la barra y lo que cuesta el salto al siguiente. */}
           <Text style={styles.summaryLabel}>
             {t('{xp} / {next} puntos', {
-              xp: level.xp,
-              next: level.nextLevelAt,
+              xp: level.xp - level.levelStart,
+              next: level.nextLevelAt - level.levelStart,
             })}
           </Text>
           <View style={styles.summaryStatsRow}>
@@ -213,6 +225,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                       key={badge.id}
                       style={({ pressed }) => [
                         styles.tile,
+                        { width: tileWidth },
                         badge.unlocked && styles.tileUnlocked,
                         pressed && styles.tilePressed,
                       ]}
@@ -230,7 +243,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                           se queda entero, que hay que poder leerlo) y, si es
                           de recuento, un anillo con lo que llevas. */}
                       {showsProgress(badge) ? (
-                        <RestTimerRing
+                        <ProgressRing
                           progress={badge.current / badge.target}
                           size={TILE_RING_SIZE}
                           strokeWidth={3}
@@ -242,7 +255,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                             color={theme.colors.textSecondary}
                             style={styles.tileIconLocked}
                           />
-                        </RestTimerRing>
+                        </ProgressRing>
                       ) : (
                         <View style={styles.tileIconBox}>
                           <MaterialCommunityIcons
@@ -273,7 +286,10 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                       )}
                     </Pressable>
                   ) : (
-                    <View key={`gap-${i}`} style={styles.tileGap} />
+                    <View
+                      key={`gap-${i}`}
+                      style={[styles.tileGap, { width: tileWidth }]}
+                    />
                   )
                 )}
               </View>
@@ -288,6 +304,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
         icon="trophy-outline"
         subtitle={t('Insignias y tu nivel')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         showLevelPill={false}
       />
 
@@ -506,7 +523,6 @@ const makeStyles = () =>
       marginHorizontal: MENU_TILE_INSET,
     },
     tile: {
-      flex: 1,
       aspectRatio: 1,
       alignItems: 'center',
       justifyContent: 'center',
@@ -542,16 +558,12 @@ const makeStyles = () =>
       fontVariant: ['tabular-nums'],
       lineHeight: 13,
     },
-    // Hueco de relleno con la MISMA caja que una casilla (borde y padding,
-    // invisibles): sin ellos Yoga repartía el ancho distinto y las casillas
-    // de una fila incompleta (las de los últimos logros, casi siempre sin
-    // conseguir) salían más anchas que las de una fila llena.
+    // Hueco de relleno de la última fila incompleta: mantiene el orden de
+    // lectura (las casillas que hay quedan a la izquierda). Ya no hace falta
+    // que imite la caja de una casilla —el ancho es fijo, no repartido—, pero
+    // sí que mida lo mismo.
     tileGap: {
-      flex: 1,
       aspectRatio: 1,
-      borderWidth: 1,
-      borderColor: 'transparent',
-      padding: MENU_TILE_PADDING,
     },
     tileLabel: {
       fontSize: 12,

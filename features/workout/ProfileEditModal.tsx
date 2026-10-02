@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TextInput } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
-import * as ImageManipulator from 'expo-image-manipulator';
-import { AppModal, Avatar, Button, OptionToggle } from '@components';
+import { AppModal, Button, OptionToggle } from '@components';
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
 import { loadMyProfile } from '@hooks/useMyProfile';
-import { getProfile, updateProfile, uploadAvatar } from '@lib/cloud/social';
+import { getProfile, updateProfile } from '@lib/cloud/social';
+import { deleteActivity } from '@lib/cloud/activity';
 
 interface ProfileEditModalProps {
   visible: boolean;
@@ -25,8 +24,10 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
   const [profileName, setProfileName] = useState('');
   const [profileBio, setProfileBio] = useState('');
   const [profilePublic, setProfilePublic] = useState(false);
-  const [profileAvatar, setProfileAvatar] = useState<string | null>(null);
-  const [pickingAvatar, setPickingAvatar] = useState(false);
+  // Compartir la Actividad (insignias, retos y días entrenados) en el perfil.
+  // Quién la ve lo decide la misma regla que el perfil; esto solo permite
+  // apagarla sin tener que volver el perfil entero privado.
+  const [shareActivity, setShareActivity] = useState(true);
   const [savingProfile, setSavingProfile] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,7 +42,9 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
         setProfileName(p.display_name ?? '');
         setProfileBio(p.bio ?? '');
         setProfilePublic(p.is_public);
-        setProfileAvatar(p.avatar_url ?? null);
+        // Las filas anteriores a la columna vienen sin ella: cuentan como
+        // encendido, que es el valor por defecto de la tabla.
+        setShareActivity(p.share_activity !== false);
       })
       .catch(() => {});
     return () => {
@@ -50,63 +53,21 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, user?.id]);
 
-  // Selecciona una foto, la recorta a cuadrado y la reduce a 256px jpeg. Se sube
-  // al bucket `avatars` de Storage (URL ligera); si no está, cae a base64.
-  const handlePickAvatar = async () => {
-    try {
-      setPickingAvatar(true);
-      setError(null);
-      const res = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 1,
-      });
-      if (res.canceled || !res.assets?.[0]) return;
-      const manip = await ImageManipulator.manipulateAsync(
-        res.assets[0].uri,
-        [{ resize: { width: 256 } }],
-        {
-          compress: 0.6,
-          format: ImageManipulator.SaveFormat.JPEG,
-          base64: true,
-        }
-      );
-      if (!manip.base64) return;
-      const dataUri = `data:image/jpeg;base64,${manip.base64}`;
-      if (!user) {
-        setProfileAvatar(dataUri);
-        return;
-      }
-      let avatar = dataUri;
-      try {
-        avatar = await uploadAvatar(user.id, manip.base64);
-      } catch {
-        avatar = dataUri;
-      }
-      setProfileAvatar(avatar);
-      // Elegir la foto YA es la confirmación: has recortado tu cara y le has
-      // dado a aceptar, no hay nada más que decidir. Se guarda sola (el resto
-      // del formulario viaja con ella, tal y como esté) en vez de dejar el
-      // avatar nuevo colgando de un "Guardar" fácil de olvidar.
-      await persistProfile(avatar);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setPickingAvatar(false);
-    }
-  };
-
-  // Escritura del perfil. El avatar llega por parámetro porque quien acaba de
-  // elegir foto todavía no lo tiene en el estado del render en curso.
-  const persistProfile = async (avatarUrl: string | null) => {
+  // Escritura del perfil. La FOTO no viaja aquí: se cambia con el lápiz de su
+  // esquina en Perfil (hooks/useAvatarPicker.ts), que la guarda sola. Si este
+  // formulario la mandara también, guardar el nombre pisaría una foto recién
+  // cambiada con la que tenía al abrirse.
+  const persistProfile = async () => {
     if (!user) return;
     await updateProfile(user.id, {
       display_name: profileName.trim() || null,
       bio: profileBio.trim() || null,
       is_public: profilePublic,
-      avatar_url: avatarUrl,
+      share_activity: shareActivity,
     });
+    // Apagarlo RETIRA lo publicado, no lo esconde: si alguien deja de compartir
+    // su actividad, no debe quedarse en la nube esperando que nadie la lea.
+    if (!shareActivity) await deleteActivity(user.id).catch(() => {});
     // La barra de navegación y Perfil leen el mismo store: recargarlo aquí
     // es lo que hace que la foto nueva aparezca sin reiniciar la app.
     await loadMyProfile(user.id, true);
@@ -118,7 +79,7 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
     setSavingProfile(true);
     setError(null);
     try {
-      await persistProfile(profileAvatar);
+      await persistProfile();
       onClose();
     } catch (e) {
       setError((e as Error).message);
@@ -155,20 +116,10 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
       }
     >
       <View style={styles.form}>
-        {/* Los contadores de seguidores/siguiendo ya NO viven aquí: esto es
-            un formulario de edición, y verse a uno mismo se hace en tu
-            tarjeta de Comunidad, que además lleva a las dos listas. */}
-        <View style={styles.avatarRow}>
-          <Avatar uri={profileAvatar} size={56} />
-          <Button
-            title={pickingAvatar ? t('Abriendo…') : t('Cambiar foto')}
-            variant="secondary"
-            size="medium"
-            onPress={handlePickAvatar}
-            disabled={pickingAvatar}
-            style={styles.avatarButton}
-          />
-        </View>
+        {/* Ni la foto ni los contadores viven aquí: la foto se cambia con el
+            lápiz de su esquina en Perfil (un toque, sin abrir este popup) y
+            verse a uno mismo se hace en tu tarjeta de Comunidad. Esto es solo
+            el texto y la visibilidad. */}
         <TextInput
           style={styles.input}
           placeholder={t('Nombre visible')}
@@ -199,6 +150,25 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
             ? t('Otros pueden ver tu perfil y seguirte.')
             : t('Tu perfil no aparece para otros.')}
         </Text>
+        {/* La Actividad por separado: se puede compartir el perfil y las
+            rutinas sin publicar los días que entrenas. Quién la ve es la misma
+            regla de arriba; esto solo decide si se publica. */}
+        <Text style={styles.sectionLabel}>{t('Actividad')}</Text>
+        <OptionToggle
+          options={[
+            { value: true, label: t('Compartir') },
+            { value: false, label: t('No compartir') },
+          ]}
+          value={shareActivity}
+          onChange={setShareActivity}
+        />
+        <Text style={styles.hint}>
+          {shareActivity
+            ? t(
+                'Tu perfil enseña tus insignias, retos superados y días entrenados.'
+              )
+            : t('Nadie verá tu actividad, y se retira la ya publicada.')}
+        </Text>
         {!user && (
           <Text style={styles.hint}>
             {t(
@@ -216,9 +186,17 @@ const makeStyles = () =>
   StyleSheet.create({
     form: { gap: 12 },
     hint: { color: theme.colors.textMuted, fontSize: 13, lineHeight: 18 },
+    // Rótulo del bloque de la Actividad: separa sus dos posiciones de las de
+    // visibilidad del perfil, que están justo encima.
+    sectionLabel: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '800',
+      textTransform: 'uppercase',
+      letterSpacing: 0.6,
+      marginTop: 4,
+    },
     error: { color: theme.colors.error, fontSize: 13, lineHeight: 18 },
-    avatarRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-    avatarButton: { flex: 1 },
     input: {
       backgroundColor: theme.colors.backgroundElevated,
       borderRadius: theme.borderRadius.md,

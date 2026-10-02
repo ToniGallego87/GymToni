@@ -9,13 +9,16 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   StretchScrollView,
 } from '@components';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { currentWeekDayState } from '@lib/weeks';
+import { isCardioOnlyLog } from '@lib/cardio';
+import { getToday, logDateKey } from '@lib/utils';
 import { exerciseCountText } from '@lib/routines';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText } from '@lib/textStyles';
@@ -24,15 +27,12 @@ import { t } from '@lib/i18n';
 interface DaySelectorScreenProps {
   routine?: WorkoutRoutine;
   onSelectDay: (day: WorkoutDay) => void;
-  // Registrar una sesión de solo cardio (sin ejercicios de fuerza).
-  onSelectCardioOnly?: () => void;
   onBack: () => void;
 }
 
 export function DaySelectorScreen({
   routine,
   onSelectDay,
-  onSelectCardioOnly,
   onBack,
 }: DaySelectorScreenProps) {
   const insets = useSafeAreaInsets();
@@ -42,7 +42,19 @@ export function DaySelectorScreen({
   // dice lo que la app ya sabe —cuáles llevas hechos y cuál toca ahora—, en vez
   // de que el usuario lo recuerde. Misma fuente que la hero de Inicio.
   const { trained, nextDay } = currentWeekDayState(routine, state.logs);
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  // Un entrenamiento por día: si hoy ya hay uno, el resto de días no se pueden
+  // arrancar (el Calendario pinta una celda por fecha y el segundo quedaría
+  // escondido; ver `takenStrengthDates`). El día ya entrenado sí se toca: abre
+  // su registro para seguir metiendo series.
+  const todayStrengthLog = state.logs.find(
+    (log) => !isCardioOnlyLog(log) && logDateKey(log) === getToday()
+  );
+  const todayDayName = todayStrengthLog
+    ? getDisplayDayName(
+        days.find((d) => d.id === todayStrengthLog.dayId)?.name || ''
+      )
+    : '';
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -59,7 +71,7 @@ export function DaySelectorScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -68,6 +80,25 @@ export function DaySelectorScreen({
         {/* Tocar el día arranca la sesión y continúa la semana en curso. Aquí
             solo se elige el día; mover un entreno a otra semana se hace desde
             su detalle ("Mover a la semana anterior/siguiente"). */}
+        {/* Hoy ya hay entreno: se dice arriba, antes de que el usuario toque
+            una tarjeta apagada y no entienda por qué no pasa nada. */}
+        {!!todayStrengthLog && (
+          <View style={styles.todayNotice}>
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={18}
+              color={theme.colors.textSecondary}
+            />
+            <Text style={styles.todayNoticeText}>
+              {todayDayName
+                ? t('Hoy ya entrenaste {day}. Un entreno por día', {
+                    day: todayDayName,
+                  })
+                : t('Hoy ya tienes un entreno. Un entreno por día')}
+            </Text>
+          </View>
+        )}
+
         {days.map((day) => {
           const isDone = trained.has(day.id);
           // El día que toca: aro dorado y su ceja lo dice. Es una sugerencia
@@ -75,14 +106,19 @@ export function DaySelectorScreen({
           // tocan igual, incluidos los ya hechos —repetir un día es legítimo y
           // abre semana nueva—.
           const isNext = !isDone && day.id === nextDay?.id;
+          // Bloqueado por el entreno de hoy (que es de otro día).
+          const blockedByToday =
+            !!todayStrengthLog && todayStrengthLog.dayId !== day.id;
 
           return (
             <Pressable
               key={day.id}
+              disabled={blockedByToday}
               style={({ pressed }) => [
                 styles.dayCard,
                 isNext && styles.dayCardNext,
                 isDone && styles.dayCardDone,
+                blockedByToday && styles.dayCardBlocked,
                 // La tarjeta ya hecha nace apagada, así que su feedback al
                 // pulsar tiene que apagarla MÁS: con el `dayCardPressed` normal
                 // se aclaraba al tocarla, justo al revés que las demás.
@@ -94,7 +130,9 @@ export function DaySelectorScreen({
               accessibilityLabel={`${t('Día')} ${
                 day.dayNumber
               }. ${getDisplayDayName(day.name)}. ${
-                isDone
+                blockedByToday
+                  ? t('Hoy ya tienes un entreno. Un entreno por día')
+                  : isDone
                   ? t('Ya entrenado esta semana')
                   : isNext
                   ? t('Te toca este')
@@ -143,31 +181,6 @@ export function DaySelectorScreen({
           );
         })}
 
-        {!!onSelectCardioOnly && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.dayCard,
-              styles.cardioOnlyCard,
-              pressed && styles.dayCardPressed,
-            ]}
-            onPress={onSelectCardioOnly}
-          >
-            <View style={styles.dayLeading}>
-              <View style={styles.cardioOnlyIcon}>
-                <MaterialCommunityIcons
-                  name="run-fast"
-                  size={26}
-                  color={theme.colors.emoji_blue}
-                />
-              </View>
-            </View>
-            <View style={styles.dayContent}>
-              <Text style={styles.dayName}>{t('Solo cardio')}</Text>
-              <Text style={styles.dayMeta}>{t('Registra solo tu cardio')}</Text>
-            </View>
-            <Text style={styles.cardioOnlyBadge}>{t('Cardio')}</Text>
-          </Pressable>
-        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -175,6 +188,7 @@ export function DaySelectorScreen({
         icon="calendar-month-outline"
         subtitle={t('Selecciona el día que vas a registrar')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         rightElement={
           !!routine ? (
             <View style={styles.badge}>
@@ -237,36 +251,35 @@ const makeStyles = () =>
     dayCardDone: {
       opacity: 0.62,
     },
+    // Día que hoy no se puede arrancar (ya hay entreno). Más apagado que el ya
+    // hecho: aquel se toca, este no.
+    dayCardBlocked: {
+      opacity: 0.35,
+    },
+    // Aviso de "hoy ya entrenaste", encima de la lista.
+    todayNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    todayNoticeText: {
+      flex: 1,
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      lineHeight: 18,
+    },
     dayCardDonePressed: {
       opacity: 0.45,
     },
     dayDoneCheck: {
       marginLeft: 10,
-    },
-    cardioOnlyCard: {
-      borderColor: theme.colors.emoji_blue,
-      borderStyle: 'dashed',
-    },
-    cardioOnlyIcon: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.emoji_blueMuted,
-    },
-    // La tarjeta de solo cardio conserva su píldora: es la única fila que no
-    // es un día de la rutina, y su azul no compite con ningún oro.
-    cardioOnlyBadge: {
-      color: theme.colors.emoji_blue,
-      backgroundColor: theme.colors.emoji_blueMuted,
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: theme.borderRadius.pill,
-      fontSize: 14,
-      fontWeight: '800',
-      overflow: 'hidden',
-      lineHeight: 18,
     },
     dayCardPressed: {
       opacity: 0.85,

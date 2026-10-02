@@ -143,6 +143,14 @@ Antes de finalizar, verificar:
 - Nada de acciones escondidas tras long-press: si algo se puede hacer, tiene que
   verse (botón propio con su icono)
 - Título de pantalla: prop `icon` de `GlassTopBar` (no recrear el row icono+texto a mano)
+- Separación con la barra superior: `useGlassTopBarHeight(insets.top)` +
+  `GLASS_TOP_BAR_CONTENT_GAP` (el hueco se decide solo ahí), y
+  su `onTopBarLayout` a la `GlassTopBar`. NO sumar sobre
+  `GLASS_TOP_BAR_BASE_HEIGHT`: la barra crece con el subtítulo y el hueco
+  desaparece
+- Ajustes de un solo valor (no navegan): `OptionToggle` si son opciones
+  excluyentes, `ValueStepper` (‹ valor ›) si es un número a saltos. Nunca una
+  fila-enlace con lápiz: esa piel es de lo que lleva a otra pantalla
 - Detalle completo del sistema en [.github/docs/frontend-design.md](.github/docs/frontend-design.md)
 
 ---

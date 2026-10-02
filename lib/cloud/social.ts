@@ -33,6 +33,13 @@ export interface Profile {
    */
   level?: number;
   xp?: number;
+  /**
+   * Compartir la Actividad (insignias, retos y días entrenados) en el perfil.
+   * Encendido por defecto; quien lo apaga deja de publicarla y lo ya subido se
+   * borra (lib/cloud/activity.ts). Quién la ve lo decide la RLS, con la misma
+   * regla que el perfil. Opcional porque las filas anteriores vienen sin él.
+   */
+  share_activity?: boolean;
 }
 
 // Versión ligera del perfil para listas (búsqueda, seguidos, autor del tablón).
@@ -115,7 +122,7 @@ export async function getProfilesByIds(
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, bio, is_public, level, xp')
+    .select('id, display_name, avatar_url, bio, is_public, level, xp, share_activity')
     .eq('id', userId)
     .maybeSingle();
   if (error) throw new Error(`profiles: ${error.message}`);
@@ -291,6 +298,13 @@ export interface PublicRoutineSummary {
   id: string;
   name: string;
   description: string | null;
+  // Los mismos metadatos que enseña el tablón, para que la rutina se vea igual
+  // por las dos puertas (components/PublicRoutineCard.tsx). Llegan en una
+  // segunda ronda de consultas, así que son opcionales.
+  total_sets?: number;
+  comments?: number;
+  likes?: number;
+  liked_by_me?: boolean;
 }
 
 // Rutinas públicas de un usuario (para su perfil). RLS deja leerlas a cualquiera.

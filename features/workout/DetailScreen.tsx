@@ -11,9 +11,11 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   StretchScrollView,
+  TopBarActionButton,
 } from '@components';
 import {
   assignmentDuplicatesDayInWeek,
@@ -21,6 +23,7 @@ import {
   isWeekCompleted,
   orderedBlockNumbers,
   planWeekMove,
+  takenStrengthDates,
   weekMoveNeedsConfirm,
   WeekMoveDirection,
   WeekMovePlan,
@@ -28,10 +31,10 @@ import {
 import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import {
   cardioSessionFromLog,
-  toCardioOnlyLog,
   disciplineIconName,
   estimateEntryKcal,
   hasIncline,
+  isCardioOnlyLog,
   weightForTimestamp,
   WeightSegment,
 } from '@lib/cardio';
@@ -43,12 +46,13 @@ import {
   combineDateWithTime,
   findDayInRoutines,
   formatDate,
+  formatDateFromKey,
   getLogTimestamp,
 } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
-import { t, dateLocale, fmtNum } from '@lib/i18n';
+import { t, fmtNum } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   buildWorkoutImprovement,
@@ -97,7 +101,6 @@ export function DetailScreen({
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteCardioToo, setDeleteCardioToo] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [pendingSplitDate, setPendingSplitDate] = useState<string | null>(null);
   const [pendingMove, setPendingMove] = useState<{
@@ -213,19 +216,15 @@ export function DetailScreen({
     applyMoveWeek(plan);
   };
 
-  // Acciones propias del detalle en el menú ⋯: corregir la sesión o borrarla.
+  // Acciones raras del detalle en el ⋮: ir a la rutina, mover de semana o borrar.
   // Eliminar pasa por un ConfirmModal (acción destructiva).
   type TopBarItem = NonNullable<
     React.ComponentProps<typeof GlassTopBar>['menuItems']
   >[number];
+  // "Editar" NO va aquí: es la acción principal de la pantalla (se entra casi
+  // siempre a corregir una serie) y va rotulada en la barra, como en la ficha
+  // de una rutina. El ⋮ se queda con lo raro.
   const menuItems: TopBarItem[] = [];
-  if (onEdit) {
-    menuItems.push({
-      icon: 'pencil-outline',
-      label: t('Editar'),
-      onPress: onEdit,
-    });
-  }
   if (onOpenRoutine) {
     menuItems.push({
       icon: 'file-document-edit-outline',
@@ -260,7 +259,7 @@ export function DetailScreen({
     });
   }
   const dayAccent = getTrainingAccent({ emoji: day.emoji, name: day.name });
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -276,20 +275,21 @@ export function DetailScreen({
   }, []);
   const weightKg = weightForTimestamp(weightHistory, log.createdAt);
 
-  // Sesión de cardio parseada del log (null si no hay cardio parseable).
-  const cardioSession = log.cardio
-    ? cardioSessionFromLog(log, weightHistory)
-    : null;
+  // Sesión de cardio parseada del log (null si no hay cardio parseable). Solo
+  // se enseña en una sesión DE cardio: consultar un entreno de fuerza ya no
+  // saca su cardio, porque cardio y fuerza son dos sesiones distintas del día
+  // y cada una se consulta por su lado (los logs antiguos pueden llevarlo
+  // dentro; su cardio sigue contando en la pestaña de Cardio).
+  const cardioSession =
+    log.cardio && isCardioOnlyLog(log)
+      ? cardioSessionFromLog(log, weightHistory)
+      : null;
 
+  // La fecha que manda es la elegida (`currentDate`, clave YYYY-MM-DD); si el
+  // log no la lleva, la de creación. Las dos ramas pintan el MISMO formato, así
+  // que las dos salen de `formatDate` (una por su puerta de clave de día).
   const displayedDate = currentDate
-    ? new Date(`${currentDate}T00:00:00`)
-        .toLocaleDateString(dateLocale, {
-          weekday: 'long',
-          year: 'numeric',
-          month: '2-digit',
-          day: '2-digit',
-        })
-        .replace(/^[a-z]/, (c) => c.toUpperCase())
+    ? formatDateFromKey(currentDate)
     : formatDate(log.createdAt);
 
   // La comparación con la sesión anterior salta las semanas de descarga (su marca
@@ -357,15 +357,6 @@ export function DetailScreen({
         label: 'min',
       });
     }
-    // Con fuerza, del cardio solo entran las kcal: los minutos ya los ocupa la
-    // duración del entreno y dos celdas "min" se leerían como un error.
-    if (cardioSession && cardioSession.totalKcal > 0) {
-      summaryItems.push({
-        key: 'kcal',
-        value: String(Math.round(cardioSession.totalKcal)),
-        label: 'kcal',
-      });
-    }
   } else if (cardioSession) {
     // Solo cardio: la tira ES el total del día.
     summaryItems.push({
@@ -414,9 +405,6 @@ export function DetailScreen({
     return null;
   };
 
-  // Solo tiene sentido "conservar el cardio" al borrar si hay fuerza que quitar
-  // y además cardio que salvar (si no, el borrado es un borrado normal).
-  const canKeepCardio = exerciseCount > 0 && !!log.cardio?.rawInput?.trim();
 
   return (
     <View style={styles.container}>
@@ -431,7 +419,7 @@ export function DetailScreen({
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -470,6 +458,20 @@ export function DetailScreen({
                 <Text style={styles.summaryLabel}>{item.label}</Text>
               </View>
             ))}
+          </View>
+        )}
+
+        {/* Nota de la sesión: el contexto del día, justo bajo el resumen. Va
+            ARRIBA porque es lo que explica los números que vienen debajo (por
+            qué ese día bajó el peso, por qué falta un ejercicio). */}
+        {!!log.notes?.trim() && (
+          <View style={styles.sessionNote}>
+            <MaterialCommunityIcons
+              name="note-text-outline"
+              size={16}
+              color={dayAccent}
+            />
+            <Text style={styles.sessionNoteText}>{log.notes.trim()}</Text>
           </View>
         )}
 
@@ -532,7 +534,7 @@ export function DetailScreen({
           );
         })}
 
-        {log.cardio && (
+        {!!cardioSession && !!log.cardio && (
           <>
             {/* En un día de solo cardio (sin ejercicios) el título "Cardio"
                 sobra: toda la vista es cardio. */}
@@ -672,7 +674,17 @@ export function DetailScreen({
         subtitle={displayedDate}
         onSubtitlePress={() => setShowDatePicker(true)}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         menuItems={menuItems.length ? menuItems : undefined}
+        rightElement={
+          onEdit ? (
+            <TopBarActionButton
+              label={t('Editar')}
+              icon="pencil"
+              onPress={onEdit}
+            />
+          ) : undefined
+        }
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -682,36 +694,26 @@ export function DetailScreen({
         title={t('¿Eliminar entrenamiento?')}
         message={t('Esta acción no se puede deshacer. ¿Estás seguro?')}
         confirmLabel={t('Eliminar')}
-        checkLabel={canKeepCardio ? t('Borrar también el cardio') : undefined}
-        checked={deleteCardioToo}
-        onToggleCheck={() => setDeleteCardioToo((prev) => !prev)}
+        // Borrar el entreno borra el entreno: su cardio es otra sesión.
         onConfirm={() => {
           setShowDeleteModal(false);
-          if (canKeepCardio && !deleteCardioToo) {
-            // Sin marcar el check, el cardio sobrevive: el log se queda sin la
-            // fuerza y pasa a ser una sesión de "Solo cardio" de ese mismo día.
-            dispatch({
-              type: 'UPDATE_WORKOUT_LOG',
-              payload: toCardioOnlyLog(log),
-            });
-            setDeleteCardioToo(false);
-            onBack();
-          } else {
-            setDeleteCardioToo(false);
-            onDelete?.();
-          }
+          onDelete?.();
         }}
-        onCancel={() => {
-          setShowDeleteModal(false);
-          setDeleteCardioToo(false);
-        }}
+        onCancel={() => setShowDeleteModal(false)}
       />
 
+      {/* Un entreno por día: los días ocupados por otro entreno no se eligen
+          (el cardio suelto no ocupa día). */}
       <DatePickerModal
         visible={showDatePicker}
         value={currentDate}
         onSelect={applyChosenDate}
         onRequestClose={() => setShowDatePicker(false)}
+        takenDates={
+          isCardioOnlyLog(log)
+            ? undefined
+            : takenStrengthDates(state.logs, log.id)
+        }
       />
 
       <ConfirmModal
@@ -798,6 +800,26 @@ const makeStyles = () =>
       letterSpacing: 0.3,
       color: theme.colors.emoji_blue,
       lineHeight: 16,
+    },
+    // Nota de la sesión: lo que el usuario apuntó del día entero. Tarjeta
+    // sobria (sin degradado) para que no compita con la tira de resumen.
+    sessionNote: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      marginTop: theme.spacing.sm,
+      padding: 12,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    sessionNoteText: {
+      flex: 1,
+      fontSize: 14,
+      lineHeight: 19,
+      color: theme.colors.textSecondary,
+      fontStyle: 'italic',
     },
     // Tira-resumen de la sesión: responde "¿cómo fue?" de un vistazo.
     summaryCard: {

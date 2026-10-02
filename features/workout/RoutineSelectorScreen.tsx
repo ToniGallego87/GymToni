@@ -23,7 +23,8 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientCtaButton,
   GradientFill,
   RoutineIntensityPill,
@@ -59,7 +60,7 @@ export function RoutineSelectorScreen({
     string | undefined
   >(undefined);
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   // Esta vista no es una pestaña de navegación: lleva botón Volver abajo en vez
   // de la barra flotante, así que su padding se calcula con la altura del botón.
   const { bottom: backBottom, scrollBottomPadding } =
@@ -105,7 +106,7 @@ export function RoutineSelectorScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -183,6 +184,7 @@ export function RoutineSelectorScreen({
         icon="book-open-variant"
         subtitle={t('Consulta la que desees o crea una nueva')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={backBottom} />

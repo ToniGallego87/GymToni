@@ -19,14 +19,11 @@ import {
   Button,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
-  LikeButton,
-  RoutineIntensityPill,
-  SaveRoutineButton,
   SegmentedFilter,
-  seriesExplanation,
-  StatBubble,
+  PublicRoutineCard,
   Toast,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
@@ -39,6 +36,7 @@ import {
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
+import { readSocialCache, writeSocialCache } from '@lib/socialCache';
 import {
   getPopularRoutines,
   getFollowingFeed,
@@ -100,11 +98,40 @@ interface RoutineItem {
 
 // Caché en memoria del último tablón/feed (por pestaña), para pintar al instante
 // al reabrir Comunidad y refrescar en segundo plano. Vive a nivel de módulo, así
-// que sobrevive a desmontar/montar la pantalla (es una pestaña de la barra).
+// que sobrevive a desmontar/montar la pantalla (es una pestaña de la barra), y se
+// guarda en disco (lib/socialCache.ts) porque esta copia muere con la app y cada
+// arranque volvía a esperar a la red para enseñar el mismo tablón.
 const boardCache: Record<
   Tab,
   { items: RoutineItem[]; avatars: Map<string, ProfileLite> } | undefined
 > = { popular: undefined, following: undefined };
+
+// El `Map` de avatares no sobrevive a JSON.stringify: se guarda como pares.
+interface StoredBoard {
+  items: RoutineItem[];
+  avatars: [string, ProfileLite][];
+}
+
+function storeBoard(tab: Tab, board: NonNullable<(typeof boardCache)[Tab]>) {
+  boardCache[tab] = board;
+  writeSocialCache<StoredBoard>(`board_${tab}`, {
+    items: board.items,
+    avatars: [...board.avatars.entries()],
+  });
+}
+
+/** Siembra `boardCache` desde el disco. Devuelve lo sembrado, o null. */
+async function hydrateBoard(tab: Tab) {
+  if (boardCache[tab]) return boardCache[tab];
+  const stored = await readSocialCache<StoredBoard>(`board_${tab}`);
+  if (!stored?.items?.length) return null;
+  const board = {
+    items: stored.items,
+    avatars: new Map(stored.avatars ?? []),
+  };
+  boardCache[tab] = board;
+  return board;
+}
 
 // Filtro de intensidad del tablón: 'all' = sin filtrar.
 type IntensityFilter = RoutineIntensity | 'all';
@@ -122,10 +149,13 @@ export function CommunityScreen({
   const { user } = useSession();
   const { profile: myProfile } = useMyProfile();
   // Tus contadores (para tu tarjeta) y lo que ha pasado desde la última visita.
-  const [socialCounts, setSocialCounts] = useState({
-    followers: 0,
-    following: 0,
-  });
+  // Se siembran con la copia del último arranque (lib/socialCache.ts): nacían en
+  // 0 y se leían como el dato, así que tu tarjeta decía "0 seguidores" y un
+  // segundo después saltaba a los de verdad.
+  const [socialCounts, setSocialCounts] = useState<{
+    followers: number;
+    following: number;
+  } | null>(null);
   const [news, setNews] = useState({ followers: 0, likes: 0, comments: 0 });
   // Rutinas y perfiles que TÚ has reportado: no vuelven a aparecerte aquí.
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
@@ -160,7 +190,7 @@ export function CommunityScreen({
     action?: 'sign-in';
   } | null>(null);
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
 
   const notify = (message: string, type: 'success' | 'error') =>
@@ -201,12 +231,34 @@ export function CommunityScreen({
         }
         // Pinta las rutinas ya (sin esperar a las fotos): el tablón aparece en
         // cuanto llega la lista y los avatares entran un instante después.
-        setItems(rows);
-        if (!background) setLoading(false);
-        if (rows.length) setLoadingMeta(true);
+        // En un refresco en segundo plano se conservan los metadatos que ya
+        // están pintados (intensidad, series, comentarios): la consulta de abajo
+        // los vuelve a traer, y mientras tanto quitarlos devolvía los esqueletos
+        // sobre datos buenos, que es lo que hacía parecer que todo recargaba.
+        if (background) {
+          const previous = new Map(
+            (boardCache[tab]?.items ?? []).map((r) => [r.id, r])
+          );
+          setItems(
+            rows.map((r) => {
+              const old = previous.get(r.id);
+              return old
+                ? {
+                    ...r,
+                    total_sets: r.total_sets ?? old.total_sets,
+                    comments: r.comments ?? old.comments,
+                  }
+                : r;
+            })
+          );
+        } else {
+          setItems(rows);
+          setLoading(false);
+        }
+        if (rows.length && !background) setLoadingMeta(true);
         const avs = await getProfilesByIds(rows.map((r) => r.owner_id));
         setAvatars(avs);
-        boardCache[tab] = { items: rows, avatars: avs };
+        storeBoard(tab, { items: rows, avatars: avs });
         // Series y comentarios de cada rutina (distintivo de intensidad y
         // recuento del hilo): van después de pintar, y si fallan el tablón se
         // queda sin esos dos datos pero entero.
@@ -222,7 +274,7 @@ export function CommunityScreen({
             comments: commentCounts.get(r.id),
           }));
           setItems(withMeta);
-          boardCache[tab] = { items: withMeta, avatars: avs };
+          storeBoard(tab, { items: withMeta, avatars: avs });
         } catch {
           // Sin totales: las tarjetas se quedan sin distintivo.
         }
@@ -244,7 +296,10 @@ export function CommunityScreen({
   // navegación (antes parecía "congelado" al pulsar la pestaña).
   useEffect(() => {
     if (!active) return;
-    const cached = boardCache[tab];
+    let alive = true;
+    // La copia de disco se lee en el acto si en memoria no hay nada: es lo que
+    // hace que tras cerrar la app el tablón no vuelva a empezar por la rueda.
+    let cached = boardCache[tab];
     if (cached) {
       setItems(cached.items);
       setAvatars(cached.avatars);
@@ -253,10 +308,24 @@ export function CommunityScreen({
     } else {
       setLoading(true);
     }
-    const task = InteractionManager.runAfterInteractions(() => {
+    const task = InteractionManager.runAfterInteractions(async () => {
+      if (!cached) {
+        const stored = await hydrateBoard(tab);
+        if (!alive) return;
+        if (stored) {
+          cached = stored;
+          setItems(stored.items);
+          setAvatars(stored.avatars);
+          setLoading(false);
+          setError(null);
+        }
+      }
       load(!!cached);
     });
-    return () => task.cancel();
+    return () => {
+      alive = false;
+      task.cancel();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, user?.id, active]);
 
@@ -308,6 +377,21 @@ export function CommunityScreen({
   //
   // De paso deja los contadores de seguidores/siguiendo para tu tarjeta de
   // arriba: es la misma consulta.
+  // Los contadores guardados, para pintar la tarjeta ya hecha mientras se
+  // confirman con la nube.
+  useEffect(() => {
+    if (!user) return;
+    let alive = true;
+    readSocialCache<{ followers: number; following: number }>(
+      `counts_${user.id}`
+    ).then((stored) => {
+      if (alive && stored) setSocialCounts((prev) => prev ?? stored);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [user?.id]);
+
   useEffect(() => {
     if (!user || !active) return;
     let alive = true;
@@ -321,6 +405,7 @@ export function CommunityScreen({
         ]);
         if (!alive) return;
         setSocialCounts({ followers, following });
+        writeSocialCache(`counts_${user.id}`, { followers, following });
 
         // Actividad de lo tuyo: me gusta y comentarios de tus rutinas públicas.
         let likes = 0;
@@ -450,7 +535,7 @@ export function CommunityScreen({
   // Singular con uno: "1 Seguidores" es lo primero que ve quien acaba de
   // estrenar el perfil. Mismo criterio que el perfil público ajeno.
   const followersLabel =
-    socialCounts.followers === 1 ? t('Seguidor') : t('Seguidores');
+    socialCounts?.followers === 1 ? t('Seguidor') : t('Seguidores');
 
   // Aviso de novedades: una sola frase con lo que haya (seguidores, me gusta y
   // comentarios). Si no hay nada nuevo, no hay aviso.
@@ -498,99 +583,32 @@ export function CommunityScreen({
     </Pressable>
   );
 
-  const renderRoutineCard = (item: RoutineItem) => {
-    const level =
-      item.total_sets != null ? routineIntensity(item.total_sets) : null;
-    const saved = !!findSavedRoutine(state.routines, item.id);
-    return (
-      <Pressable
-        style={({ pressed }) => [styles.card, pressed && styles.cardPressed]}
-        onPress={() =>
-          onOpenRoutine?.(item.id, item.name, authorName(item), item.owner_id)
-        }
-        disabled={!onOpenRoutine}
-        accessibilityRole="button"
-        accessibilityLabel={t('Ver rutina')}
-      >
-        <GradientFill accent={theme.colors.primaryLine} />
-        {/* Una sola fila de cabecera: la foto del autor (su firma, y la diana
-            que lleva a su perfil) delante del nombre, y la intensidad arriba a
-            la derecha. Antes "por {autor}" gastaba un renglón entero para decir
-            lo mismo que dice la foto. */}
-        <View style={styles.cardHead}>
-          <Pressable
-            style={({ pressed }) => [pressed && styles.pressed]}
-            onPress={() => onOpenProfile?.(item.owner_id, authorName(item))}
-            disabled={!onOpenProfile}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={t('Ver perfil de {name}', {
-              name: authorName(item),
-            })}
-          >
-            <Avatar
-              uri={avatars.get(item.owner_id)?.avatar_url ?? null}
-              size={28}
-            />
-          </Pressable>
-          <Text style={styles.routineName} numberOfLines={2}>
-            {item.name}
-          </Text>
-          {level && <RoutineIntensityPill level={level} />}
-        </View>
-
-        {!!item.description && (
-          <Text style={styles.description} numberOfLines={2}>
-            {item.description}
-          </Text>
-        )}
-
-        {/* Pie de la tarjeta: a la izquierda los datos (series y comentarios)
-            como burbujas, y a la derecha las dos acciones sociales, todas del
-            mismo tamaño. La de series se toca y explica qué mide; la de
-            comentarios se explica sola. El hilo se abre entrando en la rutina,
-            que es lo que hace la tarjeta entera. */}
-        <View style={styles.footerRow}>
-          {level && (
-            <StatBubble
-              icon="repeat"
-              value={item.total_sets ?? 0}
-              label={
-                item.total_sets === 1
-                  ? t('1 serie')
-                  : t('{n} series', { n: item.total_sets ?? 0 })
-              }
-              explanation={seriesExplanation()}
-            />
-          )}
-          {!!item.comments && (
-            <StatBubble
-              icon="comment-outline"
-              value={item.comments}
-              label={
-                item.comments === 1
-                  ? t('1 comentario')
-                  : t('{n} comentarios', { n: item.comments })
-              }
-            />
-          )}
-          <View style={styles.footerSpacer} />
-          <SaveRoutineButton
-            saved={saved}
-            busy={savingId === item.id}
-            onPress={() => handleSave(item)}
-          />
-          {item.likes !== undefined && (
-            <LikeButton
-              likes={item.likes}
-              liked={!!item.liked_by_me}
-              onPress={() => handleToggleLike(item)}
-            />
-          )}
-        </View>
-      </Pressable>
-    );
-  };
+  const renderRoutineCard = (item: RoutineItem) => (
+    // La tarjeta es compartida con el perfil de su autor
+    // (components/PublicRoutineCard.tsx): la misma rutina se ve igual por las
+    // dos puertas. Aquí lleva la firma del autor, que allí sobra.
+    <PublicRoutineCard
+      item={item}
+      saved={!!findSavedRoutine(state.routines, item.id)}
+      savingBusy={savingId === item.id}
+      loadingMeta={loadingMeta}
+      author={{
+        name: authorName(item),
+        avatarUrl: avatars.get(item.owner_id)?.avatar_url ?? null,
+        onPress: onOpenProfile
+          ? () => onOpenProfile(item.owner_id, authorName(item))
+          : undefined,
+      }}
+      onPress={
+        onOpenRoutine
+          ? () =>
+              onOpenRoutine(item.id, item.name, authorName(item), item.owner_id)
+          : undefined
+      }
+      onSave={() => handleSave(item)}
+      onToggleLike={() => handleToggleLike(item)}
+    />
+  );
 
   // Las cuatro intensidades. Ya no son un SegmentedFilter: ver `filterChip`.
   const intensityOptions: {
@@ -641,7 +659,9 @@ export function CommunityScreen({
             accessibilityRole="button"
             accessibilityLabel={followersLabel}
           >
-            <Text style={styles.meCountValue}>{socialCounts.followers}</Text>
+            <Text style={styles.meCountValue}>
+              {socialCounts?.followers ?? '—'}
+            </Text>
             <Text style={styles.meCountLabel}>{followersLabel}</Text>
           </Pressable>
           <Pressable
@@ -652,7 +672,9 @@ export function CommunityScreen({
             accessibilityRole="button"
             accessibilityLabel={t('Siguiendo')}
           >
-            <Text style={styles.meCountValue}>{socialCounts.following}</Text>
+            <Text style={styles.meCountValue}>
+              {socialCounts?.following ?? '—'}
+            </Text>
             <Text style={styles.meCountLabel}>{t('Siguiendo')}</Text>
           </Pressable>
         </Pressable>
@@ -955,6 +977,9 @@ export function CommunityScreen({
         backgroundColor="transparent"
       />
 
+      {/* Los datos que llegan tarde (intensidad, series) se avisan EN la
+          tarjeta con sus huecos reservados, no con una rueda al pie de la
+          lista, lejos de lo que está cambiando. */}
       <FlatList
         style={styles.scroll}
         data={visibleItems}
@@ -962,20 +987,11 @@ export function CommunityScreen({
         renderItem={({ item }) => renderRoutineCard(item)}
         ListHeaderComponent={header}
         ListEmptyComponent={listEmpty}
-        ListFooterComponent={
-          loadingMeta && items.length > 0 ? (
-            <ActivityIndicator
-              style={styles.footerSpinner}
-              size="large"
-              color={theme.colors.primary}
-            />
-          ) : null
-        }
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -1009,6 +1025,7 @@ export function CommunityScreen({
         icon="account-group-outline"
         subtitle={t('Descubre y comparte rutinas')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
@@ -1239,7 +1256,6 @@ const makeStyles = () =>
     hint: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
     muted: { color: theme.colors.textMuted, fontSize: 14 },
     loadingBox: { alignItems: 'center', gap: 10, paddingVertical: 28 },
-    footerSpinner: { paddingVertical: 18 },
   });
 
 let styles = makeStyles();

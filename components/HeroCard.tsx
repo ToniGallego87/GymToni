@@ -2,7 +2,6 @@ import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
-  SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -11,6 +10,7 @@ import Animated, {
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
+import { t } from '@lib/i18n';
 
 export type HeroVariant =
   | 'start'
@@ -19,6 +19,13 @@ export type HeroVariant =
   | 'closed'
   | 'add';
 
+/** Una referencia de la fila bajo el título (valor + unidad + rótulo). */
+export interface HeroCardStat {
+  value: string;
+  unit?: string;
+  label: string;
+}
+
 interface HeroCardProps {
   variant: HeroVariant;
   icon: string;
@@ -26,29 +33,28 @@ interface HeroCardProps {
   titleIcon?: string;
   subtitle?: string;
   /**
-   * Convierte el subtítulo en un botón propio (con su chevron), independiente
-   * del toque de la tarjeta. Lo usa Inicio: la hero entra al día que toca y el
-   * subtítulo —que es quien lo nombra— abre "Elige la sesión" para coger otro.
-   * Sin esto el subtítulo es texto y solo manda el `onPress` de la tarjeta.
+   * Pone junto al subtítulo un botón "Cambiar" (icono de intercambiar),
+   * independiente del toque de la tarjeta. Lo usa Inicio: el subtítulo NOMBRA
+   * el día que toca, tocar la tarjeta entra en él y "Cambiar" abre "Elige la
+   * sesión" para coger otro. Antes el propio subtítulo era el botón, con un
+   * chevron que se leía como "ir a este día" y llevaba a otro sitio.
    */
   onSubtitlePress?: () => void;
-  /** Rótulo accesible del subtítulo pulsable (por defecto, su propio texto). */
+  /** Rótulo accesible del botón "Cambiar" (por defecto, "Cambiar"). */
   subtitleAccessibilityLabel?: string;
+  /**
+   * Fila de hasta tres referencias bajo el título (Cardio: kcal de hace 7
+   * días, media diaria y mejor día). Compacta la tarjeta como el subtítulo.
+   */
+  stats?: HeroCardStat[];
   onPress: () => void;
-  // Dirección de entrada del contenido cuando la tarjeta forma parte de un
-  // carrusel: el frame no se mueve, solo el contenido entra desde este lado.
-  enterFrom?: 'left' | 'right';
-  // Escala de pulsación del carrusel: si viene, la tarjeta la anima y es el
-  // carrusel quien escala el conjunto (tarjeta + flechas + puntos).
-  pressScale?: SharedValue<number>;
 }
 
 /**
- * Altura EXACTA del marco de una hero card. Es fija (no un mínimo) y la
- * comparten las tres tarjetas del carrusel: si una crece con su contenido, el
- * carrusel entero pega un salto al cambiar de página. El contenido va centrado,
- * así que los paddings solo acotan cuánto cabe; la variante con subtítulo se
- * compacta para caber en la misma caja en vez de estirarla.
+ * Altura EXACTA del marco de una hero card: fija (no un mínimo) para que la
+ * hero no cambie de alto al pasar de un estado a otro. El contenido va
+ * centrado, así que los paddings solo acotan cuánto cabe; la variante con
+ * subtítulo se compacta para caber en la misma caja en vez de estirarla.
  */
 export const HERO_CARD_HEIGHT = 172;
 
@@ -62,9 +68,8 @@ export function HeroCard({
   subtitle,
   onSubtitlePress,
   subtitleAccessibilityLabel,
+  stats,
   onPress,
-  enterFrom,
-  pressScale,
 }: HeroCardProps) {
   // Paletas de gradiente por estado (orden claro→base→oscuro, diagonal). Se
   // definen en render para leer los gradientes del tema VIVO (cambio en
@@ -80,27 +85,19 @@ export function HeroCard({
   };
   const colors = GRADIENTS[variant];
   // Con subtítulo cabe menos: el bloque se compacta para no estirar el marco.
-  const hasSubtitle = !!subtitle;
-  const localScale = useSharedValue(1);
-  const scale = pressScale ?? localScale;
-
-  // Suelta, la tarjeta se escala a sí misma; en un carrusel escala el conjunto.
+  const hasStats = !!stats && stats.length > 0;
+  const hasSubtitle = !!subtitle || hasStats;
+  const scale = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: pressScale ? 1 : localScale.value }],
+    transform: [{ scale: scale.value }],
   }));
 
-  // Animación de solo el CONTENIDO (icono + textos): el frame (gradiente) queda
-  // fijo. En un carrusel el contenido entra deslizándose desde `enterFrom` con
-  // un fundido; suelta (sin enterFrom) hace un fundido sutil de entrada.
-  const enterDir = enterFrom === 'left' ? -1 : enterFrom === 'right' ? 1 : 0;
-  const contentTx = useSharedValue(22 * enterDir);
+  // Fundido sutil de entrada del CONTENIDO (icono + textos); el marco queda fijo.
   const contentOpacity = useSharedValue(0);
   useEffect(() => {
-    contentTx.value = withTiming(0, { duration: 260 });
     contentOpacity.value = withTiming(1, { duration: 260 });
   }, []);
   const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: contentTx.value }],
     opacity: contentOpacity.value,
   }));
 
@@ -114,18 +111,22 @@ export function HeroCard({
       onPressOut={() => {
         scale.value = withSpring(1, { damping: 14, stiffness: 260 });
       }}
+      accessibilityRole="button"
+      accessibilityLabel={[
+        title,
+        subtitle,
+        ...(stats ?? []).map((s) =>
+          [s.value, s.unit, s.label].filter(Boolean).join(' ')
+        ),
+      ]
+        .filter(Boolean)
+        .join('. ')}
     >
       <LinearGradient
         colors={colors}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={[
-          styles.gradient,
-          // "Semana completada" lleva subtítulo; los puntos del carrusel se
-          // superponen abajo, así que se sube el contenido para que la frase no
-          // quede pegada a ellos.
-          hasSubtitle && styles.gradientWithSubtitle,
-        ]}
+        style={styles.gradient}
       >
         {/* Brillo superior (sheen) para dar volumen */}
         <LinearGradient
@@ -136,7 +137,9 @@ export function HeroCard({
           pointerEvents="none"
         />
 
-        <Animated.View style={[styles.content, contentStyle]}>
+        <Animated.View
+          style={[styles.content, hasStats && styles.contentWide, contentStyle]}
+        >
           <View
             style={[styles.iconWrap, hasSubtitle && styles.iconWrapCompact]}
           >
@@ -158,39 +161,57 @@ export function HeroCard({
               />
             )}
           </View>
-          {!!subtitle &&
-            (onSubtitlePress ? (
-              // El subtítulo como CONTROL: se usa en Inicio, donde nombra el día
-              // que toca y lleva a "Elige la sesión" para coger otro. Va dentro
-              // de la tarjeta a propósito —la alternativa vivía en una pastilla
-              // debajo que empujaba media pantalla por algo que casi no se usa—,
-              // y el chevron es lo que lo delata como pulsable. Mismo patrón que
-              // el subtítulo de `GlassTopBar` (onSubtitlePress).
-              <Pressable
-                style={({ pressed }) => [
-                  styles.subtitleButton,
-                  pressed && styles.subtitlePressed,
-                ]}
-                onPress={onSubtitlePress}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={subtitleAccessibilityLabel ?? subtitle}
-              >
-                <Text style={styles.subtitle} numberOfLines={1}>
-                  {subtitle}
-                </Text>
-                <MaterialCommunityIcons
-                  name="chevron-right"
-                  size={20}
-                  color={theme.colors.onGold}
-                  style={styles.subtitleChevron}
-                />
-              </Pressable>
-            ) : (
+          {!!subtitle && (
+            <View style={styles.subtitleRow}>
               <Text style={styles.subtitle} numberOfLines={1}>
                 {subtitle}
               </Text>
-            ))}
+              {/* La alternativa, con forma de botón propio y diciendo lo que
+                  hace: el texto de al lado es parte de la tarjeta (entra en
+                  ese día), esto es lo que cambia de día. */}
+              {!!onSubtitlePress && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.changeChip,
+                    pressed && styles.changeChipPressed,
+                  ]}
+                  onPress={onSubtitlePress}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    subtitleAccessibilityLabel ?? t('Cambiar')
+                  }
+                >
+                  <MaterialCommunityIcons
+                    name="swap-horizontal"
+                    size={16}
+                    color={theme.colors.onGold}
+                  />
+                  <Text style={styles.changeChipText}>{t('Cambiar')}</Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+          {hasStats && (
+            <View style={styles.statsRow}>
+              {stats!.map((stat, index) => (
+                <React.Fragment key={stat.label}>
+                  {index > 0 && <View style={styles.statDivider} />}
+                  <View style={styles.stat}>
+                    <Text style={styles.statValue} numberOfLines={1}>
+                      {stat.value}
+                      {!!stat.unit && (
+                        <Text style={styles.statUnit}> {stat.unit}</Text>
+                      )}
+                    </Text>
+                    <Text style={styles.statLabel} numberOfLines={1}>
+                      {stat.label}
+                    </Text>
+                  </View>
+                </React.Fragment>
+              ))}
+            </View>
+          )}
         </Animated.View>
       </LinearGradient>
     </AnimatedPressable>
@@ -216,13 +237,6 @@ const makeStyles = () =>
       justifyContent: 'center',
       overflow: 'hidden',
     },
-    gradientWithSubtitle: {
-      // El hueco de abajo aparta el subtítulo de los puntitos del carrusel (van
-      // a 10px del borde inferior de la tarjeta); el de arriba lo compensa para
-      // que el bloque siga centrado dentro de la MISMA altura.
-      paddingTop: 6,
-      paddingBottom: 24,
-    },
     sheen: {
       position: 'absolute',
       top: 0,
@@ -233,6 +247,11 @@ const makeStyles = () =>
     content: {
       alignItems: 'center',
       justifyContent: 'center',
+    },
+    // Con cifras debajo, el bloque ocupa el ancho de la tarjeta: si no, la
+    // fila solo medía lo que el título y los rótulos salían cortados.
+    contentWide: {
+      alignSelf: 'stretch',
     },
     iconWrap: {
       width: 68,
@@ -278,7 +297,7 @@ const makeStyles = () =>
       fontSize: 38,
     },
     subtitle: {
-      marginTop: 4,
+      flexShrink: 1,
       color: theme.colors.onGold,
       fontFamily: theme.fonts.display,
       fontSize: 17,
@@ -288,22 +307,68 @@ const makeStyles = () =>
       textAlign: 'center',
       opacity: 0.85,
     },
-    // Subtítulo pulsable: fila con su chevron, centrada bajo el título. Sin
-    // fondo ni borde propios —sobre el oro de la hero cualquier relleno sería
-    // otro bloque de color—: lo que dice que se puede pulsar es el chevron.
-    subtitleButton: {
+    // Subtítulo y, si lo hay, su botón "Cambiar" en la misma fila.
+    subtitleRow: {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
+      gap: 10,
+      marginTop: 4,
+      maxWidth: '100%',
     },
-    subtitlePressed: {
+    // "Cambiar": cápsula sobre el oro con el velo de la propia hero (el mismo
+    // que el círculo del icono), tinta `onGold`. Tiene forma de botón a
+    // propósito: es una acción distinta de la tarjeta.
+    changeChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.onGoldVeil,
+    },
+    changeChipPressed: {
       opacity: 0.7,
     },
-    // Compensa el `marginTop` del texto para que el chevron quede centrado con
-    // el glifo de Anton y no con la caja de línea.
-    subtitleChevron: {
-      marginTop: 4,
-      marginLeft: 2,
+    changeChipText: {
+      color: theme.colors.onGold,
+      fontSize: 13,
+      fontWeight: '800',
+    },
+    // Referencias bajo el título, separadas con el velo de la propia hero. El
+    // margen negativo les devuelve parte del padding lateral de la tarjeta:
+    // son tres columnas con rótulo ("media diaria"), y con los 24 de padding
+    // no les cabía el texto.
+    statsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      alignSelf: 'stretch',
+      marginTop: 8,
+      marginHorizontal: -16,
+    },
+    stat: { flex: 1, alignItems: 'center' },
+    statDivider: {
+      width: 1,
+      height: 26,
+      backgroundColor: theme.colors.onGoldVeil,
+    },
+    statValue: {
+      color: theme.colors.onGold,
+      fontSize: 15,
+      fontWeight: '800',
+      fontVariant: ['tabular-nums'],
+    },
+    statUnit: {
+      fontSize: 11,
+      fontWeight: '700',
+    },
+    statLabel: {
+      color: theme.colors.onGold,
+      fontSize: 11,
+      fontWeight: '600',
+      opacity: 0.8,
+      marginTop: 1,
     },
   });
 

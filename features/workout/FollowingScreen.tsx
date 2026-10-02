@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ActivityIndicator,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,13 +17,15 @@ import {
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   StretchScrollView,
 } from '@components';
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
+import { readSocialCache, writeSocialCache } from '@lib/socialCache';
 import {
   getFollowingProfiles,
   getFollowerProfiles,
@@ -31,6 +39,19 @@ interface FollowingScreenProps {
   onOpenProfile?: (userId: string, name: string) => void;
 }
 
+/**
+ * Lo último que se trajo de cada lista, por modo y usuario. La navegación
+ * desmonta la pantalla, así que sin esto entrar y salir de un perfil ponía la
+ * lista a "Cargando…" otra vez para traer lo mismo. Con la copia se pinta al
+ * instante y se refresca por detrás (mismo patrón que el `boardCache` del
+ * tablón y el `profileCache` del perfil). Además se guarda en disco
+ * (lib/socialCache.ts), porque esta copia en memoria muere al cerrar la app y
+ * cada arranque volvía a esperar a la red para enseñar lo mismo.
+ */
+const listCache = new Map<string, ProfileLite[]>();
+
+const cacheKey = (mode: string, userId: string) => `${mode}:${userId}`;
+
 // Lista de personas (seguidos o seguidores). Cada una abre su perfil.
 export function FollowingScreen({
   mode,
@@ -38,13 +59,31 @@ export function FollowingScreen({
   onOpenProfile,
 }: FollowingScreenProps) {
   const insets = useSafeAreaInsets();
-  const { user } = useSession();
+  const { user, loading: sessionLoading } = useSession();
 
   const [profiles, setProfiles] = useState<ProfileLite[]>([]);
+  // Arranca cargando: hasta que la sesión se resuelve no se sabe si hay lista,
+  // y dar por hecho que está vacía era lo que colaba un "no te sigue nadie"
+  // entre la rueda y los datos.
   const [loading, setLoading] = useState(true);
   const [privateNotice, setPrivateNotice] = useState(false);
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  // Subtítulo de la barra: el recuento en cuanto hay lista, y qué es la lista
+  // mientras carga o si está vacía (el cuerpo ya se encarga de ese caso).
+  const listSubtitle =
+    profiles.length === 0 || sessionLoading || loading
+      ? mode === 'followers'
+        ? t('Quién sigue tus entrenos')
+        : t('Perfiles que sigues')
+      : mode === 'followers'
+      ? profiles.length === 1
+        ? t('1 persona te sigue')
+        : t('{n} personas te siguen', { n: profiles.length })
+      : profiles.length === 1
+      ? t('Sigues a 1 persona')
+      : t('Sigues a {n} personas', { n: profiles.length });
+
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   // Misma altura del "Volver" que el resto de pantallas.
   const { bottom: floatingBackBottom } = getFloatingBackButtonMetrics(
     insets.bottom
@@ -52,24 +91,41 @@ export function FollowingScreen({
   const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
 
   const load = useCallback(async () => {
+    // Sesión sin resolver todavía: no se sabe de quién es la lista, así que no
+    // hay nada que cargar NI que vaciar. Al llegar, este efecto se repite.
+    if (sessionLoading) return;
     if (!user) {
       setProfiles([]);
       setLoading(false);
       return;
     }
-    setLoading(true);
+    const key = cacheKey(mode, user.id);
+    // Lo de la última visita, ya: se pinta al instante y el refresco de abajo
+    // ocurre por detrás, sin devolver la rueda sobre datos buenos. En memoria si
+    // la app sigue abierta desde entonces; si no, la copia de disco.
+    const hit = listCache.get(key) ?? (await readSocialCache<ProfileLite[]>(key));
+    if (hit?.length) {
+      listCache.set(key, hit);
+      setProfiles(hit);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      setProfiles(
+      const rows =
         mode === 'followers'
           ? await getFollowerProfiles(user.id)
-          : await getFollowingProfiles(user.id)
-      );
+          : await getFollowingProfiles(user.id);
+      setProfiles(rows);
+      listCache.set(key, rows);
+      writeSocialCache(key, rows);
     } catch {
-      // Silencioso: la lista queda vacía si falla.
+      // Silencioso: si falla se queda lo que hubiera (la copia de la última
+      // visita, o la lista vacía en la primera).
     } finally {
       setLoading(false);
     }
-  }, [user?.id, mode]);
+  }, [user?.id, mode, sessionLoading]);
 
   useEffect(() => {
     load();
@@ -88,14 +144,17 @@ export function FollowingScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: backButtonSpace + 24,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {loading ? (
-          <Text style={styles.muted}>{t('Cargando…')}</Text>
+        {profiles.length === 0 && (sessionLoading || loading) ? (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator color={theme.colors.primary} />
+            <Text style={styles.muted}>{t('Cargando…')}</Text>
+          </View>
         ) : profiles.length === 0 ? (
           <Text style={styles.muted}>
             {mode === 'followers'
@@ -179,8 +238,13 @@ export function FollowingScreen({
 
       <GlassTopBar
         title={mode === 'followers' ? t('Seguidores') : t('A quién sigo')}
+        // Cuántos son: la lista no lo dice en ninguna parte y es el dato que se
+        // viene a ver. Mientras carga (o si está vacía, que ya lo explica el
+        // cuerpo) el subtítulo se queda en lo que ES la lista.
+        subtitle={listSubtitle}
         icon="account-multiple-outline"
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -212,6 +276,8 @@ const makeStyles = () =>
     namePrivate: { color: theme.colors.textSecondary, fontStyle: 'italic' },
     pressed: { opacity: 0.6 },
     muted: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
+    // Mismo bloque de carga que el tablón: la rueda y su rótulo, centrados.
+    loadingBox: { alignItems: 'center', gap: 10, paddingVertical: 28 },
   });
 
 let styles = makeStyles();

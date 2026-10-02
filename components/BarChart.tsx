@@ -32,6 +32,15 @@ interface BarChartProps {
   signed?: boolean;
 }
 
+// Ancho de la gráfica en las tres pantallas que la usan (Inicio, Cardio y
+// Progreso por ejercicio): el ancho de la ventana menos el margen lateral de
+// las tarjetas, acotado para que no se estire en pantallas grandes ni se
+// estruje en las estrechas. Vive aquí y no repetido en cada pantalla porque el
+// `SegmentedFilter` que va debajo se alinea con la gráfica: las dos tienen que
+// medir exactamente lo mismo.
+export const getChartWidth = (windowWidth: number): number =>
+  Math.max(250, Math.min(windowWidth - theme.spacing.md * 2 - 20, 420));
+
 const HEIGHT = 170;
 const PADDING = { top: 18, right: 12, bottom: 28, left: 42 };
 

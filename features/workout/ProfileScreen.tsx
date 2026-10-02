@@ -15,22 +15,23 @@ import {
   Button,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   LevelPill,
+  getMenuTileWidth,
   MENU_TILE_GAP,
   MENU_TILE_INSET,
   MENU_TILE_PADDING,
-  RestTimerModal,
   StretchScrollView,
 } from '@components';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useWorkout } from '@hooks/useWorkout';
 import { ProfileEditModal } from './ProfileEditModal';
 import { hasProfileFilled, useMyProfile } from '@hooks/useMyProfile';
+import { useAvatarPicker } from '@hooks/useAvatarPicker';
 import { useSession } from '@lib/cloud/auth';
 import { cardioSessionFromLog } from '@lib/cardio';
-import { setRestDuration, useRestDuration } from '@lib/restTimerStore';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 
@@ -90,6 +91,8 @@ export function ProfileScreen({
   const { level } = useAccountLevel();
   const { user, loading: sessionLoading } = useSession();
   const { profile, loading: profileLoading } = useMyProfile();
+  // Cambiar la foto desde el lápiz de su esquina, sin abrir el editor.
+  const { pickAvatar, picking: pickingAvatar } = useAvatarPicker();
   const isProfileFilled = hasProfileFilled(profile);
   // Primera carga sin nada que enseñar (ni copia local ni respuesta todavía):
   // no se puede decir "Sin perfil" porque aún no se sabe. Con copia local esto
@@ -100,36 +103,24 @@ export function ProfileScreen({
   // "Guardar" sale desactivado). La tarjeta lo dice aquí y lleva a la cuenta.
   const hasAccount = !!user;
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
 
   const cardioSessionsCount = state.logs.filter(
     (l) => cardioSessionFromLog(l) != null
   ).length;
 
-  // Descanso entre series: ajuste de la PERSONA, así que se edita aquí (antes
-  // vivía en cada rutina y había que repetirlo al crear o copiar una). Mismo
-  // diálogo que abre el ⋯ del registro; los dos escriben en el mismo sitio.
-  const restDuration = useRestDuration();
-  const [showTimerModal, setShowTimerModal] = useState(false);
-  const [timerInput, setTimerInput] = useState('');
   // El perfil público se edita en un popup sobre esta pantalla.
   const [showProfileEdit, setShowProfileEdit] = useState(false);
 
-  const handleOpenTimerModal = () => {
-    setTimerInput(String(restDuration));
-    setShowTimerModal(true);
-  };
-
-  const handleSaveTimer = () => {
-    const seconds = parseInt(timerInput, 10);
-    if (!isNaN(seconds) && seconds > 0) setRestDuration(seconds);
-    setShowTimerModal(false);
-    setTimerInput('');
-  };
-
-  // Seis casillas, tres por fila: icono + nombre corto. Sin subtítulos: una
+  // Cinco casillas, tres por fila: icono + nombre corto. Sin subtítulos: una
   // cuadrícula se lee de un vistazo y cabe sin scroll junto a la identidad.
+  //
+  // Todas NAVEGAN a una pantalla, que es la promesa del dibujo. La sexta era
+  // "Temporizador" y rompía esa promesa: mismo tamaño y mismo peso para abrir
+  // un modal con un número. Ese ajuste vive ahora en Configuración, con el tema
+  // y el idioma (y se sigue tocando desde el ⋯ del registro, que es donde se
+  // nota que el descanso se queda corto).
   const menu: MenuEntry[] = [
     { icon: 'book-open-variant', label: t('Rutinas'), onPress: onOpenRoutines },
     {
@@ -138,23 +129,18 @@ export function ProfileScreen({
       onPress: onOpenExerciseProgress,
     },
     { icon: 'scale-bathroom', label: t('Peso'), onPress: onOpenBodyWeight },
-    {
-      icon: 'timer-sand',
-      label: t('Temporizador'),
-      onPress: handleOpenTimerModal,
-    },
     { icon: 'cog-outline', label: t('Configuración'), onPress: onOpenSettings },
     { icon: 'trophy-outline', label: t('Logros'), onPress: onOpenAchievements },
   ];
   const menuRows: MenuEntry[][] = [];
   for (let i = 0; i < menu.length; i += 3) menuRows.push(menu.slice(i, i + 3));
 
-  // Un solo tamaño de letra para las seis casillas: el mayor con el que cabe
-  // la etiqueta más larga en una línea. Con `adjustsFontSizeToFit` cada casilla
+  // Medida de la casilla (`menuTileTokens`, compartida con Logros) y, con
+  // ella, un solo tamaño de letra para todas: el mayor con el que cabe la
+  // etiqueta más larga en una línea. Con `adjustsFontSizeToFit` cada casilla
   // encogía la suya y "Configuración" salía más pequeño que "Peso".
   const { width: windowWidth } = useWindowDimensions();
-  const tileWidth =
-    (windowWidth - theme.spacing.md * 2 - MENU_INSET * 2 - MENU_GAP * 2) / 3;
+  const tileWidth = getMenuTileWidth(windowWidth);
   const longestLabel = Math.max(...menu.map((entry) => entry.label.length));
   const menuFontSize = Math.max(
     MENU_FONT_MIN,
@@ -177,7 +163,7 @@ export function ProfileScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -211,7 +197,31 @@ export function ProfileScreen({
             </Pressable>
           )}
           <View style={styles.identityRow}>
-            <Avatar uri={profile?.avatar_url} size={72} />
+            {/* La foto se cambia desde la foto: un lápiz en su esquina, sin
+                pasar por "Editar perfil". Era el único dato del perfil que se
+                toca a menudo y costaba abrir un popup y buscar su botón. */}
+            <View>
+              <Avatar uri={profile?.avatar_url} size={72} />
+              {hasAccount && (
+                <Pressable
+                  style={({ pressed }: { pressed: boolean }) => [
+                    styles.avatarEditBadge,
+                    pressed && styles.menuTilePressed,
+                  ]}
+                  onPress={pickAvatar}
+                  disabled={pickingAvatar}
+                  hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Cambiar foto')}
+                >
+                  <MaterialCommunityIcons
+                    name={pickingAvatar ? 'progress-upload' : 'camera'}
+                    size={14}
+                    color={theme.colors.onGold}
+                  />
+                </Pressable>
+              )}
+            </View>
             <View style={styles.identityTextWrap}>
               <Text style={styles.identityName} numberOfLines={2}>
                 {profileUnknown
@@ -241,7 +251,7 @@ export function ProfileScreen({
           </View>
           {/* Sin cuenta el perfil público no se puede completar: el único
               botón del cuerpo es el que lleva a crearla. Con cuenta, editar
-              vive en el lápiz de la barra superior. */}
+              vive en el lápiz de la esquina de esta tarjeta. */}
           {!profileUnknown && !hasAccount && (
             <Button
               title={t('Crear cuenta')}
@@ -281,6 +291,7 @@ export function ProfileScreen({
                 key={entry.label}
                 style={({ pressed }) => [
                   styles.menuTile,
+                  { width: tileWidth },
                   pressed && styles.menuTilePressed,
                 ]}
                 onPress={entry.onPress}
@@ -310,19 +321,12 @@ export function ProfileScreen({
         icon="account-circle-outline"
         subtitle={t('Tu rutina, tus datos y la configuración')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <ProfileEditModal
         visible={showProfileEdit}
         onClose={() => setShowProfileEdit(false)}
-      />
-
-      <RestTimerModal
-        visible={showTimerModal}
-        value={timerInput}
-        onChangeValue={setTimerInput}
-        onSave={handleSaveTimer}
-        onCancel={() => setShowTimerModal(false)}
       />
 
       {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
@@ -359,6 +363,22 @@ const makeStyles = () =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 14,
+    },
+    // Lápiz de la foto: disco dorado pegado a su esquina inferior derecha, con
+    // un borde del color del fondo para que se lea como encima de la foto y no
+    // como parte de ella.
+    avatarEditBadge: {
+      position: 'absolute',
+      right: -2,
+      bottom: -2,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primary,
+      borderWidth: 2,
+      borderColor: theme.colors.surface,
     },
     identityTextWrap: {
       flex: 1,
@@ -433,11 +453,16 @@ const makeStyles = () =>
     // radio, borde y sombra que las tarjetas de arriba.
     menuGridRow: {
       flexDirection: 'row',
+      // Centrada: la última fila incompleta queda en el medio, no pegada a la
+      // izquierda. Las casillas llevan ANCHO FIJO (`tileWidth`) y no `flex: 1`:
+      // con flex, el hueco sobrante se repartía SOBRE la base medida de cada
+      // casilla, así que las de etiqueta larga ("Configuración", "Logros")
+      // salían más anchas —y por aspectRatio, más altas— que las de arriba.
+      justifyContent: 'center',
       gap: MENU_GAP,
       marginHorizontal: MENU_INSET,
     },
     menuTile: {
-      flex: 1,
       aspectRatio: 1,
       alignItems: 'center',
       justifyContent: 'center',

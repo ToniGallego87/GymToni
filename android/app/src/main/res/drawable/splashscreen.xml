@@ -1,4 +1,14 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Splash nativo: el que se ve entre el toque en el icono y el primer frame de
+     React. Antes era el de expo-splash-screen (un color a secas, y su valor por
+     defecto es BLANCO), así que una app de tema oscuro arrancaba con un fogonazo
+     blanco y, al retirarse, con el lienzo todavía vacío. Ahora lleva el titular
+     de la marca sobre negro: lo mismo que se ve arriba en Inicio.
+     El logo vive en drawable-xxhdpi (densidad 3x), así que sus 757 px de ancho
+     se pintan a unos 252 dp: centrado y sin llegar a los bordes. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
   <item android:drawable="@color/splashscreen_background"/>
+  <item
+    android:drawable="@drawable/splashscreen_logo"
+    android:gravity="center"/>
 </layer-list>

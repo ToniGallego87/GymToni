@@ -4,6 +4,7 @@ import {
   canonicalDecimals,
   dateLocale,
   decimalSeparator,
+  fmtInt,
   hasEnglish,
   language,
   localizeDecimals,
@@ -71,6 +72,19 @@ describe('cambio de idioma en caliente (setLanguage)', () => {
     expect(t('Guardar')).toBe('Guardar');
     expect(decimalSeparator).toBe(',');
     expect(dateLocale).toBe('es-ES');
+  });
+
+  // El póster de hitos pintaba los miles siempre con punto (separador español)
+  // aunque la app estuviera en inglés: "12.450 kg" se lee allí como doce coma
+  // cuarenta y cinco.
+  it('fmtInt usa el separador de miles del idioma', () => {
+    expect(fmtInt(12450)).toBe('12.450');
+    expect(fmtInt(999)).toBe('999');
+    expect(fmtInt(1234567)).toBe('1.234.567');
+
+    setLanguage('en');
+    expect(fmtInt(12450)).toBe('12,450');
+    expect(fmtInt(1234567)).toBe('1,234,567');
   });
 });
 

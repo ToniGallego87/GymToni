@@ -18,9 +18,14 @@ import { loadAppData } from '@lib/storage';
 // foto del día en que se añadieron. Cada una que haya cambiado entra por
 // UPDATE_ROUTINE: la persistencia no encola al outbox las enlazadas, así que el
 // refresco se queda en local y no choca con la RLS del autor.
+// `enabled` retrasa el arranque del sync: la app lo pone a true cuando ya ha
+// pintado y está quieta. Sin eso, el primer `syncNow` salía a la vez que la
+// hidratación —compitiendo por la misma BD— y su `SET_APP_DATA` podía caer en
+// mitad de la apertura, repintando de golpe todas las pantallas montadas.
 export function useCloudSync(
   dispatch: Dispatch<WorkoutAction>,
-  routines: WorkoutRoutine[]
+  routines: WorkoutRoutine[],
+  enabled = true
 ): void {
   const { user } = useSession();
   const userId = user?.id ?? null;
@@ -33,6 +38,7 @@ export function useCloudSync(
   routinesRef.current = routines;
 
   useEffect(() => {
+    if (!enabled) return;
     registerSyncUser(userId);
     if (!userId) return;
 
@@ -74,5 +80,5 @@ export function useCloudSync(
       cancelled = true;
       sub.remove();
     };
-  }, [userId, dispatch]);
+  }, [userId, dispatch, enabled]);
 }

@@ -32,7 +32,8 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   Toast,
   StretchScrollView,
 } from '../../components';
@@ -193,7 +194,7 @@ export function WeekAchievementScreen({
     };
   }, []);
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -351,7 +352,7 @@ export function WeekAchievementScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -386,6 +387,7 @@ export function WeekAchievementScreen({
         icon="trophy-variant"
         subtitle={t('Comparte tus resultados en redes')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />

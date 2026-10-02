@@ -40,7 +40,6 @@ import {
   AchievementsScreen,
   BodyWeightScreen,
   SettingsScreen,
-  QRScannerScreen,
   RoutineDetailScreen,
   RoutineSelectorScreen,
   WeekAchievementScreen,
@@ -63,7 +62,11 @@ import {
   getFloatingPrimaryNavMetrics,
 } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
-import { CARDIO_ONLY_DAY, hasAnyCardio } from '@lib/cardio';
+import {
+  CARDIO_ONLY_DAY,
+  hasAnyCardio,
+  splitMixedCardioLogs,
+} from '@lib/cardio';
 import type { WeightSegment } from '@lib/cardio';
 import {
   clearAppData,
@@ -91,15 +94,18 @@ import { isNewerVersion, playStoreUrls } from '@lib/appUpdate';
 import { fetchLatestRelease } from '@lib/cloud/release';
 import type { AppRelease } from '@lib/cloud/release';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
-import type { SharedRoutine } from '@lib/routineShare';
 import { subscribePipMode } from '@lib/pipTimer';
-import { useRestTimer } from '@lib/restTimerStore';
+import { getRestTimer, useRestTimer } from '@lib/restTimerStore';
 import { findDayInRoutines } from '@lib/utils';
 import { theme, useThemeVersion } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t, useLanguageVersion } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import { useCloudSync } from '@hooks/useCloudSync';
+import {
+  getStoredCardioSplitDone,
+  setStoredCardioSplitDone,
+} from '@lib/appSettings';
 import {
   WorkoutAppData,
   WorkoutDay,
@@ -118,6 +124,9 @@ type Screen =
       log?: WorkoutLog;
       cardioOnly?: boolean;
       origin?: 'home' | 'calendar' | 'cardio';
+      // Pantalla a la que vuelve "Volver" cuando no es una pestaña: el Detalle
+      // desde el que se pulsó "Editar". Sin ella se vuelve a `origin`.
+      back?: Screen;
     }
   | {
       type: 'detail';
@@ -127,7 +136,10 @@ type Screen =
     }
   | { type: 'calendar' }
   | { type: 'profile' }
-  | { type: 'data' }
+  // Datos y nube se abre desde Configuración y, para "crear cuenta", desde
+  // Perfil, Comunidad, perfiles ajenos, rutinas públicas y la ficha de una
+  // rutina: se vuelve a donde se abrió (sin `back`, a Configuración).
+  | { type: 'data'; back?: Screen }
   | { type: 'settings' }
   // Peso corporal: se edita desde Perfil, no en el carrusel de Cardio.
   | { type: 'body-weight' }
@@ -179,7 +191,12 @@ type Screen =
         origin: 'home' | 'calendar' | 'cardio';
       };
     }
-  | { type: 'new-routine'; initialDays?: SharedRoutineDay[] }
+  | {
+      type: 'new-routine';
+      initialDays?: SharedRoutineDay[];
+      // Desde Rutinas se vuelve a Rutinas; sin `back` (Inicio, enlace), a Inicio.
+      back?: Screen;
+    }
   | {
       type: 'routine-details';
       routine: WorkoutRoutine;
@@ -191,7 +208,6 @@ type Screen =
       // Día que se abre desplegado (el del ejercicio desde el que se llegó).
       expandDayId?: string;
     }
-  | { type: 'qr-scanner' }
   | {
       type: 'week-achievement';
       achievements: WeekAchievements;
@@ -208,23 +224,120 @@ const TAB_ORDER = [
 ] as const;
 type TabType = (typeof TAB_ORDER)[number];
 
+/**
+ * Margen entre el primer frame pintado y el momento en que se considera que la
+ * app está QUIETA (`idle`), que es cuando arranca la fase 1 del arranque.
+ *
+ * Hace falta un reloj de verdad porque `InteractionManager.runAfterInteractions`
+ * NO lo es: solo espera a las "interacciones" registradas (animaciones,
+ * PanResponder), y pulsar un `Pressable` no registra ninguna. Se resolvía en el
+ * frame siguiente, así que todo ese trabajo caía pegado al primer pintado, justo
+ * cuando el usuario ya está tocando la pantalla.
+ */
+const BOOT_SETTLE_MS = 450;
+
+/**
+ * Hueco entre montar una pestaña de fondo y la siguiente. Cada montaje son
+ * 80-210 ms de JS (medido en garnet) más el trabajo nativo de asentar sus
+ * vistas; con las cuatro seguidas se juntaban en un tapón. Espaciadas, cada una
+ * bloquea un frame suelto y cualquier toque entra entre medias.
+ */
+const WARM_STEP_MS = 650;
+
+/**
+ * El arranque va en DOS fases, y este es el motivo de que estén separadas.
+ *
+ * Fase 1 (`idle`): dejar la UI lista. Montar cada pestaña de fondo cuesta
+ * 80-210 ms de JS (medido en garnet), así que son trozos cortos entre los que
+ * cabe cualquier toque.
+ *
+ * Fase 2 (`background`): las tareas de red y fichero. El sync con la nube tarda
+ * **8,1-8,6 s** en un arranque en frío y lo normal es que no traiga NADA
+ * (`pulled=0`); la comprobación de versión, otro segundo. Colgando de `idle`
+ * caían encima de los primeros toques del usuario y era lo que hacía que pulsar
+ * la barra de navegación tardase en responder: no el montaje de la pestaña, sino
+ * todo eso peleando por el hilo a la vez.
+ *
+ * Nada de la fase 2 corre prisa —reconciliar con otro dispositivo o avisar de
+ * una versión nueva aguanta tres segundos— así que espera a que no quede UI que
+ * preparar. No hace falta tope de seguridad: si el usuario navega sin parar, cada
+ * navegación monta su pestaña, y como solo hay cinco la fase 1 termina igual.
+ */
+
 function AppContent() {
   const { dispatch, state } = useWorkout();
+  // Logs vivos para las vueltas atrás (ver `goBackTo`): el atrás físico se
+  // registra al cambiar de pantalla y su cierre no ve los logs posteriores.
+  const logsRef = React.useRef(state.logs);
+  logsRef.current = state.logs;
   // Foto del perfil público para la pestaña de Perfil de la barra.
   const { profile: myProfile } = useMyProfile();
+  const [screen, setScreen] = useState<Screen>({ type: 'home' });
+  // Pestañas ya montadas (ver `tabLayer`). Al arrancar solo la activa, para que
+  // el primer pintado sea lo más corto posible; las demás entran luego, una a una
+  // y espaciadas (`WARM_STEP_MS`), y una vez montadas se QUEDAN ocultas con
+  // display:none, así que volver a una pestaña ya vista nunca la remonta.
+  //
+  // En un REF y no en estado a propósito: apuntar la pestaña en la que se entra
+  // no debe provocar un render extra —lo último que necesita una navegación es
+  // repintar otra vez las cinco pantallas—, y la activa ya se pinta por ser
+  // activa. El render que sí hace falta cuando el calentamiento monta una nueva
+  // lo dispara `warmTick`.
+  const mountedTabsRef = React.useRef<Set<TabType>>(new Set<TabType>(['home']));
+  const [warmTick, setWarmTick] = useState(0);
+  // Fase 1: la UI ya ha pintado y está quieta; se pueden calentar las pestañas.
+  const [idle, setIdle] = useState(false);
+  // Fase 2: ya no queda UI que preparar; entran las tareas de red y fichero.
+  const [background, setBackground] = useState(false);
   // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
   // plano. Refresca el estado si el pull trae cambios de otro dispositivo y
   // pone al día las rutinas enlazadas de la comunidad si su autor las cambió.
-  useCloudSync(dispatch, state.routines);
-  const [screen, setScreen] = useState<Screen>({ type: 'home' });
-  // "Calentar" el resto de pestañas: al arrancar se monta SOLO la activa (splash
-  // corto y arranque ágil); tras el primer render se montan las demás en segundo
-  // plano, de modo que la primera entrada a cualquiera ya sea instantánea.
-  const [warmTabs, setWarmTabs] = useState(false);
+  //
+  // Espera a la fase 2 (ver `background`): son 8,5 s de red que casi nunca
+  // traen nada, y arrancando antes se comían los primeros toques del usuario.
+  useCloudSync(dispatch, state.routines, background);
+
+  // Cardio y fuerza son sesiones independientes; los registros viejos llevaban
+  // las dos cosas en un mismo log. Se parten en dos una sola vez, para que los
+  // datos de siempre se comporten como los nuevos (su cardio se consulta y se
+  // borra por su cuenta). Va en la FASE 2 del arranque, no en la hidratación:
+  // cada log partido encola dos escrituras en SQLite (ver lib/persistence.ts) y
+  // con un historial largo esa cola le robaba el hilo al primer pintado —la app
+  // se quedaba unos segundos en negro—. Nada de esto corre prisa: hasta que
+  // ocurre, el cardio viejo se sigue viendo donde se veía.
+  //
+  // Es idempotente (no vuelve a tocar lo ya separado) y el id del log de cardio
+  // se deriva del original, así que si otro dispositivo ya lo separó el sync los
+  // fusiona en vez de duplicar.
+  //
+  // Corre UNA sola vez en la vida de la instalación: al acabar se marca la
+  // bandera (`setStoredCardioSplitDone`) y los arranques siguientes no vuelven
+  // ni a comprobarlo. El ref evita además repetirlo dentro del mismo arranque.
+  const splitDoneRef = React.useRef(false);
+  useEffect(() => {
+    if (!background || splitDoneRef.current) return;
+    splitDoneRef.current = true;
+    if (getStoredCardioSplitDone()) return;
+    const { updated, created } = splitMixedCardioLogs(logsRef.current);
+    updated.forEach((log) =>
+      dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: log })
+    );
+    created.forEach((log) =>
+      dispatch({ type: 'ADD_WORKOUT_LOG', payload: log })
+    );
+    // Se marca también cuando no había nada que partir (instalación nueva): la
+    // pregunta está respondida igual.
+    setStoredCardioSplitDone();
+  }, [background, dispatch]);
   const insets = useSafeAreaInsets();
   // Índice de la pestaña activa (-1 en subpantallas, donde el pager queda tapado).
   const tabIndex = TAB_ORDER.indexOf(screen.type as TabType);
   const isTab = tabIndex >= 0;
+  // La pestaña activa se apunta como montada aquí mismo: es lo que hace que al
+  // SALIR de ella siga viva (si no, una pestaña visitada antes de que el
+  // calentamiento llegara a ella se desmontaba al salir y volver costaba lo
+  // mismo que la primera vez).
+  if (isTab) mountedTabsRef.current.add(screen.type as TabType);
   // Pager NATIVO (react-native-pager-view / ViewPager2): gestiona el arrastre
   // horizontal y el asentamiento de forma nativa, sin pasar por el hilo JS ni por
   // react-native-gesture-handler (el enfoque casero se colgaba por un bug de
@@ -352,7 +465,7 @@ function AppContent() {
   // cualquier fallo (sin red, tabla vacía): no avisar es siempre preferible a
   // molestar en el arranque. En web no aplica: no hay ficha de Play.
   useEffect(() => {
-    if (!hydrated || Platform.OS === 'web') return;
+    if (!background || Platform.OS === 'web') return;
 
     let isMounted = true;
 
@@ -381,7 +494,7 @@ function AppContent() {
     return () => {
       isMounted = false;
     };
-  }, [hydrated]);
+  }, [background]);
 
   // Cerrar el aviso lo da por visto para esa versión, se haya ido a Play o no:
   // quien ya lo ha leído no necesita verlo otra vez mañana.
@@ -415,24 +528,24 @@ function AppContent() {
   // el recordatorio. El aviso salta unas horas después, no ahora: con la app
   // abierta sería avisar de algo que el usuario tiene delante.
   useEffect(() => {
-    if (!hydrated || isFirstInstall) return;
+    if (!background || isFirstInstall) return;
     loadBodyWeight()
       .then(() => maybeNotifyStaleWeight())
       .catch((error) => console.error('Error revisando el peso:', error));
-  }, [hydrated, isFirstInstall]);
+  }, [background, isFirstInstall]);
 
   // Backup automático local: al abrir la app, si está activado y ha pasado el
   // intervalo (un día), se escribe un backup silencioso en el dispositivo. Sin
   // cloud; solo protege frente a perder el móvil sin haber exportado a mano.
   useEffect(() => {
-    if (!hydrated || isFirstInstall) return;
+    if (!background || isFirstInstall) return;
     if (!isAutoBackupDue()) return;
     handleAutoBackup().catch((error) =>
       console.error('Error en backup automático:', error)
     );
-    // Solo al arrancar (tras hidratar); el resto de deps son estables.
+    // Solo al arrancar (con la UI ya lista); el resto de deps son estables.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated, isFirstInstall]);
+  }, [background, isFirstInstall]);
 
   // Oculta el splash nativo una vez los datos reales ya están en pantalla, pero
   // NO en el mismo tick que se marca `hydrated`: se esperan dos frames para que
@@ -450,14 +563,44 @@ function AppContent() {
     return () => cancelAnimationFrame(outer);
   }, [hydrated]);
 
-  // Tras hidratar y pintar la pantalla inicial, monta el resto de pestañas en
-  // segundo plano (runAfterInteractions) para que ya estén listas al entrar.
+  // Calienta el resto de pestañas en segundo plano, de UNA EN UNA y con un hueco
+  // real entre cada montaje, para que la primera entrada a cualquiera sea
+  // instantánea sin secuestrar el hilo JS mientras el usuario acaba de abrir.
+  //
+  // Depender de `screen.type` no es decorativo: cualquier navegación reprograma
+  // el temporizador, así que un toque en la barra CANCELA el montaje de fondo
+  // pendiente. La pantalla a la que se va se pinta sola y el calentamiento
+  // continúa después, en vez de sumarse al render de la navegación.
+  useEffect(() => {
+    if (!idle) return;
+    const next = TAB_ORDER.find((type) => !mountedTabsRef.current.has(type));
+    if (!next) {
+      // No queda pestaña que montar: se abre la fase 2.
+      setBackground(true);
+      return;
+    }
+    const timer = setTimeout(() => {
+      mountedTabsRef.current.add(next);
+      setWarmTick((n) => n + 1);
+    }, WARM_STEP_MS);
+    return () => clearTimeout(timer);
+  }, [idle, warmTick, screen.type]);
+
+  // La app ya está quieta: a partir de aquí empieza la fase 1 (calentar las
+  // pestañas) sin robarle frames a la primera pantalla. `runAfterInteractions`
+  // marca el primer frame pintado y el `setTimeout` da el margen de verdad
+  // (ver BOOT_SETTLE_MS): solo con el primero
+  // esto se resolvía en el frame siguiente y no esperaba nada.
   useEffect(() => {
     if (!hydrated) return;
-    const task = InteractionManager.runAfterInteractions(() =>
-      setWarmTabs(true)
-    );
-    return () => task.cancel();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const task = InteractionManager.runAfterInteractions(() => {
+      timer = setTimeout(() => setIdle(true), BOOT_SETTLE_MS);
+    });
+    return () => {
+      task.cancel();
+      if (timer) clearTimeout(timer);
+    };
   }, [hydrated]);
 
   // Cambia de pestaña por índice de TAB_ORDER (lo llama el swipe del pager).
@@ -506,8 +649,6 @@ function AppContent() {
   const goProfile = () => setScreen({ type: 'profile' });
   const backFromRoutineSelector = (origin?: 'home' | 'profile') =>
     setScreen({ type: origin === 'home' ? 'home' : 'profile' });
-  const backFromWorkoutLog = (origin?: 'home' | 'calendar' | 'cardio') =>
-    setScreen({ type: origin ?? 'home' });
   const backFromDetail = (origin: 'home' | 'calendar' | 'cardio') =>
     setScreen({
       type:
@@ -517,13 +658,38 @@ function AppContent() {
           ? 'cardio'
           : 'home',
     });
+  // Vuelta a una pantalla guardada en `back`. Un Detalle guardado lleva el log
+  // tal como estaba al salir de él, y si se salió para EDITARLO (su "Editar"
+  // abre el registro) volver con esa copia enseñaría los datos de antes: se
+  // vuelve con el log vivo, y si ya no existe, a la pestaña de la que venía.
+  // Lee los logs de un ref y no del cierre: el atrás físico se registra al
+  // cambiar de pantalla y su `state` se queda viejo mientras se meten series.
+  const goBackTo = (back: Screen) => {
+    if (back.type === 'detail') {
+      const live = logsRef.current.find((l) => l.id === back.log.id);
+      if (live) setScreen({ ...back, log: live });
+      else backFromDetail(back.origin);
+      return;
+    }
+    setScreen(back);
+  };
+  const backFromWorkoutLog = (
+    screen: Extract<Screen, { type: 'workout-log' }>
+  ) =>
+    screen.back
+      ? goBackTo(screen.back)
+      : setScreen({ type: screen.origin ?? 'home' });
+  const backFromData = (screen: Extract<Screen, { type: 'data' }>) =>
+    setScreen(screen.back ?? { type: 'settings' });
+  const backFromNewRoutine = (
+    screen: Extract<Screen, { type: 'new-routine' }>
+  ) => setScreen(screen.back ?? { type: 'home' });
   const backFromRoutineDetails = (
     screen: Extract<Screen, { type: 'routine-details' }>
   ) =>
-    setScreen(
+    goBackTo(
       screen.back ?? { type: 'routine-selector', origin: screen.origin }
     );
-  const backToNewRoutine = () => setScreen({ type: 'new-routine' });
   // "Ir a la rutina" desde el ⋯ del Detalle, del Registro y de Inicio: la ficha
   // de la rutina a la que pertenece el día, con ese día desplegado, y vuelta a
   // la pantalla desde la que se abrió. Mismo camino que el atajo de Progreso.
@@ -576,7 +742,6 @@ function AppContent() {
             case 'profile':
             case 'community':
             case 'day-selector':
-            case 'new-routine':
             case 'week-achievement':
               // Pantallas sin "Volver" propio en pantalla (navegación inferior
               // o destino final de un flujo corto): el físico vuelve a Inicio,
@@ -586,14 +751,17 @@ function AppContent() {
             case 'routine-selector':
               backFromRoutineSelector(screen.origin);
               return true;
+            case 'new-routine':
+              backFromNewRoutine(screen);
+              return true;
             case 'workout-log':
-              backFromWorkoutLog(screen.origin);
+              backFromWorkoutLog(screen);
               return true;
             case 'detail':
               backFromDetail(screen.origin);
               return true;
             case 'data':
-              setScreen({ type: 'settings' });
+              backFromData(screen);
               return true;
             case 'settings':
               goProfile();
@@ -615,16 +783,13 @@ function AppContent() {
             case 'user-profile':
               // Al perfil ajeno se llega desde el tablón, pero también desde
               // tus rutinas: se vuelve a donde se abrió.
-              setScreen(screen.back ?? { type: 'community' });
+              goBackTo(screen.back ?? { type: 'community' });
               return true;
             case 'exercise-progress':
               backFromExerciseProgress(screen);
               return true;
             case 'routine-details':
               backFromRoutineDetails(screen);
-              return true;
-            case 'qr-scanner':
-              backToNewRoutine();
               return true;
             default:
               goHome();
@@ -722,6 +887,23 @@ function AppContent() {
       setScreen({ type: 'home' });
     }
   };
+
+  // Volver de la ventanita flotante (el PiP del descanso): tocarla trae la app
+  // al frente, y lo que se estaba mirando ahí es la cuenta atrás. Así que se
+  // aterriza en el REGISTRO del día que la lanzó —donde está el temporizador
+  // entero y las casillas de la serie siguiente—, no en la pantalla en la que
+  // se dejó la app antes de minimizarla.
+  useEffect(
+    () =>
+      subscribePipMode((inPip) => {
+        if (inPip) return;
+        const timer = getRestTimer();
+        if (!timer) return;
+        const day = findDayInRoutines(state.routines, timer.dayId);
+        if (day) setScreen({ type: 'workout-log', day, origin: 'home' });
+      }),
+    [state.routines]
+  );
 
   useEffect(() => {
     if (!Notifications) return;
@@ -883,21 +1065,23 @@ function AppContent() {
   }
 
   // Pestañas montadas "en caliente": al arrancar se monta SOLO la activa (splash
-  // corto), y tras el primer render se montan las demás (warmTabs) y se quedan
-  // vivas, ocultas con display:none al no estar activas. Así la PRIMERA entrada a
-  // cualquiera ya está lista (sus useMemo caros ya calculados) y el cambio es
-  // instantáneo. Cada pantalla difiere además su contenido pesado un frame
-  // (useDeferredReady), para no bloquear al calentarse. El registro guarda las
-  // series en estado local (no despacha por serie), así que tenerlas de fondo no
-  // recalcula durante el entreno.
-  // Cada página del PagerView. El contenido se monta al calentar o si es la
-  // activa (al arrancar solo la activa; las demás esperan a warmTabs), pero el
-  // View-página va SIEMPRE para que el pager mantenga sus 5 índices.
+  // corto), y una vez la app está quieta entran las demás espaciadas
+  // (`mountedTabsRef`) y se quedan vivas, ocultas con display:none al no estar
+  // activas. Así la PRIMERA entrada a cualquiera ya está lista (sus useMemo caros
+  // ya calculados) y el cambio es instantáneo. Cada pantalla difiere además su
+  // contenido pesado un frame (useDeferredReady), para no bloquear al calentarse.
+  // El registro guarda las series en estado local (no despacha por serie), así
+  // que tenerlas de fondo no recalcula durante el entreno.
+  //
+  // Cada página del PagerView: el contenido se monta al calentar o al ser la
+  // activa, pero el View-página va SIEMPRE para que el pager mantenga sus 5
+  // índices.
   const tabLayer = (type: TabType, node: React.ReactNode) => {
     const active = screen.type === type;
+    const mounted = mountedTabsRef.current.has(type);
     return (
       <View key={type} style={styles.pagerPage} collapsable={false}>
-        {active || warmTabs ? (
+        {active || mounted ? (
           <TabStateBoundary active={active}>{node}</TabStateBoundary>
         ) : null}
       </View>
@@ -1066,7 +1250,9 @@ function AppContent() {
               onOpenFollowers={() =>
                 setScreen({ type: 'followers', back: 'community' })
               }
-              onOpenAccount={() => setScreen({ type: 'data' })}
+              onOpenAccount={() =>
+                setScreen({ type: 'data', back: { type: 'community' } })
+              }
             />
           )}
 
@@ -1082,7 +1268,9 @@ function AppContent() {
               onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
               onOpenAchievements={() => setScreen({ type: 'achievements' })}
               onOpenSettings={() => setScreen({ type: 'settings' })}
-              onOpenAccount={() => setScreen({ type: 'data' })}
+              onOpenAccount={() =>
+                setScreen({ type: 'data', back: { type: 'profile' } })
+              }
             />
           )}
         </PagerView>
@@ -1096,7 +1284,9 @@ function AppContent() {
                 origin: screen.origin,
               })
             }
-            onCreateRoutine={() => setScreen({ type: 'new-routine' })}
+            onCreateRoutine={() =>
+              setScreen({ type: 'new-routine', back: screen })
+            }
             // Perfil del autor de una rutina traída de la comunidad. Se vuelve
             // aquí, no al tablón: a Rutinas no se llega desde Comunidad.
             onOpenProfile={(userId, name) =>
@@ -1122,13 +1312,6 @@ function AppContent() {
               // Inicio en silencio, eso solo confunde ("¿no ha funcionado el toque?").
               setScreen({ type: 'workout-log', day });
             }}
-            onSelectCardioOnly={() =>
-              setScreen({
-                type: 'workout-log',
-                day: CARDIO_ONLY_DAY,
-                cardioOnly: true,
-              })
-            }
             onBack={goHome}
           />
         )}
@@ -1138,8 +1321,8 @@ function AppContent() {
             day={screen.day}
             log={screen.log}
             cardioOnly={screen.cardioOnly}
-            onSave={() => backFromWorkoutLog(screen.origin)}
-            onBack={() => backFromWorkoutLog(screen.origin)}
+            onSave={() => backFromWorkoutLog(screen)}
+            onBack={() => backFromWorkoutLog(screen)}
             onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
           />
         )}
@@ -1157,6 +1340,9 @@ function AppContent() {
                 log: screen.log,
                 cardioOnly: screen.log.cardioOnly || undefined,
                 origin: screen.origin,
+                // Al terminar de corregir se vuelve a ESTE Detalle (con el log
+                // ya corregido, ver `goBackTo`), no a la pestaña de la que venía.
+                back: screen,
               })
             }
             onDelete={() => {
@@ -1187,7 +1373,9 @@ function AppContent() {
         {screen.type === 'settings' && (
           <SettingsScreen
             onBack={goProfile}
-            onOpenData={() => setScreen({ type: 'data' })}
+            onOpenData={() =>
+              setScreen({ type: 'data', back: { type: 'settings' } })
+            }
           />
         )}
 
@@ -1196,7 +1384,7 @@ function AppContent() {
             mode="following"
             onBack={() => setScreen({ type: screen.back })}
             onOpenProfile={(userId, name) =>
-              setScreen({ type: 'user-profile', userId, name })
+              setScreen({ type: 'user-profile', userId, name, back: screen })
             }
           />
         )}
@@ -1206,16 +1394,20 @@ function AppContent() {
             mode="followers"
             onBack={() => setScreen({ type: screen.back })}
             onOpenProfile={(userId, name) =>
-              setScreen({ type: 'user-profile', userId, name })
+              setScreen({ type: 'user-profile', userId, name, back: screen })
             }
           />
         )}
 
         {screen.type === 'user-profile' && (
           <UserProfileScreen
+            // Un perfil distinto es una pantalla distinta: sin `key`, React
+            // reutiliza la instancia y se quedarían en pantalla los datos del
+            // anterior (y su caché) hasta que llegaran los nuevos.
+            key={screen.userId}
             userId={screen.userId}
             name={screen.name}
-            onBack={() => setScreen(screen.back ?? { type: 'community' })}
+            onBack={() => goBackTo(screen.back ?? { type: 'community' })}
             onOpenRoutine={(routineId, name, authorName) =>
               setScreen({
                 type: 'public-routine',
@@ -1230,7 +1422,9 @@ function AppContent() {
                 },
               })
             }
-            onOpenAccount={() => setScreen({ type: 'data' })}
+            onOpenAccount={() => setScreen({ type: 'data', back: screen })}
+            // Tu propio perfil visto desde Comunidad: editarlo vive en Perfil.
+            onOpenOwnProfile={goProfile}
           />
         )}
 
@@ -1242,9 +1436,9 @@ function AppContent() {
             ownerId={screen.ownerId}
             onBack={() => setScreen(screen.back)}
             onOpenProfile={(userId, name) =>
-              setScreen({ type: 'user-profile', userId, name })
+              setScreen({ type: 'user-profile', userId, name, back: screen })
             }
-            onOpenAccount={() => setScreen({ type: 'data' })}
+            onOpenAccount={() => setScreen({ type: 'data', back: screen })}
           />
         )}
 
@@ -1278,7 +1472,7 @@ function AppContent() {
             onExportData={handleExportData}
             onBackupNow={handleAutoBackup}
             onClearData={handleClearData}
-            onBack={() => setScreen({ type: 'settings' })}
+            onBack={() => backFromData(screen)}
           />
         )}
 
@@ -1293,8 +1487,7 @@ function AppContent() {
             }
             existingRoutineCount={state.routines.length}
             onCreateRoutine={handleCreateRoutine}
-            onBack={goHome}
-            onScanRoutineQR={() => setScreen({ type: 'qr-scanner' })}
+            onBack={() => backFromNewRoutine(screen)}
             onOpenCommunity={() => setScreen({ type: 'community' })}
             initialDays={screen.initialDays}
           />
@@ -1315,21 +1508,14 @@ function AppContent() {
                 back: screen.back,
               })
             }
-            onOpenAccount={() => setScreen({ type: 'data' })}
+            // Borrada desde su ⋮: se vuelve a donde se abrió (normalmente Rutinas).
+            onDeleted={() => backFromRoutineDetails(screen)}
+            onOpenAccount={() => setScreen({ type: 'data', back: screen })}
             // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
             // vuelve a esta misma ficha (tal cual: con su propio camino de vuelta).
             onOpenProfile={(userId, name) =>
               setScreen({ type: 'user-profile', userId, name, back: screen })
             }
-          />
-        )}
-
-        {screen.type === 'qr-scanner' && (
-          <QRScannerScreen
-            onScanSuccess={(shared: SharedRoutine) =>
-              setScreen({ type: 'new-routine', initialDays: shared.days })
-            }
-            onBack={backToNewRoutine}
           />
         )}
 

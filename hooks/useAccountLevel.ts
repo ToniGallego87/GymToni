@@ -15,6 +15,8 @@ import {
   XP_PER_CHALLENGE,
 } from '@lib/level';
 import { Award, pushAwards } from '@lib/awards';
+import { buildLocalActivity } from '@lib/activity';
+import { publishActivity } from '@lib/cloud/activity';
 import { getStoredSeenBadges, setStoredSeenBadges } from '@lib/appSettings';
 import { useSession } from '@lib/cloud/auth';
 import { updateProfile } from '@lib/cloud/social';
@@ -181,6 +183,45 @@ export function useAccountLevel(options: { record?: boolean } = {}): {
         pushedXp.current = null;
       });
   }, [options.record, user, profile?.xp, level]);
+
+  // Publicar la Actividad (insignias, retos y días entrenados) para que la vean
+  // en tu perfil. Se hace aquí por lo mismo que el nivel: este es el único sitio
+  // que ya tiene el catálogo entero calculado y corre una sola vez (`record`).
+  // Solo sube lo que falte (`publishActivity` es idempotente) y únicamente si el
+  // interruptor está encendido; apagarlo borra lo subido desde Editar perfil.
+  const publishing = useRef(false);
+  useEffect(() => {
+    if (!options.record || !user) return;
+    // Hasta que el perfil no ha llegado no se sabe si lo comparte, y publicar
+    // "por si acaso" sería publicar lo de quien lo tiene apagado.
+    if (!profile || profile.share_activity === false) return;
+    if (publishing.current) return;
+    publishing.current = true;
+    const items = buildLocalActivity({
+      logs: state.logs,
+      routines: state.routines,
+      badges,
+      challenges,
+      wins,
+    });
+    publishActivity(user.id, items)
+      .catch(() => {
+        // Sin red o sin la tabla creada: se reintenta en el próximo arranque.
+      })
+      .finally(() => {
+        publishing.current = false;
+      });
+    // A propósito solo cuando cambia lo publicable, no en cada repintado: los
+    // hitos nuevos llegan con un reto ganado, una insignia o un entreno más.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    options.record,
+    user,
+    profile?.share_activity,
+    wins.length,
+    unlockedBadges.length,
+    state.logs.length,
+  ]);
 
   return { challenges, badges, level };
 }

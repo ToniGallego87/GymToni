@@ -5,7 +5,6 @@ import {
   View,
   Text,
   StyleSheet,
-  TouchableOpacity,
   Pressable,
   useWindowDimensions,
 } from 'react-native';
@@ -15,11 +14,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
 import { useAccountLevel } from '@hooks/useAccountLevel';
-import { challengeProgressLabel } from '@lib/challenges';
-import { getToday } from '@lib/utils';
+import { getToday, shortDayMonth } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
-import { antonCenterNudge, dayNameText, weekTitleText } from '@lib/textStyles';
+import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { t, dateLocale, fmtNum } from '@lib/i18n';
 import {
   buildCardioDays,
@@ -37,18 +35,21 @@ import {
 import { loadBodyWeight, useBodyWeight } from '@lib/bodyWeight';
 import {
   BarChart,
+  ChartCard,
   BarChartPoint,
+  getChartWidth,
   ChallengesModal,
   Collapsible,
   getFloatingPrimaryNavMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   HeroCard,
-  HeroCarousel,
-  HeroStatsCard,
-  StatsStrip,
+  ChallengesStrip,
+  HeroCardStat,
   SEGMENTED_FILTER_CHART_GAP,
+  SectionLegend,
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
@@ -69,12 +70,6 @@ interface CardioScreenProps {
 
 // Cuántas semanas se muestran de inicio y cuántas añade "Cargar más".
 const WEEKS_PAGE = 5;
-
-// "29 jun" a partir de YYYY-MM-DD.
-const dayMonth = (dateStr: string) =>
-  new Date(`${dateStr}T00:00:00`)
-    .toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })
-    .replace('.', '');
 
 // Icono de la disciplina (cuesta arriba si hay pendiente): la lógica vive en
 // lib/cardio (disciplineIconName); aquí solo se castea al tipo del icono.
@@ -205,10 +200,9 @@ export function CardioScreen({
 }: CardioScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
-  // Retos de cardio (hoy y semana natural), tercer estado de la hero.
+  // Retos de cardio (hoy y semana natural), en la tira bajo la hero.
   const { challenges } = useAccountLevel();
   const heroChallenges = challenges.filter((c) => c.category === 'cardio');
-  const challengesDone = heroChallenges.filter((c) => c.done).length;
   const [showChallenges, setShowChallenges] = useState(false);
   // El hero se pinta al instante; la gráfica y el historial de semanas (lo caro
   // de Cardio) se difieren un frame para que abrir Cardio sea ágil.
@@ -292,13 +286,12 @@ export function CardioScreen({
 
   const todayKey = getToday();
 
-  // Datos del hero: HOY como protagonista, con tres referencias diarias para
-  // leerlo de un vistazo (mismo día de la semana pasada, media y mejor día).
+  // Referencias diarias de kcal de la hero (mismo día de la semana pasada,
+  // media y mejor día).
   const days = useMemo(
     () => buildCardioDays(state.logs, weightHistory),
     [state.logs, weightHistory]
   );
-  const today = useMemo(() => days.find((d) => d.isToday) ?? null, [days]);
   // Compara lunes con lunes: el mismo día de la semana anterior (hoy - 7).
   const sameDayLastWeek = useMemo(() => {
     const d = new Date(`${todayKey}T00:00:00`);
@@ -322,6 +315,25 @@ export function CardioScreen({
     () => (days.length ? Math.max(...days.map((d) => d.totalKcal)) : null),
     [days]
   );
+  const fmtKcal = (v: number | null | undefined) =>
+    v == null ? '—' : String(Math.round(v));
+  const heroStats: HeroCardStat[] = [
+    {
+      value: fmtKcal(sameDayLastWeek?.totalKcal),
+      unit: sameDayLastWeek ? 'kcal' : undefined,
+      label: t('hace 7 días'),
+    },
+    {
+      value: fmtKcal(avgDayKcal),
+      unit: avgDayKcal != null ? 'kcal' : undefined,
+      label: t('media diaria'),
+    },
+    {
+      value: fmtKcal(bestDayKcal),
+      unit: bestDayKcal != null ? 'kcal' : undefined,
+      label: t('mejor día'),
+    },
+  ];
 
   // La gráfica es mensual; la métrica se elige con el selector.
   const kcalMonths = months.filter((m) => m.totalKcal > 0);
@@ -338,12 +350,9 @@ export function CardioScreen({
   const visibleWeeks = orderedWeeks.slice(0, visibleCount);
   const hasMore = orderedWeeks.length > visibleCount;
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
-  const chartWidth = Math.max(
-    250,
-    Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
-  );
+  const chartWidth = getChartWidth(windowWidth);
 
   const hasCardio = weeks.length > 0;
 
@@ -365,48 +374,27 @@ export function CardioScreen({
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Carrusel con la ACCIÓN primero y la consulta después, igual que la
-            hero de Inicio: apuntar cardio es a lo que se entra, así que no vive
-            tras un toque de flecha. El peso corporal salió de aquí a Perfil →
-            Peso corporal: se toca una vez cada varias semanas y ocupaba media
-            hero, y allí además le cabe el histórico entero.
-            Mismo aspecto que la HeroCard de Fuerza: el scroll no lleva padding
-            horizontal y la tarjeta se posiciona con el margen propio de la
-            HeroCard (misma estrategia de márgenes que Inicio, sin heroBleed). */}
-        <HeroCarousel
-          // Sin cardio hoy, el pase automático se queda en "Insertar cardio"
-          // (mismo criterio que la tarjeta de entrenar de Inicio).
-          holdIndex={today ? undefined : 0}
-          slides={[
-            <HeroCard
-              key="insert"
-              variant="start"
-              icon="run-fast"
-              title={t('Insertar cardio')}
-              onPress={() => onInsertCardioOnly?.()}
-            />,
-            <HeroStatsCard
-              key="challenges"
-              kicker={t('Retos de cardio')}
-              mainIcon="flag-checkered"
-              mainValue={`${challengesDone}/${heroChallenges.length}`}
-              mainUnit={t('retos')}
-              stats={heroChallenges.map((c) => ({
-                value: challengeProgressLabel(c, true),
-                label: c.name,
-                // Anillo por reto en vez de la cifra: se lee de un vistazo.
-                progress: c.target > 0 ? c.current / c.target : c.done ? 1 : 0,
-                icon: c.icon,
-              }))}
-              onPress={() => setShowChallenges(true)}
-            />,
-          ]}
+        {/* La misma pareja que Inicio: la hero con la ACCIÓN (apuntar cardio es a
+            lo que se entra) y, debajo, la tira con los retos de cardio, siempre
+            a la vista. Antes era un carrusel de dos tarjetas que dejaba los
+            retos tras una flecha. El peso corporal vive en Perfil → Peso. */}
+        <HeroCard
+          variant="start"
+          icon="run-fast"
+          title={t('Insertar cardio')}
+          onPress={() => onInsertCardioOnly?.()}
+          // Referencias diarias de kcal bajo la acción, en cuanto hay cardio.
+          stats={days.length > 0 ? heroStats : undefined}
+        />
+        <ChallengesStrip
+          challenges={heroChallenges}
+          onPress={() => setShowChallenges(true)}
         />
 
         {/* Sin peso anotado, las kcal se estiman con ASSUMED_WEIGHT_KG y nadie
@@ -442,124 +430,75 @@ export function CardioScreen({
         )}
 
         {ready && hasCardio && (
-          // Con cardio siempre (lleva las cifras de hoy); la gráfica mensual
+          // Con cardio siempre (el dato del mes en la cabecera); la gráfica mensual
           // solo se despliega a partir de dos meses.
-          <View style={[styles.progressCard, { borderColor: progressAccent }]}>
-            <GradientFill accent={progressAccent} />
-            <TouchableOpacity
-              style={styles.progressToggle}
-              activeOpacity={0.85}
-              disabled={!canOpenChart}
-              onPress={() => {
-                animateLayout();
-                setShowChart((prev) => !prev);
-              }}
-            >
-              <View style={styles.progressHeaderRow}>
-                <View style={styles.progressTitleRow}>
-                  <MaterialCommunityIcons
-                    name={metric.icon}
-                    size={18}
-                    color={theme.colors.text}
-                  />
-                  <Text style={styles.progressTitle}>
-                    {metric.label} / {t('mes')}
-                  </Text>
-                  {canOpenChart && (
-                    <MaterialCommunityIcons
-                      name={showChart ? 'chevron-up' : 'chevron-down'}
-                      size={20}
-                      color={theme.colors.text}
-                    />
-                  )}
-                </View>
-                {latestMonthValue != null && (
+          <ChartCard
+            style={styles.progressCard}
+            accent={progressAccent}
+            icon={metric.icon}
+            title={`${metric.label} / ${t('mes')}`}
+            expandable={canOpenChart}
+            expanded={showChart}
+            onToggle={() => {
+              animateLayout();
+              setShowChart((prev) => !prev);
+            }}
+            right={
+              latestMonthValue != null ? (
+                // La cifra es la del MES en curso, no un total ni una media: se
+                // dice debajo, como el "desde la semana 1" de Fuerza. Sin el
+                // rótulo parecía el acumulado de todo el cardio registrado.
+                <View style={styles.progressLatestWrap}>
                   <Text style={styles.progressLatestKcal}>
                     {metric.fmt(latestMonthValue)} {metric.unit}
                   </Text>
-                )}
-              </View>
-              {/* Cifras de hoy (kcal, disciplinas · min · km y sus
-                  referencias): antes eran la tarjeta "Hoy" del carrusel. */}
-              <StatsStrip
-                icon="fire"
-                centerMain
-                value={String(Math.round(today?.totalKcal ?? 0))}
-                unit="kcal"
-                meta={
-                  today
-                    ? `${today.disciplines.length} ${
-                        today.disciplines.length === 1
-                          ? t('disciplina')
-                          : t('disciplinas')
-                      } · ${Math.round(today.totalMinutes)} min · ${fmtNum(
-                        today.totalKm
-                      )} km`
-                    : t('Aún sin cardio hoy')
-                }
-                stats={[
-                  {
-                    value: sameDayLastWeek
-                      ? String(Math.round(sameDayLastWeek.totalKcal))
-                      : '—',
-                    label: t('hace 7 días'),
-                  },
-                  {
-                    value:
-                      avgDayKcal != null ? String(Math.round(avgDayKcal)) : '—',
-                    label: t('media diaria'),
-                  },
-                  {
-                    value:
-                      bestDayKcal != null
-                        ? String(Math.round(bestDayKcal))
-                        : '—',
-                    label: t('mejor día'),
-                  },
-                ]}
+                  <Text style={styles.progressLatestBase}>
+                    {t('este mes')}
+                  </Text>
+                </View>
+              ) : null
+            }
+          >
+            {!!metricChart && (
+              <BarChart
+                points={metricChart.bars}
+                domain={metricChart.domain}
+                width={chartWidth}
+                formatYTick={metric.fmt}
               />
-            </TouchableOpacity>
-
-            {canOpenChart && showChart && (
-              // Centrado: el `progressCard` no puede llevar alignItems:'center'
-              // (su cabecera usa space-between y necesita el ancho completo), así
-              // que la gráfica y su selector —ambos de ancho fijo `chartWidth`—
-              // se centran en su propio contenedor.
-              <View style={styles.chartArea}>
-                {!!metricChart && (
-                  <BarChart
-                    points={metricChart.bars}
-                    domain={metricChart.domain}
-                    width={chartWidth}
-                    formatYTick={metric.fmt}
-                  />
-                )}
-                <SegmentedFilter
-                  style={{
-                    width: chartWidth,
-                    marginTop: SEGMENTED_FILTER_CHART_GAP,
-                  }}
-                  options={METRIC_OPTIONS}
-                  labelMode="below"
-                  value={metric.id}
-                  onChange={(id) => {
-                    const next = CHART_METRICS.findIndex((m) => m.id === id);
-                    if (next < 0) return;
-                    animateLayout();
-                    setMetricIdx(next);
-                    AsyncStorage.setItem('cardioChartMetric', id).catch(
-                      () => {}
-                    );
-                  }}
-                />
-              </View>
             )}
+            <SegmentedFilter
+              style={{
+                width: chartWidth,
+                marginTop: SEGMENTED_FILTER_CHART_GAP,
+              }}
+              options={METRIC_OPTIONS}
+              labelMode="below"
+              value={metric.id}
+              onChange={(id) => {
+                const next = CHART_METRICS.findIndex((m) => m.id === id);
+                if (next < 0) return;
+                animateLayout();
+                setMetricIdx(next);
+                AsyncStorage.setItem('cardioChartMetric', id).catch(() => {});
+              }}
+            />
+          </ChartCard>
+        )}
+
+        {/* La misma cabecera que el historial de Inicio, aquí solo con el
+            título: el delta de cada semana ya lleva su "kcal" al lado. */}
+        {ready && visibleWeeks.length > 0 && (
+          <View style={styles.weeksLegendWrap}>
+            <SectionLegend title={t('Historial')} />
           </View>
         )}
 
         {ready &&
           visibleWeeks.map((week) => {
-            const isExpanded = expandedWeeks[week.weekKey] ?? week.isCurrent;
+            // Colapsadas de entrada, también la semana en curso (mismo criterio
+            // que el historial de Inicio).
+            const isExpanded = expandedWeeks[week.weekKey] ?? false;
             // Tarjeta: acento estructural salvo la semana en curso (amarilla). El
             // verde/rojo solo se usa en el dato de subida/bajada (kcalDelta).
             const accent = week.isCurrent
@@ -585,7 +524,8 @@ export function CardioScreen({
                       style={[styles.weekTitle, { color: theme.colors.white }]}
                       numberOfLines={1}
                     >
-                      {dayMonth(week.weekStart)} – {dayMonth(week.weekEnd)}
+                      {shortDayMonth(week.weekStart)} –{' '}
+                      {shortDayMonth(week.weekEnd)}
                     </Text>
                     {/* Arriba a la derecha: diferencia de kcal vs semana anterior.
                       La semana en curso no la muestra (aún está acumulando). */}
@@ -716,7 +656,7 @@ export function CardioScreen({
       <ChallengesModal
         visible={showChallenges}
         onClose={() => setShowChallenges(false)}
-        title={t('Retos de cardio')}
+        title={t('Retos de la semana')}
         challenges={heroChallenges}
       />
 
@@ -727,6 +667,7 @@ export function CardioScreen({
         icon="run-fast"
         subtitle={t('Consulta tus resultados')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
     </View>
   );
@@ -766,52 +707,35 @@ const makeStyles = () =>
       fontWeight: '700',
       color: theme.colors.primary,
     },
+    // Solo márgenes: la piel de la tarjeta (borde, degradado, paddings y el
+    // centrado de la gráfica) vive en `ChartCard`, compartida con Inicio.
     progressCard: {
       // Margen propio por tarjeta (misma estrategia que Inicio): el scroll no
       // lleva padding horizontal, cada superficie pone su marginHorizontal.
+      // Sin marginTop: la separa de los retos el marginBottom de la tira (md),
+      // el mismo que separa los retos de la hero.
       marginHorizontal: theme.spacing.md,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 2,
-      paddingVertical: 16,
-      paddingHorizontal: 16,
-      marginTop: theme.spacing.xs,
       marginBottom: theme.spacing.lg,
-      overflow: 'hidden',
-      backgroundColor: theme.colors.surface,
-      ...theme.shadow.card,
     },
-    // Centra la gráfica y su selector (ambos de ancho fijo `chartWidth`) dentro
-    // del `progressCard`, que no puede centrar por su cabecera de ancho completo.
-    chartArea: {
-      alignItems: 'center',
-    },
-    progressToggle: {
-      width: '100%',
-    },
-    progressHeaderRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'space-between',
-    },
-    progressTitleRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
-    },
-    progressTitle: {
-      fontSize: 20,
-      fontFamily: theme.fonts.display,
-      letterSpacing: 0.5,
-      color: theme.colors.text,
-      lineHeight: 28,
-      includeFontPadding: false,
-      textAlignVertical: 'center',
-      ...antonCenterNudge,
+    progressLatestWrap: {
+      alignItems: 'flex-end',
+      marginLeft: 12,
     },
     progressLatestKcal: {
       fontSize: 17,
       fontWeight: '800',
       color: theme.colors.white,
+    },
+    progressLatestBase: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      lineHeight: 14,
+    },
+    // La cabecera del historial se alinea con las tarjetas de semana, que
+    // llevan su propio margen horizontal (el scroll no tiene padding).
+    weeksLegendWrap: {
+      marginHorizontal: theme.spacing.md,
     },
     weekBlock: {
       // Margen propio (misma estrategia que Inicio). El hueco inferior bajo el

@@ -6,13 +6,14 @@ import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FloatingBackButton,
-  FLOATING_BACK_BUTTON_HEIGHT,
-  FLOATING_BACK_BUTTON_MARGIN,
+  getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   OptionToggle,
   StretchScrollView,
+  ValueStepper,
   WhatsNewModal,
 } from '@components';
 import { theme, setThemeMode } from '@lib/theme';
@@ -20,6 +21,13 @@ import { subscribeTheme } from '@lib/themeStore';
 import { t, formatAgo, language, setLanguage } from '@lib/i18n';
 import { Language, ThemeMode } from '@lib/appSettings';
 import { CHANGELOG } from '@data/changelog';
+import {
+  MAX_REST_SECONDS,
+  MIN_REST_SECONDS,
+  stepRestDuration,
+  useRestDuration,
+} from '@lib/restTimerStore';
+import { formatRestTime } from '@lib/utils';
 import { useSession } from '@lib/cloud/auth';
 import { getLastSync } from '@lib/cloud/sync';
 
@@ -41,6 +49,9 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
   const [showWhatsNew, setShowWhatsNew] = useState(false);
   const { user } = useSession();
   const [lastSync, setLastSync] = useState<number | null>(null);
+  // Descanso por defecto entre series (lib/restTimerStore): ajuste de la
+  // persona, no de cada rutina. Se toca aquí mismo con dos flechas.
+  const restDuration = useRestDuration();
 
   useEffect(() => {
     if (!user) {
@@ -64,11 +75,9 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
     ? `${t('Sincronizado')} · ${formatAgo(lastSync)}`
     : t('Sesión iniciada');
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
-  const floatingBackBottom =
-    Math.max(insets.bottom, 10) + FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding =
-    floatingBackBottom + FLOATING_BACK_BUTTON_HEIGHT + 28;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
+  const { bottom: floatingBackBottom, scrollBottomPadding } =
+    getFloatingBackButtonMetrics(insets.bottom);
 
   const latestChangelog = CHANGELOG[0] ?? null;
 
@@ -99,7 +108,7 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -139,6 +148,38 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
             value={language}
             onChange={setLanguage}
           />
+        </View>
+
+        {/* Descanso por defecto entre series: un ajuste de la persona de un
+            solo valor, así que vive aquí con el tema y el idioma —y con su MISMA
+            piel, porque se comporta igual: cambia un valor en el sitio, no lleva
+            a otra pantalla. Antes era una fila-enlace con un lápiz que abría un
+            modal con un campo de texto, indistinguible de "Datos y nube", que sí
+            navega. Se sigue tocando también desde el ⋯ del registro, que es donde
+            se nota que se queda corto. */}
+        <View style={styles.sectionCard}>
+          <GradientFill accent={theme.colors.primaryLine} />
+          <View style={styles.sectionTitleRow}>
+            <MaterialCommunityIcons
+              name="timer-sand"
+              size={18}
+              color={theme.colors.text}
+            />
+            <Text style={styles.sectionTitle}>
+              {t('Temporizador de descanso')}
+            </Text>
+          </View>
+          <ValueStepper
+            label={t('Temporizador de descanso')}
+            value={formatRestTime(restDuration)}
+            atMin={restDuration <= MIN_REST_SECONDS}
+            atMax={restDuration >= MAX_REST_SECONDS}
+            onDecrement={() => stepRestDuration(-1)}
+            onIncrement={() => stepRestDuration(1)}
+          />
+          <Text style={styles.sectionHint}>
+            {t('Entre series, en saltos de 30 s (de 0:00 a 5:00)')}
+          </Text>
         </View>
 
         <Pressable
@@ -203,6 +244,7 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
         icon="cog-outline"
         subtitle={t('Ajusta la app a tu gusto')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -245,11 +287,18 @@ const makeStyles = () =>
       gap: 8,
     },
     sectionTitle: {
+      flexShrink: 1,
       fontSize: 21,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.4,
       color: theme.colors.text,
       lineHeight: 30,
+    },
+    // Aclaración bajo un control de la tarjeta (el rango del temporizador).
+    sectionHint: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 16,
     },
     pressed: {
       opacity: 0.85,

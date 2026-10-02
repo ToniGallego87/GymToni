@@ -124,7 +124,9 @@ export function setLastAutoBackupAt(timestamp: number): void {
 export function getStoredRestTimerSeconds(): number | null {
   const raw = readSetting(REST_TIMER_KEY);
   const value = raw ? parseInt(raw, 10) : NaN;
-  return Number.isFinite(value) && value > 0 ? value : null;
+  // 0 es un valor fijado de verdad ("sin descanso"), no un "nunca fijado":
+  // devolverlo como null resucitaría el valor por defecto en cada arranque.
+  return Number.isFinite(value) && value >= 0 ? value : null;
 }
 
 export function setStoredRestTimerSeconds(seconds: number): void {
@@ -175,4 +177,43 @@ export function getStoredSeenBadges(): string[] | null {
 
 export function setStoredSeenBadges(ids: string[]): void {
   writeSetting(SEEN_BADGES_KEY, JSON.stringify(ids));
+}
+
+// Hitos de la Actividad ya publicados en la nube, por clave `kind:ref` (ver
+// lib/activity.ts). Evita reenviar en cada arranque lo que ya está subido: la
+// tabla es idempotente (`unique (user_id, kind, ref)`), así que esto es un
+// ahorro de red, no la fuente de verdad. Borrarlo solo provoca una resubida.
+const PUBLISHED_ACTIVITY_KEY = 'publishedActivity';
+
+export function getStoredPublishedActivity(): string[] {
+  const raw = readSetting(PUBLISHED_ACTIVITY_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function setStoredPublishedActivity(keys: string[]): void {
+  writeSetting(PUBLISHED_ACTIVITY_KEY, JSON.stringify(keys));
+}
+
+// ¿Ya se separaron los registros que llevaban fuerza y cardio en un mismo log?
+// (ver splitMixedCardioLogs). Se marca tras la primera pasada —también cuando no
+// había ninguno que partir, como en una instalación nueva— y a partir de ahí no
+// se vuelve a comprobar. OJO: un log mixto que llegue DESPUÉS por sync, desde un
+// dispositivo con una versión anterior de la app, ya no se separará; borrar esta
+// clave vuelve a armar la comprobación.
+const CARDIO_SPLIT_KEY = 'cardioSplitDone';
+
+export function getStoredCardioSplitDone(): boolean {
+  return readSetting(CARDIO_SPLIT_KEY) === '1';
+}
+
+export function setStoredCardioSplitDone(): void {
+  writeSetting(CARDIO_SPLIT_KEY, '1');
 }

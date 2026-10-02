@@ -47,8 +47,76 @@ export function formatDate(timestamp: number): string {
     .replace(/^[a-z]/, (c) => c.toUpperCase());
 }
 
+/**
+ * Una clave `YYYY-MM-DD` leída como fecha LOCAL, al mediodía.
+ *
+ * Las claves de día no llevan hora, así que hay que ponerle una para construir
+ * el `Date` con el que se pinta. Se usa el mediodía y no la medianoche porque
+ * es el punto del día que ningún salto horario puede mover de fecha; lo que se
+ * ve es lo mismo, pero no depende de que la medianoche exista en el huso de
+ * quien entrena.
+ */
+function dateFromKey(dateStr: string): Date {
+  return new Date(`${dateStr}T12:00:00`);
+}
+
+/**
+ * "12 jul" a partir de una clave `YYYY-MM-DD`.
+ *
+ * Fuente única del formato corto de fecha: lo escribían por su cuenta Cardio
+ * (`dayMonth`, el rango de la semana) y Progreso por ejercicio (`shortDate`,
+ * el eje de la gráfica y los récords) — la MISMA implementación letra por
+ * letra bajo dos nombres distintos.
+ */
+export function shortDayMonth(dateStr: string): string {
+  return dateFromKey(dateStr)
+    .toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })
+    .replace('.', '');
+}
+
+/**
+ * "12 de julio de 2025" a partir de una clave `YYYY-MM-DD`. El hermano largo
+ * de `shortDayMonth`, con los mismos dos consumidores que lo tenían repetido
+ * (Progreso por ejercicio y Logros).
+ */
+export function longDate(dateStr: string): string {
+  return dateFromKey(dateStr)
+    .toLocaleDateString(dateLocale, {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    })
+    .replace('.', '');
+}
+
+/**
+ * `formatDate` desde una clave `YYYY-MM-DD` en vez de un timestamp:
+ * "Lunes, 12/07/2025". El Detalle lo escribía a mano con las mismas opciones y
+ * la misma capitalización, en la otra rama de la misma expresión en la que ya
+ * llamaba a `formatDate`.
+ */
+export function formatDateFromKey(dateStr: string): string {
+  return formatDate(dateFromKey(dateStr).getTime());
+}
+
+/**
+ * Día de una fecha como clave `YYYY-MM-DD` en la zona horaria DEL MÓVIL.
+ *
+ * Fuente única de "qué día es este instante" en toda la app. Antes se sacaba
+ * con `toISOString()`, que es UTC: en husos con desfase, un entreno metido de
+ * madrugada se guardaba con la fecha del día anterior y el calendario marcaba
+ * "hoy" en la casilla equivocada. El día de la app es el del reloj de quien
+ * entrena, no el de Greenwich.
+ */
+export function dateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export function getToday(): string {
-  return new Date().toISOString().split('T')[0];
+  return dateKey(new Date());
 }
 
 /**
@@ -102,6 +170,21 @@ export function getLogTimestamp(log: WorkoutLog | null | undefined): number {
     return new Date(`${log.date}T00:00:00`).getTime();
   }
   return 0;
+}
+
+/**
+ * Día de un log como clave `YYYY-MM-DD`, comparable con `getToday()`. Usa la
+ * fecha guardada y, si el log es antiguo (o viene de un backup) y no la trae,
+ * la deriva de `createdAt` con el MISMO criterio que `getToday()` (día local):
+ * es la ÚNICA forma de responder "¿es de hoy?" en la app. Hermana de
+ * `getLogTimestamp`: la misma caída a `createdAt`, pero en día en vez de
+ * instante.
+ *
+ * La caída es por valor vacío (`||`), no solo por `undefined`: un `date: ""`
+ * de un backup manipulado tiene que resolverse igual que la ausencia del campo.
+ */
+export function logDateKey(log: WorkoutLog): string {
+  return log.date || dateKey(new Date(log.createdAt));
 }
 
 export type ImprovementKind = 'up' | 'down' | 'neutral';

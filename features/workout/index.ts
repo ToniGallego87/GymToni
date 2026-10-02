@@ -21,4 +21,3 @@ export { NewRoutineScreen } from './NewRoutineScreen';
 export { RoutineDetailScreen } from './RoutineDetailScreen';
 export { RoutineSelectorScreen } from './RoutineSelectorScreen';
 export { WeekAchievementScreen } from './WeekAchievementScreen';
-export { QRScannerScreen } from './QRScannerScreen';

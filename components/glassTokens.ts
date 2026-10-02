@@ -23,7 +23,7 @@ export let GLASS_TOP_BAR_OVERLAY = 'rgba(255, 255, 255, 0.04)';
 // por debajo (en noche el contraste del blur ya lo hace y no lleva borde).
 export let GLASS_TOP_BAR_HAIRLINE = 'rgba(255, 255, 255, 0.08)';
 
-export let GLASS_FLOATING_BG = 'rgba(28, 32, 42, 0.4)';
+export let GLASS_FLOATING_BG = 'rgba(28, 32, 42, 0.48)';
 export let GLASS_FLOATING_OVERLAY = 'rgba(8, 12, 16, 0)';
 export let GLASS_FLOATING_BORDER = 'rgba(255, 255, 255, 0.12)';
 export let GLASS_FLOATING_HIGHLIGHT = 'rgba(255, 255, 255, 0.1)';
@@ -42,6 +42,11 @@ export let GLASS_BACK_BUTTON_BORDER = 'rgba(255, 255, 255, 0.12)';
 export let GLASS_BACK_BUTTON_OVERLAY = 'rgba(8, 12, 16, 0.05)';
 export let GLASS_BACK_BUTTON_TEXT = '#ffffff';
 
+// Descanso flotante del registro: mismo cristal oscuro que "Volver" pero MÁS
+// denso. Se posa sobre la lista de ejercicios y la cuenta atrás tiene que
+// leerse de reojo sin el ruido de lo que pasa por debajo. Tinta: la de "Volver".
+export let GLASS_REST_TIMER_BG = 'rgba(28, 32, 42, 0.72)';
+
 function recomputeGlassTokens() {
   const isLight = theme.mode === 'light';
 
@@ -57,9 +62,11 @@ function recomputeGlassTokens() {
 
   // Con blur reducido debajo, el fondo solo tiñe: algo más denso que el
   // cristal original (0.24) porque el desenfoque a reducción 12 es más suave.
+  // Subido un punto más (0.40 → 0.48 en noche, 0.55 → 0.62 en día): la barra se
+  // separa mejor del contenido que pasa por debajo sin dejar de ser cristal.
   GLASS_FLOATING_BG = isLight
-    ? 'rgba(255, 255, 255, 0.55)'
-    : 'rgba(28, 32, 42, 0.4)';
+    ? 'rgba(255, 255, 255, 0.62)'
+    : 'rgba(28, 32, 42, 0.48)';
   GLASS_FLOATING_OVERLAY = isLight
     ? 'rgba(255, 255, 255, 0)'
     : 'rgba(8, 12, 16, 0)';
@@ -90,6 +97,10 @@ function recomputeGlassTokens() {
     ? 'rgba(8, 12, 16, 0.06)'
     : 'rgba(8, 12, 16, 0.05)';
   GLASS_BACK_BUTTON_TEXT = isLight ? GLASS_FLOATING_TEXT : '#ffffff';
+
+  GLASS_REST_TIMER_BG = isLight
+    ? 'rgba(18, 22, 30, 0.75)'
+    : 'rgba(28, 32, 42, 0.72)';
 }
 
 // Valor inicial acorde al tema guardado, y recálculo en cada cambio de tema.

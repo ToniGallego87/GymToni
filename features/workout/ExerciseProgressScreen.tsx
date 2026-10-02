@@ -25,16 +25,20 @@ import {
 } from '@lib/exerciseProgress';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
-import { dateLocale, fmtNum, t } from '@lib/i18n';
+import { fmtNum, t } from '@lib/i18n';
+import { longDate, shortDayMonth } from '@lib/utils';
 import { WorkoutRoutine } from '../../types';
 import {
   BarChart,
+  ChartArea,
   BarChartPoint,
+  getChartWidth,
   Button,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   ExerciseGifButton,
   GradientFill,
   LoadMoreButton,
@@ -70,7 +74,7 @@ const MAX_CHART_SESSIONS = 8;
 
 // Ejercicios por página: con un historial largo pintar la lista entera de golpe
 // bloquea la entrada a la pantalla. Se amplía de PAGE_SIZE en PAGE_SIZE.
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 // Umbrales del chrome de la lista. Con dos o tres ejercicios registrados (las
 // primeras semanas) buscador y orden eran más control que contenido encima de
@@ -88,21 +92,6 @@ const SORT_OPTIONS: SegmentedOption<ExerciseSort>[] = [
   { id: 'sessions', label: t('Sesiones') },
   { id: 'best', label: t('1RM') },
 ];
-
-/** "12 jul" a partir de una fecha YYYY-MM-DD. */
-const shortDate = (date: string) =>
-  new Date(`${date}T00:00:00`)
-    .toLocaleDateString(dateLocale, { day: 'numeric', month: 'short' })
-    .replace('.', '');
-
-const longDate = (date: string) =>
-  new Date(`${date}T00:00:00`)
-    .toLocaleDateString(dateLocale, {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    })
-    .replace('.', '');
 
 type ChartMetric = {
   id: string;
@@ -194,7 +183,7 @@ function buildSessionChart(
     return {
       key: point.session.logId,
       value: point.value,
-      label: shortDate(point.session.date),
+      label: shortDayMonth(point.session.date),
       valueLabel: metric.fmt(point.value),
       color,
       // La etiqueta es texto sobre la tarjeta: la última sesión necesita la
@@ -315,13 +304,10 @@ export function ExerciseProgressScreen({
     [sessions, metric]
   );
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: backBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
-  const chartWidth = Math.max(
-    250,
-    Math.min(windowWidth - theme.spacing.md * 2 - 20, 420)
-  );
+  const chartWidth = getChartWidth(windowWidth);
 
   // "Volver" sube un paso: de la ficha a la lista, o de la lista fuera. Si se
   // entró enfocado desde el detalle de un día no hay lista que enseñar y se
@@ -342,7 +328,10 @@ export function ExerciseProgressScreen({
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: topBarHeight + 28, paddingBottom: scrollBottomPadding },
+          {
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
+            paddingBottom: scrollBottomPadding,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -437,11 +426,12 @@ export function ExerciseProgressScreen({
 
         {/* Mismo botón de paginar que el historial de Inicio y el de Cardio:
             antes era un `Button` secundario con otras palabras ("Ver más"). El
-            recuento de los que faltan sobrevive como prop del componente
-            compartido, no como una copia con otra piel. */}
+            rótulo dice lo que va a CRECER la lista ("+10"), no cuántos faltan:
+            con un catálogo de cientos, "Cargar más (312)" se leía como si el
+            botón fuese a soltarlos todos. */}
         {!selected && visibleCount < filtered.length && (
           <LoadMoreButton
-            remaining={filtered.length - visibleCount}
+            step={Math.min(PAGE_SIZE, filtered.length - visibleCount)}
             onPress={() => {
               animateLayout();
               setVisibleCount((count) => count + PAGE_SIZE);
@@ -469,35 +459,41 @@ export function ExerciseProgressScreen({
               <Text style={styles.cardHint}>
                 {t('{n} sesiones · última el {date}', {
                   n: selected.sessionCount,
-                  date: shortDate(selected.lastDate),
+                  date: shortDayMonth(selected.lastDate),
                 })}
               </Text>
 
-              {chart ? (
-                <BarChart
-                  points={chart.bars}
-                  domain={chart.domain}
-                  width={chartWidth}
-                  formatYTick={(value) => metric.fmt(value)}
-                />
-              ) : (
-                <Text style={styles.chartEmpty}>
-                  {t('Aún no hay dos sesiones que comparar con esta medida.')}
-                </Text>
-              )}
+              {/* La gráfica y su filtro, centrados con la misma pieza que
+                  Inicio y Cardio (`ChartArea`). La TARJETA sí es distinta: aquí
+                  no se pliega ni se pulsa, y el título es el GIF del ejercicio,
+                  así que no usa `ChartCard`. */}
+              <ChartArea>
+                {chart ? (
+                  <BarChart
+                    points={chart.bars}
+                    domain={chart.domain}
+                    width={chartWidth}
+                    formatYTick={(value) => metric.fmt(value)}
+                  />
+                ) : (
+                  <Text style={styles.chartEmpty}>
+                    {t('Aún no hay dos sesiones que comparar con esta medida.')}
+                  </Text>
+                )}
 
-              <SegmentedFilter
-                style={{
-                  width: chartWidth,
-                  marginTop: SEGMENTED_FILTER_CHART_GAP,
-                }}
-                options={METRIC_OPTIONS}
-                value={metricId}
-                onChange={(id) => {
-                  animateLayout();
-                  setMetricId(id);
-                }}
-              />
+                <SegmentedFilter
+                  style={{
+                    width: chartWidth,
+                    marginTop: SEGMENTED_FILTER_CHART_GAP,
+                  }}
+                  options={METRIC_OPTIONS}
+                  value={metricId}
+                  onChange={(id) => {
+                    animateLayout();
+                    setMetricId(id);
+                  }}
+                />
+              </ChartArea>
             </View>
 
             <RecordsCard records={records} />
@@ -514,6 +510,7 @@ export function ExerciseProgressScreen({
             : t('Elige un ejercicio para ver su evolución')
         }
         topInset={insets.top}
+        onLayout={onTopBarLayout}
         // Salto a la rutina desde la ficha. Con el ejercicio en varias rutinas,
         // una opción por rutina (con su nombre) en vez de un selector aparte.
         menuItems={
@@ -575,7 +572,7 @@ function ExerciseRow({
         <Text style={styles.exerciseHint} numberOfLines={1}>
           {t('{n} sesiones · {date}', {
             n: exercise.sessionCount,
-            date: shortDate(exercise.lastDate),
+            date: shortDayMonth(exercise.lastDate),
           })}
         </Text>
       </View>

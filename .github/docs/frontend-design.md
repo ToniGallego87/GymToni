@@ -20,8 +20,11 @@ cada componente para que recalcule sus `styles` vía `makeStyles()`; no hace fal
 relanzar el bundle. El IDIOMA sigue el mismo patrón (`lib/i18n.ts`: `language`/
 `dateLocale`/`decimalSeparator` como bindings vivos + `useLanguageVersion` en la
 raíz), así que también se cambia en caliente.
-**Ningún hex suelto en pantallas/componentes**: los únicos archivos con valores hex
-son `lib/theme.ts` y `components/glassTokens.ts`.
+**Ningún hex suelto en pantallas/componentes**: los valores hex viven en
+`lib/theme.ts` y `components/glassTokens.ts`. La única excepción es el
+destello de `components/LevelPill.tsx` (`flash`), que necesita un blanco
+literal en los DOS temas —`colors.white` es tinta, y en día vale casi negro—
+y lo lleva comentado en el sitio.
 
 Los roles no siempre se invierten: varios tokens (`accentLine`, `shadow`,
 `gradients.cardSheen`) tienen valor propio en día porque su inverso literal queda
@@ -108,8 +111,10 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
   pestañas, en cambio, es cristal claro en día): su terna propia son los tokens
   `GLASS_BACK_BUTTON_BG` / `_BORDER` / `_OVERLAY` / `_TEXT`.
 - Tokens de blur/opacidad/bordes en `components/glassTokens.ts`.
-- Todas las pantallas son edge-to-edge; el scroll se compensa con
-  `GLASS_TOP_BAR_BASE_HEIGHT + insets.top` arriba y, abajo, con las métricas de
+- Todas las pantallas son edge-to-edge; el scroll se compensa arriba con
+  `useGlassTopBarHeight(insets.top)` —devuelve `{ topBarHeight, onTopBarLayout }`,
+  y el `onLayout` va a la `GlassTopBar`— más `GLASS_TOP_BAR_CONTENT_GAP` (exportado
+  por `GlassTopBar`, único sitio donde se fija el hueco), y abajo con las métricas de
   la pieza flotante que lleve: `getFloatingPrimaryNavMetrics(insets.bottom)` en
   las pestañas y `getFloatingBackButtonMetrics(insets.bottom)` en las
   subpantallas (ambas devuelven `{ bottom, scrollBottomPadding }`). No recalcular
@@ -123,6 +128,12 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
   pulsar) de "Guardar" del registro y "Crear rutina". No recrearlo a mano.
 - **`GymIconGrid`** — rejilla del selector de icono de día (modales de Nueva
   rutina y detalle de rutina).
+- **`OptionToggle`** — segmentado de opciones excluyentes (tema, idioma, backup
+  automático). Activo = `primaryMuted` + tinta `primary`.
+- **`ValueStepper`** — su hermano para el ajuste de UN valor a saltos: flecha,
+  cifra, flecha (el temporizador de descanso en Configuración). Misma altura y
+  mismo borde que `OptionToggle`, así que los ajustes de una pantalla se leen
+  como una sola familia. Quien lo usa pone el salto y los topes.
 - **`AppModal`** — carpintería común de TODA superficie modal: overlay
   `colors.overlay`, tarjeta surface centrada (max 340), título con icono, cuerpo
   y pie de `Button`. `ConfirmModal` es su especialización. Nunca montar un
@@ -136,7 +147,16 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
 - **`ConfirmModal`** — TODA confirmación (eliminar, importar, limpiar).
   Overlay `colors.overlay`, tarjeta surface centrada (max 340), título 18/800
   centrado con icono, botones `Button`. No montar `Modal` a mano para un confirm.
-- **`HeroCard`** — tarjeta principal de Inicio, una por estado (`HeroVariant`).
+- **`HeroCard`** — tarjeta principal de Inicio y Cardio, una por estado
+  (`HeroVariant`). Una sola tarjeta, sin carrusel. Si su subtítulo tiene
+  alternativa (otro día), va como botón "Cambiar" aparte, no como subtítulo
+  pulsable: el texto es parte de la tarjeta.
+- **`ChallengesStrip`** — la tira bajo la hero de Inicio y Cardio: "Retos de la
+  semana", el recuento de superados y un anillo por reto; abre `ChallengesModal`. Superficie, no oro: no
+  compite con la hero.
+- **`TopBarActionButton`** — la acción principal de una pantalla de consulta,
+  rotulada en la barra (`rightElement`): "Editar" en el Detalle y en la ficha de
+  rutina. Lo raro va al ⋮.
 - **`GradientFill`** — relleno sutil de acento en tarjetas con borde.
 - **`Toast`** — feedback flotante global (éxito/error) sobre la barra inferior.
 - **`WhatsNewModal`** — novedades tras actualizar (contenido en `data/changelog.ts`).

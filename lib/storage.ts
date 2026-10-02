@@ -11,7 +11,15 @@ import {
   saveAppDataToDb,
 } from './db';
 import { normalizeAppData } from './normalize';
-import devWebSeed from '@data/devWebSeed.json';
+
+// El backup de dev (532 KB) se carga con `require` perezoso y NO con un import
+// de módulo: solo se usa en web+dev, pero como import lo evaluaba el arranque de
+// cualquier build, release incluida.
+type DevWebSeed = Partial<WorkoutAppData> & {
+  cardioWeightHistory?: unknown;
+};
+const getDevWebSeed = (): DevWebSeed =>
+  require('../data/devWebSeed.json') as DevWebSeed;
 
 // Claves del almacenamiento JSON. En nativo son legacy: solo se leen una vez
 // para migrar a SQLite. En web siguen siendo el almacenamiento principal
@@ -44,7 +52,7 @@ export function getSeedAppData(): WorkoutAppData {
   // poder probar las vistas con datos de verdad. En nativo dev se mantiene el
   // seed de fábrica (WORKOUT_ROUTINES / INITIAL_LOGS).
   if (isWeb) {
-    return normalizeAppData(devWebSeed as Partial<WorkoutAppData>, {
+    return normalizeAppData(getDevWebSeed(), {
       routines: [],
       logs: [],
     });
@@ -57,7 +65,7 @@ export function getSeedAppData(): WorkoutAppData {
 // valor por defecto. Vacío si el backup no lo trae o fuera de web+dev.
 export function getSeedCardioWeightHistory(): WeightSegment[] {
   if (!__DEV__ || !isWeb) return [];
-  const seed = devWebSeed as { cardioWeightHistory?: unknown };
+  const seed = getDevWebSeed();
   return isValidWeightSegments(seed.cardioWeightHistory)
     ? seed.cardioWeightHistory
     : [];

@@ -1,5 +1,6 @@
 import { WorkoutDay, WorkoutLog } from '../types';
 import { fmtNum } from './i18n';
+import { dateKey, getToday } from './utils';
 
 /**
  * Lógica pura del cardio "de primera clase".
@@ -264,6 +265,59 @@ export function toCardioOnlyLog(
 }
 
 /**
+ * Sufijo del id del log de cardio que sale de partir uno mixto. El id es
+ * DETERMINISTA a propósito: si la separación corre en dos dispositivos, los dos
+ * generan el mismo id y el sync los fusiona en vez de duplicar el cardio.
+ */
+const SPLIT_CARDIO_SUFFIX = '-cardio';
+
+/**
+ * Separa los logs MIXTOS (fuerza + cardio en el mismo registro) en dos sesiones
+ * independientes, que es como se guardan desde que cardio y fuerza están
+ * desligados: el log original se queda con la fuerza y sin cardio, y nace un log
+ * de solo cardio con el mismo día y fecha.
+ *
+ * Es idempotente: un log ya separado no vuelve a tocarse (su cardio ya no está),
+ * y el id del log nuevo se deriva del original, así que repetirlo no duplica.
+ * La nota se queda con la FUERZA: se escribió desde el registro del entreno.
+ *
+ * Devuelve lo que hay que escribir; no toca el estado (lo aplica quien llama,
+ * con los dispatch normales, para que el sync lo suba como cualquier cambio).
+ */
+export function splitMixedCardioLogs(
+  logs: WorkoutLog[],
+  updatedAt: number = Date.now()
+): { updated: WorkoutLog[]; created: WorkoutLog[] } {
+  const updated: WorkoutLog[] = [];
+  const created: WorkoutLog[] = [];
+  const existingIds = new Set(logs.map((log) => log.id));
+
+  logs.forEach((log) => {
+    // Mixto = tiene cardio Y tiene fuerza. Un log de solo cardio ya está bien.
+    const raw = log.cardio?.rawInput?.trim();
+    if (!raw || isCardioOnlyLog(log) || log.exercises.length === 0) return;
+
+    const cardioId = `${log.id}${SPLIT_CARDIO_SUFFIX}`;
+    // La fuerza se queda sin el cardio.
+    updated.push({ ...log, cardio: undefined, updatedAt });
+    // Y el cardio pasa a ser su propia sesión del mismo día. Si ya existe (otra
+    // pasada, u otro dispositivo que ya lo separó y sincronizó), no se recrea.
+    if (!existingIds.has(cardioId)) {
+      created.push({
+        ...toCardioOnlyLog(log, updatedAt),
+        id: cardioId,
+        cardio: log.cardio,
+        // La nota es del entreno de fuerza, que es donde se escribió.
+        notes: undefined,
+        isDeload: undefined,
+      });
+    }
+  });
+
+  return { updated, created };
+}
+
+/**
  * Nombre del icono (MaterialCommunityIcons) de una disciplina de cardio.
  * `hasIncline` fuerza el icono de cuesta arriba. Se devuelve como string para
  * mantener esta librería libre de dependencias de UI; se castea en el consumidor.
@@ -317,7 +371,7 @@ export function cardioSessionFromLog(
       ? weight
       : weightForTimestamp(weight, log.createdAt);
 
-  const date = log.date || new Date(log.createdAt).toISOString().split('T')[0];
+  const date = log.date || dateKey(new Date(log.createdAt));
 
   // Reclasificación retroactiva: entradas antiguas con pendiente = andar en cinta.
   const entries = parsed.map((e) =>
@@ -411,7 +465,7 @@ export function groupSessionsByDay(sessions: CardioSession[]): CardioDay[] {
     else byDate.set(session.date, [session]);
   }
 
-  const today = new Date().toISOString().split('T')[0];
+  const today = getToday();
   return Array.from(byDate.keys())
     .sort()
     .map((date) => {
@@ -498,7 +552,7 @@ export function buildCardioWeeks(
   }
 
   const keys = Array.from(byWeek.keys()).sort();
-  const todayKey = isoWeekKey(new Date().toISOString().split('T')[0]);
+  const todayKey = isoWeekKey(getToday());
 
   let prevKcal: number | null = null;
   return keys.map((key, index) => {

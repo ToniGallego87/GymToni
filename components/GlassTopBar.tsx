@@ -1,10 +1,11 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
   Pressable,
   StyleSheet,
+  LayoutChangeEvent,
   TextStyle,
   ViewStyle,
 } from 'react-native';
@@ -22,7 +23,71 @@ import {
   GLASS_TOP_BAR_OVERLAY,
 } from './glassTokens';
 
-export const GLASS_TOP_BAR_BASE_HEIGHT = 50;
+// Piezas de una barra ESTÁNDAR (una línea de título y una de subtítulo, que es
+// lo que llevan todas), con los mismos números que sus estilos de más abajo.
+const TOP_BAR_PADDING_TOP = 6;
+// `iconTitle`.lineHeight, y también el icono de los `titleElement` (24).
+const TOP_BAR_TITLE_LINE = 24;
+const TOP_BAR_SUBTITLE_GAP = 4; // `subtitle`.marginTop
+const TOP_BAR_SUBTITLE_LINE = 19; // `subtitle`.lineHeight
+const TOP_BAR_PADDING_BOTTOM = theme.spacing.sm;
+
+/**
+ * Alto de la barra (sin el inset) mientras no se ha MEDIDO la de verdad: la suma
+ * de las piezas de arriba, no una cifra redonda.
+ *
+ * Que sea exacta importa más de lo que parece. La pantalla pinta su contenido a
+ * `topBarHeight + GLASS_TOP_BAR_CONTENT_GAP`, así que si la estimación se queda
+ * corta el contenido aparece en su sitio y, en cuanto llega la medida real por
+ * `onLayout`, DA UN SALTO hacia abajo. Con 50 se quedaba corta por 13 px en
+ * todas las pantallas, y se notaba al entrar en cualquiera que no naciera tapada
+ * por el splash (el registro, sin ir más lejos).
+ */
+export const GLASS_TOP_BAR_BASE_HEIGHT =
+  TOP_BAR_PADDING_TOP +
+  TOP_BAR_TITLE_LINE +
+  TOP_BAR_SUBTITLE_GAP +
+  TOP_BAR_SUBTITLE_LINE +
+  TOP_BAR_PADDING_BOTTOM;
+
+/**
+ * Aire entre el borde inferior de la barra y el PRIMER elemento de la pantalla.
+ * Único sitio donde se decide: toda pantalla con `GlassTopBar` lo suma al alto
+ * medido de la barra (`topBarHeight + GLASS_TOP_BAR_CONTENT_GAP`) en su
+ * `paddingTop`. Antes cada pantalla llevaba el número a mano (28) repetido
+ * veinte veces, así que no había forma de ajustar el aire de una sola vez.
+ */
+export const GLASS_TOP_BAR_CONTENT_GAP = 14;
+
+/**
+ * Alto real de la barra y el `onLayout` que lo mide. TODA pantalla con
+ * `GlassTopBar` usa esto para separar su contenido de la barra, que va flotando
+ * (position: absolute) y no empuja nada.
+ *
+ * Hace falta MEDIRLA porque la barra CRECE con su contenido: `minHeight` es
+ * `GLASS_TOP_BAR_BASE_HEIGHT + topInset`, pero un subtítulo —y más si ocupa dos
+ * líneas, como "Selecciona el día que vas a registrar"— la deja bastante más
+ * alta. Cada pantalla sumaba el hueco sobre la constante, así que el aire entre
+ * la barra y el primer elemento se comía justo lo que el subtítulo hubiera
+ * crecido: en las de subtítulo largo desaparecía del todo. Con la altura medida,
+ * la separación (`GLASS_TOP_BAR_CONTENT_GAP`) es la misma en todas.
+ */
+export function useGlassTopBarHeight(topInset: number): {
+  topBarHeight: number;
+  onTopBarLayout: (event: LayoutChangeEvent) => void;
+} {
+  const [measured, setMeasured] = useState<number | null>(null);
+  const onTopBarLayout = useCallback((event: LayoutChangeEvent) => {
+    const next = Math.round(event.nativeEvent.layout.height);
+    setMeasured((prev) => (prev === next ? prev : next));
+  }, []);
+  // Hasta la primera medida, la estimación calculada (exacta para la barra
+  // estándar; solo la corrige un título o un subtítulo de dos líneas).
+  return {
+    topBarHeight: measured ?? GLASS_TOP_BAR_BASE_HEIGHT + topInset,
+    onTopBarLayout,
+  };
+}
 
 interface GlassTopBarProps {
   title: string;
@@ -65,6 +130,12 @@ interface GlassTopBarProps {
   }[];
   titleNumberOfLines?: number;
   subtitleNumberOfLines?: number;
+  /**
+   * Medida de la barra (`useGlassTopBarHeight`): la pantalla necesita su alto
+   * REAL para separar el contenido, porque la barra flota y crece con el
+   * subtítulo.
+   */
+  onLayout?: (event: LayoutChangeEvent) => void;
   containerStyle?: ViewStyle;
   titleStyle?: TextStyle;
 }
@@ -82,11 +153,12 @@ export function GlassTopBar({
   menuItems,
   titleNumberOfLines = 1,
   subtitleNumberOfLines = 2,
+  onLayout,
   containerStyle,
   titleStyle,
 }: GlassTopBarProps) {
   const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + topInset;
-  const topBarPaddingTop = topInset + 6;
+  const topBarPaddingTop = topInset + TOP_BAR_PADDING_TOP;
 
   // Menú de tres puntos compartido: el botón va en la fila de la barra, pero el
   // desplegable y su fondo se pintan como HERMANOS de la barra (fuera de su
@@ -132,6 +204,7 @@ export function GlassTopBar({
   return (
     <>
       <View
+        onLayout={onLayout}
         style={[
           styles.topBarBackground,
           { minHeight: topBarHeight, paddingTop: topBarPaddingTop },
@@ -312,7 +385,9 @@ const makeStyles = () =>
     },
     topBarContent: {
       paddingHorizontal: theme.spacing.md,
-      paddingBottom: theme.spacing.sm,
+      // La misma pieza que entra en GLASS_TOP_BAR_BASE_HEIGHT: si cambia una,
+      // cambia la otra, o la estimación vuelve a no cuadrar con la medida.
+      paddingBottom: TOP_BAR_PADDING_BOTTOM,
     },
     topBarRow: {
       flexDirection: 'row',

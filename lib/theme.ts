@@ -197,9 +197,9 @@ function buildTheme(mode: ThemeMode) {
       amber: (mode === 'light'
         ? ['#FFC94F', '#F0A81C', '#C98505']
         : ['#F9D85A', '#F2B33D', '#E08A26']) as [string, string, string],
-      // Sombreado del "peldaño" de las flechas del carrusel de heros: tinta oscura
-      // translúcida, intensa en el borde exterior y desvanecida a nada hacia el
-      // centro (ver HeroCarousel). En día pesa menos: sobre el oro vivo la misma
+      // Sombreado del "peldaño" de las barras de pliegue (tarjetas de ejercicio
+      // y días de una rutina): tinta oscura translúcida, intensa en el borde y
+      // desvanecida a nada hacia el centro. En día pesa menos: sobre el oro vivo la misma
       // tinta que en noche ennegrecía el escalón.
       heroStep: (mode === 'light'
         ? [

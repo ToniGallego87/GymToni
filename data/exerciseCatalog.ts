@@ -9,7 +9,6 @@
 // - Los GIF NO se empaquetan: se cargan bajo demanda desde el CDN (jsDelivr).
 //   La media es © Gym Visual; mostrar SIEMPRE la atribución al enseñar un GIF.
 import { language } from '@lib/i18n';
-import raw from './exerciseCatalog.json';
 
 export interface CatalogExercise {
   id: string;
@@ -21,13 +20,33 @@ export interface CatalogExercise {
   category: string; // clave inglesa (zona corporal)
 }
 
-export const EXERCISE_CATALOG = raw as unknown as CatalogExercise[];
+// El catálogo (1300 ejercicios, 288 KB de JSON) se carga la PRIMERA VEZ que
+// alguien lo pide, no al evaluar el bundle. Antes era un `import` de módulo, y
+// como este fichero cuelga del barril de `components` (el buscador de ejercicios,
+// el visor de GIF), el arranque pagaba siempre el JSON entero más el Map por id
+// aunque nadie fuera a abrir el buscador. Quien lo necesita es el registro y el
+// alta de ejercicios, nunca la primera pantalla.
+let catalog: CatalogExercise[] | null = null;
+let byId: Map<string, CatalogExercise> | null = null;
 
-const BY_ID = new Map(EXERCISE_CATALOG.map((e) => [e.id, e]));
+/** Catálogo completo. La primera llamada lo carga; las demás lo reutilizan. */
+export function getExerciseCatalog(): CatalogExercise[] {
+  if (!catalog) {
+    catalog = require('./exerciseCatalog.json') as unknown as CatalogExercise[];
+  }
+  return catalog;
+}
 
 /** Registro del catálogo por su id ("0001"). undefined si no existe o sin id. */
-export const getCatalogExercise = (id?: string): CatalogExercise | undefined =>
-  id ? BY_ID.get(id) : undefined;
+export const getCatalogExercise = (
+  id?: string
+): CatalogExercise | undefined => {
+  if (!id) return undefined;
+  if (!byId) {
+    byId = new Map(getExerciseCatalog().map((e) => [e.id, e]));
+  }
+  return byId.get(id);
+};
 
 // --- GIF / imagen bajo demanda (no empaquetados) ---
 const CDN = 'https://cdn.jsdelivr.net/gh/hasaneyldrm/exercises-dataset@main';

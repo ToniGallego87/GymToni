@@ -65,6 +65,9 @@ export interface WorkoutLogRow {
   starts_new_week: number;
   cardio_only: number;
   is_deload: number;
+  // Nota de la SESIÓN (no confundir con ExerciseLogRow.notes, que es del
+  // ejercicio ni con CardioLogRow.notes, que es del cardio).
+  notes: string | null;
 }
 
 export interface ExerciseLogRow {
@@ -241,6 +244,7 @@ export function logToRows(
       starts_new_week: log.startsNewWeek ? 1 : 0,
       cardio_only: log.cardioOnly ? 1 : 0,
       is_deload: log.isDeload ? 1 : 0,
+      notes: log.notes?.trim() ? log.notes : null,
     },
     exerciseLogs,
     logSets,
@@ -445,6 +449,7 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       startsNewWeek: row.starts_new_week ? true : undefined,
       cardioOnly: row.cardio_only ? true : undefined,
       isDeload: row.is_deload ? true : undefined,
+      notes: row.notes ?? undefined,
     }));
 
   return { routines, activeRoutineId, selectedRoutineId, logs };

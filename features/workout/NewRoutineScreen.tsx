@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AppModal,
   Button,
+  ConfirmModal,
   ExerciseEditorModal,
   ExerciseSummaryRow,
   SortableList,
@@ -14,7 +15,8 @@ import {
   getFloatingBackButtonMetrics,
   GradientCtaButton,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   GymIcon,
   GymIconGrid,
@@ -34,15 +36,13 @@ import {
 } from '@lib/exerciseForm';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { stripIconTag } from '@lib/routineShare';
+import { parseRoutineShareLink, stripIconTag } from '@lib/routineShare';
 import { WorkoutDay, WorkoutRoutine } from '../../types';
 
 interface NewRoutineScreenProps {
   existingRoutineCount: number;
   onCreateRoutine: (routine: WorkoutRoutine) => void;
   onBack: () => void;
-  // Abre el escáner de QR para importar una rutina compartida.
-  onScanRoutineQR?: () => void;
   // Salta a la pestaña Comunidad: la tercera vía de "¿ya tienes la rutina?",
   // para quien no tiene ninguna y no sabe que hay decenas listas.
   onOpenCommunity?: () => void;
@@ -105,7 +105,6 @@ export function NewRoutineScreen({
   existingRoutineCount,
   onCreateRoutine,
   onBack,
-  onScanRoutineQR,
   onOpenCommunity,
   initialDays,
 }: NewRoutineScreenProps) {
@@ -130,12 +129,22 @@ export function NewRoutineScreen({
   } | null>(null);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
+  // Importar por ENLACE (el que viaja dentro del QR). Antes era una pantalla
+  // completa que decía "escanea con la cámara" y luego ofrecía una caja de
+  // pegar: el escaneo de verdad lo hace la cámara del sistema y entra por deep
+  // link, así que aquí solo queda pegar, y eso cabe en un modal como el
+  // hermano de texto plano.
+  const [showLinkImport, setShowLinkImport] = useState(false);
+  const [linkText, setLinkText] = useState('');
+  const [linkError, setLinkError] = useState<string | null>(null);
   // Ejercicio con el editor abierto; el resto se muestran colapsados si tienen nombre.
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
   // Día cuyo selector de icono está abierto.
   const [iconPickerDayId, setIconPickerDayId] = useState<string | null>(null);
+  // Día pendiente de confirmar su borrado (antes se quitaba sin preguntar).
+  const [dayToDeleteId, setDayToDeleteId] = useState<string | null>(null);
 
   const handleImportText = () => {
     const parsed = buildDaysFromRoutineText(importText);
@@ -160,7 +169,42 @@ export function NewRoutineScreen({
       type: 'success',
     });
   };
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  // Enlace de rutina pegado a mano: mismo destino que el texto plano (rellenar
+  // los días del formulario), y el mismo aviso si no se reconoce.
+  const handleImportLink = () => {
+    const trimmed = linkText.trim();
+    if (!trimmed) {
+      setLinkError(t('Pega el enlace del QR aquí.'));
+      return;
+    }
+    const shared = parseRoutineShareLink(trimmed);
+    if (!shared) {
+      setLinkError(
+        t('Enlace no válido. Usa el enlace copiado desde "Compartir por QR".')
+      );
+      return;
+    }
+    setDays(
+      shared.days.slice(0, 7).map((day) => ({
+        id: generateId(),
+        title: day.title,
+        icon: day.icon,
+        exercises: buildExercisesFromText(day.exercisesText),
+      }))
+    );
+    setShowLinkImport(false);
+    setLinkText('');
+    setLinkError(null);
+    setToast({
+      message: t(
+        shared.days.length > 1 ? 'Importados {n} días' : 'Importado 1 día',
+        { n: Math.min(shared.days.length, 7) }
+      ),
+      type: 'success',
+    });
+  };
+
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -182,7 +226,6 @@ export function NewRoutineScreen({
   }, [days]);
   const titleMissing = (day: NewRoutineDayForm) =>
     !day.title.trim() && day.exercises.some((ex) => ex.name.trim());
-  const canRemoveDay = days.length > 1;
   const canAddMoreDays = canAddNewDay && days.length < 7;
 
   const updateDay = (
@@ -256,28 +299,25 @@ export function NewRoutineScreen({
     ]);
   };
 
+  // Quitar un día se confirma antes, como en la ficha de una rutina guardada:
+  // se lleva por delante los ejercicios ya tecleados, que aquí no existen en
+  // ningún otro sitio todavía.
   const handleRemoveDay = (dayId: string) => {
     setDays((previous) =>
       previous.length <= 1
         ? previous
         : previous.filter((day) => day.id !== dayId)
     );
+    setDayToDeleteId(null);
   };
 
-  // Reordena un día dentro de la rutina. El número visible ("Día N") se deriva
-  // del índice al construir la rutina (ver buildRoutineDays), así que basta con
-  // mover la entrada de sitio.
-  const handleMoveDay = (dayId: string, direction: -1 | 1) => {
-    setDays((previous) => {
-      const index = previous.findIndex((day) => day.id === dayId);
-      const target = index + direction;
-      if (index === -1 || target < 0 || target >= previous.length) {
-        return previous;
-      }
-      const next = [...previous];
-      [next[index], next[target]] = [next[target], next[index]];
-      return next;
-    });
+  // Arrastre por el asa: el día `from` cae en el hueco `to`. Mismo gesto (y
+  // mismo `SortableList`) que ya ordena los ejercicios dentro de cada día y que
+  // ordena los días en la ficha de una rutina guardada. El número visible
+  // ("Día N") se deriva del índice al construir la rutina (ver
+  // buildRoutineDays), así que basta con mover la entrada de sitio.
+  const handleMoveDayTo = (from: number, to: number) => {
+    setDays((previous) => moveRow(previous, from, to));
   };
 
   const buildRoutineDays = (): WorkoutDay[] => {
@@ -342,6 +382,168 @@ export function NewRoutineScreen({
     }
   };
 
+  // Tarjeta de un día del formulario. `dragHandle` solo llega cuando la lista
+  // de días es arrastrable (dos o más): con uno solo no hay nada que ordenar y
+  // el asa sería un adorno.
+  const renderDayCard = (
+    day: NewRoutineDayForm,
+    index: number,
+    dragHandle?: React.ReactNode
+  ) => {
+    const accent = theme.colors.accentLine;
+    const dayIcon = effectiveDayIcon(day);
+    const canRemoveThisDay = days.length > 1;
+
+    return (
+      <View
+        key={day.id}
+        style={[
+          styles.dayCard,
+          // Dentro de la lista arrastrable la separación la pone la propia
+          // lista (`gap`), no el contenedor de fuera.
+          !!dragHandle && styles.dayCardSortable,
+          { borderLeftColor: accent },
+        ]}
+      >
+        <GradientFill accent={accent} />
+
+        {/* Línea 1: asa de arrastre (si hay más de un día), "Día N" y el
+            selector de icono. Ordenar ya no es una fila de flechas debajo:
+            es el mismo asa que ordena los ejercicios de este día y los días
+            de una rutina ya guardada. */}
+        <View style={styles.dayHeaderRow}>
+          {dragHandle}
+          <Text style={styles.dayTitleDisplay}>
+            {t('Día')} {index + 1}
+          </Text>
+          <Pressable
+            style={({ pressed }) => [
+              styles.dayIconPick,
+              !dayIcon && styles.dayIconPickEmpty,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => setIconPickerDayId(day.id)}
+          >
+            {dayIcon ? (
+              <>
+                <GymIcon name={dayIcon} size={18} color={theme.colors.white} />
+                <Text style={styles.dayIconPickText}>
+                  {t(GYM_ICON_LABELS[dayIcon])}
+                </Text>
+              </>
+            ) : (
+              <>
+                <MaterialCommunityIcons
+                  name="help-circle-outline"
+                  size={18}
+                  color={theme.colors.primary}
+                />
+                <Text
+                  style={[
+                    styles.dayIconPickText,
+                    { color: theme.colors.primary },
+                  ]}
+                >
+                  {t('Elegir icono')}
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </View>
+
+        <View style={styles.inputRow}>
+          <TextInput
+            style={[styles.input, titleMissing(day) && styles.inputError]}
+            placeholder={t('Ej: Push, Pierna, Torso…')}
+            placeholderTextColor={theme.colors.textSecondary}
+            value={day.title}
+            onChangeText={(value) => handleUpdateTitle(day.id, value)}
+          />
+        </View>
+
+        <Text style={styles.label}>{t('Ejercicios')}</Text>
+
+        <SortableList
+          items={day.exercises}
+          keyOf={(exercise) => exercise.id}
+          onMove={(from, to) => handleMoveExerciseTo(day.id, from, to)}
+          renderItem={(exercise, handle) => (
+            <ExerciseSummaryRow
+              exercise={exercise}
+              canRemove={day.exercises.length > 1}
+              onEdit={() => setEditingExerciseId(exercise.id)}
+              onRemove={() => handleRemoveExercise(day.id, exercise.id)}
+              dragHandle={handle}
+            />
+          )}
+        />
+
+        {/* Popup de edición del ejercicio abierto (el lápiz de su fila),
+            el mismo que en la ficha de una rutina guardada. Cerrarlo sin
+            nombre descarta la fila si el día tiene otras. */}
+        {(() => {
+          const editing = day.exercises.find(
+            (exercise) => exercise.id === editingExerciseId
+          );
+          if (!editing) return null;
+          return (
+            <ExerciseEditorModal
+              visible
+              exercise={editing}
+              accent={accent}
+              onChange={(changes) =>
+                handleUpdateExercise(day.id, editing.id, changes)
+              }
+              onDone={() => {
+                if (!editing.name.trim()) {
+                  handleRemoveExercise(day.id, editing.id);
+                }
+                setEditingExerciseId(null);
+              }}
+            />
+          );
+        })()}
+
+        <Pressable
+          style={({ pressed }) => [
+            styles.addExerciseButton,
+            pressed && styles.buttonPressed,
+          ]}
+          onPress={() => handleAddExercise(day.id)}
+        >
+          <MaterialCommunityIcons
+            name="plus-circle-outline"
+            size={18}
+            color={theme.colors.primary}
+          />
+          <Text style={styles.addExerciseText}>{t('Añadir ejercicio')}</Text>
+        </Pressable>
+
+        {/* Quitar el día: rotulado y al pie del bloque, lejos del asa, igual
+            que en la ficha de una rutina guardada. Antes era una papelera
+            pegada a las flechas de ordenar y borraba sin preguntar. */}
+        {canRemoveThisDay && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.removeDayButton,
+              pressed && styles.buttonPressed,
+            ]}
+            onPress={() => setDayToDeleteId(day.id)}
+            accessibilityRole="button"
+            accessibilityLabel={t('Quitar día')}
+          >
+            <MaterialCommunityIcons
+              name="trash-can-outline"
+              size={16}
+              color={theme.colors.error}
+            />
+            <Text style={styles.removeDayText}>{t('Quitar día')}</Text>
+          </Pressable>
+        )}
+      </View>
+    );
+  };
+
   return (
     <View style={styles.container}>
       <StatusBar
@@ -355,7 +557,7 @@ export function NewRoutineScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -368,24 +570,22 @@ export function NewRoutineScreen({
           <Text style={styles.importGroupLabel}>
             {t('¿Ya tienes la rutina en otro sitio?')}
           </Text>
-          {onScanRoutineQR && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.qrButton,
-                pressed && styles.qrButtonPressed,
-              ]}
-              onPress={onScanRoutineQR}
-            >
-              <MaterialCommunityIcons
-                name="qrcode-scan"
-                size={18}
-                color={theme.colors.primary}
-              />
-              <Text style={styles.qrButtonText}>
-                {t('Crear a partir de QR')}
-              </Text>
-            </Pressable>
-          )}
+          <Pressable
+            style={({ pressed }) => [
+              styles.qrButton,
+              pressed && styles.qrButtonPressed,
+            ]}
+            onPress={() => setShowLinkImport(true)}
+          >
+            <MaterialCommunityIcons
+              name="link-variant"
+              size={18}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.qrButtonText}>
+              {t('Pegar el enlace de una rutina')}
+            </Text>
+          </Pressable>
           <Pressable
             style={({ pressed }) => [
               styles.qrButton,
@@ -457,207 +657,24 @@ export function NewRoutineScreen({
           </View>
         </View>
 
-        {days.map((day, index) => {
-          const accent = theme.colors.accentLine;
-          const dayIcon = effectiveDayIcon(day);
-
-          return (
-            <View
-              key={day.id}
-              style={[styles.dayCard, { borderLeftColor: accent }]}
-            >
-              <GradientFill accent={accent} />
-
-              {/* Línea 1: título del día + selector de icono, cada uno con su
-                  espacio. Reordenar/borrar va en su propia fila debajo, para no
-                  amontonar cuatro clusters de controles en una sola línea. */}
-              <View style={styles.dayHeaderRow}>
-                <Text style={styles.dayTitleDisplay}>
-                  {t('Día')} {index + 1}
-                </Text>
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.dayIconPick,
-                    !dayIcon && styles.dayIconPickEmpty,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => setIconPickerDayId(day.id)}
-                >
-                  {dayIcon ? (
-                    <>
-                      <GymIcon
-                        name={dayIcon}
-                        size={18}
-                        color={theme.colors.white}
-                      />
-                      <Text style={styles.dayIconPickText}>
-                        {t(GYM_ICON_LABELS[dayIcon])}
-                      </Text>
-                    </>
-                  ) : (
-                    <>
-                      <MaterialCommunityIcons
-                        name="help-circle-outline"
-                        size={18}
-                        color={theme.colors.primary}
-                      />
-                      <Text
-                        style={[
-                          styles.dayIconPickText,
-                          { color: theme.colors.primary },
-                        ]}
-                      >
-                        {t('Elegir icono')}
-                      </Text>
-                    </>
-                  )}
-                </Pressable>
-              </View>
-
-              {/* Subir/bajar/quitar solo con dos o más días: con uno solo los
-                  tres salían deshabilitados, una fila de controles grises en
-                  el primer formulario que ve un usuario nuevo. */}
-              {days.length > 1 && (
-                <View style={styles.dayReorderRow}>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.dayReorderButton,
-                      index === 0 && styles.dayReorderButtonDisabled,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => handleMoveDay(day.id, -1)}
-                    disabled={index === 0}
-                    hitSlop={6}
-                    accessibilityLabel={t('Subir día')}
-                  >
-                    <MaterialCommunityIcons
-                      name="chevron-up"
-                      size={18}
-                      color={
-                        index === 0
-                          ? theme.colors.textSecondary
-                          : theme.colors.text
-                      }
-                    />
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.dayReorderButton,
-                      index === days.length - 1 &&
-                        styles.dayReorderButtonDisabled,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => handleMoveDay(day.id, 1)}
-                    disabled={index === days.length - 1}
-                    hitSlop={6}
-                    accessibilityLabel={t('Bajar día')}
-                  >
-                    <MaterialCommunityIcons
-                      name="chevron-down"
-                      size={18}
-                      color={
-                        index === days.length - 1
-                          ? theme.colors.textSecondary
-                          : theme.colors.text
-                      }
-                    />
-                  </Pressable>
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.dayReorderButton,
-                      !canRemoveDay && styles.dayReorderButtonDisabled,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() => handleRemoveDay(day.id)}
-                    disabled={!canRemoveDay}
-                    hitSlop={6}
-                    accessibilityLabel={t('Quitar día')}
-                  >
-                    <MaterialCommunityIcons
-                      name="trash-can-outline"
-                      size={17}
-                      color={
-                        canRemoveDay
-                          ? theme.colors.error
-                          : theme.colors.textSecondary
-                      }
-                    />
-                  </Pressable>
-                </View>
-              )}
-
-              <View style={styles.inputRow}>
-                <TextInput
-                  style={[styles.input, titleMissing(day) && styles.inputError]}
-                  placeholder={t('Ej: Push, Pierna, Torso…')}
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={day.title}
-                  onChangeText={(value) => handleUpdateTitle(day.id, value)}
-                />
-              </View>
-
-              <Text style={styles.label}>{t('Ejercicios')}</Text>
-
-              <SortableList
-                items={day.exercises}
-                keyOf={(exercise) => exercise.id}
-                onMove={(from, to) => handleMoveExerciseTo(day.id, from, to)}
-                renderItem={(exercise, handle) => (
-                  <ExerciseSummaryRow
-                    exercise={exercise}
-                    canRemove={day.exercises.length > 1}
-                    onEdit={() => setEditingExerciseId(exercise.id)}
-                    onRemove={() => handleRemoveExercise(day.id, exercise.id)}
-                    dragHandle={handle}
-                  />
-                )}
-              />
-
-              {/* Popup de edición del ejercicio abierto (el lápiz de su fila),
-                  el mismo que en la ficha de una rutina guardada. Cerrarlo sin
-                  nombre descarta la fila si el día tiene otras. */}
-              {(() => {
-                const editing = day.exercises.find(
-                  (exercise) => exercise.id === editingExerciseId
-                );
-                if (!editing) return null;
-                return (
-                  <ExerciseEditorModal
-                    visible
-                    exercise={editing}
-                    accent={accent}
-                    onChange={(changes) =>
-                      handleUpdateExercise(day.id, editing.id, changes)
-                    }
-                    onDone={() => {
-                      if (!editing.name.trim()) {
-                        handleRemoveExercise(day.id, editing.id);
-                      }
-                      setEditingExerciseId(null);
-                    }}
-                  />
-                );
-              })()}
-
-              <Pressable
-                style={({ pressed }) => [
-                  styles.addExerciseButton,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => handleAddExercise(day.id)}
-              >
-                <MaterialCommunityIcons
-                  name="plus-circle-outline"
-                  size={18}
-                  color={theme.colors.primary}
-                />
-                <Text style={styles.addExerciseText}>
-                  {t('Añadir ejercicio')}
-                </Text>
-              </Pressable>
-            </View>
-          );
-        })}
+        {days.length > 1 ? (
+          <View style={styles.daysSortable}>
+            <SortableList
+              items={days}
+              keyOf={(day) => day.id}
+              gap={12}
+              onMove={handleMoveDayTo}
+              handleWidth={44}
+              handleIconSize={28}
+              handleStyle={styles.dayDragHandle}
+              renderItem={(day, handle, index) =>
+                renderDayCard(day, index, handle)
+              }
+            />
+          </View>
+        ) : (
+          days.map((day, index) => renderDayCard(day, index))
+        )}
 
         <View style={styles.rowButtons}>
           <Pressable
@@ -710,6 +727,7 @@ export function NewRoutineScreen({
         icon="playlist-plus"
         subtitle={t('Define los ejercicios que realizarás cada día')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -755,6 +773,56 @@ export function NewRoutineScreen({
         />
       </AppModal>
 
+      {/* Pegar el enlace de una rutina (el que viaja dentro del QR). El mensaje
+          recuerda que el QR de verdad se escanea con la cámara del móvil y abre
+          la app solo: aquí solo hace falta entrar si te han pasado el enlace
+          suelto. Antes esto era una pantalla completa fuera del sistema de
+          diseño; ahora es el hermano del modal de texto plano. */}
+      <AppModal
+        visible={showLinkImport}
+        onRequestClose={() => setShowLinkImport(false)}
+        title={t('Pegar el enlace de una rutina')}
+        icon="link-variant"
+        align="left"
+        message={t(
+          'Si tienes el código QR delante, apunta con la cámara del móvil y GymBro se abrirá solo con la rutina. Si te han pasado el enlace, pégalo aquí.'
+        )}
+        footer={
+          <View style={styles.modalButtons}>
+            <Button
+              title={t('Cancelar')}
+              onPress={() => setShowLinkImport(false)}
+              variant="secondary"
+              size="medium"
+              style={styles.modalButton}
+            />
+            <Button
+              title={t('Importar')}
+              onPress={handleImportLink}
+              variant="primary"
+              size="medium"
+              style={styles.modalButton}
+            />
+          </View>
+        }
+      >
+        <TextInput
+          style={styles.modalLinkInput}
+          multiline
+          textAlignVertical="top"
+          placeholder="gymbro://import-routine?data=..."
+          placeholderTextColor={theme.colors.textSecondary}
+          value={linkText}
+          onChangeText={(value) => {
+            setLinkText(value);
+            setLinkError(null);
+          }}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {!!linkError && <Text style={styles.modalError}>{linkError}</Text>}
+      </AppModal>
+
       <AppModal
         visible={iconPickerDayId !== null}
         onRequestClose={() => setIconPickerDayId(null)}
@@ -780,6 +848,20 @@ export function NewRoutineScreen({
           }
         />
       </AppModal>
+
+      {/* Quitar un día se pregunta antes: se lleva sus ejercicios, que en este
+          formulario aún no existen en ningún otro sitio. Mismo modal y mismo
+          criterio que la ficha de una rutina guardada. */}
+      <ConfirmModal
+        visible={!!dayToDeleteId}
+        title={t('¿Quitar el día?')}
+        message={t(
+          'Se quitará del formulario junto con los ejercicios que le hayas puesto. ¿Continuar?'
+        )}
+        confirmLabel={t('Quitar')}
+        onConfirm={() => dayToDeleteId && handleRemoveDay(dayToDeleteId)}
+        onCancel={() => setDayToDeleteId(null)}
+      />
 
       {toast && (
         <Toast
@@ -826,23 +908,38 @@ const makeStyles = () =>
       justifyContent: 'space-between',
       gap: 8,
     },
-    dayReorderRow: {
+    // Lista de días arrastrable: la separación entre tarjetas la pone la
+    // propia lista (`gap`), así que el contenedor solo aporta el hueco de
+    // abajo (el `gap: 12` del scroll no llega dentro de ella).
+    daysSortable: {
+      marginBottom: 0,
+    },
+    dayCardSortable: {
+      marginBottom: 0,
+    },
+    // El asa se sale del `padding` de la tarjeta (margen negativo) para quedar
+    // a ras de su borde izquierdo, igual que en la ficha de una rutina.
+    dayDragHandle: {
+      marginLeft: -theme.spacing.md,
+      marginVertical: -theme.spacing.md,
+    },
+    // Quitar el día: rotulado y al pie del bloque, lejos del asa. Borrar un día
+    // se lleva sus ejercicios, así que pide confirmación (ConfirmModal).
+    removeDayButton: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'flex-end',
-      gap: 4,
-    },
-    dayReorderButton: {
-      width: 32,
-      height: 32,
-      alignItems: 'center',
       justifyContent: 'center',
+      gap: 6,
+      paddingVertical: 8,
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderColor: theme.colors.error,
     },
-    dayReorderButtonDisabled: {
-      opacity: 0.4,
+    removeDayText: {
+      color: theme.colors.error,
+      fontSize: 13,
+      fontWeight: '800',
+      lineHeight: 17,
     },
     dayTitleDisplay: {
       fontSize: 21,
@@ -1022,6 +1119,27 @@ const makeStyles = () =>
       color: theme.colors.text,
       fontSize: 14,
       lineHeight: 20,
+    },
+    // Caja del enlace pegado: como la de texto plano pero baja (un enlace ocupa
+    // dos o tres renglones, no una rutina entera).
+    modalLinkInput: {
+      marginTop: 12,
+      minHeight: 76,
+      maxHeight: 140,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      padding: 12,
+      color: theme.colors.text,
+      fontSize: 14,
+      lineHeight: 20,
+    },
+    modalError: {
+      marginTop: 8,
+      color: theme.colors.error,
+      fontSize: 13,
+      lineHeight: 18,
     },
     modalButtons: {
       flexDirection: 'row',

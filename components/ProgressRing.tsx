@@ -4,33 +4,35 @@ import { StyleSheet, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { theme } from '@lib/theme';
 
-interface RestTimerRingProps {
-  /** Fracción del descanso ya consumida (0 = recién lanzado, 1 = terminado). */
+interface ProgressRingProps {
+  /** Fracción completada (0 = vacío, 1 = lleno). */
   progress: number;
   /** Diámetro total del anillo. */
   size: number;
   /** Grosor del trazo. */
   strokeWidth?: number;
-  /** Color del trazo (por defecto el acento del descanso). */
+  /** Color del trazo (por defecto el acento estructural). */
   color?: string;
-  /** Lo que va centrado dentro (la cuenta atrás). */
+  /** Lo que va centrado dentro (un icono o una cifra). */
   children?: ReactNode;
 }
 
 /**
- * Rueda del descanso (y anillo de progreso de las insignias): un anillo que se va completando en el sentido de las
- * agujas del reloj a medida que pasa el tiempo, con la cuenta atrás en el
- * centro. Pista tenue del acento debajo y trazo del acento encima; el arco se
- * dibuja con `strokeDasharray` sobre la circunferencia y arranca arriba (el
- * `rotation` de -90° del SVG).
+ * Anillo de progreso: se completa en el sentido de las agujas del reloj según
+ * `progress`, con lo que se quiera centrado dentro. Lo usan las casillas de
+ * insignias de Logros y los retos de la hero de estadísticas. (Se llamaba
+ * `RestTimerRing` porque nació como rueda del descanso; el descanso pasó a ser
+ * un relleno y el anillo se quedó para el progreso.) Pista tenue del acento
+ * debajo y trazo del acento encima; el arco se dibuja con `strokeDasharray`
+ * sobre la circunferencia y arranca arriba (el `rotation` de -90° del SVG).
  */
-export function RestTimerRing({
+export function ProgressRing({
   progress,
   size,
   strokeWidth = 8,
   color = theme.colors.accentLine,
   children,
-}: RestTimerRingProps) {
+}: ProgressRingProps) {
   const clamped = Math.min(1, Math.max(0, progress));
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;

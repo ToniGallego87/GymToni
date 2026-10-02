@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (19 suites, 257 tests)
+npm test           # Jest sobre lib/ (19 suites, 260 tests)
 npm run format     # Prettier
 ```
 
@@ -41,18 +41,22 @@ GymToni/
 │   └── +native-intent.ts     ← Redirección de deep links nativos
 ├── components/               ← UI reutilizable
 │   ├── glassTokens.ts        ← Tokens del sistema glass (blur, opacidades)
-│   ├── GlassTopBar.tsx       ← Barra superior (título estándar via prop icon)
+│   ├── GlassTopBar.tsx       ← Barra superior (título estándar via prop icon) + `useGlassTopBarHeight` (alto REAL medido)
 │   ├── FloatingPrimaryNav.tsx / FloatingBackButton.tsx / FloatingGlassBar.tsx
 │   ├── Button.tsx            ← Botón estándar (primary/secondary/danger)
 │   ├── AppModal.tsx          ← Carpintería única de los modales de la app
 │   ├── ConfirmModal.tsx      ← AppModal + par cancelar/confirmar
-│   ├── HeroCard.tsx          ← Tarjeta principal de Inicio
+│   ├── HeroCard.tsx          ← Tarjeta principal de Inicio y Cardio (una sola, sin carrusel)
+│   ├── ChallengesStrip.tsx   ← Tira bajo la hero: retos de la semana, siempre a la vista
+│   ├── TopBarActionButton.tsx ← Acción principal rotulada en la barra ("Editar" del Detalle y de la ficha de rutina)
 │   ├── GlassBlur.tsx         ← Cristal esmerilado de las barras (módulo nativo glass-blur; cae a fondo translúcido si no está)
 │   ├── StatsStrip.tsx        ← Fila de cifras (kg / kcal + 3 referencias) de las tarjetas de progreso de Inicio y Cardio
-│   ├── BarChart.tsx          ← Gráfica de barras (Inicio y Cardio)
+│   ├── BarChart.tsx          ← Gráfica de barras (Inicio, Cardio y Progreso por ejercicio) + `getChartWidth` (ancho común de gráfica y filtro)
 │   ├── WeightTrendChart.tsx  ← Línea del peso corporal en el tiempo (pantalla Peso)
-│   ├── SortableList.tsx      ← Lista reordenable arrastrando por un asa (ejercicios del día)
+│   ├── SortableList.tsx      ← Lista reordenable arrastrando por un asa (ejercicios de un día y días de una rutina)
 │   ├── SegmentedFilter.tsx   ← Filtro de chips de las gráficas
+│   ├── OptionToggle.tsx / ValueStepper.tsx ← Ajustes en el sitio: segmentado de opciones y ‹ valor › a saltos
+│   ├── LoadMoreButton.tsx    ← Paginación de los historiales e "Cargar más (+10)" del catálogo de ejercicios
 │   ├── ExerciseInputField.tsx← Registro serie a serie (60x8 → ➕)
 │   ├── ExerciseFormRow.tsx   ← Popup de edición de un ejercicio + fila resumen (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
@@ -60,7 +64,7 @@ GymToni/
 │   ├── Avatar.tsx            ← Foto de perfil (fuente única de las pantallas sociales)
 │   ├── AchievementPoster.tsx ← Póster SVG de hitos semanales (imagen/vídeo)
 │   ├── ChallengesModal.tsx / AwardModal.tsx / LevelPill.tsx ← Retos de la semana, popup de premio y píldora de nivel
-│   ├── RestTimerRing.tsx     ← Anillo de progreso (SVG): rueda del descanso y casillas de Logros
+│   ├── ProgressRing.tsx      ← Anillo de progreso (SVG): casillas de Logros y retos de la hero
 │   ├── AnchorMenu.tsx        ← Menú desplegable anclado a un botón ⋯ (acciones de la tarjeta de ejercicio)
 │   ├── ThemeRevealOverlay.tsx ← Cambio de tema: disco con pantallazo de la piel de destino (react-native-view-shot)
 │   ├── WhatsNewModal.tsx     ← Popup de novedades tras actualizar
@@ -75,18 +79,19 @@ GymToni/
 │   ├── CardioScreen.tsx      ← Sesiones de cardio, kcal, peso corporal
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
-│   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y cuadrícula (rutinas, ejercicios, peso, temporizador, configuración, logros)
+│   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y cuadrícula (rutinas, ejercicios, peso, configuración, logros)
 │   ├── AchievementsScreen.tsx ← Logros: nivel (retos superados + logros, regla de puntos), fila a todos los retos (ChallengesModal) e insignias con progreso en la casilla (lib/level.ts, badges.ts)
-│   ├── SettingsScreen.tsx    ← Configuración: tema, idioma, novedades y acceso a Datos y nube
+│   ├── SettingsScreen.tsx    ← Configuración: tema, idioma, descanso entre series, novedades y acceso a Datos y nube
 │   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
 │   ├── PublicRoutineScreen.tsx ← Rutina ajena en solo lectura (antes de copiarla)
 │   ├── ProfileEditModal.tsx  ← Popup del perfil público propio (lápiz de Perfil)
 │   ├── UserProfileScreen.tsx / FollowingScreen.tsx ← Perfil de otro y listas de seguir/seguidores
-│   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx / QRScannerScreen.tsx
+│   ├── NewRoutineScreen.tsx / RoutineDetailScreen.tsx
 │   └── WeekAchievementScreen.tsx ← Compartir logros semanales
 ├── hooks/
 │   ├── useWorkout.ts         ← Consumer del contexto
 │   ├── useCloudSync.ts       ← Sync de fondo (login / foreground) → refresca estado
+│   ├── useMyProfile.ts       ← Perfil público propio (copia local + refresco); `hasProfileFilled`
 │   ├── useAccountLevel.ts    ← Retos vigentes + nivel; con `record` apunta los superados y sube el nivel al perfil
 │   └── useDeferredReady.ts   ← Difiere el contenido pesado de una pantalla un frame
 ├── lib/                      ← Lógica compartida (ver ARCHITECTURE.md)
@@ -117,14 +122,21 @@ GymToni/
 ## Formato de entrada
 
 - **Series**: `{peso}x{reps}`, una a una — `60x8`, `22.5x10`. Dos campos con
-  flechas +/− y el botón "Añadir serie", que se encoge a un "+" junto a las
-  burbujas en cuanto entra la primera. Cada serie metida lleva su × para
+  flechas +/− y el botón ancho "Añadir serie", fijo bajo las casillas en todas
+  las series y rotulado con la que entra ("Añadir serie 3/4"); las burbujas de
+  lo ya metido van debajo. Cada serie metida lleva su × para
   borrarla (no hay "borrar última"), y "Saltar resto / Saltar ejercicio" cierra
   el ejercicio desde el ⋯ de su cabecera.
 - **Cardio**: por disciplina en `CardioInputField` (cinta andar/correr, bici,
   elíptica…), con duración, velocidad/pendiente. Se guarda como `rawInput`.
-- **Notas**: desde el ⋯ del ejercicio (modal); con la tarjeta plegada, el icono
-  de nota junto al título avisa de que hay algo escrito y la abre.
+- **Notas del ejercicio**: desde el ⋯ del ejercicio (modal); con la tarjeta
+  plegada, el icono de nota junto al título avisa de que hay algo escrito y la
+  abre.
+- **Nota de la sesión**: el contexto del día ("gym lleno, cambié banca por
+  mancuernas"), al pie del registro junto al cardio. Se ofrece como botón
+  mientras no haya nada escrito y se autoguarda; el Detalle la pinta bajo la
+  tira de resumen. Campo `notes` de `WorkoutLog` (columna `notes` en
+  `workout_logs`, local y en la nube).
 
 ## Persistencia
 

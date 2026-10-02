@@ -7,7 +7,8 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   OptionToggle,
   Toast,
@@ -33,6 +34,7 @@ import {
   verifySignUpCode,
   resendSignUpCode,
 } from '@lib/cloud/auth';
+import { clearSocialCache } from '@lib/socialCache';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
 import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
 import { clearOutbox } from '@lib/db';
@@ -110,7 +112,7 @@ export function DataScreen({
     type: 'success' | 'error';
   } | null>(null);
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: backBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -252,6 +254,9 @@ export function DataScreen({
     setBusyAction('signout');
     try {
       await signOut();
+      // Las copias de las pantallas sociales son de lo que vio esta cuenta: no
+      // se quedan en el dispositivo tras salir (lib/socialCache.ts).
+      await clearSocialCache();
     } finally {
       setBusyAction(null);
     }
@@ -375,7 +380,7 @@ export function DataScreen({
         contentContainerStyle={[
           styles.content,
           {
-            paddingTop: topBarHeight + 28,
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
             paddingBottom: scrollBottomPadding,
           },
         ]}
@@ -699,6 +704,7 @@ export function DataScreen({
         icon="folder-cog-outline"
         subtitle={t('Tu cuenta, tus copias y tus datos')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={backBottom} />

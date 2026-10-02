@@ -3,10 +3,15 @@
     "name": "GymBro",
     "slug": "gymbro",
     "icon": "./assets/icon.png",
-    "version": "0.8.0",
+    "version": "0.8.1",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "assetBundlePatterns": ["**/*"],
+    "splash": {
+      "image": "./assets/title.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tonigallego.gymbro"

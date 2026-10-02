@@ -122,7 +122,12 @@ export function LikeButton({
  * Con `explanation` la burbuja se puede tocar y abre un `AppModal` corto que
  * dice qué mide ("Series planificadas en toda la semana"): un icono y una
  * cifra sin explicar son solo un número, igual que le pasaba a la píldora de
- * intensidad. Sin `explanation` (comentarios) sigue siendo un dato sin toque.
+ * intensidad.
+ *
+ * Sin `explanation` (comentarios) es un DATO, y se pinta plano: sin la píldora
+ * de fondo. En el pie de la tarjeta la regla queda a la vista — lo que tiene
+ * fondo de píldora se pulsa (series, guardar, me gusta) y lo plano solo se lee.
+ * Antes los dos se pintaban idénticos y uno de los dos no hacía nada al tocarlo.
  */
 export function StatBubble({
   icon,
@@ -154,7 +159,7 @@ export function StatBubble({
   if (!explanation) {
     return (
       <View
-        style={[styles.button, style]}
+        style={[styles.button, styles.buttonFlat, style]}
         accessible
         accessibilityRole="text"
         accessibilityLabel={label}
@@ -196,6 +201,21 @@ export function StatBubble({
         }
       />
     </>
+  );
+}
+
+/**
+ * Hueco de una burbuja cuyo dato todavía se está cargando: la misma píldora,
+ * vacía y atenuada. Reserva el alto y el ancho para que la tarjeta no CREZCA
+ * bajo el dedo cuando llegan las series y los comentarios (el tablón se pinta
+ * en dos tiempos y la lista ya responde al toque en el primero).
+ */
+export function StatBubbleSkeleton({ style }: { style?: ViewStyle }) {
+  return (
+    <View
+      style={[styles.button, styles.skeleton, style]}
+      pointerEvents="none"
+    />
   );
 }
 
@@ -296,6 +316,10 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surfaceAlt,
     },
     buttonSaved: { backgroundColor: theme.colors.primaryMuted },
+    // Dato, no control: sin fondo de píldora y sin el padding que la dibuja.
+    buttonFlat: { backgroundColor: 'transparent', paddingHorizontal: 2 },
+    // Mismo alto que una burbuja con contenido (icono 20 + 6 arriba y abajo).
+    skeleton: { width: 52, height: 32, opacity: 0.45 },
     label: {
       color: theme.colors.textSecondary,
       fontSize: 13,

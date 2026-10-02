@@ -16,23 +16,23 @@ npm start          # Expo Go (móvil)
 
 ## Uso
 
-1. Selecciona un día de tu rutina
-2. Registra series una por una: `60x8` → ➕
-3. (Opcional) Cardio: `Cinta: 22.5mins, 11.5kmh`
+1. Pulsa la tarjeta principal de Inicio: abre el día que te toca (o elige otro)
+2. Registra cada serie: peso y repeticiones (salen rellenos con lo de la última vez) → "Añadir serie"
+3. (Opcional) Cardio: elige la disciplina (cinta, bici, elíptica…) y apunta minutos, velocidad y pendiente
 4. Sal con "Volver": el entrenamiento se guarda solo, serie a serie
 
 ## Documentación
 
-| Documento                                             | Contenido                                |
-| ----------------------------------------------------- | ---------------------------------------- |
-| [ARCHITECTURE.md](.github/ARCHITECTURE.md)            | Stack, flujo de datos, tipos, navegación |
-| [CONVENTIONS.md](.github/CONVENTIONS.md)              | Naming, patrones, reglas de código       |
-| [frontend-design.md](.github/docs/frontend-design.md) | Sistema de diseño UI (colores, tipos)    |
-| [backend-design.md](.github/docs/backend-design.md)   | Nube opcional: cuentas, sync y social    |
-| [SETUP.md](.github/docs/SETUP.md)                     | Instalación detallada y estructura       |
-| [COMMANDS.md](.github/docs/COMMANDS.md)               | Comandos de desarrollo y build           |
-| [UPDATES.md](.github/docs/UPDATES.md)                 | Historial de versiones                   |
-| [ROADMAP.md](.github/docs/ROADMAP.md)                 | Features futuras (no MVP)                |
+| Documento                                             | Contenido                                                        |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| [ARCHITECTURE.md](.github/ARCHITECTURE.md)            | Stack, flujo de datos, tipos, navegación                         |
+| [CONVENTIONS.md](.github/CONVENTIONS.md)              | Naming, patrones, reglas de código                               |
+| [frontend-design.md](.github/docs/frontend-design.md) | Sistema de diseño UI (colores, tipos)                            |
+| [backend-design.md](.github/docs/backend-design.md)   | Nube opcional: cuentas, sync y social                            |
+| [SETUP.md](.github/docs/SETUP.md)                     | Instalación detallada y estructura                               |
+| [COMMANDS.md](.github/docs/COMMANDS.md)               | Comandos de desarrollo y build                                   |
+| [UPDATES.md](.github/docs/UPDATES.md)                 | Historial de versiones                                           |
+| [ROADMAP.md](.github/docs/ROADMAP.md)                 | Trabajo pendiente: UX, simplificaciones y nuevas funcionalidades |
 
 ## Estructura
 
@@ -40,10 +40,11 @@ npm start          # Expo Go (móvil)
 app/                → Entry point
 components/         → UI reutilizable (Glass system, inputs, cards)
 features/workout/   → Pantallas y lógica de negocio
-hooks/              → useWorkout
-lib/                → Parsers, storage, theme, progress
+hooks/              → useWorkout, sync de nube, perfil, nivel
+lib/                → Parsers, storage, theme, progress, nube (cloud/)
 types/              → Tipos TypeScript centralizados
-data/               → Rutinas seed
+data/               → Rutinas seed, catálogo de ejercicios, changelog
+modules/            → Módulos nativos locales (descanso PiP, cristal, vídeo)
 ```
 
 **¡A entrenar! 💪**

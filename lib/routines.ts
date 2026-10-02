@@ -285,6 +285,10 @@ export type RoutineStatus = 'active' | 'prepared' | 'closed';
  * historial UNA vez: la lista de Rutinas necesita el dato de todas a la vez
  * (estado, fecha de cierre y orden), y hacerlo rutina a rutina era recorrer
  * `logs` entero tantas veces como rutinas hubiera.
+ *
+ * Para una rutina cerrada es su fecha de cierre: el día de su ÚLTIMO
+ * entrenamiento, que es cuando se dejó de usar (no existe un `closedAt`, el
+ * historial ya lo dice). Una rutina sin entrenamientos no aparece en el mapa.
  */
 export function lastTrainedByRoutine(logs: WorkoutLog[]): Map<string, number> {
   const last = new Map<string, number>();
@@ -294,21 +298,6 @@ export function lastTrainedByRoutine(logs: WorkoutLog[]): Map<string, number> {
     if (previous === undefined || at > previous) last.set(log.routineId, at);
   }
   return last;
-}
-
-/**
- * Cuándo se cerró una rutina: la fecha de su ÚLTIMO entrenamiento, que es el
- * día en que se dejó de usar. No hace falta guardar nada nuevo (no existe un
- * `closedAt`), el historial ya lo dice.
- *
- * Devuelve `undefined` si la rutina no tiene entrenamientos, es decir si nunca
- * llegó a cerrarse (está sin estrenar).
- */
-export function routineClosedAt(
-  routine: WorkoutRoutine,
-  logs: WorkoutLog[]
-): number | undefined {
-  return lastTrainedByRoutine(logs).get(routine.id);
 }
 
 /**

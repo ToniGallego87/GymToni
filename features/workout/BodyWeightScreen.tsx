@@ -11,7 +11,8 @@ import {
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
+  GLASS_TOP_BAR_CONTENT_GAP,
+  useGlassTopBarHeight,
   GradientFill,
   HeroWeightCard,
   StretchScrollView,
@@ -68,7 +69,7 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
   const daysSince = daysSinceWeightUpdate(segments);
   const isStale = daysSince != null && daysSince >= STALE_WEIGHT_DAYS;
 
-  const topBarHeight = GLASS_TOP_BAR_BASE_HEIGHT + insets.top;
+  const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: backBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
@@ -113,7 +114,10 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
-          { paddingTop: topBarHeight + 28, paddingBottom: scrollBottomPadding },
+          {
+            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
+            paddingBottom: scrollBottomPadding,
+          },
         ]}
         showsVerticalScrollIndicator={false}
       >
@@ -248,6 +252,7 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
         icon="scale-bathroom"
         subtitle={t('Tu peso y cómo ha ido cambiando')}
         topInset={insets.top}
+        onLayout={onTopBarLayout}
       />
 
       <FloatingBackButton onPress={onBack} bottom={backBottom} />

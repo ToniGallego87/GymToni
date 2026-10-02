@@ -5,7 +5,7 @@ import {
 } from './progress';
 import { improvementAgainstHistory } from './weeks';
 import { getLogTimestamp } from './utils';
-import { localizeDecimals, t } from './i18n';
+import { fmtInt, localizeDecimals, t } from './i18n';
 
 /** Ejercicio con mayor mejora respecto a la misma semana anterior. */
 export interface TopImprovement {
@@ -293,13 +293,6 @@ function countSetsAndReps(logs: WorkoutLog[]): { sets: number; reps: number } {
   return { sets, reps };
 }
 
-// "12450" → "12.450" (separador de miles español, sin depender de toLocaleString).
-function formatInt(value: number): string {
-  return Math.round(value)
-    .toString()
-    .replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-}
-
 function formatWeightText(weight: number): string {
   return Number.isInteger(weight)
     ? String(weight)
@@ -499,7 +492,7 @@ export function computeWeekAchievements({
 
   const totalVolume = getTotalVolume(currentLatest);
   if (totalVolume > 0) {
-    const text = formatInt(totalVolume);
+    const text = fmtInt(totalVolume);
     candidates.push({
       id: 'total-volume',
       category: 'volume',
@@ -547,7 +540,7 @@ export function computeWeekAchievements({
     });
   }
   if (reps > 0) {
-    const text = formatInt(reps);
+    const text = fmtInt(reps);
     candidates.push({
       id: 'total-reps',
       category: 'volume',

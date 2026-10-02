@@ -14,6 +14,7 @@ import {
   topKcalDiscipline,
   weightForTimestamp,
   toCardioOnlyLog,
+  splitMixedCardioLogs,
   CARDIO_ONLY_DAY_ID,
 } from '../cardio';
 import { WorkoutLog } from '../../types';
@@ -394,5 +395,85 @@ describe('toCardioOnlyLog', () => {
     expect(result.updatedAt).toBe(999);
     expect(result.id).toBe('l1');
     expect(result.cardio).toEqual(base.cardio);
+  });
+});
+
+// Separación de los registros viejos, que llevaban fuerza y cardio en el MISMO
+// log. Toca datos ya guardados, así que lo que se comprueba es que no se pierda
+// ni se duplique nada.
+describe('splitMixedCardioLogs', () => {
+  const mixed = (): WorkoutLog => ({
+    ...makeLog('L1', '2026-05-04', 'Cinta: 20min, 10kmh'),
+    exercises: [
+      {
+        id: 'e1',
+        exerciseId: 'ex1',
+        exerciseName: 'Banca',
+        order: 0,
+        rawInput: '60x8',
+        parsedSets: [{ weight: 60, reps: 8 }],
+        timestamp: 0,
+      },
+    ],
+    notes: 'gym lleno',
+    isDeload: true,
+  });
+
+  it('parte un log mixto en fuerza sin cardio y una sesión de cardio', () => {
+    const { updated, created } = splitMixedCardioLogs([mixed()], 999);
+
+    expect(updated).toHaveLength(1);
+    expect(updated[0].cardio).toBeUndefined();
+    expect(updated[0].exercises).toHaveLength(1);
+    // La nota y la descarga se quedan con la fuerza: es donde se escribieron.
+    expect(updated[0].notes).toBe('gym lleno');
+    expect(updated[0].isDeload).toBe(true);
+
+    expect(created).toHaveLength(1);
+    expect(created[0].id).toBe('L1-cardio');
+    expect(created[0].cardio?.rawInput).toBe('Cinta: 20min, 10kmh');
+    expect(created[0].dayId).toBe(CARDIO_ONLY_DAY_ID);
+    expect(created[0].cardioOnly).toBe(true);
+    expect(created[0].exercises).toEqual([]);
+    // Mismo día: el cardio no se mueve de fecha.
+    expect(created[0].date).toBe('2026-05-04');
+    expect(created[0].notes).toBeUndefined();
+  });
+
+  it('no toca lo que ya está separado: solo cardio, solo fuerza, o sin cardio', () => {
+    const cardioOnly = toCardioOnlyLog(makeLog('L2', '2026-05-05', 'Bici: 30min'));
+    const strengthOnly: WorkoutLog = {
+      ...mixed(),
+      id: 'L3',
+      cardio: undefined,
+    };
+    const { updated, created } = splitMixedCardioLogs([cardioOnly, strengthOnly]);
+    expect(updated).toEqual([]);
+    expect(created).toEqual([]);
+  });
+
+  it('es idempotente: repetirla no vuelve a crear el log de cardio', () => {
+    const primera = splitMixedCardioLogs([mixed()], 1);
+    // Segunda pasada sobre el resultado de la primera (lo que habría en la BD).
+    const segunda = splitMixedCardioLogs(
+      [...primera.updated, ...primera.created],
+      2
+    );
+    expect(segunda.updated).toEqual([]);
+    expect(segunda.created).toEqual([]);
+  });
+
+  it('con el log de cardio ya sincronizado desde otro móvil, no lo duplica', () => {
+    const log = mixed();
+    const yaCreado: WorkoutLog = {
+      ...toCardioOnlyLog(log, 5),
+      id: 'L1-cardio',
+    };
+    const { updated, created } = splitMixedCardioLogs([log, yaCreado], 7);
+    // La fuerza aún tenía su cardio dentro, así que sí se limpia…
+    expect(updated).toHaveLength(1);
+    expect(updated[0].cardio).toBeUndefined();
+    // …pero el log de cardio no se recrea.
+    expect(created).toEqual([]);
   });
 });

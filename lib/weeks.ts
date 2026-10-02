@@ -4,7 +4,8 @@ import {
   getComparableWorkoutScores,
   ImprovementResult,
 } from './progress';
-import { getLogTimestamp } from './utils';
+import { getLogTimestamp, logDateKey } from './utils';
+import { isCardioOnlyLog } from './cardio';
 
 /** Mapa { numeroDeBloque (empezando en 1) -> logs ordenados por fecha ascendente }. */
 export type WeekBlocks = Record<number, WorkoutLog[]>;
@@ -721,4 +722,29 @@ export function buildWeekProgress(
   }
 
   return points;
+}
+
+/**
+ * Fechas (YYYY-MM-DD) que YA tienen un entreno de fuerza, ignorando el log que
+ * se esté editando. Es la regla "un entrenamiento por día": el Calendario pinta
+ * UNA celda por fecha, así que un segundo entreno ese día quedaría escondido, y
+ * además un día repetido abre bloque de semana nueva (ver `groupLogsIntoWeekBlocks`).
+ * En vez de tolerarlo y disimularlo, no se deja crear: el selector de día no
+ * arranca otro y "Fecha del entreno" pinta esos días bloqueados.
+ *
+ * El cardio no cuenta: cardio y fuerza el mismo día conviven (cada modo del
+ * Calendario tiene su propia celda).
+ */
+export function takenStrengthDates(
+  logs: WorkoutLog[],
+  exceptLogId?: string
+): string[] {
+  const dates = new Set<string>();
+  logs.forEach((log) => {
+    if (isCardioOnlyLog(log)) return;
+    if (exceptLogId && log.id === exceptLogId) return;
+    const date = logDateKey(log);
+    if (date) dates.add(date);
+  });
+  return [...dates];
 }

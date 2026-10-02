@@ -9,6 +9,32 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.1',
+    items: [
+      'El cardio y la fuerza ya son dos sesiones distintas. Antes el cardio de un día acababa metido dentro del entreno de pesas; ahora cada uno tiene su registro, su nota y se borra por separado. Tus entrenos antiguos se separan solos la primera vez que abres la app.',
+      'Puedes dejar una nota en cada sesión. Al pie del registro tienes un hueco para apuntar cómo fue el día ("gym lleno, cambié banca por mancuernas"), y al revisar el entreno la ves arriba del todo, antes de los ejercicios.',
+      'Inicio y Cardio estrenan una sola tarjeta grande con todo lo importante a la vista: los retos de la semana, tu racha y los días que llevas hechos. La tarjeta te dice qué día te toca y te lleva a él de un toque.',
+      'La app abre bastante más rápido: lo que no se ve en la primera pantalla ya no retrasa el arranque.',
+      'En Comunidad puedes ver la trayectoria de una persona: sus insignias, los retos que ha superado y los días que ha entrenado, con la rutina de la que salió cada día.',
+      'Y si no quieres enseñar los días que entrenas, puedes apagarlo desde Editar perfil sin tener que hacer privado todo el resto.',
+      'El descanso entre series se ajusta con flechas, sin abrir ninguna ventana, se puede mover por la pantalla y te dice si lo que viene es otra serie o el siguiente ejercicio.',
+      'El tiempo de descanso por defecto se ajusta ahora en Configuración, que es donde lo buscabas.',
+      'El historial de Inicio y de Cardio aparece plegado, así ves de golpe todas tus semanas. Cada semana cerrada te dice si la cumpliste, y al abrirla salen también los días que faltaron.',
+      'El calendario vuelve a decirte de qué rutina es cada día, y ya no pinta dos veces el mismo entrenamiento.',
+      'Para cambiar tu foto de perfil basta con tocar la foto. La ventana de editar perfil se queda solo con tus datos.',
+      'El perfil de otra persona en Comunidad está más limpio: un botón para pasar de sus rutinas a su actividad, sin datos repetidos.',
+      'Traer una rutina por enlace se hace desde la propia pantalla de crear rutina, sin saltar a otra.',
+      'Al crear una rutina ya puedes ordenar y borrar los días igual que en una rutina que ya existe.',
+      'Volver atrás te deja donde estabas, y no en una pantalla cualquiera.',
+      'En Inicio cada porcentaje dice contra qué se compara, para que sepas qué estás mirando.',
+      'El tablón de Comunidad va en dos columnas y ya no se mueve bajo el dedo mientras cargan las rutinas.',
+      'Los seguidores, el nivel y el botón "Seguir" ya no enseñan un 0 o un dato equivocado mientras cargan.',
+      'Corregido: cambiar entre claro y oscuro ya no parpadea ni hace desaparecer las flechas de la tarjeta de Inicio.',
+      'Corregido: la gráfica de fuerza mostraba porcentajes negativos sin tener aún una semana completa, y el póster de logros escribía los números en español con la app en inglés.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.0',
     items: [
       'Ahora ganas puntos y subes de nivel. Cada semana tienes retos (completar la semana, mejorar un 3 %, superar tu mejor sesión, quemar kcal…) y al superarlos sumas puntos, igual que al conseguir una insignia. Tu nivel se ve junto a tu nombre, y también lo ven los demás en Comunidad.',

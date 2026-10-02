@@ -132,9 +132,12 @@ lib/                    → Lógica compartida
   ├── pipTimer.ts       → Ventana flotante del descanso (módulo nativo pip-timer,
   │                       Picture-in-Picture de Android; no-op en iOS/web)
   ├── layoutAnimation.ts→ animateLayout compartido (habilita LayoutAnimation en Android)
-  ├── utils.ts          → Utilidades genéricas (generateId, formatDate, getToday,
-  │                       findDayInRoutines, formatRestTime y getImprovementColor;
-  │                       el indicador de mejora se pinta con components/TrendDelta)
+  ├── utils.ts          → Utilidades genéricas (generateId, findDayInRoutines,
+  │                       formatRestTime, getImprovementColor) y la FUENTE ÚNICA
+  │                       de fechas: dateKey/getToday/logDateKey (clave de día en
+  │                       el huso del móvil) y el pintado (formatDate,
+  │                       formatDateFromKey, shortDayMonth, longDate);
+  │                       el indicador de mejora se pinta con components/TrendDelta
   └── theme.ts          → Colores, degradados (gradients), tipografía, spacing
 lib/__tests__/          → Tests Jest de la lógica pura (npm test)
 types/                  → Definiciones TypeScript centralizadas
@@ -160,13 +163,13 @@ Subpantallas (setScreen; se renderizan opacas encima del pager)
   HomeScreen
     ├─→ DaySelectorScreen → WorkoutLogScreen (registrar)
     ├─→ RoutineSelectorScreen → RoutineDetailScreen (ver/editar, compartir QR)
-    ├─→ NewRoutineScreen → QRScannerScreen (importar por QR/texto)
+    ├─→ NewRoutineScreen (importar por enlace o texto plano: modales propios)
     ├─→ WeekAchievementScreen (imagen/vídeo de logros)
     └─→ DetailScreen (ver log; recuerda origen home/calendar/cardio para volver)
   ProfileScreen (identidad pública + números + menú)
     ├─→ RoutineSelectorScreen · ExerciseProgressScreen
     ├─→ ProfileEditModal (popup: perfil público propio, foto, bio, público/privado)
-    └─→ SettingsScreen (tema, idioma, novedades)
+    └─→ SettingsScreen (tema, idioma, descanso entre series, novedades)
           └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
   CommunityScreen (tablón de rutinas públicas)
     ├─→ PublicRoutineScreen (rutina ajena en SOLO lectura + "Añadir a mis rutinas")

@@ -1,6 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -9,6 +10,7 @@ import {
   useRestSecondsLeft,
   useRestTimer,
 } from '@lib/restTimerStore';
+import { useRestFillStyle } from '@lib/restFill';
 import { formatRestTime } from '@lib/utils';
 import {
   GLASS_BACK_BUTTON_BG,
@@ -43,6 +45,9 @@ interface RestTimerBarProps {
 export function RestTimerBar({ onPress, bottom }: RestTimerBarProps) {
   const restTimer = useRestTimer();
   const seconds = useRestSecondsLeft();
+  // Mismo relleno que la tarjeta del registro: cuánto queda se ve sin leer el
+  // número (ver `lib/restFill`).
+  const fillStyle = useRestFillStyle();
 
   if (!restTimer || seconds <= 0) return null;
 
@@ -55,6 +60,7 @@ export function RestTimerBar({ onPress, bottom }: RestTimerBarProps) {
     >
       <GlassBlur tint={GLASS_BACK_BUTTON_BG} style={styles.blur} />
       <View style={styles.overlay} />
+      <Animated.View style={[styles.fill, fillStyle]} pointerEvents="none" />
 
       <MaterialCommunityIcons
         name="timer-sand"
@@ -108,6 +114,15 @@ const makeStyles = () =>
     overlay: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: GLASS_BACK_BUTTON_OVERLAY,
+    },
+    // Lo ya consumido del descanso, de izquierda a derecha (lleno = se acabó).
+    // Mismo tinte que en la tarjeta del registro.
+    fill: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      bottom: 0,
+      backgroundColor: theme.colors.accentLine + '3D',
     },
     // La cuenta atrás manda: es el dato por el que se mira la barra.
     countdown: {

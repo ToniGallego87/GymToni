@@ -90,6 +90,11 @@ export interface WorkoutLog {
   // vive en el/los log(s) del bloque. A efectos de estadística la semana queda
   // al margen: barra en blanco en la gráfica y no sirve de base al comparar.
   isDeload?: boolean;
+  // Nota de la SESIÓN: el contexto del día ("gym lleno, cambié banca por
+  // mancuernas"), que es lo que explica los datos raros al revisar el
+  // histórico. Distinta de `ExerciseLog.notes` (de un ejercicio concreto) y de
+  // `CardioLog.notes` (del cardio).
+  notes?: string;
 }
 
 export interface WorkoutAppData {

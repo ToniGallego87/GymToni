@@ -39,7 +39,7 @@ const fadeIn = FadeIn.duration(180);
 const fadeOut = FadeOut.duration(140);
 
 // Sombreado del "peldaño" del pliegue al pie de la tarjeta: misma tinta y mismos
-// cortes que las flechas laterales de la hero card (ver HeroCarousel), pero en
+// cortes que la barra de pliegue de los días de una rutina, y en
 // vertical: intensa en el borde inferior y desvanecida a nada hacia el centro,
 // para que la barra se lea como un escalón tallado en la tarjeta y no como un
 // botón pegado encima.
@@ -212,6 +212,11 @@ export function ExerciseInputField({
     };
   }, []);
 
+  // Heurística SOLO para rotular la casilla ("Segundos" en vez de
+  // "Repeticiones") cuando el objetivo se escribió en tiempo ("3x30s"). Ya NO
+  // decide si hay cronómetro: eso hacía que una plancha escrita "3x30" (sin la
+  // "s") no pudiera cronometrarse y no hubiera forma de pedirlo, con una regla
+  // invisible sobre un texto tecleado meses atrás.
   const isTimeBased = !!(
     target?.reps && /\d+\s*(s\b|seg|sec|min)/i.test(target.reps)
   );
@@ -284,6 +289,14 @@ export function ExerciseInputField({
     ? addedSets.length >= target.sets
     : false;
   const hasAddedSets = addedSets.length > 0;
+  // Rótulo del botón de añadir: la serie que entra sobre el objetivo ("3/4").
+  // Sin objetivo, solo la acción.
+  const addSetLabel = target?.sets
+    ? t('Añadir serie {n}/{total}', {
+        n: addedSets.length + 1,
+        total: target.sets,
+      })
+    : t('Añadir serie');
 
   // Al completarse (todas las series hechas) la tarjeta se tiñe de verde para
   // marcarla como terminada, esté colapsada o desplegada.
@@ -451,35 +464,6 @@ export function ExerciseInputField({
             )}
           </Animated.View>
         ))}
-        {/* Añadir serie, encogido al tamaño de una burbuja y a la derecha de la
-            última: con series ya metidas el CTA no necesita explicarse, así que
-            se queda en el "+". No aparece con la tarjeta plegada (no se puede
-            teclear) ni con el ejercicio completado (no hay nada que añadir). */}
-        {expanded && !isMaxSetsReached && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-          >
-            <Pressable
-              style={({ pressed }) => [
-                styles.addChip,
-                { backgroundColor: theme.colors.primaryFill },
-                pressed && styles.addButtonPressed,
-              ]}
-              onPress={handleAddSet}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel={t('Añadir serie')}
-            >
-              <MaterialCommunityIcons
-                name="plus"
-                size={20}
-                color={theme.colors.onGold}
-              />
-            </Pressable>
-          </Animated.View>
-        )}
         {renderImprovementBadge()}
       </View>
     );
@@ -739,27 +723,30 @@ export function ExerciseInputField({
               </View>
             </View>
 
-            {/* Botón principal: añadir serie. Solo mientras la tarjeta está
-                vacía, que es cuando hay que decir qué hace; en cuanto entra la
-                primera serie se encoge al "+" que acompaña a las burbujas (ver
-                renderSeriesRow), y así el CTA deja de comerse una fila entera. */}
-            {!hasAddedSets && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.addButton,
-                  { backgroundColor: theme.colors.primaryFill },
-                  pressed && styles.addButtonPressed,
-                ]}
-                onPress={handleAddSet}
-              >
-                <MaterialCommunityIcons
-                  name="plus-circle"
-                  size={22}
-                  color={theme.colors.onGold}
-                />
-                <Text style={styles.addButtonText}>{t('Añadir serie')}</Text>
-              </Pressable>
-            )}
+            {/* Botón principal: añadir serie. Ancho, fijo bajo las casillas y el
+                MISMO en todas las series: es la acción más repetida de la app y
+                se pulsa sin mirar, con una mano. Antes, tras la primera serie se
+                encogía a un "+" pegado a la última burbuja, que cambiaba de sitio
+                con cada serie y quedaba junto a la × que borra la de al lado. Las
+                burbujas van DEBAJO, así que crecer no lo mueve. Lleva la serie que
+                se va a añadir sobre el objetivo ("3/4"). */}
+            <Pressable
+              style={({ pressed }) => [
+                styles.addButton,
+                { backgroundColor: theme.colors.primaryFill },
+                pressed && styles.addButtonPressed,
+              ]}
+              onPress={handleAddSet}
+              accessibilityRole="button"
+              accessibilityLabel={addSetLabel}
+            >
+              <MaterialCommunityIcons
+                name="plus-circle"
+                size={22}
+                color={theme.colors.onGold}
+              />
+              <Text style={styles.addButtonText}>{addSetLabel}</Text>
+            </Pressable>
           </Animated.View>
         )}
 
@@ -783,81 +770,64 @@ export function ExerciseInputField({
 
         {/* Cronómetro del ejercicio, bajo las series. Borrar ya no vive aquí:
             cada burbuja lleva su × y esta fila desaparece si no hay cronómetro. */}
-        {expanded && !isMaxSetsReached && isTimeBased && stopwatchVisible && (
+        {expanded && !isMaxSetsReached && stopwatchVisible && (
           <Animated.View
             entering={fadeIn}
             exiting={fadeOut}
             layout={layoutTransition}
             style={styles.afterSeriesBlock}
           >
-            {/* Cronómetro (ejercicios basados en tiempo). Se despliega desde el
-                ⋯, y se queda a la vista mientras corre o mientras haya una
-                medida sin usar. */}
-            <View style={styles.stopwatchContainer}>
-              {/* Título propio: distingue este cronómetro (cuenta hacia
-                    ARRIBA, mide el ejercicio) del temporizador de descanso
-                    (dorado, cuenta hacia ABAJO) que aparece al pie tras
-                    completar una serie. */}
-              <View style={styles.stopwatchLabelRow}>
+            {/* Sin caja ni rótulo: DÍGITOS sueltos bajo las casillas, con un
+                botón redondo de arrancar/parar. El descanso entre series es un BLOQUE
+                que se rellena de izquierda a derecha, flotando al pie; este es
+                texto liso dentro de la tarjeta, y cuenta hacia arriba. Antes
+                los dos eran una caja con su cuenta y hacía falta un rótulo
+                ("Cronómetro del ejercicio") cuyo único trabajo era decir que
+                este no era el otro: se distinguían LEYENDO, que es lo que no se
+                puede hacer entre serie y serie. */}
+            <View style={styles.stopwatchRow}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.stopwatchToggle,
+                  timerRunning
+                    ? styles.stopwatchToggleStop
+                    : styles.stopwatchToggleStart,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={timerRunning ? stopTimer : startTimer}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  timerRunning ? t('Parar') : t('Cronometrar el ejercicio')
+                }
+              >
                 <MaterialCommunityIcons
-                  name="timer-outline"
-                  size={14}
-                  color={theme.colors.textSecondary}
+                  name={timerRunning ? 'stop' : 'play'}
+                  size={18}
+                  color={theme.colors.onDanger}
                 />
-                <Text style={styles.stopwatchLabel}>
-                  {t('Cronómetro del ejercicio')}
-                </Text>
-              </View>
+              </Pressable>
               <Text style={styles.stopwatchDisplay}>
                 {formatTimerDisplay(timerSeconds)}
               </Text>
-              <View style={styles.stopwatchButtons}>
+              {timerSeconds > 0 && !timerRunning && (
                 <Pressable
                   style={({ pressed }) => [
-                    styles.stopwatchBtn,
-                    timerRunning
-                      ? styles.stopwatchBtnStop
-                      : styles.stopwatchBtnStart,
+                    styles.stopwatchUse,
                     pressed && styles.buttonPressed,
                   ]}
-                  onPress={timerRunning ? stopTimer : startTimer}
+                  onPress={useTimerAsReps}
                 >
                   <MaterialCommunityIcons
-                    name={timerRunning ? 'stop' : 'play'}
+                    name="check"
                     size={16}
-                    color={theme.colors.onDanger}
+                    color={theme.colors.onGold}
                   />
-                  {/* Iniciar/Parar van sobre verde/rojo, no sobre el oro: su
-                        tinta es la de estado, no la del oro (ver theme.ts). */}
-                  <Text
-                    style={[
-                      styles.stopwatchButtonText,
-                      { color: theme.colors.onDanger },
-                    ]}
-                  >
-                    {timerRunning ? t('Parar') : t('Iniciar')}
+                  <Text style={styles.stopwatchUseText}>
+                    {t('Usar {n}s', { n: timerSeconds })}
                   </Text>
                 </Pressable>
-                {timerSeconds > 0 && !timerRunning && (
-                  <Pressable
-                    style={({ pressed }) => [
-                      styles.stopwatchBtn,
-                      styles.stopwatchBtnUse,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={useTimerAsReps}
-                  >
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={16}
-                      color={theme.colors.onGold}
-                    />
-                    <Text style={styles.stopwatchButtonText}>
-                      {t('Usar {n}s', { n: timerSeconds })}
-                    </Text>
-                  </Pressable>
-                )}
-              </View>
+              )}
             </View>
           </Animated.View>
         )}
@@ -933,16 +903,14 @@ export function ExerciseInputField({
             label: notes ? t('Editar nota') : t('Añadir nota'),
             onPress: onNotesPress,
           },
-          // Cronómetro solo en ejercicios medidos en tiempo (plancha, etc.).
-          ...(isTimeBased
-            ? [
-                {
-                  icon: 'timer-outline',
-                  label: t('Cronómetro del ejercicio'),
-                  onPress: () => setShowStopwatch(true),
-                } as AnchorMenuItem,
-              ]
-            : []),
+          // Cronómetro SIEMPRE: es una acción del ⋯, no estorba a nadie, y
+          // antes solo existía si el objetivo llevaba escrita una unidad de
+          // tiempo — justo en los isométricos donde más falta hace.
+          {
+            icon: 'timer-outline',
+            label: t('Cronometrar el ejercicio'),
+            onPress: () => setShowStopwatch(true),
+          } as AnchorMenuItem,
           // Cierra el ejercicio rellenando con guiones (series omitidas) las
           // que falten hasta el objetivo. Ya completado no hay nada que
           // saltar, así que no se ofrece.
@@ -1114,19 +1082,6 @@ const makeStyles = () =>
       fontWeight: '800',
       fontSize: 15,
       letterSpacing: 0.2,
-    },
-    // "+" compacto que sustituye al CTA ancho en cuanto hay series: mismo alto
-    // que una burbuja (padding vertical de `serieTag` + su línea de texto) para
-    // que la fila quede pareja, pero cuadrado, porque solo lleva el icono.
-    addChip: {
-      width: 46,
-      // Alto de una burbuja: su padding vertical (9+9) más la línea de su
-      // texto de 15. Así la fila queda pareja aunque el chip no lleve texto.
-      height: 38,
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      ...theme.shadow.soft,
     },
     improvementBadge: {
       paddingHorizontal: 12,
@@ -1327,51 +1282,41 @@ const makeStyles = () =>
     },
 
     // Cronómetro
-    stopwatchContainer: {
-      backgroundColor: theme.colors.inputBg,
-      borderRadius: theme.borderRadius.sm,
-      padding: 12,
-      alignItems: 'center',
-      gap: 10,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-    },
-    stopwatchLabelRow: {
+    // Cronómetro del ejercicio: una fila lisa, sin caja. Ver el bloque que la
+    // pinta para por qué no se parece al anillo dorado del descanso.
+    stopwatchRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 12,
     },
-    stopwatchLabel: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.colors.textSecondary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
+    stopwatchToggle: {
+      width: 34,
+      height: 34,
+      borderRadius: 17,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
+    stopwatchToggleStart: { backgroundColor: theme.colors.success },
+    stopwatchToggleStop: { backgroundColor: theme.colors.error },
+    // Tinta de texto, NO el oro: el oro es del descanso.
     stopwatchDisplay: {
-      fontSize: 32,
+      fontSize: 30,
       fontWeight: '800',
-      color: theme.colors.primary,
+      color: theme.colors.text,
       letterSpacing: 2,
       fontVariant: ['tabular-nums'],
     },
-    stopwatchButtons: {
-      flexDirection: 'row',
-      gap: 8,
-      alignItems: 'center',
-    },
-    stopwatchBtn: {
+    stopwatchUse: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 6,
-      paddingVertical: 10,
-      paddingHorizontal: 16,
+      marginLeft: 'auto',
+      paddingVertical: 8,
+      paddingHorizontal: 14,
       borderRadius: theme.borderRadius.sm,
+      backgroundColor: theme.colors.primaryFill,
     },
-    stopwatchBtnStart: { backgroundColor: theme.colors.success },
-    stopwatchBtnStop: { backgroundColor: theme.colors.error },
-    stopwatchBtnUse: { backgroundColor: theme.colors.primaryFill },
-    stopwatchButtonText: {
+    stopwatchUseText: {
       color: theme.colors.onGold,
       fontWeight: '800',
       fontSize: 14,

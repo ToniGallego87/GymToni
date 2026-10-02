@@ -18,11 +18,17 @@ interface LoadMoreButtonProps {
   style?: StyleProp<ViewStyle>;
   /**
    * Cuántos elementos quedan por mostrar. Si se pasa, el rótulo lo dice
-   * ("Cargar más (12)"). Lo usa la lista de "Progreso por ejercicio", donde el
-   * total es finito y saber cuántos faltan ayuda a decidir si seguir o buscar;
-   * los historiales de Inicio y Cardio no lo pasan (son semanas, no un catálogo).
+   * ("Cargar más (12)").
    */
   remaining?: number;
+  /**
+   * Cuántos elementos añade esta pulsación. Si se pasa, el rótulo lo dice
+   * ("Cargar más (+10)") y manda sobre `remaining`: en una lista larga importa
+   * más lo que va a crecer que lo que falta. Lo usa "Progreso por ejercicio";
+   * los historiales de Inicio y Cardio no pasan ninguno de los dos (son semanas,
+   * no un catálogo).
+   */
+  step?: number;
 }
 
 // Botón "Cargar más" del historial paginado. Fuente única de la paginación:
@@ -33,6 +39,7 @@ export function LoadMoreButton({
   onPress,
   style,
   remaining,
+  step,
 }: LoadMoreButtonProps) {
   return (
     <TouchableOpacity
@@ -46,7 +53,9 @@ export function LoadMoreButton({
         color={theme.colors.text}
       />
       <Text style={styles.text}>
-        {remaining != null
+        {step != null
+          ? t('Cargar más (+{n})', { n: step })
+          : remaining != null
           ? t('Cargar más ({n})', { n: remaining })
           : t('Cargar más')}
       </Text>
