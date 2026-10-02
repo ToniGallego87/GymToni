@@ -32,10 +32,10 @@ import { ExerciseResultDisplay } from '@components/ExerciseResultDisplay';
 import {
   cardioSessionFromLog,
   disciplineIconName,
-  estimateEntryKcal,
   hasIncline,
   isCardioOnlyLog,
-  weightForTimestamp,
+  rangeStr,
+  topDisciplineIconName,
   WeightSegment,
 } from '@lib/cardio';
 import { exerciseKey } from '@lib/exerciseProgress';
@@ -173,7 +173,13 @@ export function DetailScreen({
   // acciones de un log pasado (Inicio ya no lo ofrece), así que aquí vive también
   // "mover semana": misma lógica derivada de bloques que usaba Inicio (lib/weeks).
   const routine = state.routines.find((r) => r.id === log.routineId);
-  const routineLogs = state.logs.filter((l) => l.routineId === log.routineId);
+  // Sin las sesiones de solo cardio: no forman parte de ninguna semana (igual
+  // que en el resto de lib/weeks). Así, en el detalle de un día de cardio
+  // `planWeekMove` no lo encuentra y el ⋯ no ofrece "mover de semana", que ahí
+  // no significaría nada; y un entreno de fuerza calcula sus bloques sin ellas.
+  const routineLogs = state.logs.filter(
+    (l) => l.routineId === log.routineId && !isCardioOnlyLog(l)
+  );
   const moveDayKey = (l: WorkoutLog) => dayNumberForLog(l);
   const movePrevPlan = planWeekMove(routineLogs, log.id, 'prev', moveDayKey);
   const moveNextPlan = planWeekMove(routineLogs, log.id, 'next', moveDayKey);
@@ -273,7 +279,6 @@ export function DetailScreen({
       })
       .catch(() => {});
   }, []);
-  const weightKg = weightForTimestamp(weightHistory, log.createdAt);
 
   // Sesión de cardio parseada del log (null si no hay cardio parseable). Solo
   // se enseña en una sesión DE cardio: consultar un entreno de fuerza ya no
@@ -284,6 +289,8 @@ export function DetailScreen({
     log.cardio && isCardioOnlyLog(log)
       ? cardioSessionFromLog(log, weightHistory)
       : null;
+  // La tira de arriba es el total de un día de cardio (no un resumen de fuerza).
+  const isCardioTotal = !!cardioSession;
 
   // La fecha que manda es la elegida (`currentDate`, clave YYYY-MM-DD); si el
   // log no la lleva, la de creación. Las dos ramas pintan el MISMO formato, así
@@ -440,9 +447,18 @@ export function DetailScreen({
           </View>
         )}
 
+        {/* En un día de cardio la tira ES el total del día y debajo vienen las
+            disciplinas con el mismo tipo de cifras: va con relleno sólido y
+            números mayores (relleno = el total; contorno = cada parte) para que
+            no se confunda con una disciplina más. */}
         {summaryItems.length > 0 && (
-          <View style={styles.summaryCard}>
-            <GradientFill accent={dayAccent} />
+          <View
+            style={[
+              styles.summaryCard,
+              isCardioTotal && styles.summaryCardTotal,
+            ]}
+          >
+            {!isCardioTotal && <GradientFill accent={dayAccent} />}
             {summaryItems.map((item) => (
               <View key={item.key} style={styles.summaryItem}>
                 {item.improvement ? (
@@ -453,7 +469,14 @@ export function DetailScreen({
                     textStyle={styles.summaryValue}
                   />
                 ) : (
-                  <Text style={styles.summaryValue}>{item.value}</Text>
+                  <Text
+                    style={[
+                      styles.summaryValue,
+                      isCardioTotal && styles.summaryValueTotal,
+                    ]}
+                  >
+                    {item.value}
+                  </Text>
                 )}
                 <Text style={styles.summaryLabel}>{item.label}</Text>
               </View>
@@ -549,64 +572,77 @@ export function DetailScreen({
               </Text>
             )}
             {cardioSession ? (
-              // Una caja por entrada registrada (el rawInput puede traer varias
-              // unidas por " | "): sin agrupar por disciplina, para poder leer
-              // cada tanda tal cual se metió.
-              cardioSession.entries.map((entry, index) => {
-                const kcal = estimateEntryKcal(entry, weightKg);
+              // Una caja por DISCIPLINA, no por tramo: el día se piensa como
+              // "anduve 69 min y corrí 8", y así se lee igual que en la lista de
+              // Cardio (que ya agrupa). Los tramos se suman y la velocidad y la
+              // pendiente pasan a rango (mín-máx). Cada tramo tal como se tecleó
+              // sigue a la vista en "Editar".
+              cardioSession.disciplines.map((discipline, index) => {
+                const incline = hasIncline(discipline.maxPendiente);
                 return (
-                  <View key={`${entry.raw}-${index}`} style={styles.cardioBox}>
+                  <View
+                    key={`${discipline.type}-${incline}-${index}`}
+                    style={styles.cardioBox}
+                  >
                     <GradientFill accent={dayAccent} />
                     <View style={styles.cardioLabelRow}>
                       <MaterialCommunityIcons
                         name={
                           disciplineIconName(
-                            entry.type,
-                            hasIncline(entry.pendiente)
+                            discipline.type,
+                            incline
                           ) as React.ComponentProps<
                             typeof MaterialCommunityIcons
                           >['name']
                         }
-                        size={16}
-                        color={theme.colors.textSecondary}
+                        size={20}
+                        color={theme.colors.primary}
                       />
                       <Text
                         style={[styles.cardioLabel, styles.cardioLabelInRow]}
                       >
-                        {entry.type.toUpperCase()}
+                        {discipline.type.toUpperCase()}
                       </Text>
                     </View>
                     <View style={styles.cardioStatsRow}>
-                      {entry.minutes != null && (
+                      {discipline.totalMinutes > 0 && (
                         <View style={styles.cardioStat}>
                           <Text style={styles.cardioStatValue}>
-                            {fmtNum(entry.minutes)}
+                            {fmtNum(discipline.totalMinutes)}
                           </Text>
                           <Text style={styles.cardioStatUnit}>min</Text>
                         </View>
                       )}
-                      {entry.speed != null && (
+                      {discipline.minSpeed != null &&
+                        discipline.maxSpeed != null && (
+                          <View style={styles.cardioStat}>
+                            <Text style={styles.cardioStatValue}>
+                              {rangeStr(
+                                discipline.minSpeed,
+                                discipline.maxSpeed
+                              )}
+                            </Text>
+                            <Text style={styles.cardioStatUnit}>km/h</Text>
+                          </View>
+                        )}
+                      {discipline.minPendiente != null &&
+                        discipline.maxPendiente != null && (
+                          <View style={styles.cardioStat}>
+                            <Text style={styles.cardioStatValue}>
+                              {rangeStr(
+                                discipline.minPendiente,
+                                discipline.maxPendiente
+                              )}
+                            </Text>
+                            <Text style={styles.cardioStatUnit}>
+                              {t('Pendiente %')}
+                            </Text>
+                          </View>
+                        )}
+                      {discipline.kcal > 0 && (
                         <View style={styles.cardioStat}>
                           <Text style={styles.cardioStatValue}>
-                            {fmtNum(entry.speed)}
-                          </Text>
-                          <Text style={styles.cardioStatUnit}>km/h</Text>
-                        </View>
-                      )}
-                      {entry.pendiente != null && (
-                        <View style={styles.cardioStat}>
-                          <Text style={styles.cardioStatValue}>
-                            {fmtNum(entry.pendiente)}
-                          </Text>
-                          <Text style={styles.cardioStatUnit}>
-                            {t('Pendiente %')}
-                          </Text>
-                        </View>
-                      )}
-                      {kcal > 0 && (
-                        <View style={styles.cardioStat}>
-                          <Text style={styles.cardioStatValue}>
-                            {Math.round(kcal)}
+                            {Math.round(discipline.kcal)}
                           </Text>
                           <Text style={styles.cardioStatUnit}>kcal</Text>
                         </View>
@@ -661,15 +697,33 @@ export function DetailScreen({
         )}
       </StretchScrollView>
 
+      {/* Un día de cardio se titula por lo que es ("Registro de cardio") y lleva
+          el icono de la disciplina que más kcal quemó, con la prop `icon`
+          estándar. El de fuerza conserva su icono de grupo muscular vía
+          `titleElement`: es la excepción que GlassTopBar documenta ("icono de
+          día"). */}
       <GlassTopBar
-        title={getDisplayDayName(day.name)}
+        title={
+          isCardioOnlyLog(log)
+            ? t('Registro de cardio')
+            : getDisplayDayName(day.name)
+        }
+        icon={
+          isCardioOnlyLog(log)
+            ? cardioSession
+              ? topDisciplineIconName(cardioSession)
+              : 'run-fast'
+            : undefined
+        }
         titleElement={
-          <View style={styles.topBarTitleRow}>
-            <DayAccentIcon emoji={day.emoji} name={day.name} size={24} />
-            <Text style={styles.topBarTitleText}>
-              {getDisplayDayName(day.name)}
-            </Text>
-          </View>
+          isCardioOnlyLog(log) ? undefined : (
+            <View style={styles.topBarTitleRow}>
+              <DayAccentIcon emoji={day.emoji} name={day.name} size={24} />
+              <Text style={styles.topBarTitleText}>
+                {getDisplayDayName(day.name)}
+              </Text>
+            </View>
+          )
         }
         subtitle={displayedDate}
         onSubtitlePress={() => setShowDatePicker(true)}
@@ -842,12 +896,22 @@ const makeStyles = () =>
       alignItems: 'center',
       paddingHorizontal: theme.spacing.sm,
     },
+    // El total de un día de cardio: relleno sólido y sombra elevada frente al
+    // contorno de las tarjetas de disciplina, para que se lea como "el día".
+    summaryCardTotal: {
+      backgroundColor: theme.colors.surface,
+      ...theme.shadow.card,
+    },
     summaryValue: {
       fontSize: 22,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.4,
       color: theme.colors.text,
       lineHeight: 31,
+    },
+    summaryValueTotal: {
+      fontSize: 30,
+      lineHeight: 40,
     },
     summaryLabel: {
       marginTop: 2,
@@ -879,20 +943,24 @@ const makeStyles = () =>
     cardioLabelRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
+      gap: 8,
       marginBottom: 6,
     },
     // El margen inferior lo pone la fila: aquí desalinearía el icono.
     cardioLabelInRow: {
       marginBottom: 0,
     },
+    // Titular de la tarjeta: tiene que pesar más que sus cifras para que se vea
+    // de qué disciplina va (antes era 14/600 en textSecondary, por debajo de los
+    // números de 22 que tenía debajo).
     cardioLabel: {
-      fontSize: 14,
-      fontWeight: '600',
-      color: theme.colors.textSecondary,
+      fontSize: 16,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      color: theme.colors.text,
       marginBottom: 6,
       textTransform: 'uppercase',
-      lineHeight: 16,
+      lineHeight: 20,
     },
     // Cuadrícula valor+unidad: mismo peso de dato que la tira-resumen de fuerza
     // (número display grande + unidad pequeña en versalitas). Con las kcal son

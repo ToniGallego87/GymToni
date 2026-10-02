@@ -218,6 +218,7 @@ register({
   'Pulsa para cambiar la rutina': 'Tap to change the routine',
   Preparada: 'Prepared',
   'Solo cardio': 'Cardio only',
+  'Registro de cardio': 'Cardio log',
   'Registra solo tu cardio': 'Log just your cardio',
   'Añade tu cardio antes de guardar': 'Add your cardio before saving',
   '¡Semana completada!': 'Week completed!',

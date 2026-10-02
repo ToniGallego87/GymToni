@@ -12,6 +12,7 @@ import {
   parseCardioEntry,
   estimateEntryKcal,
   topKcalDiscipline,
+  topDisciplineIconName,
   weightForTimestamp,
   toCardioOnlyLog,
   splitMixedCardioLogs,
@@ -207,6 +208,37 @@ describe('topKcalDiscipline', () => {
         isToday: false,
       })
     ).toBeNull();
+  });
+});
+
+describe('topDisciplineIconName', () => {
+  it('usa el icono de la disciplina que más kcal quemó', () => {
+    // Más minutos de bici, pero correr quema más: manda correr.
+    const [day] = buildCardioDays([
+      makeLog('a', '2026-07-01', 'Bici: 40min, 20kmh | Correr: 20min, 12kmh'),
+    ]);
+    expect(topDisciplineIconName(day)).toBe('run-fast');
+  });
+
+  it('vale igual para una sesión que para un día (cabecera del detalle)', () => {
+    const session = cardioSessionFromLog(
+      makeLog('a', '2026-07-01', 'Bici: 60min, 20kmh | Andar: 10min, 4kmh')
+    )!;
+    expect(topDisciplineIconName(session)).toBe('bike');
+  });
+
+  it('el genérico si no hay disciplinas', () => {
+    expect(
+      topDisciplineIconName({
+        date: '2026-07-01',
+        sessions: [],
+        disciplines: [],
+        totalMinutes: 0,
+        totalKm: 0,
+        totalKcal: 0,
+        isToday: false,
+      })
+    ).toBe('run-fast');
   });
 });
 

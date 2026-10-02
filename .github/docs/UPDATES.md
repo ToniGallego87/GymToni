@@ -2,6 +2,45 @@
 
 ## Sin publicar
 
+### Cambios
+
+- **La consulta de un día de cardio, rehecha (salida de `/revisar-vista`).**
+  Cuatro cambios en `DetailScreen` para un log `cardioOnly`:
+  - **Una tarjeta por disciplina, no por tramo.** El detalle pintaba
+    `cardioSession.entries` (cada tramo tal como se tecleó) mientras la lista de
+    Cardio agrupa el día por disciplina, así que el mismo día se leía de dos
+    maneras: tres tramos de andar eran una línea en la lista y tres tarjetas al
+    entrar. Ahora pinta `cardioSession.disciplines`, que ya venía calculado: suma
+    minutos y kcal y enseña velocidad y pendiente como rango con `rangeStr`
+    (`3-12`, o un solo valor si no cambia). Los tramos sueltos siguen a la vista
+    en "Editar".
+  - **El total del día se distingue de sus partes.** La tira de resumen y las
+    tarjetas de disciplina compartían exactamente los mismos estilos y cifras, y
+    nada decía cuál era el total. En un día de cardio la tira pasa a relleno
+    sólido (`colors.surface` + `shadow.card`, sin `GradientFill`) y cifras de 30
+    en vez de 22; las disciplinas siguen con contorno. Solo en cardio: el
+    resumen de un entreno de fuerza no cambia.
+  - **El nombre de cada disciplina se ve.** Estaba a 14/600 en `textSecondary`
+    con un icono de 16 también apagado, por debajo de sus propias cifras de 22.
+    Pasa a 16/800 en `colors.text`, y el icono a 20 en el dorado `primary`.
+  - **Cabecera "Registro de cardio" con el icono de la disciplina principal.**
+    Antes ponía "Solo cardio" (el nombre del día sintético) con `run-fast`
+    siempre, aunque el día fuera de bici. Ahora el icono es el de la disciplina
+    que más kcal quemó, mediante la prop `icon` estándar de `GlassTopBar`. El
+    cálculo sale de `topDisciplineIconName` (nuevo en `lib/cardio.ts`), que es el
+    que ya usaba la celda del Calendario y que ahora comparten las dos pantallas,
+    así que un mismo día lleva el mismo icono en ambas. Los días de fuerza
+    conservan su icono de grupo muscular por `titleElement`, la excepción que
+    `GlassTopBar` documenta para el "icono de día".
+  - **El ⋯ de un día de cardio ya no ofrece "mover de semana".** El detalle
+    calculaba `planWeekMove` sobre los logs de la rutina SIN excluir los
+    `cardioOnly`, cuando el resto de `lib/weeks` sí los excluye (el cardio no
+    pertenece a ninguna semana). Filtrándolos, en un día de cardio la acción
+    desaparece sola. Efecto también en los entrenos de fuerza: sus bloques para
+    mover de semana se calculan ya sin las sesiones de cardio, igual que en el
+    resto de la app.
+  Tres tests nuevos de `topDisciplineIconName` en `cardio.test.ts`.
+
 ### Correcciones
 
 - **La normalización deshacía la separación de cardio y fuerza, y el cardio

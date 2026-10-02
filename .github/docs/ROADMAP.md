@@ -49,54 +49,6 @@ Supabase (cuentas, sync y social) está entregado; plan en
       `components/FloatingPrimaryNav.tsx:104` (sin rol ni estado de pestaña),
       `components/ChartCard.tsx:71` (la cabecera plegable).
       **Esfuerzo:** medio.
-- [ ] **El día de cardio se lee distinto en la lista que al abrirlo** — la
-      pestaña Cardio agrupa el día POR DISCIPLINA ("Andar en cinta, 69 min,
-      3-12 km/h") y el detalle pinta una tarjeta por cada tramo tal como se
-      tecleó, así que un día con tres tramos de andar sale como una línea en la
-      lista y tres tarjetas casi idénticas al entrar. Pintar
-      `cardioSession.disciplines` en vez de `.entries`: ya viene calculado, con
-      `totalMinutes`, `kcal` y `minSpeed`/`maxSpeed` para enseñar el rango.
-      **Por qué:** es el mismo día contado de dos maneras, y al usuario le parece
-      que los números no cuadran. Además corta la repetición: una tarjeta por
-      disciplina en vez de una por tramo, que es como el usuario piensa el día
-      ("hoy anduve 69 minutos y corrí 8"), no como lo fue tecleando.
-      **Archivos:** `features/workout/DetailScreen.tsx:555` (el `.entries.map`),
-      `lib/cardio.ts:77` (`MergedCardioEntry`, lo que ya hay calculado),
-      `lib/cardio.ts:40` (`CardioSession.disciplines`).
-      **Esfuerzo:** bajo.
-- [ ] **En el detalle de cardio, el total del día y cada disciplina pesan lo
-      mismo** — la tarjeta de resumen y las de disciplina comparten tokens
-      EXACTOS (fondo transparente, borde de 1, `GradientFill`, `shadow.soft`) y
-      sus cifras también (`fontSize: 22` + `fonts.display`, unidad 12/700). Nada
-      dice cuál es el total. Y dentro de cada tarjeta el nombre de la disciplina
-      (14/600 en `textSecondary`, icono de 16 también apagado) pesa MENOS que sus
-      propios números, así que no se ve de qué va la tarjeta. Dar al resumen
-      relleno sólido (`colors.surface` + `shadow.card`) y cifra mayor, dejando
-      las disciplinas en el estilo de contorno actual; y subir el titular de cada
-      disciplina a `colors.text` con el icono en el acento.
-      **Por qué:** el usuario mira esta pantalla para saber "cuánto hice hoy", y
-      hoy tiene que deducirlo contando tarjetas. Relleno contra contorno es la
-      distinción que la app ya usa en otros sitios, así que no inventa lenguaje.
-      **Archivos:** `features/workout/DetailScreen.tsx:825` (`summaryCard`),
-      `:869` (`cardioBox`, los mismos valores), `:889` (`cardioLabel`),
-      `:845` y `:912` (las dos cifras, idénticas).
-      **Esfuerzo:** bajo.
-- [ ] **La cabecera del día de cardio no dice de qué fue el día** — el título
-      sale de `CARDIO_ONLY_DAY.name` ("Solo cardio", que nombra una limitación en
-      vez del contenido) y el icono es la constante `emoji: 'run-fast'`, el mismo
-      aunque el día fuera entero en bici. Pasar a "Registro de cardio" con el
-      icono de la disciplina que más kcal quemó (`topKcalDiscipline` +
-      `disciplineIconName`, las dos ya existen). De paso, usar la prop `icon` de
-      `GlassTopBar` en lugar del `titleElement` montado a mano, que es lo que
-      mandan `AGENTS.md` y el checklist de `frontend-design.md`.
-      **Por qué:** la cabecera es lo primero que se lee y hoy no distingue un día
-      de bici de uno de cinta. Y el row icono+texto a mano es una desviación del
-      sistema de diseño que ya está escrita como regla.
-      **Archivos:** `features/workout/DetailScreen.tsx:664-673` (el
-      `titleElement`), `lib/cardio.ts:237` (`CARDIO_ONLY_DAY.name` y `.emoji`),
-      `lib/cardio.ts:347` (`topKcalDiscipline`), `components/GlassTopBar.tsx:99`
-      (la prop `icon`).
-      **Esfuerzo:** bajo.
 - [ ] **El subtítulo de la barra superior dice algo vivo, no un eslogan** —
       Inicio, el Detalle y la ficha de rutina usan el hueco del subtítulo para
       orientar (la rutina, la fecha, el estado de la rutina), pero catorce vistas lo gastan en una frase fija que
@@ -276,21 +228,6 @@ Supabase (cuentas, sync y social) está entregado; plan en
       (el patrón exacto a replicar: `Pressable` + `hitSlop` +
       `accessibilityLabel`), `features/workout/HomeScreen.tsx:271` (el filtro
       `!log.cardioOnly`).
-      **Esfuerzo:** bajo.
-- [ ] **El ⋯ de un día de cardio ofrece moverlo de semana** — el detalle calcula
-      `planWeekMove` sobre `state.logs.filter(l => l.routineId === log.routineId)`,
-      un filtro que NO excluye los `cardioOnly`. Pero las semanas sí los
-      excluyen en todas partes (`!log.cardioOnly` y el `return` temprano de
-      `weeks.ts`), así que el menú puede ofrecer "Mover a la semana anterior /
-      siguiente" en una sesión que no pertenece a ninguna semana. Filtrar los
-      cardio al armar `routineLogs`, con lo que los dos items desaparecen solos
-      en esta vista.
-      **Por qué:** una acción que no significa nada aquí, y encima con un
-      `ConfirmModal` que avisa de "recalcular racha, progreso e hitos" —
-      promete consecuencias sobre algo en lo que el cardio ni participa.
-      **Archivos:** `features/workout/DetailScreen.tsx:176` (el filtro),
-      `:178-179` (los dos planes), `lib/weeks.ts:364` y `:744` (donde las
-      semanas sí excluyen el cardio).
       **Esfuerzo:** bajo.
 - [ ] **"Un día = un registro de cardio" es un invariante del modelo que no
       garantiza nadie** — al insertar cardio, el registro REUTILIZA el log que ya

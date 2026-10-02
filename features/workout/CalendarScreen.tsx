@@ -23,11 +23,9 @@ import {
   CardioDay,
   CardioSession,
   CARDIO_ONLY_DAY,
-  disciplineIconName,
   groupSessionsByDay,
-  hasIncline,
   isCardioOnlyLog,
-  topKcalDiscipline,
+  topDisciplineIconName,
 } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
@@ -48,12 +46,9 @@ const MODE_OPTIONS: OptionToggleOption<CalendarMode>[] = [
 const cardioDayIcon = (
   day: CardioDay
 ): React.ComponentProps<typeof MaterialCommunityIcons>['name'] => {
-  const top = topKcalDiscipline(day);
-  if (!top) return 'run-fast';
-  return disciplineIconName(
-    top.type,
-    hasIncline(top.maxPendiente)
-  ) as React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  return topDisciplineIconName(day) as React.ComponentProps<
+    typeof MaterialCommunityIcons
+  >['name'];
 };
 
 interface CalendarScreenProps {

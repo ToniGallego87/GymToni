@@ -356,6 +356,20 @@ export function topKcalDiscipline(
   );
 }
 
+/**
+ * Icono que representa un día o una sesión de cardio: el de la disciplina que
+ * más kcal quemó (cuesta arriba si la hizo con pendiente), o el genérico si no
+ * hay disciplinas. Lo comparten la celda del Calendario y la cabecera del
+ * detalle, para que el mismo día se vea con el mismo icono en los dos sitios.
+ */
+export function topDisciplineIconName(
+  session: CardioSession | CardioDay
+): string {
+  const top = topKcalDiscipline(session);
+  if (!top) return 'run-fast';
+  return disciplineIconName(top.type, hasIncline(top.maxPendiente));
+}
+
 /** Convierte un log en una sesión de cardio, o null si no tiene cardio. */
 export function cardioSessionFromLog(
   log: WorkoutLog,
