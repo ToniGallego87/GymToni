@@ -1,6 +1,6 @@
 # UPDATES
 
-## Version 0.9.0 - 2026-10-11
+## Version 0.8.5 - 2026-10-11
 
 ### Arquitectura
 
@@ -416,10 +416,11 @@
   historial del ejercicio (`weightStepFromHistory`: el menor escalón entre
   pesos usados, de 0,5 / 1 / 1,25 / 2 / 2,5 / 5; si no, 1 kg como antes), y un
   peso fuera de esa rejilla va al escalón contiguo (61 → 62,5 / 60).
-- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.9.0
-  (minor: tabla nueva `cardio_entries` con migración SQLite v9 y función
-  `sync_max_updated` en Supabase, más recordatorios, Actividad propia y
-  récords); `versionCode` 31 → 32.
+- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.5
+  (patch por decisión de producto, pese a la tabla nueva `cardio_entries` con
+  migración SQLite v9, la función `sync_max_updated` en Supabase,
+  recordatorios, Actividad propia y récords); `versionCode` 31 → 32. Se cerró
+  primero como 0.9.0 (commit `9aa6b48`) y se renumeró antes de publicarla.
 
 - **Revisión completa (`/revision-app`) del 2026-10-09.** ROADMAP reescrito
   entero: salen las 2 fichas ya hechas (subtítulos con dato vivo y "Enviar a

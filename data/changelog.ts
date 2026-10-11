@@ -9,7 +9,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
-    version: '0.9.0',
+    version: '0.8.5',
     items: [
       'Récords personales: cuando superas tu mejor marca en un ejercicio, la serie se pinta en dorado con un trofeo y te lo celebramos al momento.',
       'Recordatorio de entreno: una hora antes de la hora a la que sueles entrenar te avisamos, y si pasan dos semanas sin ir, también. Lo puedes apagar en Configuración.',
