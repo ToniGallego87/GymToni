@@ -596,6 +596,8 @@ describe('weekMoveNeedsConfirm', () => {
 });
 
 describe('currentWeekDayState', () => {
+  // Día de los logs de `makeLog`: la semana sigue abierta (no ha caducado).
+  const BASE_DAY = new Date(1_700_000_000_000).toISOString().slice(0, 10);
   const routine = (dayCount: number): WorkoutRoutine => ({
     id: 'r1',
     name: 'Rutina',
@@ -608,7 +610,7 @@ describe('currentWeekDayState', () => {
     const state = currentWeekDayState(routine(4), [
       makeLog('a', 1, 0),
       makeLog('b', 2, 1),
-    ]);
+    ], BASE_DAY);
     expect([...state.trained].sort()).toEqual(['d1', 'd2']);
     expect(state.nextDay?.id).toBe('d3');
   });
@@ -617,7 +619,7 @@ describe('currentWeekDayState', () => {
     const state = currentWeekDayState(routine(4), [
       makeLog('a', 1, 0),
       makeLog('c', 3, 1),
-    ]);
+    ], BASE_DAY);
     expect(state.nextDay?.id).toBe('d2');
   });
 
@@ -628,6 +630,18 @@ describe('currentWeekDayState', () => {
     ]);
     expect(state.trained.size).toBe(0);
     expect(state.nextDay?.id).toBe('d1');
+  });
+
+  it('numera la semana igual que Inicio y da el log de cada día hecho', () => {
+    const logs = [makeLog('a', 1, 0), makeLog('b', 2, 1), makeLog('c', 1, 3)];
+    const state = currentWeekDayState(routine(4), logs, BASE_DAY);
+    // 'c' repite el día 1: semana 2 en curso, con el día 1 hecho.
+    expect(state.weekNumber).toBe(2);
+    expect(state.logByDayId.d1?.id).toBe('c');
+    // Semana completa: la que toca es la siguiente.
+    const done = currentWeekDayState(routine(2), [makeLog('a', 1, 0), makeLog('b', 2, 1)], BASE_DAY);
+    expect(done.weekNumber).toBe(2);
+    expect(currentWeekDayState(routine(3), []).weekNumber).toBe(1);
   });
 
   it('sin historial toca el primer día', () => {
@@ -647,5 +661,70 @@ describe('currentWeekDayState', () => {
   it('sin rutina no sugiere nada', () => {
     const state = currentWeekDayState(undefined, [makeLog('a', 1, 0)]);
     expect(state.nextDay).toBeUndefined();
+  });
+
+  it('a los 7 días del primer entreno la semana caduca y toca el día 1', () => {
+    const logs = [makeLogOn('a', 1, '2026-10-06'), makeLogOn('b', 2, '2026-10-07')];
+    const before = currentWeekDayState(routine(4), logs, '2026-10-12');
+    expect(before.nextDay?.id).toBe('d3');
+    const after = currentWeekDayState(routine(4), logs, '2026-10-13');
+    expect(after.trained.size).toBe(0);
+    expect(after.nextDay?.id).toBe('d1');
+  });
+
+  it('una semana abierta antes del corte caduca para un entreno de después', () => {
+    const logs = [makeLogOn('a', 1, '2026-09-20')];
+    const state = currentWeekDayState(routine(4), logs, '2026-10-05');
+    expect(state.nextDay?.id).toBe('d1');
+  });
+});
+
+/** Log con fecha concreta (para la caducidad de semanas, que va por calendario). */
+function makeLogOn(id: string, dayNumber: number, date: string): WorkoutLog {
+  const createdAt = new Date(`${date}T10:00:00`).getTime();
+  return { ...makeLog(id, dayNumber, 0), date, createdAt, updatedAt: createdAt };
+}
+
+describe('caducidad de la semana a los 7 días', () => {
+  it('un entreno a 7 días o más del primero abre semana nueva', () => {
+    const logs = [
+      makeLogOn('a', 1, '2026-10-06'),
+      makeLogOn('b', 2, '2026-10-08'),
+      makeLogOn('c', 3, '2026-10-13'), // 7 días después de "a"
+    ];
+    const blocks = groupLogsIntoWeekBlocks(logs, dayNumberOf);
+    expect(blocks[1].map((l) => l.id)).toEqual(['a', 'b']);
+    expect(blocks[2].map((l) => l.id)).toEqual(['c']);
+  });
+
+  it('a 6 días sigue en la misma semana', () => {
+    const logs = [makeLogOn('a', 1, '2026-10-06'), makeLogOn('b', 2, '2026-10-12')];
+    const blocks = groupLogsIntoWeekBlocks(logs, dayNumberOf);
+    expect(Object.keys(blocks)).toEqual(['1']);
+  });
+
+  it('no toca el histórico anterior a la fecha de corte', () => {
+    const logs = [makeLogOn('a', 1, '2026-09-01'), makeLogOn('b', 2, '2026-09-20')];
+    const blocks = groupLogsIntoWeekBlocks(logs, dayNumberOf);
+    expect(Object.keys(blocks)).toEqual(['1']);
+  });
+
+  it('no deja mover un día a la semana anterior si ya caducó', () => {
+    const logs = [
+      makeLogOn('a', 1, '2026-10-06'),
+      makeLogOn('b', 2, '2026-10-14'),
+    ];
+    expect(planWeekMove(logs, 'b', 'prev', dayNumberOf)).toBeNull();
+  });
+
+  it('no deja adelantar un día si la semana siguiente se partiría', () => {
+    const logs = [
+      makeLogOn('a', 1, '2026-10-06'),
+      makeLogOn('b', 2, '2026-10-07'),
+      makeLogOn('c', 1, '2026-10-08'),
+      makeLogOn('d', 3, '2026-10-14'),
+    ];
+    // "b" encabezaría la semana de "c"/"d", y "d" queda a 7 días de "b".
+    expect(planWeekMove(logs, 'b', 'next', dayNumberOf)).toBeNull();
   });
 });

@@ -23,7 +23,7 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (19 suites, 260 tests)
+npm test           # Jest sobre lib/ (21 suites, 316 tests)
 npm run format     # Prettier
 ```
 
@@ -57,6 +57,7 @@ GymToni/
 │   ├── SegmentedFilter.tsx   ← Filtro de chips de las gráficas
 │   ├── OptionToggle.tsx / ValueStepper.tsx ← Ajustes en el sitio: segmentado de opciones y ‹ valor › a saltos
 │   ├── LoadMoreButton.tsx    ← Paginación de los historiales e "Cargar más (+10)" del catálogo de ejercicios
+│   ├── HistoryCard.tsx       ← Tarjeta de un día del historial (icono, título, fecha y dato a la derecha), compartida por Inicio y Cardio
 │   ├── ExerciseInputField.tsx← Registro serie a serie (60x8 → ➕)
 │   ├── ExerciseFormRow.tsx   ← Popup de edición de un ejercicio + fila resumen (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
@@ -80,6 +81,8 @@ GymToni/
 │   ├── CalendarScreen.tsx    ← Vista mensual fuerza/cardio
 │   ├── DataScreen.tsx        ← Datos y nube: cuenta+sync, copias, importar/restaurar/borrar
 │   ├── ProfileScreen.tsx     ← Perfil (pestaña): identidad pública, tus números y cuadrícula (rutinas, ejercicios, peso, configuración, logros)
+│   ├── BodyWeightScreen.tsx  ← Peso corporal (Perfil): tramos de peso con los que se estiman las kcal del cardio
+│   ├── ActivityScreen.tsx    ← Actividad propia (Perfil): logros, retos superados y días entrenados en una línea de tiempo, desde los datos del móvil
 │   ├── AchievementsScreen.tsx ← Logros: nivel (retos superados + logros, regla de puntos), fila a todos los retos (ChallengesModal) e insignias con progreso en la casilla (lib/level.ts, badges.ts)
 │   ├── SettingsScreen.tsx    ← Configuración: tema, idioma, descanso entre series, novedades y acceso a Datos y nube
 │   ├── CommunityScreen.tsx   ← Comunidad (pestaña): tablón, feed, filtro de intensidad, buscar
@@ -92,13 +95,14 @@ GymToni/
 │   ├── useWorkout.ts         ← Consumer del contexto
 │   ├── useCloudSync.ts       ← Sync de fondo (login / foreground) → refresca estado
 │   ├── useMyProfile.ts       ← Perfil público propio (copia local + refresco); `hasProfileFilled`
-│   ├── useAccountLevel.ts    ← Retos vigentes + nivel; con `record` apunta los superados y sube el nivel al perfil
+│   ├── useAccountLevel.ts    ← Retos vigentes + nivel; `useRecordAccountLevel` (solo la raíz) apunta los superados y sube el nivel al perfil
 │   └── useDeferredReady.ts   ← Difiere el contenido pesado de una pantalla un frame
 ├── lib/                      ← Lógica compartida (ver ARCHITECTURE.md)
 │   ├── theme.ts              ← Colores, degradados, tipografía, spacing
 │   ├── storage.ts / persistence.ts / db/ ← Persistencia SQLite (nativo) / JSON (web)
 │   ├── cloud/               ← Nube: auth.ts, backup.ts, sync.ts (motor push/pull), social.ts (perfiles/seguir/tablón)
 │   ├── supabase.ts / supabaseConfig.ts ← Cliente Supabase (clave anon pública)
+│   ├── userQuiet.ts          ← ¿Está el usuario tocando? El arranque pone su trabajo de fondo en los huecos sin toques
 │   └── parsers.ts, progress.ts, weeks.ts, exerciseProgress.ts, routines.ts,
 │       cardio.ts, achievements.ts (póster semanal), badges.ts (logros de Perfil),
 │       challenges.ts (retos semanales), level.ts (nivel permanente de la cuenta),
@@ -110,7 +114,8 @@ GymToni/
 │   └── changelog.ts          ← Novedades por versión (popup in-app)
 ├── supabase/
 │   ├── schema.sql            ← Esquema de la nube (tablas espejo + RLS)
-│   └── social-schema.sql     ← Esquema social (is_public, follows, likes, comentarios, reports, RLS pública)
+│   ├── social-schema.sql     ← Esquema social (is_public, follows, likes, comentarios, reports, RLS pública)
+│   └── storage-avatars.sql   ← Bucket de fotos de perfil (Storage) y sus políticas
 ├── modules/                  ← Módulos nativos locales (autolinked por Expo)
 │   ├── pip-timer/            ← Ventana flotante del descanso (PiP de Android)
 │   ├── glass-blur/           ← Cristal esmerilado de las barras (UNA captura desenfocada por frame, compartida)
@@ -128,7 +133,9 @@ GymToni/
   borrarla (no hay "borrar última"), y "Saltar resto / Saltar ejercicio" cierra
   el ejercicio desde el ⋯ de su cabecera.
 - **Cardio**: por disciplina en `CardioInputField` (cinta andar/correr, bici,
-  elíptica…), con duración, velocidad/pendiente. Se guarda como `rawInput`.
+  elíptica…), con duración, velocidad/pendiente. Se guarda como `rawInput` y
+  también como filas de `cardio_entries` (una por entrada); mientras queden
+  móviles sin actualizar, si no cuadran manda el texto.
 - **Notas del ejercicio**: desde el ⋯ del ejercicio (modal); con la tarjeta
   plegada, el icono de nota junto al título avisa de que hay algo escrito y la
   abre.

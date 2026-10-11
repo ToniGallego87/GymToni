@@ -9,6 +9,8 @@ interface AnimatedCounterProps {
   prefix?: string;
   suffix?: string;
   style?: StyleProp<TextStyle>;
+  /** Una sola línea que encoge la letra si no cabe en el ancho disponible. */
+  shrinkToFit?: boolean;
 }
 
 // Cuenta desde 0 hasta `value` con easing, re-renderizando el número cada frame.
@@ -20,6 +22,7 @@ export function AnimatedCounter({
   prefix = '',
   suffix = '',
   style,
+  shrinkToFit = false,
 }: AnimatedCounterProps) {
   const [display, setDisplay] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -43,7 +46,11 @@ export function AnimatedCounter({
   }, [value, duration]);
 
   return (
-    <Text style={style}>
+    <Text
+      style={style}
+      numberOfLines={shrinkToFit ? 1 : undefined}
+      adjustsFontSizeToFit={shrinkToFit}
+    >
       {prefix}
       {localizeDecimals(display.toFixed(decimals))}
       {suffix}

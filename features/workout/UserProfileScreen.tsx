@@ -51,6 +51,7 @@ import {
 import { getActivity, getActivityCounts } from '@lib/cloud/activity';
 import { readSocialCache, writeSocialCache } from '@lib/socialCache';
 import { useAccountLevel } from '@hooks/useAccountLevel';
+import { levelForXp } from '@lib/level';
 import { ActivityItem, ActivityCounts } from '@lib/activity';
 
 interface UserProfileScreenProps {
@@ -120,12 +121,12 @@ async function hydrateProfileCache(
   return stored;
 }
 
-/** "12 insignias · 34 retos · 128 días", saltando lo que esté a cero. */
+/** "12 logros · 34 retos · 128 días", saltando lo que esté a cero. */
 function activityCountsLabel(counts: ActivityCounts): string {
   const { badges, challenges, days } = counts;
   return [
     badges > 0 &&
-      (badges === 1 ? t('1 insignia') : t('{n} insignias', { n: badges })),
+      (badges === 1 ? t('1 logro') : t('{n} logros', { n: badges })),
     challenges > 0 &&
       (challenges === 1 ? t('1 reto') : t('{n} retos', { n: challenges })),
     days > 0 && (days === 1 ? t('1 día') : t('{n} días', { n: days })),
@@ -392,9 +393,14 @@ export function UserProfileScreen({
   // Hay actividad que enseñar: lo que decide si existe la pestaña. Mientras
   // carga no se da por hecho que no hay (si no, el conmutador aparecería de
   // golpe un segundo después y movería la lista bajo el dedo).
-  // El nivel que se enseña: el propio se calcula aquí (local), el ajeno es el
-  // que su dueño subió al perfil.
-  const shownLevel = isSelf ? localLevel.level : profile?.level;
+  // El nivel que se enseña: el propio se calcula aquí (local); el ajeno sale de
+  // los puntos que su dueño subió al perfil (así sigue la curva vigente aunque
+  // su `level` guardado sea de una versión anterior), o del `level` si no hay.
+  const shownLevel = isSelf
+    ? localLevel.level
+    : profile?.xp != null
+    ? levelForXp(profile.xp)
+    : profile?.level;
   const hasActivity = loadingActivity || activity.length > 0;
   // Sin pestaña de actividad, las rutinas se enseñan siempre.
   const showRoutines = !hasActivity || section === 'routines';

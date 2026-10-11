@@ -6,14 +6,17 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  ScrollView,
   Platform,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
-import { canonicalDecimals, t } from '@lib/i18n';
+import { canonicalDecimals, fmtNum, localizeDecimals, t } from '@lib/i18n';
 import {
+  ASSUMED_WEIGHT_KG,
+  CardioEntry,
+  estimateEntryKcal,
   disciplineIconName,
+  disciplineIdFromLabel,
   parseCardioEntry,
   hasIncline,
   formatEntryResults,
@@ -31,12 +34,24 @@ interface CardioInputFieldProps {
   onChangeText: (text: string) => void;
   // Color de acento del día (push/pull/pierna). Tiñe el borde izquierdo.
   accent?: string;
-  // Disciplinas a la vista como casillas (icono + nombre, como el menú de
-  // Perfil) en vez del botón "Añadir cardio" + lista en el modal. Lo usa
-  // "Insertar cardio" (solo cardio), donde elegir disciplina es LA acción: la
-  // casilla abre directamente el popup de detalles.
-  inlinePicker?: boolean;
+  // Última entrada de cada disciplina (`lastCardioEntryByDiscipline`): sus
+  // datos salen sugeridos al elegirla, como el peso de la última vez en fuerza.
+  lastEntries?: Record<string, CardioEntry>;
+  // Disciplinas propias usadas hace poco (`recentCustomDisciplines`): casilla
+  // propia tras las fijas, para no volver a teclear su nombre en "Otro".
+  customDisciplines?: string[];
+  // Peso con el que se estiman las kcal que enseña el popup.
+  weightKg?: number;
+  // Rótulo del día en la cabecera de lo apuntado ("Hoy", o la fecha si se
+  // corrige otro día).
+  dateLabel?: string;
+  // Se ha borrado una entrada; `undo` la devuelve a su sitio ("Deshacer").
+  onEntryDeleted?: (undo: () => void) => void;
 }
+
+// Icono de MaterialCommunityIcons (los de las disciplinas salen de lib/cardio
+// como texto).
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 type CardioType =
   | 'treadmill'
@@ -50,14 +65,48 @@ type CardioType =
 // Disciplinas de cinta: muestran el campo de pendiente.
 const TREADMILL_TYPES: CardioType[] = ['treadmill', 'treadmill-walk'];
 
-const CARDIO_OPTIONS = [
-  { id: 'treadmill', label: t('Correr en cinta') },
-  { id: 'treadmill-walk', label: t('Andar en cinta') },
-  { id: 'outdoor-run', label: t('Correr en exterior') },
-  { id: 'stationary-bike', label: t('Bici estática') },
-  { id: 'elliptical', label: t('Elíptica') },
-  { id: 'other', label: t('Otro') },
+// Rótulos con getter: t() se evalúa al pintar, no al cargar el módulo, así
+// que siguen al idioma en caliente (ver lib/i18n.ts).
+const FIXED_CARDIO_OPTIONS = [
+  {
+    id: 'treadmill',
+    get label() {
+      return t('Correr en cinta');
+    },
+  },
+  {
+    id: 'treadmill-walk',
+    get label() {
+      return t('Andar en cinta');
+    },
+  },
+  {
+    id: 'outdoor-run',
+    get label() {
+      return t('Correr en exterior');
+    },
+  },
+  {
+    id: 'stationary-bike',
+    get label() {
+      return t('Bici estática');
+    },
+  },
+  {
+    id: 'elliptical',
+    get label() {
+      return t('Elíptica');
+    },
+  },
 ];
+const OTHER_OPTION = {
+  id: 'other',
+  get label() {
+    return t('Otro');
+  },
+};
+// Prefijo del id de la casilla de una disciplina propia ("custom:Remo").
+const CUSTOM_PREFIX = 'custom:';
 
 // Icono de una opción del picker. Fuente única: disciplineIconName (la misma que
 // la lista de disciplinas ya registradas y la vista de consulta), para que la
@@ -68,19 +117,46 @@ const optionIconName = (option: { id: string; label: string }): string =>
     ? 'dots-horizontal-circle-outline'
     : disciplineIconName(option.label);
 
+// Número en la casilla del popup, en el separador del idioma.
+const fieldOf = (n: number | null | undefined): string =>
+  n == null ? '' : localizeDecimals(String(n));
+
+// Las disciplinas van a la vista como casillas (icono + nombre, como el menú de
+// Perfil): en "Insertar cardio" elegir disciplina es LA acción, así que la
+// casilla abre directamente el popup de detalles.
 export function CardioInputField({
   value,
   onChangeText,
   accent = theme.colors.primaryLine,
-  inlinePicker = false,
+  lastEntries,
+  customDisciplines = [],
+  weightKg = ASSUMED_WEIGHT_KG,
+  onEntryDeleted,
+  dateLabel,
 }: CardioInputFieldProps) {
   const [cardioEntries, setCardioEntries] = useState<string[]>(() => {
     if (!value) return [];
     return value.split(' | ').filter((e) => e.trim());
   });
-  // La tarjeta solo existe cuando hay al menos un cardio guardado; mientras no
-  // lo haya, se muestra el botón "Añadir cardio".
+  // La tarjeta solo existe cuando hay al menos un cardio guardado.
   const isExpanded = cardioEntries.length > 0;
+  // Cada entrada con sus kcal estimadas (mismo cálculo que el popup) y el total
+  // del día para la cabecera.
+  const parsedEntries = cardioEntries.map((entry) => {
+    const parsed = parseCardioEntry(entry);
+    const kcal = estimateEntryKcal(
+      { ...parsed, discipline: disciplineIdFromLabel(parsed.type) },
+      weightKg
+    );
+    return { parsed, kcal };
+  });
+  const totals = parsedEntries.reduce(
+    (acc, { parsed, kcal }) => ({
+      minutes: acc.minutes + (parsed.minutes ?? 0),
+      kcal: acc.kcal + kcal,
+    }),
+    { minutes: 0, kcal: 0 }
+  );
   const [showCardioModal, setShowCardioModal] = useState(false);
   const [selectedCardioType, setSelectedCardioType] =
     useState<CardioType>(null);
@@ -89,13 +165,79 @@ export function CardioInputField({
   const [cardioSpeed, setCardioSpeed] = useState('');
   const [cardioPendiente, setCardioPendiente] = useState('');
   const [step, setStep] = useState<'type' | 'details'>('type');
+  // Entrada que se está corrigiendo (índice en `cardioEntries`); null = nueva.
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  // Casillas: las cinco fijas, las propias recientes y "Otro" al final.
+  const cardioOptions = [
+    ...FIXED_CARDIO_OPTIONS,
+    ...customDisciplines.map((name) => ({
+      id: `${CUSTOM_PREFIX}${name}`,
+      label: name,
+    })),
+    OTHER_OPTION,
+  ];
 
   // Paso en el que está el asistente del modal.
   const isTypeStep = step === 'type' && !selectedCardioType;
   const isCustomTypeStep = step === 'type' && selectedCardioType === 'other';
   const isDetailsStep = step === 'details';
+  const isTreadmill = TREADMILL_TYPES.includes(selectedCardioType);
+  // Nombre de la disciplina elegida: el popup se titula con él, para que se vea
+  // qué casilla se tocó antes de guardar.
+  const selectedLabel =
+    customCardioType.trim() ||
+    FIXED_CARDIO_OPTIONS.find((o) => o.id === selectedCardioType)?.label ||
+    '';
+  // Lo de la última vez en esta disciplina (misma clave que
+  // `cardioDisciplineKey`: el id fijo, o el nombre si es propia).
+  // Al corregir una entrada no hay sugerencia: un campo vaciado es "sin dato",
+  // no "lo de la última vez".
+  const suggestion =
+    isDetailsStep && editingIndex === null
+      ? lastEntries?.[
+          selectedCardioType && selectedCardioType !== 'other'
+            ? selectedCardioType
+            : `label:${customCardioType.trim().toLowerCase()}`
+        ]
+      : undefined;
+  const suggested = (n: number | null | undefined): string =>
+    n == null ? '' : String(n);
+  // Lo tecleado manda; un campo vacío vale lo sugerido (igual que "Añadir
+  // serie" acepta el peso sugerido). Ya con punto decimal, que es lo que se
+  // guarda y lo que parsea lib/cardio.
+  const effectiveMinutes =
+    canonicalDecimals(cardioMinutes.trim()) || suggested(suggestion?.minutes);
+  const effectiveSpeed =
+    canonicalDecimals(cardioSpeed.trim()) || suggested(suggestion?.speed);
+  const effectivePendiente = isTreadmill
+    ? canonicalDecimals(cardioPendiente.trim()) ||
+      suggested(suggestion?.pendiente)
+    : '';
+  const toNumber = (v: string): number | null => {
+    const n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  };
+  // Kcal estimadas mientras se teclea. Sin velocidad no hay estimación (la
+  // entrada vale 0 para retos y gráficas), y se dice aquí, donde se arregla.
+  const kcalPreview = estimateEntryKcal(
+    {
+      type: selectedLabel,
+      minutes: toNumber(effectiveMinutes),
+      speed: toNumber(effectiveSpeed),
+      pendiente: toNumber(effectivePendiente),
+      raw: '',
+      discipline:
+        selectedCardioType && selectedCardioType !== 'other'
+          ? selectedCardioType
+          : null,
+    },
+    weightKg
+  );
+  // La sugerencia se lee en la casilla vacía, en el separador del idioma.
+  const placeholderOf = (n: number | null | undefined): string =>
+    n == null ? '0' : localizeDecimals(String(n));
   const modalTitle = isDetailsStep
-    ? t('Detalles del cardio')
+    ? selectedLabel
     : isCustomTypeStep
     ? t('Especifica el tipo de ejercicio')
     : t('Selecciona el tipo de cardio');
@@ -105,6 +247,13 @@ export function CardioInputField({
     setStep('type');
     setSelectedCardioType(null);
     setCustomCardioType('');
+    // Los datos de una entrada que se corregía no pasan a la siguiente nueva.
+    if (editingIndex !== null) {
+      setEditingIndex(null);
+      setCardioMinutes('');
+      setCardioSpeed('');
+      setCardioPendiente('');
+    }
   };
 
   // Cerrar la tarjeta (back de Android, gesto de cierre o toque en el velo)
@@ -113,22 +262,11 @@ export function CardioInputField({
   // la app; confirmar es ahora el botón "Guardar" del pie (o el ✓ del teclado).
   const handleModalDismiss = () => closeCardioModal();
 
-  // Vuelve al primer paso para corregir la disciplina. Los datos ya tecleados
-  // (minutos, velocidad, pendiente) se CONSERVAN: quien pulsa "Atrás" casi
-  // siempre se equivocó de disciplina, no de números, y volver a teclearlos era
-  // un castigo silencioso.
   // Con las casillas fuera del modal no hay paso de disciplina al que volver:
-  // "Atrás" cierra y se elige otra casilla.
-  const resetToTypeStep = () => {
-    if (inlinePicker) {
-      closeCardioModal();
-      return;
-    }
-    setSelectedCardioType(null);
-    setCustomCardioType('');
-    setStep('type');
-  };
-
+  // "Atrás" cierra y se elige otra casilla. Los datos ya tecleados (minutos,
+  // velocidad, pendiente) se CONSERVAN: quien pulsa "Atrás" casi siempre se
+  // equivocó de disciplina, no de números, y volver a teclearlos era un castigo
+  // silencioso.
   const handleSelectCardioType = (typeId: string) => {
     setSelectedCardioType(typeId as CardioType);
     if (typeId === 'other') {
@@ -138,15 +276,43 @@ export function CardioInputField({
     }
   };
 
-  // Casilla de disciplina (modo inlinePicker): abre el popup ya en su paso.
+  // Casilla de disciplina: abre el popup ya en su paso. La de una propia va
+  // directa a sus datos, como si se hubiera tecleado su nombre en "Otro".
   const handleTilePress = (typeId: string) => {
-    handleSelectCardioType(typeId);
+    if (typeId.startsWith(CUSTOM_PREFIX)) {
+      setSelectedCardioType('other');
+      setCustomCardioType(typeId.slice(CUSTOM_PREFIX.length));
+      setStep('details');
+    } else {
+      setCustomCardioType('');
+      handleSelectCardioType(typeId);
+    }
     setShowCardioModal(true);
   };
 
-  const optionRows: (typeof CARDIO_OPTIONS)[] = [];
-  for (let i = 0; i < CARDIO_OPTIONS.length; i += 3) {
-    optionRows.push(CARDIO_OPTIONS.slice(i, i + 3));
+  // Tocar una entrada ya apuntada la corrige: el mismo popup con sus datos, y
+  // "Guardar" la sustituye en su sitio (la × sigue siendo borrar).
+  const handleEditEntry = (index: number) => {
+    const { parsed } = parsedEntries[index];
+    const fixedId = disciplineIdFromLabel(parsed.type);
+    if (fixedId) {
+      setSelectedCardioType(fixedId as CardioType);
+      setCustomCardioType('');
+    } else {
+      setSelectedCardioType('other');
+      setCustomCardioType(parsed.type);
+    }
+    setCardioMinutes(fieldOf(parsed.minutes));
+    setCardioSpeed(fieldOf(parsed.speed));
+    setCardioPendiente(fieldOf(parsed.pendiente));
+    setEditingIndex(index);
+    setStep('details');
+    setShowCardioModal(true);
+  };
+
+  const optionRows: (typeof cardioOptions)[] = [];
+  for (let i = 0; i < cardioOptions.length; i += 3) {
+    optionRows.push(cardioOptions.slice(i, i + 3));
   }
 
   const handleCardioTypeConfirm = () => {
@@ -156,28 +322,24 @@ export function CardioInputField({
   };
 
   const handleSaveCardio = () => {
-    if (!selectedCardioType || !cardioMinutes) return;
+    if (!selectedCardioType || !effectiveMinutes) return;
 
-    let cardioText = '';
-    let typeLabel =
-      customCardioType ||
-      CARDIO_OPTIONS.find((o) => o.id === selectedCardioType)?.label ||
-      '';
-
-    // Lo tecleado puede venir con coma decimal (teclado español); se guarda
-    // siempre con punto, que es lo que parsea lib/cardio.
-    cardioText = `${typeLabel}: ${canonicalDecimals(cardioMinutes)}min`;
-    if (cardioSpeed) {
-      cardioText += `, ${canonicalDecimals(cardioSpeed)}kmh`;
+    let cardioText = `${selectedLabel}: ${effectiveMinutes}min`;
+    if (effectiveSpeed) {
+      cardioText += `, ${effectiveSpeed}kmh`;
     }
-    if (cardioPendiente && TREADMILL_TYPES.includes(selectedCardioType)) {
-      cardioText += `, ${canonicalDecimals(cardioPendiente)}%`;
+    if (effectivePendiente) {
+      cardioText += `, ${effectivePendiente}%`;
     }
 
-    const newEntries = [...cardioEntries, cardioText];
+    const newEntries =
+      editingIndex !== null && editingIndex < cardioEntries.length
+        ? cardioEntries.map((e, i) => (i === editingIndex ? cardioText : e))
+        : [...cardioEntries, cardioText];
     setCardioEntries(newEntries);
     onChangeText(newEntries.join(' | '));
 
+    setEditingIndex(null);
     setSelectedCardioType(null);
     setCustomCardioType('');
     setCardioMinutes('');
@@ -188,34 +350,56 @@ export function CardioInputField({
   };
 
   const handleDeleteEntry = (index: number) => {
+    const before = cardioEntries;
     const newEntries = cardioEntries.filter((_, i) => i !== index);
     setCardioEntries(newEntries);
     onChangeText(newEntries.join(' | '));
+    // Se puede deshacer (el aviso lo pinta quien monta el campo).
+    onEntryDeleted?.(() => {
+      setCardioEntries(before);
+      onChangeText(before.join(' | '));
+    });
   };
 
   return (
     <>
-      {!isExpanded && !inlinePicker ? (
-        <Pressable
-          style={({ pressed }) => [
-            styles.collapsedButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => {
-            setShowCardioModal(true);
-            setStep('type');
-          }}
-        >
-          <View style={styles.buttonContent}>
-            <MaterialCommunityIcons
-              name="run-fast"
-              size={18}
-              color={theme.colors.primary}
-            />
-            <Text style={styles.collapsedButtonText}>{t('Añadir cardio')}</Text>
+      {/* Disciplinas como casillas (mismo dibujo que el menú de Perfil): un
+          toque abre el popup de detalles de esa disciplina. Con su rótulo: la
+          rejilla salía a pelo y no decía qué se esperaba de ella. */}
+      <Text style={styles.pickerTitle}>{t('Selecciona la disciplina')}</Text>
+      <View style={styles.tileGrid}>
+        {optionRows.map((row, rowIndex) => (
+          <View key={rowIndex} style={styles.tileRow}>
+            {row.map((option) => (
+              <Pressable
+                key={option.id}
+                style={({ pressed }) => [
+                  styles.tile,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => handleTilePress(option.id)}
+                accessibilityRole="button"
+                accessibilityLabel={option.label}
+              >
+                <MaterialCommunityIcons
+                  name={optionIconName(option) as IconName}
+                  size={34}
+                  color={theme.colors.text}
+                />
+                <Text style={styles.tileLabel} numberOfLines={2}>
+                  {option.label}
+                </Text>
+              </Pressable>
+            ))}
           </View>
-        </Pressable>
-      ) : isExpanded ? (
+        ))}
+      </View>
+
+      {/* Lo apuntado va DEBAJO de las casillas: así guardar una disciplina no
+          mueve la rejilla que se usa a continuación (el mismo criterio que las
+          series de fuerza, que crecen bajo el botón). La cabecera dice el total
+          del día en vez de repetir "Cardio", que ya lo dice la barra. */}
+      {isExpanded && (
         <View style={[styles.container, { borderLeftColor: accent }]}>
           <View style={styles.header}>
             <View style={styles.headerLeft}>
@@ -225,23 +409,39 @@ export function CardioInputField({
                 color={theme.colors.text}
                 style={styles.icon}
               />
-              <Text style={styles.title}>{t('Cardio')}</Text>
+              <Text style={styles.title} numberOfLines={1}>
+                {[
+                  dateLabel ?? t('Hoy'),
+                  `${fmtNum(totals.minutes)} min`,
+                  ...(totals.kcal > 0
+                    ? [`${Math.round(totals.kcal)} kcal`]
+                    : []),
+                ].join(' · ')}
+              </Text>
             </View>
           </View>
 
           {/* Cada entrada se pinta como en la vista de consulta: icono real de la
               disciplina (cuesta incluida), nombre y resultados formateados
               (mismos helpers de lib/cardio), en vez del texto crudo guardado. */}
-          {cardioEntries.map((entry, index) => {
-            const parsed = parseCardioEntry(entry);
+          {parsedEntries.map(({ parsed, kcal }, index) => {
             return (
-              <View key={index} style={styles.cardioEntryRow}>
+              <Pressable
+                key={index}
+                style={({ pressed }) => [
+                  styles.cardioEntryRow,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => handleEditEntry(index)}
+                accessibilityRole="button"
+                accessibilityLabel={`${t('Corregir')} ${parsed.type}`}
+              >
                 <MaterialCommunityIcons
                   name={
                     disciplineIconName(
                       parsed.type,
                       hasIncline(parsed.pendiente)
-                    ) as any
+                    ) as IconName
                   }
                   size={26}
                   color={theme.colors.white}
@@ -254,6 +454,13 @@ export function CardioInputField({
                     {formatEntryResults(parsed)}
                   </Text>
                 </View>
+                {kcal > 0 && (
+                  <Text style={styles.cardioEntryKcal}>
+                    {t('≈ {n} kcal', { n: Math.round(kcal) })}
+                  </Text>
+                )}
+                {/* La misma marca de "quitar esto" que las series de fuerza:
+                    disco lleno con la × recortada. */}
                 <Pressable
                   style={({ pressed }) => [
                     styles.clearButton,
@@ -261,95 +468,46 @@ export function CardioInputField({
                   ]}
                   onPress={() => handleDeleteEntry(index)}
                   hitSlop={8}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${t('Borrar')} ${parsed.type}`}
                 >
                   <MaterialCommunityIcons
-                    name="close"
-                    size={16}
-                    color={theme.colors.error}
+                    name="close-circle"
+                    size={24}
+                    color={theme.colors.textSecondary}
                   />
                 </Pressable>
-              </View>
+              </Pressable>
             );
           })}
-          {/* Con casillas a la vista, añadir otra disciplina es pulsar otra
-              casilla: el botón sobra. */}
-          {!inlinePicker && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.addCardioButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => {
-                setShowCardioModal(true);
-                setStep('type');
-              }}
-            >
-              <View style={styles.buttonContent}>
-                <MaterialCommunityIcons
-                  name="plus"
-                  size={16}
-                  color={theme.colors.onGold}
-                />
-                <Text style={styles.addCardioText}>{t('Añadir')}</Text>
-              </View>
-            </Pressable>
-          )}
-        </View>
-      ) : null}
-
-      {/* Disciplinas como casillas (mismo dibujo que el menú de Perfil): un
-          toque abre el popup de detalles de esa disciplina. Con su rótulo: la
-          rejilla salía a pelo y no decía qué se esperaba de ella. */}
-      {inlinePicker && (
-        <Text style={styles.pickerTitle}>{t('Selecciona la disciplina')}</Text>
-      )}
-      {inlinePicker && (
-        <View style={styles.tileGrid}>
-          {optionRows.map((row, rowIndex) => (
-            <View key={rowIndex} style={styles.tileRow}>
-              {row.map((option) => (
-                <Pressable
-                  key={option.id}
-                  style={({ pressed }) => [
-                    styles.tile,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => handleTilePress(option.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                >
-                  <MaterialCommunityIcons
-                    name={optionIconName(option) as any}
-                    size={34}
-                    color={theme.colors.text}
-                  />
-                  <Text style={styles.tileLabel} numberOfLines={2}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          ))}
+          {/* Añadir otra disciplina es pulsar otra casilla: sin botón propio. */}
         </View>
       )}
 
-      {/* Asistente en tres pasos dentro del mismo modal: elegir disciplina,
-          nombrarla si es "Otro", y sus datos. El paso de datos se confirma con
-          su botón "Guardar" (o con el ✓ del teclado, que hace lo mismo); antes
-          no había botón y había que adivinarlo leyendo una nota. */}
+      {/* El popup de una casilla: nombrar la disciplina si es "Otro" y sus
+          datos. El paso de datos se confirma con su botón "Guardar" (o con el
+          ✓ del teclado, que hace lo mismo); antes no había botón y había que
+          adivinarlo leyendo una nota. */}
       <AppModal
         visible={showCardioModal}
         onRequestClose={handleModalDismiss}
         onOverlayPress={handleModalDismiss}
         title={modalTitle}
-        icon="run-fast"
+        icon={
+          (isDetailsStep
+            ? disciplineIconName(
+                selectedLabel,
+                hasIncline(toNumber(effectivePendiente))
+              )
+            : 'run-fast') as IconName
+        }
         align={isDetailsStep ? 'left' : 'center'}
         footer={
           isDetailsStep ? (
             <View style={styles.modalButtons}>
               <Button
                 title={t('Atrás')}
-                onPress={resetToTypeStep}
+                onPress={closeCardioModal}
                 variant="secondary"
                 size="medium"
                 style={styles.modalButton}
@@ -357,7 +515,7 @@ export function CardioInputField({
               <Button
                 title={t('Guardar')}
                 onPress={handleSaveCardio}
-                disabled={!cardioMinutes}
+                disabled={!effectiveMinutes}
                 variant="primary"
                 size="medium"
                 style={styles.modalButton}
@@ -375,7 +533,7 @@ export function CardioInputField({
               )}
               <Button
                 title={isTypeStep ? t('Cancelar') : t('Atrás')}
-                onPress={isTypeStep ? closeCardioModal : resetToTypeStep}
+                onPress={closeCardioModal}
                 variant="secondary"
                 size="medium"
               />
@@ -383,32 +541,6 @@ export function CardioInputField({
           )
         }
       >
-        {/* Con casillas no hay paso de lista (y así no asoma al cerrar). */}
-        {isTypeStep && !inlinePicker && (
-          <ScrollView
-            style={styles.optionsScroll}
-            showsVerticalScrollIndicator={false}
-          >
-            {CARDIO_OPTIONS.map((option) => (
-              <Pressable
-                key={option.id}
-                style={({ pressed }) => [
-                  styles.optionButton,
-                  pressed && styles.optionButtonPressed,
-                ]}
-                onPress={() => handleSelectCardioType(option.id)}
-              >
-                <MaterialCommunityIcons
-                  name={optionIconName(option) as any}
-                  size={20}
-                  color={theme.colors.white}
-                />
-                <Text style={styles.optionButtonText}>{option.label}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-
         {isCustomTypeStep && (
           <TextInput
             style={styles.customTypeInput}
@@ -425,7 +557,7 @@ export function CardioInputField({
               <Text style={styles.labelCardio}>{t('Minutos')}</Text>
               <TextInput
                 style={styles.inputCardio}
-                placeholder="0"
+                placeholder={placeholderOf(suggestion?.minutes)}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={cardioMinutes}
                 onChangeText={setCardioMinutes}
@@ -440,7 +572,7 @@ export function CardioInputField({
               <Text style={styles.labelCardio}>km/h</Text>
               <TextInput
                 style={styles.inputCardio}
-                placeholder="0"
+                placeholder={placeholderOf(suggestion?.speed)}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={cardioSpeed}
                 onChangeText={setCardioSpeed}
@@ -450,12 +582,12 @@ export function CardioInputField({
                 onSubmitEditing={handleSaveCardio}
               />
             </View>
-            {TREADMILL_TYPES.includes(selectedCardioType) && (
+            {isTreadmill && (
               <View style={styles.inputGroupCardio}>
                 <Text style={styles.labelCardio}>{t('Pendiente %')}</Text>
                 <TextInput
                   style={styles.inputCardio}
-                  placeholder="0"
+                  placeholder={placeholderOf(suggestion?.pendiente)}
                   placeholderTextColor={theme.colors.textSecondary}
                   value={cardioPendiente}
                   onChangeText={setCardioPendiente}
@@ -467,6 +599,20 @@ export function CardioInputField({
               </View>
             )}
           </View>
+        )}
+        {/* Lo que vale la entrada, en el momento de apuntarla: las kcal son lo
+            que mueve la hero, la gráfica y los retos de cardio. */}
+        {isDetailsStep && !!effectiveMinutes && (
+          <Text
+            style={[
+              styles.kcalPreview,
+              !effectiveSpeed && styles.kcalPreviewWarning,
+            ]}
+          >
+            {effectiveSpeed
+              ? t('≈ {n} kcal', { n: Math.round(kcalPreview) })
+              : t('Sin velocidad no se calculan kcal')}
+          </Text>
         )}
       </AppModal>
     </>
@@ -494,8 +640,10 @@ const makeStyles = () =>
     headerLeft: {
       flexDirection: 'row',
       alignItems: 'center',
+      flex: 1,
     },
     title: {
+      flexShrink: 1,
       fontSize: 17,
       fontWeight: '700',
       color: theme.colors.text,
@@ -529,6 +677,12 @@ const makeStyles = () =>
       textAlignVertical: 'center',
       transform: [{ translateY: Platform.OS === 'android' ? 2 : 4 }],
     },
+    // Kcal de una entrada, a la derecha de sus resultados.
+    cardioEntryKcal: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.primary,
+    },
     cardioEntryResults: {
       fontSize: 13,
       fontWeight: '500',
@@ -537,53 +691,12 @@ const makeStyles = () =>
       lineHeight: 16,
     },
     clearButton: {
-      padding: 8,
-      backgroundColor: theme.colors.error + '30',
-      borderRadius: theme.borderRadius.sm,
-    },
-    addCardioButton: {
-      backgroundColor: theme.colors.primaryFill,
-      paddingVertical: 12,
-      paddingHorizontal: 16,
-      borderRadius: theme.borderRadius.sm,
-      alignItems: 'center',
-      marginTop: 10,
-    },
-    // Estilo secundario/outline (no relleno dorado): "Añadir cardio" es la
-    // entrada a una sección secundaria y no debe competir en peso con el CTA
-    // dorado "Hecho" del pie. El dorado queda como único protagonista.
-    collapsedButton: {
-      backgroundColor: theme.colors.surface,
-      borderWidth: 1.5,
-      borderColor: theme.colors.primaryLine,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      borderRadius: theme.borderRadius.sm,
-      alignItems: 'center',
-      marginVertical: 12,
-    },
-    collapsedButtonText: {
-      color: theme.colors.primary,
-      fontWeight: '800',
-      fontSize: 15,
-    },
-    addCardioText: {
-      color: theme.colors.onGold,
-      fontWeight: '800',
-      fontSize: 15,
-    },
-    buttonContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 6,
+      padding: 6,
     },
     buttonPressed: {
       opacity: 0.8,
     },
-    // Casillas de disciplina: copia del `menuTile` de Perfil (superficie,
-    // borde, sombra suave, cuadradas). `flexBasis: 0` + `flexGrow: 1` para que
-    // todas midan lo mismo tenga la etiqueta la longitud que tenga.
-    // Rótulo de la rejilla de disciplinas (modo inlinePicker).
+    // Rótulo de la rejilla de disciplinas.
     pickerTitle: {
       color: theme.colors.textSecondary,
       fontSize: 13,
@@ -601,6 +714,9 @@ const makeStyles = () =>
       flexDirection: 'row',
       gap: MENU_TILE_GAP,
     },
+    // Casillas de disciplina: copia del `menuTile` de Perfil (superficie,
+    // borde, sombra suave, cuadradas). `flexBasis: 0` + `flexGrow: 1` para que
+    // todas midan lo mismo tenga la etiqueta la longitud que tenga.
     tile: {
       flexGrow: 1,
       flexBasis: 0,
@@ -621,30 +737,6 @@ const makeStyles = () =>
       color: theme.colors.text,
       lineHeight: 16,
       textAlign: 'center',
-    },
-    optionsScroll: {
-      marginTop: 12,
-      maxHeight: 300,
-    },
-    optionButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      backgroundColor: theme.colors.primaryMuted,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      marginBottom: 8,
-    },
-    optionButtonPressed: {
-      opacity: 0.8,
-    },
-    optionButtonText: {
-      fontSize: 15,
-      fontWeight: '700',
-      color: theme.colors.white,
     },
     customTypeInput: {
       backgroundColor: theme.colors.inputBg,
@@ -680,6 +772,17 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
       marginBottom: 6,
       textTransform: 'uppercase',
+    },
+    // Kcal estimadas bajo los campos del popup; en tono de aviso sin velocidad.
+    kcalPreview: {
+      marginTop: 10,
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.primary,
+    },
+    kcalPreviewWarning: {
+      fontWeight: '700',
+      color: theme.colors.warning,
     },
     inputCardio: {
       backgroundColor: theme.colors.inputBg,

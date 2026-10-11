@@ -385,7 +385,12 @@ export function WeekAchievementScreen({
       <GlassTopBar
         title={t('Hitos de la semana')}
         icon="trophy-variant"
-        subtitle={t('Comparte tus resultados en redes')}
+        subtitle={
+          routineName
+            ? `${t('Semana')} ${achievements.weekNumber} · ${routineName}`
+            : `${t('Semana')} ${achievements.weekNumber}`
+        }
+        subtitleNumberOfLines={1}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />

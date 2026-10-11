@@ -122,7 +122,9 @@ export async function getProfilesByIds(
 export async function getProfile(userId: string): Promise<Profile | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, display_name, avatar_url, bio, is_public, level, xp, share_activity')
+    .select(
+      'id, display_name, avatar_url, bio, is_public, level, xp, share_activity'
+    )
     .eq('id', userId)
     .maybeSingle();
   if (error) throw new Error(`profiles: ${error.message}`);
@@ -371,6 +373,41 @@ export interface FeedRoutine {
   name: string;
   description: string | null;
   owner_id: string;
+}
+
+// Busca rutinas públicas por nombre o descripción: el tablón solo trae las 50
+// más populares y el feed las 50 más recientes, así que el resto solo se
+// alcanza buscando. Se quitan del texto los caracteres que rompen el filtro
+// `or` de PostgREST (comas, paréntesis) y los comodines.
+export async function searchPublicRoutines(
+  query: string,
+  limit = 20
+): Promise<FeedRoutine[]> {
+  const q = query.replace(/[,()%*\\]/g, ' ').trim();
+  if (!q) return [];
+  const { data, error } = await supabase
+    .from('routines')
+    .select('id, name, description, user_id')
+    .eq('is_public', true)
+    .eq('deleted', false)
+    .or(`name.ilike.%${q}%,description.ilike.%${q}%`)
+    .order('updated_at', { ascending: false })
+    .limit(limit);
+  if (error) throw new Error(`routines: ${error.message}`);
+  return (data ?? []).map((r) => {
+    const row = r as {
+      id: string;
+      name: string;
+      description: string | null;
+      user_id: string;
+    };
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description ?? null,
+      owner_id: row.user_id,
+    };
+  });
 }
 
 export async function getFollowingFeed(

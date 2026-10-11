@@ -192,15 +192,45 @@ async function cancelNotification(): Promise<void> {
   }
 }
 
+// Identificador fijo del aviso de descanso: en Android, uno nuevo con el mismo
+// id SUSTITUYE al que siga en la bandeja en vez de apilarse (serie a serie se
+// juntaban varios "Descanso finalizado" iguales). Siempre hay como mucho uno, y
+// es el del último descanso.
+const REST_NOTIFICATION_ID = 'rest-timer';
+
+// Quita de la bandeja el aviso de un descanso anterior que no se tocó: al
+// empezar otro descanso ya no dice nada útil.
+async function dismissPresentedRestNotification(): Promise<void> {
+  if (!Notifications) return;
+  try {
+    const presented = await Notifications.getPresentedNotificationsAsync();
+    await Promise.all(
+      presented
+        .filter(
+          (n) =>
+            (n.request.content.data as Record<string, unknown> | undefined)
+              ?.source === 'rest-timer'
+        )
+        .map((n) =>
+          Notifications!.dismissNotificationAsync(n.request.identifier)
+        )
+    );
+  } catch (error) {
+    console.error('Error dismissing timer notification:', error);
+  }
+}
+
 async function scheduleNotification(
   seconds: number,
   snapshot: RestTimerSnapshot
 ): Promise<void> {
   if (!Notifications || seconds <= 0) return;
   await cancelNotification();
+  await dismissPresentedRestNotification();
 
   try {
     notificationId = await Notifications.scheduleNotificationAsync({
+      identifier: REST_NOTIFICATION_ID,
       content: {
         title: t('Descanso finalizado'),
         body: t('Es hora de tu siguiente serie'),

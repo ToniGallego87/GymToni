@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
@@ -102,6 +102,22 @@ CREATE TABLE IF NOT EXISTS cardio_logs (
   updated_at      INTEGER NOT NULL DEFAULT 0
 );
 
+-- Una fila por entrada de cardio, como log_sets para la fuerza (v9). Convive
+-- con cardio_logs.raw_input mientras haya móviles que solo entienden el texto;
+-- workout_logs_id va duplicado para que el sync filtre por log sin cruzar.
+CREATE TABLE IF NOT EXISTS cardio_entries (
+  id              TEXT PRIMARY KEY,
+  cardio_logs_id  TEXT NOT NULL REFERENCES cardio_logs(id) ON DELETE CASCADE,
+  workout_logs_id TEXT NOT NULL,
+  entry_order     INTEGER NOT NULL,
+  discipline      TEXT,
+  label           TEXT NOT NULL,
+  minutes         REAL,
+  speed           REAL,
+  incline         REAL,
+  updated_at      INTEGER NOT NULL DEFAULT 0
+);
+
 -- Cola de cambios pendientes de subir a la nube (sync artesanal, Fase 1).
 -- Una fila por operación granular; el motor de sync (Fase 3) la vacía.
 CREATE TABLE IF NOT EXISTS sync_outbox (
@@ -122,4 +138,6 @@ CREATE INDEX IF NOT EXISTS idx_exlogs_log       ON exercise_logs(workout_logs_id
 CREATE INDEX IF NOT EXISTS idx_exlogs_exercise  ON exercise_logs(exercises_id);
 CREATE INDEX IF NOT EXISTS idx_sets_exlog       ON log_sets(exercise_logs_id);
 CREATE INDEX IF NOT EXISTS idx_outbox_entity    ON sync_outbox(entity, entity_id);
+CREATE INDEX IF NOT EXISTS idx_centries_cardio  ON cardio_entries(cardio_logs_id);
+CREATE INDEX IF NOT EXISTS idx_centries_log     ON cardio_entries(workout_logs_id);
 `;

@@ -909,7 +909,10 @@ export function PublicRoutineScreen({
       <GlassTopBar
         title={routine?.name ?? name}
         icon="book-open-variant"
-        subtitle={t('Rutina de la comunidad')}
+        subtitle={
+          displayAuthor ? t('De {name}', { name: displayAuthor }) : undefined
+        }
+        subtitleNumberOfLines={1}
         topInset={insets.top}
         onLayout={onTopBarLayout}
         menuItems={

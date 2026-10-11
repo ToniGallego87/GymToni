@@ -11,6 +11,7 @@ import {
   Platform,
   StatusBar,
   StyleSheet,
+  unstable_batchedUpdates,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,8 @@ import * as SplashScreen from 'expo-splash-screen';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
+// Toques en notificaciones ya atendidos (ver el efecto de las notificaciones).
+const handledNotificationTaps = new Set<string>();
 import {
   CalendarScreen,
   CardioScreen,
@@ -38,6 +41,7 @@ import {
   NewRoutineScreen,
   ProfileScreen,
   AchievementsScreen,
+  ActivityScreen,
   BodyWeightScreen,
   SettingsScreen,
   RoutineDetailScreen,
@@ -64,7 +68,7 @@ import {
 import type { WeekAchievements } from '@lib/achievements';
 import {
   CARDIO_ONLY_DAY,
-  hasAnyCardio,
+  isCardioOnlyLog,
   splitMixedCardioLogs,
 } from '@lib/cardio';
 import type { WeightSegment } from '@lib/cardio';
@@ -83,29 +87,41 @@ import {
   setLastUpdatePromptVersion,
 } from '@lib/storage';
 import { useMyProfile } from '@hooks/useMyProfile';
-import { useAccountLevel } from '@hooks/useAccountLevel';
+import { useRecordAccountLevel } from '@hooks/useAccountLevel';
 import { shiftAward, useAwards } from '@lib/awards';
 import { requestLevelPulse } from '@lib/levelPulse';
 import { setAchievementsOpener } from '@lib/achievementsLink';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
-import { isAutoBackupDue, runAutoBackup } from '@lib/backup';
+import { isAutoBackupDue, readAutoBackup, runAutoBackup } from '@lib/backup';
 import { loadBodyWeight, maybeNotifyStaleWeight } from '@lib/bodyWeight';
+import {
+  rescheduleWorkoutReminders,
+  WORKOUT_REMINDER_SOURCE,
+} from '@lib/workoutReminder';
 import { isNewerVersion, playStoreUrls } from '@lib/appUpdate';
 import { fetchLatestRelease } from '@lib/cloud/release';
 import type { AppRelease } from '@lib/cloud/release';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import { subscribePipMode } from '@lib/pipTimer';
 import { getRestTimer, useRestTimer } from '@lib/restTimerStore';
-import { findDayInRoutines } from '@lib/utils';
+import { findDayInRoutines, getToday, logDateKey } from '@lib/utils';
+import { currentWeekDayState } from '@lib/weeks';
 import { theme, useThemeVersion } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t, useLanguageVersion } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import { useCloudSync } from '@hooks/useCloudSync';
+import { startSession } from '@lib/cloud/auth';
 import {
   getStoredCardioSplitDone,
   setStoredCardioSplitDone,
 } from '@lib/appSettings';
+import {
+  noteTouchCancel,
+  noteTouchEnd,
+  noteTouchStart,
+  runWhenQuiet,
+} from '@lib/userQuiet';
 import {
   WorkoutAppData,
   WorkoutDay,
@@ -117,12 +133,17 @@ type Screen =
   | { type: 'home' }
   | { type: 'cardio' }
   | { type: 'routine-selector'; origin?: 'home' | 'profile' }
-  | { type: 'day-selector' }
+  // `forDate`: entreno olvidado de ese día, desde una celda vacía del Calendario.
+  | { type: 'day-selector'; forDate?: string }
   | {
       type: 'workout-log';
       day: WorkoutDay;
       log?: WorkoutLog;
       cardioOnly?: boolean;
+      // Abre semana nueva con este entreno (ver WorkoutLogScreen).
+      startsNewWeek?: boolean;
+      // Fecha de un entreno olvidado (ver WorkoutLogScreen).
+      initialDate?: string;
       origin?: 'home' | 'calendar' | 'cardio';
       // Pantalla a la que vuelve "Volver" cuando no es una pestaña: el Detalle
       // desde el que se pulsó "Editar". Sin ella se vuelve a `origin`.
@@ -133,6 +154,8 @@ type Screen =
       log: WorkoutLog;
       day: WorkoutDay;
       origin: 'home' | 'calendar' | 'cardio';
+      // Pantalla a la que vuelve si no es una pestaña (Elige la sesión).
+      back?: Screen;
     }
   | { type: 'calendar' }
   | { type: 'profile' }
@@ -145,6 +168,8 @@ type Screen =
   | { type: 'body-weight' }
   // Logros: insignias derivadas del histórico; cuelga de Perfil.
   | { type: 'achievements' }
+  // Actividad propia (insignias, retos y días), desde los datos locales.
+  | { type: 'activity' }
   // El perfil público se edita desde Perfil (su tarjeta de identidad), que es
   // el único sitio desde el que se llega: Comunidad habla de otra gente.
   | { type: 'community' }
@@ -237,19 +262,25 @@ type TabType = (typeof TAB_ORDER)[number];
 const BOOT_SETTLE_MS = 450;
 
 /**
- * Hueco entre montar una pestaña de fondo y la siguiente. Cada montaje son
- * 80-210 ms de JS (medido en garnet) más el trabajo nativo de asentar sus
- * vistas; con las cuatro seguidas se juntaban en un tapón. Espaciadas, cada una
- * bloquea un frame suelto y cualquier toque entra entre medias.
+ * Hueco MÍNIMO entre montar una pestaña de fondo y la siguiente. Cada montaje
+ * son 80-210 ms de JS (medido en garnet) más el trabajo nativo de asentar sus
+ * vistas; con las cuatro seguidas se juntaban en un tapón. Además de este hueco,
+ * cada montaje espera a que el usuario no esté tocando (`runWhenQuiet`).
  */
 const WARM_STEP_MS = 650;
+
+/**
+ * Tope de espera de cada paso del arranque si el usuario no deja de tocar: pasado
+ * este rato se hace igual, para que el sync y el resto de la fase 2 no se queden
+ * esperando para siempre a alguien que no suelta la pantalla.
+ */
+const BOOT_MAX_WAIT_MS = 8000;
 
 /**
  * El arranque va en DOS fases, y este es el motivo de que estén separadas.
  *
  * Fase 1 (`idle`): dejar la UI lista. Montar cada pestaña de fondo cuesta
- * 80-210 ms de JS (medido en garnet), así que son trozos cortos entre los que
- * cabe cualquier toque.
+ * 80-210 ms de JS (medido en garnet), así que son trozos cortos.
  *
  * Fase 2 (`background`): las tareas de red y fichero. El sync con la nube tarda
  * **8,1-8,6 s** en un arranque en frío y lo normal es que no traiga NADA
@@ -260,8 +291,13 @@ const WARM_STEP_MS = 650;
  *
  * Nada de la fase 2 corre prisa —reconciliar con otro dispositivo o avisar de
  * una versión nueva aguanta tres segundos— así que espera a que no quede UI que
- * preparar. No hace falta tope de seguridad: si el usuario navega sin parar, cada
- * navegación monta su pestaña, y como solo hay cinco la fase 1 termina igual.
+ * preparar.
+ *
+ * Y ningún paso de las dos fases va a reloj fijo: cada uno espera además a que
+ * el usuario lleve un rato sin tocar (`lib/userQuiet.ts`). A reloj fijo, el
+ * montaje de una pestaña caía tantas veces encima de un toque o de un scroll que
+ * los primeros segundos iban a tirones. Si el usuario navega sin parar, cada
+ * navegación monta su pestaña igualmente, y `BOOT_MAX_WAIT_MS` pone el tope.
  */
 
 function AppContent() {
@@ -270,8 +306,11 @@ function AppContent() {
   // registra al cambiar de pantalla y su cierre no ve los logs posteriores.
   const logsRef = React.useRef(state.logs);
   logsRef.current = state.logs;
-  // Foto del perfil público para la pestaña de Perfil de la barra.
-  const { profile: myProfile } = useMyProfile();
+  // OJO al añadir hooks aquí: lo que haga repintar a AppContent repinta la app
+  // ENTERA (las cinco pestañas montadas y la subpantalla abierta). La sesión, el
+  // perfil, el sync y el nivel de la cuenta viven por eso en componentes hoja
+  // (`CloudSync`, `AccountLevelRecorder`, `PrimaryNav`): al llegar la sesión o el
+  // perfil durante el arranque, solo repinta lo que los enseña.
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
   // Pestañas ya montadas (ver `tabLayer`). Al arrancar solo la activa, para que
   // el primer pintado sea lo más corto posible; las demás entran luego, una a una
@@ -289,13 +328,6 @@ function AppContent() {
   const [idle, setIdle] = useState(false);
   // Fase 2: ya no queda UI que preparar; entran las tareas de red y fichero.
   const [background, setBackground] = useState(false);
-  // Sync de fondo con la nube (Fase 3): al iniciar sesión y al volver a primer
-  // plano. Refresca el estado si el pull trae cambios de otro dispositivo y
-  // pone al día las rutinas enlazadas de la comunidad si su autor las cambió.
-  //
-  // Espera a la fase 2 (ver `background`): son 8,5 s de red que casi nunca
-  // traen nada, y arrancando antes se comían los primeros toques del usuario.
-  useCloudSync(dispatch, state.routines, background);
 
   // Cardio y fuerza son sesiones independientes; los registros viejos llevaban
   // las dos cosas en un mismo log. Se parten en dos una sola vez, para que los
@@ -346,17 +378,10 @@ function AppContent() {
   const pagerRef = React.useRef<PagerView>(null);
   // La vista que captura el cambio de tema (toda la app menos el overlay).
   const themeCaptureRef = React.useRef<View>(null);
-  // La barra oculta la pestaña de cardio si no hay ningún cardio.
-  const showCardio = hasAnyCardio(state.logs);
   // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
   // que esto es true, para no pintar primero los datos semilla y saltar luego
   // a los reales (el "carga a trompicones" del arranque).
   const [hydrated, setHydrated] = useState(false);
-  // Retos semanales: aquí (y solo aquí) se apuntan los superados, se avisa de
-  // lo nuevo (retos, logros, nivel: cola de `lib/awards`) y se sube el nivel
-  // al perfil público. Solo con los datos reales: con los semilla de antes de
-  // hidratar, todo parecería "nuevo".
-  useAccountLevel({ record: hydrated });
   const awards = useAwards();
   // La píldora de nivel de la barra superior (GlassTopBar, en todas las
   // pantallas) abre Logros a través de este puente.
@@ -377,12 +402,28 @@ function AppContent() {
     let isMounted = true;
 
     const hydrateState = async () => {
+      let data: WorkoutAppData | null = null;
+      let firstInstall = false;
+      // La sesión, también bajo el splash y a la vez que SQLite (ver
+      // `startSession`). Aparte: un fallo de la nube no debe dejar sin datos.
       try {
-        const savedData = await loadAppData();
+        startSession();
+      } catch (error) {
+        console.error('Error iniciando la sesión:', error);
+      }
+      try {
+        // El peso corporal se lee A LA VEZ que los datos y bajo el splash: los
+        // retos (kcal de cardio) dependen de él. Leído después, en la fase 2,
+        // obligaba a recalcular los retos y repintar media app justo cuando el
+        // usuario ya estaba tocando.
+        const [savedData] = await Promise.all([
+          loadAppData(),
+          loadBodyWeight(),
+        ]);
         if (!isMounted) return;
 
         if (savedData) {
-          dispatch({ type: 'SET_APP_DATA', payload: savedData });
+          data = savedData;
         } else {
           // Primer arranque: sembrar el almacenamiento y reflejar ese seed en
           // el estado. El reducer parte de datos de fábrica (WORKOUT_ROUTINES /
@@ -391,21 +432,28 @@ function AppContent() {
           // ejemplo del estado inicial en lugar de arrancar vacía.
           const seed = getSeedAppData();
           await saveAppData(seed);
-          dispatch({ type: 'SET_APP_DATA', payload: seed });
+          data = seed;
           // Peso corporal del backup de dev (web): sin él las kcal del cardio
           // se calcularían con el peso por defecto.
           const seedWeights = getSeedCardioWeightHistory();
           if (seedWeights.length) {
             await setCardioWeightHistory(seedWeights);
           }
-          setIsFirstInstall(true);
+          firstInstall = true;
         }
       } catch (error) {
         console.error('Error loading app data:', error);
-      } finally {
-        // Siempre marcar hidratado (aunque falle) para no dejar el splash colgado.
-        if (isMounted) setHydrated(true);
       }
+      // Siempre marcar hidratado (aunque falle) para no dejar el splash colgado.
+      if (!isMounted) return;
+      // Datos y `hydrated` en UN render: fuera de un evento, la arquitectura
+      // antigua pinta cada `setState` por separado, y el primero repintaba con
+      // los datos nuevos una pantalla que aún no se ve.
+      unstable_batchedUpdates(() => {
+        if (data) dispatch({ type: 'SET_APP_DATA', payload: data });
+        if (firstInstall) setIsFirstInstall(true);
+        setHydrated(true);
+      });
     };
 
     hydrateState();
@@ -523,10 +571,10 @@ function AppContent() {
     }
   };
 
-  // Peso corporal: se carga al arrancar (lo consume Cardio para estimar las
-  // kcal de cada sesión) y, si lleva más de dos semanas sin tocarse, se programa
-  // el recordatorio. El aviso salta unas horas después, no ahora: con la app
-  // abierta sería avisar de algo que el usuario tiene delante.
+  // Peso corporal: se carga en la hidratación (lo consumen Cardio y los retos
+  // para estimar las kcal) y, si lleva más de dos semanas sin tocarse, aquí se
+  // programa el recordatorio. El aviso salta unas horas después, no ahora: con
+  // la app abierta sería avisar de algo que el usuario tiene delante.
   useEffect(() => {
     if (!background || isFirstInstall) return;
     loadBodyWeight()
@@ -571,20 +619,26 @@ function AppContent() {
   // el temporizador, así que un toque en la barra CANCELA el montaje de fondo
   // pendiente. La pantalla a la que se va se pinta sola y el calentamiento
   // continúa después, en vez de sumarse al render de la navegación.
+  //
+  // Cada paso espera además a un hueco sin toques (`runWhenQuiet`): con el hueco
+  // fijo solo, el montaje caía a menudo encima de un toque o de un scroll.
   useEffect(() => {
-    if (!idle) return;
+    if (!idle || background) return;
     const next = TAB_ORDER.find((type) => !mountedTabsRef.current.has(type));
     if (!next) {
-      // No queda pestaña que montar: se abre la fase 2.
-      setBackground(true);
-      return;
+      // No queda pestaña que montar: se abre la fase 2 (también en un hueco: el
+      // backup diario y el sync arrancan con trabajo de JS).
+      return runWhenQuiet(() => setBackground(true), 0, BOOT_MAX_WAIT_MS);
     }
-    const timer = setTimeout(() => {
-      mountedTabsRef.current.add(next);
-      setWarmTick((n) => n + 1);
-    }, WARM_STEP_MS);
-    return () => clearTimeout(timer);
-  }, [idle, warmTick, screen.type]);
+    return runWhenQuiet(
+      () => {
+        mountedTabsRef.current.add(next);
+        setWarmTick((n) => n + 1);
+      },
+      WARM_STEP_MS,
+      BOOT_MAX_WAIT_MS
+    );
+  }, [idle, background, warmTick, screen.type]);
 
   // La app ya está quieta: a partir de aquí empieza la fase 1 (calentar las
   // pestañas) sin robarle frames a la primera pantalla. `runAfterInteractions`
@@ -737,11 +791,14 @@ function AppContent() {
             case 'home':
               // Permitir que salga de la app desde la pantalla de inicio
               return false;
+            case 'day-selector':
+              if (screen.forDate) setScreen({ type: 'calendar' });
+              else goHome();
+              return true;
             case 'cardio':
             case 'calendar':
             case 'profile':
             case 'community':
-            case 'day-selector':
             case 'week-achievement':
               // Pantallas sin "Volver" propio en pantalla (navegación inferior
               // o destino final de un flujo corto): el físico vuelve a Inicio,
@@ -758,7 +815,8 @@ function AppContent() {
               backFromWorkoutLog(screen);
               return true;
             case 'detail':
-              backFromDetail(screen.origin);
+              if (screen.back) goBackTo(screen.back);
+              else backFromDetail(screen.origin);
               return true;
             case 'data':
               backFromData(screen);
@@ -768,6 +826,7 @@ function AppContent() {
               return true;
             case 'body-weight':
             case 'achievements':
+            case 'activity':
               goProfile();
               return true;
             case 'following':
@@ -823,6 +882,14 @@ function AppContent() {
     [state.activeRoutineId, state.routines]
   );
 
+  // Recordatorios de entreno: se rehacen al abrir la app y cada vez que cambian
+  // los entrenos o la rutina activa (guardar el de hoy cancela el aviso de hoy).
+  // Ver lib/workoutReminder.ts.
+  useEffect(() => {
+    if (!background || isFirstInstall) return;
+    rescheduleWorkoutReminders(state.logs, activeRoutine);
+  }, [background, isFirstInstall, state.logs, activeRoutine]);
+
   // Rutina que se está mostrando/entrenando: la seleccionada (si existe) o, en
   // su defecto, la activa. "Empezar entrenamiento" opera sobre esta, de modo
   // que se puede entrenar una rutina "preparada" seleccionada aunque no sea la
@@ -850,6 +917,10 @@ function AppContent() {
   const openWorkoutFromNotificationData = (
     data: Record<string, unknown> | undefined
   ) => {
+    if (data?.source === WORKOUT_REMINDER_SOURCE) {
+      openSuggestedWorkout();
+      return;
+    }
     if (!data || data.source !== 'rest-timer') return;
 
     const dayId = typeof data.dayId === 'string' ? data.dayId : undefined;
@@ -888,6 +959,23 @@ function AppContent() {
     }
   };
 
+  // Recordatorio de entreno: el aviso no nombra el día; se decide AHORA, con la
+  // misma sugerencia que Inicio y "Elige la sesión". Si hoy ya hay entreno (o no
+  // hay sugerencia), se aterriza en "Elige la sesión", que explica por qué.
+  const openSuggestedWorkout = () => {
+    const { nextDay } = currentWeekDayState(activeRoutine, state.logs);
+    const trainedToday = state.logs.some(
+      (log) => !isCardioOnlyLog(log) && logDateKey(log) === getToday()
+    );
+    if (nextDay && !trainedToday) {
+      setScreen({ type: 'workout-log', day: nextDay });
+    } else if (activeRoutine) {
+      setScreen({ type: 'day-selector' });
+    } else {
+      setScreen({ type: 'home' });
+    }
+  };
+
   // Volver de la ventanita flotante (el PiP del descanso): tocarla trae la app
   // al frente, y lo que se estaba mirando ahí es la cuenta atrás. Así que se
   // aterriza en el REGISTRO del día que la lanzó —donde está el temporizador
@@ -910,6 +998,7 @@ function AppContent() {
 
     const subscription = Notifications.addNotificationResponseReceivedListener(
       (response) => {
+        handledNotificationTaps.add(response.notification.request.identifier);
         openWorkoutFromNotificationData(
           response.notification.request.content.data as Record<string, unknown>
         );
@@ -920,7 +1009,12 @@ function AppContent() {
       try {
         const response =
           await Notifications!.getLastNotificationResponseAsync();
-        if (response) {
+        // Este efecto se repite al cambiar las rutinas, y la "última respuesta"
+        // sigue siendo la misma: sin recordar cuáles ya se atendieron, editar
+        // una rutina volvía a navegar al destino de un toque antiguo.
+        const id = response?.notification.request.identifier;
+        if (response && id && !handledNotificationTaps.has(id)) {
+          handledNotificationTaps.add(id);
           openWorkoutFromNotificationData(
             response.notification.request.content.data as Record<
               string,
@@ -1003,8 +1097,9 @@ function AppContent() {
     await runAutoBackup(await buildBackupJson());
   };
 
-  const handleImportData = async () => {
-    const raw = await readJsonFromFile();
+  // Importar un fichero y restaurar una copia automática son la misma operación:
+  // solo cambia de dónde sale el JSON.
+  const importFromJson = async (raw: string) => {
     const payload = JSON.parse(raw) as Partial<WorkoutAppData> & {
       cardioWeightHistory?: unknown;
     };
@@ -1053,6 +1148,11 @@ function AppContent() {
     setScreen({ type: 'home' });
   };
 
+  const handleImportData = async () => importFromJson(await readJsonFromFile());
+
+  const handleRestoreAutoBackup = async (fileName: string) =>
+    importFromJson(await readAutoBackup(fileName));
+
   // Hasta que termina la hidratación, el reducer aún tiene los datos de fábrica
   // (WORKOUT_ROUTINES / INITIAL_LOGS): pintar las pantallas con ellos hacía que,
   // al retirar el splash, se viera un fogonazo de la rutina demo antes de cargar
@@ -1089,7 +1189,17 @@ function AppContent() {
   };
 
   return (
-    <View style={styles.container}>
+    <View
+      style={styles.container}
+      // Solo apuntan cuándo toca el usuario (ver lib/userQuiet.ts): el arranque
+      // coloca su trabajo de fondo en los huecos sin toques.
+      onTouchStart={noteTouchStart}
+      onTouchEnd={(e) => noteTouchEnd(e.nativeEvent.touches.length)}
+      onTouchCancel={noteTouchCancel}
+    >
+      {/* Sin UI y fuera de AppContent a propósito (ver el aviso de arriba). */}
+      <CloudSync enabled={background} />
+      <AccountLevelRecorder />
       <View ref={themeCaptureRef} style={styles.container} collapsable={false}>
         <WhatsNewModal
           visible={whatsNewEntry !== null}
@@ -1167,13 +1277,14 @@ function AppContent() {
               onOpenRoutineSelector={() =>
                 setScreen({ type: 'routine-selector', origin: 'home' })
               }
-              // Ficha de la rutina ACTIVA (no la mostrada: es la que se entrena).
-              onOpenActiveRoutine={
-                activeRoutine
+              // Ficha de la rutina que Inicio ENSEÑA (la de su subtítulo), no la
+              // activa: el enlace lleva a lo que nombra.
+              onOpenDisplayedRoutine={
+                displayedRoutine
                   ? () =>
                       setScreen({
                         type: 'routine-details',
-                        routine: activeRoutine,
+                        routine: displayedRoutine,
                         back: { type: 'home' },
                       })
                   : undefined
@@ -1224,6 +1335,18 @@ function AppContent() {
                   origin: 'calendar',
                 })
               }
+              onLogForgottenDay={(date) =>
+                setScreen({ type: 'day-selector', forDate: date })
+              }
+              onLogForgottenCardio={(date) =>
+                setScreen({
+                  type: 'workout-log',
+                  day: CARDIO_ONLY_DAY,
+                  cardioOnly: true,
+                  initialDate: date,
+                  origin: 'calendar',
+                })
+              }
             />
           )}
 
@@ -1267,6 +1390,9 @@ function AppContent() {
               }
               onOpenBodyWeight={() => setScreen({ type: 'body-weight' })}
               onOpenAchievements={() => setScreen({ type: 'achievements' })}
+              onOpenActivity={() => setScreen({ type: 'activity' })}
+              onOpenCalendar={() => setScreen({ type: 'calendar' })}
+              onOpenCardio={() => setScreen({ type: 'cardio' })}
               onOpenSettings={() => setScreen({ type: 'settings' })}
               onOpenAccount={() =>
                 setScreen({ type: 'data', back: { type: 'profile' } })
@@ -1305,14 +1431,39 @@ function AppContent() {
         {screen.type === 'day-selector' && (
           <DaySelectorScreen
             routine={displayedRoutine}
-            onSelectDay={(day) => {
+            forDate={screen.forDate}
+            onSelectDay={(day, options) => {
+              if (screen.forDate) {
+                setScreen({
+                  type: 'workout-log',
+                  day,
+                  initialDate: screen.forDate,
+                  origin: 'calendar',
+                });
+                return;
+              }
               // Si el día ya tiene un log de hoy, WorkoutLogScreen lo detecta solo
               // (getLatestTodayLog) y abre ese registro para seguir metiendo series,
               // igual que la hero "Continúa tu entrenamiento": no hay que volver a
               // Inicio en silencio, eso solo confunde ("¿no ha funcionado el toque?").
-              setScreen({ type: 'workout-log', day });
+              setScreen({
+                type: 'workout-log',
+                day,
+                startsNewWeek: options?.startsNewWeek,
+              });
             }}
-            onBack={goHome}
+            onOpenLog={(log, day) =>
+              setScreen({
+                type: 'detail',
+                log,
+                day,
+                origin: 'home',
+                back: { type: 'day-selector' },
+              })
+            }
+            onBack={() =>
+              screen.forDate ? setScreen({ type: 'calendar' }) : goHome()
+            }
           />
         )}
 
@@ -1321,6 +1472,8 @@ function AppContent() {
             day={screen.day}
             log={screen.log}
             cardioOnly={screen.cardioOnly}
+            startsNewWeek={screen.startsNewWeek}
+            initialDate={screen.initialDate}
             onSave={() => backFromWorkoutLog(screen)}
             onBack={() => backFromWorkoutLog(screen)}
             onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
@@ -1331,7 +1484,11 @@ function AppContent() {
           <DetailScreen
             log={screen.log}
             day={screen.day}
-            onBack={() => backFromDetail(screen.origin)}
+            onBack={() =>
+              screen.back
+                ? goBackTo(screen.back)
+                : backFromDetail(screen.origin)
+            }
             onOpenRoutine={() => openRoutineOfDay(screen.day.id, screen)}
             onEdit={() =>
               setScreen({
@@ -1347,7 +1504,8 @@ function AppContent() {
             }
             onDelete={() => {
               dispatch({ type: 'DELETE_WORKOUT_LOG', payload: screen.log.id });
-              backFromDetail(screen.origin);
+              if (screen.back) goBackTo(screen.back);
+              else backFromDetail(screen.origin);
             }}
             onOpenExerciseProgress={(exerciseKey) =>
               setScreen({
@@ -1368,6 +1526,19 @@ function AppContent() {
         )}
         {screen.type === 'achievements' && (
           <AchievementsScreen onBack={goProfile} />
+        )}
+
+        {screen.type === 'activity' && (
+          <ActivityScreen
+            onBack={goProfile}
+            onOpenRoutine={(routine) =>
+              setScreen({
+                type: 'routine-details',
+                routine,
+                back: { type: 'activity' },
+              })
+            }
+          />
         )}
 
         {screen.type === 'settings' && (
@@ -1469,6 +1640,7 @@ function AppContent() {
         {screen.type === 'data' && (
           <DataScreen
             onImportData={handleImportData}
+            onRestoreAutoBackup={handleRestoreAutoBackup}
             onExportData={handleExportData}
             onBackupNow={handleAutoBackup}
             onClearData={handleClearData}
@@ -1530,16 +1702,14 @@ function AppContent() {
         {/* Barra de navegación FIJA (fuera del pager): solo en pestañas. El
           contenido de cada pestaña desliza por debajo; la barra no se mueve. */}
         {isTab && (
-          <FloatingPrimaryNav
+          <PrimaryNav
             bottom={getFloatingPrimaryNavMetrics(insets.bottom).bottom}
             activeTab={screen.type as TabType}
-            showCardio={showCardio}
             onPressHome={() => setScreen({ type: 'home' })}
             onPressCardio={() => setScreen({ type: 'cardio' })}
             onPressCalendar={() => setScreen({ type: 'calendar' })}
             onPressCommunity={() => setScreen({ type: 'community' })}
             onPressProfile={() => setScreen({ type: 'profile' })}
-            profileAvatarUri={myProfile?.avatar_url}
           />
         )}
 
@@ -1562,6 +1732,51 @@ function AppContent() {
           de tema en caliente, con un pantallazo de la vista de arriba. */}
       <ThemeRevealOverlay captureTarget={themeCaptureRef} />
     </View>
+  );
+}
+
+/**
+ * Sync de fondo con la nube: al iniciar sesión y al volver a primer plano.
+ * Refresca el estado si el pull trae cambios de otro dispositivo y pone al día
+ * las rutinas enlazadas de la comunidad si su autor las cambió.
+ *
+ * Espera a la fase 2 (ver `background`): son 8,5 s de red que casi nunca traen
+ * nada, y arrancando antes se comían los primeros toques del usuario. Y es un
+ * componente aparte porque escucha la sesión: dentro de AppContent, su llegada
+ * repintaba la app entera.
+ */
+function CloudSync({ enabled }: { enabled: boolean }) {
+  const { dispatch, state } = useWorkout();
+  useCloudSync(dispatch, state.routines, enabled);
+  return null;
+}
+
+/**
+ * Retos semanales: aquí (y solo aquí) se apuntan los superados, se avisa de lo
+ * nuevo (retos, logros, nivel: cola de `lib/awards`) y se sube el nivel al
+ * perfil público. Se monta ya con los datos reales: con los semilla de antes de
+ * hidratar, todo parecería "nuevo". Aparte de AppContent por lo mismo que
+ * `CloudSync`: escucha sesión, perfil y peso.
+ */
+function AccountLevelRecorder() {
+  useRecordAccountLevel(true);
+  return null;
+}
+
+/**
+ * La barra de pestañas con la foto del perfil público en la de Perfil. El perfil
+ * se lee aquí y no en AppContent: llega de la copia local y luego de la nube, ya
+ * con la app en pantalla, y cada llegada repintaba la app entera.
+ */
+function PrimaryNav(
+  props: Omit<
+    React.ComponentProps<typeof FloatingPrimaryNav>,
+    'profileAvatarUri'
+  >
+) {
+  const { profile } = useMyProfile();
+  return (
+    <FloatingPrimaryNav {...props} profileAvatarUri={profile?.avatar_url} />
   );
 }
 

@@ -60,10 +60,29 @@ export interface ExerciseLog {
   timestamp: number;
 }
 
+/**
+ * Una entrada de cardio estructurada (el equivalente a una serie de fuerza):
+ * una fila por esfuerzo, con números de verdad en vez de texto. `discipline` es
+ * el id fijo del selector (`treadmill-walk`…), o null para "Otro", que entonces
+ * guarda su nombre en `label`. Ver `cardioEntriesFromRaw` en lib/cardio.ts.
+ */
+export interface CardioEntryData {
+  discipline: string | null;
+  label: string;
+  minutes: number | null;
+  speed: number | null;
+  incline: number | null;
+}
+
 export interface CardioLog {
   id: string;
   type: string;
+  // Texto editable ("Andar en cinta: 20min, 5kmh | …"). Convive con `entries`
+  // mientras haya móviles sin actualizar que solo entienden el texto: hasta
+  // entonces, si los dos no cuadran, manda el texto.
   rawInput: string;
+  // Las entradas estructuradas, derivadas del texto al guardar.
+  entries?: CardioEntryData[];
   duration?: number;
   distance?: number;
   pace?: string;

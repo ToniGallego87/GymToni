@@ -18,7 +18,7 @@ import {
   TopBarActionButton,
 } from '@components';
 import {
-  assignmentDuplicatesDayInWeek,
+  dateAssignmentConflict,
   groupLogsIntoWeekBlocks,
   isWeekCompleted,
   orderedBlockNumbers,
@@ -45,9 +45,9 @@ import { getCardioWeightHistory } from '@lib/storage';
 import {
   combineDateWithTime,
   findDayInRoutines,
-  formatDate,
-  formatDateFromKey,
   getLogTimestamp,
+  logDateKey,
+  weekdayDayMonth,
 } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
@@ -58,6 +58,7 @@ import {
   buildWorkoutImprovement,
   getExerciseStrengthScore,
   hasScoringSets,
+  workoutDurationMinutes,
 } from '@lib/progress';
 
 interface DetailScreenProps {
@@ -75,20 +76,6 @@ interface DetailScreenProps {
   onOpenRoutine?: () => void;
 }
 
-function extractIncline(rawInput: string): string | null {
-  if (!rawInput) return null;
-  // Buscar patrón "10p", "5.5p", etc.
-  const match = rawInput.match(/(\d+(?:\.\d+)?)\s*p(?:\s|,|$)/i);
-  return match ? `${match[1]}%` : null;
-}
-
-function extractPaceNumber(pace: string): string {
-  if (!pace) return '';
-  // Extraer solo el número (ej: "11.5kmh" -> "11.5")
-  const match = pace.match(/(\d+(?:\.\d+)?)/);
-  return match ? match[1] : pace;
-}
-
 export function DetailScreen({
   log,
   day,
@@ -102,7 +89,12 @@ export function DetailScreen({
   const { state, dispatch } = useWorkout();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [pendingSplitDate, setPendingSplitDate] = useState<string | null>(null);
+  // Fecha pendiente de confirmar porque parte una semana ('split') o deja el
+  // entreno solo en una semana entre otras ('lone').
+  const [pendingDate, setPendingDate] = useState<{
+    date: string;
+    reason: 'split' | 'lone';
+  } | null>(null);
   const [pendingMove, setPendingMove] = useState<{
     plan: WeekMovePlan;
     removesWeek: boolean;
@@ -130,17 +122,17 @@ export function DetailScreen({
     setShowDatePicker(false);
     if (date === currentDate) return;
 
-    const routineLogs = state.logs.filter((l) => l.routineId === log.routineId);
-    const newTimestamp = combineDateWithTime(date, log.createdAt || Date.now());
-    if (
-      assignmentDuplicatesDayInWeek(
-        routineLogs,
-        log,
-        newTimestamp,
-        dayNumberForLog
-      )
-    ) {
-      setPendingSplitDate(date);
+    // El mismo aviso que el registro (`dateAssignmentConflict`): partir una
+    // semana o dejar el entreno solo en una semana aparte.
+    const reason = dateAssignmentConflict(
+      state.logs.filter((l) => l.routineId === log.routineId),
+      log,
+      combineDateWithTime(date, log.createdAt || Date.now()),
+      dayNumberForLog,
+      state.routines.find((r) => r.id === log.routineId)?.days.length ?? 0
+    );
+    if (reason) {
+      setPendingDate({ date, reason });
       return;
     }
     commitDate(date);
@@ -293,11 +285,8 @@ export function DetailScreen({
   const isCardioTotal = !!cardioSession;
 
   // La fecha que manda es la elegida (`currentDate`, clave YYYY-MM-DD); si el
-  // log no la lleva, la de creación. Las dos ramas pintan el MISMO formato, así
-  // que las dos salen de `formatDate` (una por su puerta de clave de día).
-  const displayedDate = currentDate
-    ? formatDateFromKey(currentDate)
-    : formatDate(log.createdAt);
+  // log no la lleva, la de creación. Misma forma que el historial y el registro.
+  const displayedDate = weekdayDayMonth(currentDate || logDateKey(log));
 
   // La comparación con la sesión anterior salta las semanas de descarga (su marca
   // viaja en cada log del bloque): un deload no es referencia. Y si ESTE log es de
@@ -319,16 +308,8 @@ export function DetailScreen({
   // escanear todas las tarjetas.
   const exerciseCount = log.exercises?.length ?? 0;
   const sessionImprovement = buildWorkoutImprovement(log, previousLog);
-  // Duración estimada: hueco entre el primer y el último ejercicio insertados
-  // (cada ExerciseLog guarda su timestamp = created_at). Mide cuándo se
-  // registró, no el tiempo real bajo la barra: si todo se mete al acabar, sale 0.
-  const workoutMinutes = (() => {
-    const stamps = (log.exercises ?? [])
-      .map((e) => e.timestamp)
-      .filter((ts): ts is number => typeof ts === 'number' && ts > 0);
-    if (stamps.length < 2) return 0;
-    return Math.round((Math.max(...stamps) - Math.min(...stamps)) / 60000);
-  })();
+  // Duración: de la primera a la última serie apuntada (ver lib/progress).
+  const workoutMinutes = workoutDurationMinutes(log);
 
   // Celdas de la tira-resumen. Se arma como lista para que la tira exista
   // SIEMPRE que haya algo que resumir: antes estaba condicionada a que hubiera
@@ -412,7 +393,6 @@ export function DetailScreen({
     return null;
   };
 
-
   return (
     <View style={styles.container}>
       <StatusBar
@@ -467,6 +447,7 @@ export function DetailScreen({
                     improved={item.improvement.isImproved}
                     iconSize={20}
                     textStyle={styles.summaryValue}
+                    shrinkToFit
                   />
                 ) : (
                   <Text
@@ -474,11 +455,19 @@ export function DetailScreen({
                       styles.summaryValue,
                       isCardioTotal && styles.summaryValueTotal,
                     ]}
+                    numberOfLines={1}
+                    adjustsFontSizeToFit
                   >
                     {item.value}
                   </Text>
                 )}
-                <Text style={styles.summaryLabel}>{item.label}</Text>
+                <Text
+                  style={styles.summaryLabel}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                >
+                  {item.label}
+                </Text>
               </View>
             ))}
           </View>
@@ -571,128 +560,85 @@ export function DetailScreen({
                 {t('Cardio')}
               </Text>
             )}
-            {cardioSession ? (
-              // Una caja por DISCIPLINA, no por tramo: el día se piensa como
-              // "anduve 69 min y corrí 8", y así se lee igual que en la lista de
-              // Cardio (que ya agrupa). Los tramos se suman y la velocidad y la
-              // pendiente pasan a rango (mín-máx). Cada tramo tal como se tecleó
-              // sigue a la vista en "Editar".
-              cardioSession.disciplines.map((discipline, index) => {
-                const incline = hasIncline(discipline.maxPendiente);
-                return (
-                  <View
-                    key={`${discipline.type}-${incline}-${index}`}
-                    style={styles.cardioBox}
-                  >
-                    <GradientFill accent={dayAccent} />
-                    <View style={styles.cardioLabelRow}>
-                      <MaterialCommunityIcons
-                        name={
-                          disciplineIconName(
-                            discipline.type,
-                            incline
-                          ) as React.ComponentProps<
-                            typeof MaterialCommunityIcons
-                          >['name']
-                        }
-                        size={20}
-                        color={theme.colors.primary}
-                      />
-                      <Text
-                        style={[styles.cardioLabel, styles.cardioLabelInRow]}
-                      >
+            {/* Una caja por DISCIPLINA, no por tramo: el día se piensa como
+                "anduve 69 min y corrí 8", y así se lee igual que en la lista de
+                Cardio (que ya agrupa). Los tramos se suman y la velocidad y la
+                pendiente pasan a rango (mín-máx). Cada tramo tal como se tecleó
+                sigue a la vista en "Editar". */}
+            {cardioSession.disciplines.map((discipline, index) => {
+              const incline = hasIncline(discipline.maxPendiente);
+              return (
+                <View
+                  key={`${discipline.type}-${incline}-${index}`}
+                  style={styles.cardioBox}
+                >
+                  <GradientFill accent={dayAccent} />
+                  <View style={styles.cardioBody}>
+                    <MaterialCommunityIcons
+                      name={
+                        disciplineIconName(
+                          discipline.type,
+                          incline
+                        ) as React.ComponentProps<
+                          typeof MaterialCommunityIcons
+                        >['name']
+                      }
+                      size={44}
+                      color={theme.colors.primary}
+                    />
+                    <View style={styles.cardioContent}>
+                      <Text style={styles.cardioLabel}>
                         {discipline.type.toUpperCase()}
                       </Text>
-                    </View>
-                    <View style={styles.cardioStatsRow}>
-                      {discipline.totalMinutes > 0 && (
-                        <View style={styles.cardioStat}>
-                          <Text style={styles.cardioStatValue}>
-                            {fmtNum(discipline.totalMinutes)}
-                          </Text>
-                          <Text style={styles.cardioStatUnit}>min</Text>
-                        </View>
-                      )}
-                      {discipline.minSpeed != null &&
-                        discipline.maxSpeed != null && (
+                      <View style={styles.cardioStatsRow}>
+                        {discipline.totalMinutes > 0 && (
                           <View style={styles.cardioStat}>
                             <Text style={styles.cardioStatValue}>
-                              {rangeStr(
-                                discipline.minSpeed,
-                                discipline.maxSpeed
-                              )}
+                              {fmtNum(discipline.totalMinutes)}
                             </Text>
-                            <Text style={styles.cardioStatUnit}>km/h</Text>
+                            <Text style={styles.cardioStatUnit}>min</Text>
                           </View>
                         )}
-                      {discipline.minPendiente != null &&
-                        discipline.maxPendiente != null && (
+                        {discipline.minSpeed != null &&
+                          discipline.maxSpeed != null && (
+                            <View style={styles.cardioStat}>
+                              <Text style={styles.cardioStatValue}>
+                                {rangeStr(
+                                  discipline.minSpeed,
+                                  discipline.maxSpeed
+                                )}
+                              </Text>
+                              <Text style={styles.cardioStatUnit}>km/h</Text>
+                            </View>
+                          )}
+                        {discipline.minPendiente != null &&
+                          discipline.maxPendiente != null && (
+                            <View style={styles.cardioStat}>
+                              <Text style={styles.cardioStatValue}>
+                                {rangeStr(
+                                  discipline.minPendiente,
+                                  discipline.maxPendiente
+                                )}
+                              </Text>
+                              <Text style={styles.cardioStatUnit}>
+                                {t('Pendiente %')}
+                              </Text>
+                            </View>
+                          )}
+                        {discipline.kcal > 0 && (
                           <View style={styles.cardioStat}>
                             <Text style={styles.cardioStatValue}>
-                              {rangeStr(
-                                discipline.minPendiente,
-                                discipline.maxPendiente
-                              )}
+                              {Math.round(discipline.kcal)}
                             </Text>
-                            <Text style={styles.cardioStatUnit}>
-                              {t('Pendiente %')}
-                            </Text>
+                            <Text style={styles.cardioStatUnit}>kcal</Text>
                           </View>
                         )}
-                      {discipline.kcal > 0 && (
-                        <View style={styles.cardioStat}>
-                          <Text style={styles.cardioStatValue}>
-                            {Math.round(discipline.kcal)}
-                          </Text>
-                          <Text style={styles.cardioStatUnit}>kcal</Text>
-                        </View>
-                      )}
+                      </View>
                     </View>
                   </View>
-                );
-              })
-            ) : (
-              // Fallback legado: rawInput no parseable, se muestra el resumen
-              // simple del primer registro como antes.
-              <View style={styles.cardioBox}>
-                <GradientFill accent={dayAccent} />
-                <Text style={styles.cardioLabel}>
-                  {log.cardio.type?.toUpperCase()}
-                </Text>
-                <View style={styles.cardioStatsRow}>
-                  {log.cardio.duration && (
-                    <View style={styles.cardioStat}>
-                      <Text style={styles.cardioStatValue}>
-                        {log.cardio.duration}
-                      </Text>
-                      <Text style={styles.cardioStatUnit}>min</Text>
-                    </View>
-                  )}
-                  {log.cardio.pace && (
-                    <View style={styles.cardioStat}>
-                      <Text style={styles.cardioStatValue}>
-                        {extractPaceNumber(log.cardio.pace)}
-                      </Text>
-                      <Text style={styles.cardioStatUnit}>km/h</Text>
-                    </View>
-                  )}
-                  {log.cardio.rawInput &&
-                    extractIncline(log.cardio.rawInput) && (
-                      <View style={styles.cardioStat}>
-                        <Text style={styles.cardioStatValue}>
-                          {extractIncline(log.cardio.rawInput)?.replace(
-                            '%',
-                            ''
-                          )}
-                        </Text>
-                        <Text style={styles.cardioStatUnit}>
-                          {t('Pendiente %')}
-                        </Text>
-                      </View>
-                    )}
                 </View>
-              </View>
-            )}
+              );
+            })}
           </>
         )}
       </StretchScrollView>
@@ -735,6 +681,7 @@ export function DetailScreen({
             <TopBarActionButton
               label={t('Editar')}
               icon="pencil"
+              iconOnly
               onPress={onEdit}
             />
           ) : undefined
@@ -771,18 +718,28 @@ export function DetailScreen({
       />
 
       <ConfirmModal
-        visible={pendingSplitDate !== null}
-        title={t('¿Dividir la semana?')}
-        message={t(
-          'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?'
-        )}
+        visible={pendingDate !== null}
+        title={
+          pendingDate?.reason === 'lone'
+            ? t('¿Semana aparte?')
+            : t('¿Dividir la semana?')
+        }
+        message={
+          pendingDate?.reason === 'lone'
+            ? t(
+                'Esa fecha no encaja en ninguna semana ya registrada: este entreno quedará como una semana aparte, solo con este día, y puede afectar a la racha y al progreso. ¿Continuar?'
+              )
+            : t(
+                'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?'
+              )
+        }
         confirmLabel={t('Continuar')}
         confirmVariant="primary"
         onConfirm={() => {
-          if (pendingSplitDate) commitDate(pendingSplitDate);
-          setPendingSplitDate(null);
+          if (pendingDate) commitDate(pendingDate.date);
+          setPendingDate(null);
         }}
-        onCancel={() => setPendingSplitDate(null)}
+        onCancel={() => setPendingDate(null)}
       />
 
       <ConfirmModal
@@ -879,9 +836,6 @@ const makeStyles = () =>
     summaryCard: {
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-around',
-      flexWrap: 'wrap',
-      rowGap: 8,
       backgroundColor: 'transparent',
       borderRadius: theme.borderRadius.md,
       borderWidth: 1,
@@ -892,9 +846,13 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
+    // Columnas iguales (un tercio cada una con tres cifras): el texto que no
+    // cabe se encoge en vez de ensanchar su columna o saltar de línea.
     summaryItem: {
+      flex: 1,
+      minWidth: 0,
       alignItems: 'center',
-      paddingHorizontal: theme.spacing.sm,
+      paddingHorizontal: theme.spacing.xs,
     },
     // El total de un día de cardio: relleno sólido y sombra elevada frente al
     // contorno de las tarjetas de disciplina, para que se lea como "el día".
@@ -940,15 +898,16 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
-    cardioLabelRow: {
+    // Icono grande a la izquierda de todo el bloque (título + cifras).
+    cardioBody: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      marginBottom: 6,
+      gap: theme.spacing.md,
     },
-    // El margen inferior lo pone la fila: aquí desalinearía el icono.
-    cardioLabelInRow: {
-      marginBottom: 0,
+    // flex: 1 obliga al título a partir línea dentro de la tarjeta; sin él se
+    // salía por la derecha y el overflow de la caja lo cortaba ("ANDAR EN").
+    cardioContent: {
+      flex: 1,
     },
     // Titular de la tarjeta: tiene que pesar más que sus cifras para que se vea
     // de qué disciplina va (antes era 14/600 en textSecondary, por debajo de los
@@ -968,10 +927,9 @@ const makeStyles = () =>
     cardioStatsRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
-      justifyContent: 'center',
       columnGap: theme.spacing.lg,
       rowGap: theme.spacing.sm,
-      marginTop: 10,
+      marginTop: 4,
     },
     cardioStat: {
       alignItems: 'center',

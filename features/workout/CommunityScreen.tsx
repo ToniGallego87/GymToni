@@ -42,6 +42,7 @@ import {
   getFollowingFeed,
   getLikeInfo,
   searchProfiles,
+  searchPublicRoutines,
   getProfilesByIds,
   getFollowerCount,
   likeRoutine,
@@ -166,6 +167,9 @@ export function CommunityScreen({
   const [intensityOpen, setIntensityOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ProfileLite[]>([]);
+  // Rutinas públicas que casan con la búsqueda: el tablón trae solo las 50 más
+  // populares, y el resto no se alcanzaba de ninguna forma.
+  const [routineResults, setRoutineResults] = useState<RoutineItem[]>([]);
   // Hay una consulta de personas en vuelo: la sección de resultados es ahora
   // permanente, así que sin esto parpadearía "Sin resultados" en cada tecla.
   const [searching, setSearching] = useState(false);
@@ -342,25 +346,40 @@ export function CommunityScreen({
     };
   }, [active]);
 
-  // Búsqueda de usuarios, con un pequeño retardo para no consultar en cada tecla.
+  // Búsqueda de personas y rutinas, con un pequeño retardo para no consultar en
+  // cada tecla. Si una de las dos falla, la otra se enseña igual.
   useEffect(() => {
     const q = query.trim();
     if (!q) {
       setSearchResults([]);
+      setRoutineResults([]);
       setSearching(false);
       return;
     }
     let active = true;
     setSearching(true);
     const timer = setTimeout(() => {
-      searchProfiles(q)
-        .then((r) => {
-          if (active) setSearchResults(r);
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (active) setSearching(false);
-        });
+      Promise.all([
+        searchProfiles(q)
+          .then((r) => {
+            if (active) setSearchResults(r);
+          })
+          .catch(() => {}),
+        searchPublicRoutines(q)
+          .then(async (routines) => {
+            const authors = await getProfilesByIds(
+              routines.map((r) => r.owner_id)
+            ).catch(() => new Map<string, ProfileLite>());
+            if (!active) return;
+            setAvatars((prev) => new Map([...prev, ...authors]));
+            setRoutineResults(
+              routines.map((r) => ({ ...r, author_name: null }))
+            );
+          })
+          .catch(() => {}),
+      ]).finally(() => {
+        if (active) setSearching(false);
+      });
     }, 300);
     return () => {
       active = false;
@@ -523,6 +542,9 @@ export function CommunityScreen({
   };
 
   const showingSearch = query.trim().length > 0;
+  const visibleRoutineResults = routineResults.filter(
+    (r) => !hiddenIds.has(r.id) && !hiddenIds.has(r.owner_id)
+  );
   // Buscador plegado por defecto: se despliega con su lupa (junto al filtro de
   // intensidad) y se cierra vaciando lo tecleado.
   const [searchOpen, setSearchOpen] = useState(false);
@@ -769,10 +791,10 @@ export function CommunityScreen({
           }}
           accessibilityRole="button"
           accessibilityState={{ expanded: searchOpen }}
-          accessibilityLabel={t('Buscar personas')}
+          accessibilityLabel={t('Buscar personas o rutinas')}
         >
           <MaterialCommunityIcons
-            name="account-search-outline"
+            name="magnify"
             size={20}
             color={showingSearch ? theme.colors.primary : theme.colors.text}
           />
@@ -852,13 +874,13 @@ export function CommunityScreen({
       {(searchOpen || showingSearch) && (
         <View style={styles.searchBox}>
           <MaterialCommunityIcons
-            name="account-search-outline"
+            name="magnify"
             size={20}
             color={theme.colors.textMuted}
           />
           <TextInput
             style={styles.searchInput}
-            placeholder={t('Buscar personas')}
+            placeholder={t('Buscar personas o rutinas')}
             placeholderTextColor={theme.colors.textMuted}
             value={query}
             onChangeText={setQuery}
@@ -867,7 +889,12 @@ export function CommunityScreen({
             autoFocus
           />
           {showingSearch && (
-            <Pressable onPress={() => setQuery('')} hitSlop={8}>
+            <Pressable
+              onPress={() => setQuery('')}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('Borrar búsqueda')}
+            >
               <MaterialCommunityIcons
                 name="close-circle"
                 size={18}
@@ -886,6 +913,22 @@ export function CommunityScreen({
           <Text style={styles.sectionEyebrow}>{t('Personas')}</Text>
           {searchResults.length > 0 ? (
             searchResults.map(renderUserRow)
+          ) : (
+            <Text style={styles.muted}>
+              {searching ? t('Buscando…') : t('Sin resultados')}
+            </Text>
+          )}
+          <Text style={[styles.sectionEyebrow, styles.sectionEyebrowNext]}>
+            {t('Rutinas')}
+          </Text>
+          {visibleRoutineResults.length > 0 ? (
+            <View style={styles.routineResults}>
+              {visibleRoutineResults.map((item) => (
+                <React.Fragment key={item.id}>
+                  {renderRoutineCard(item)}
+                </React.Fragment>
+              ))}
+            </View>
           ) : (
             <Text style={styles.muted}>
               {searching ? t('Buscando…') : t('Sin resultados')}
@@ -1023,7 +1066,7 @@ export function CommunityScreen({
       <GlassTopBar
         title={t('Comunidad')}
         icon="account-group-outline"
-        subtitle={t('Descubre y comparte rutinas')}
+        subtitle={t('Rutinas y gente que entrena')}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -1132,6 +1175,9 @@ const makeStyles = () =>
     // Sección de resultados de personas: vive ENCIMA del tablón, no en su
     // lugar. El separador de abajo es su cierre.
     peopleSection: { gap: 8 },
+    // "Rutinas" va tras "Personas" en la misma sección: aire para separarlas.
+    sectionEyebrowNext: { marginTop: 8 },
+    routineResults: { gap: 10 },
     sectionEnd: {
       marginTop: 4,
       height: 1,
@@ -1211,29 +1257,6 @@ const makeStyles = () =>
       borderWidth: 1,
       borderColor: theme.colors.border,
       gap: 10,
-    },
-    cardPressed: { opacity: 0.85 },
-    // Cabecera en una fila: foto del autor, nombre (se queda el ancho que
-    // sobra) e intensidad, centrados en vertical con el nombre.
-    cardHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-    },
-    // Pie: burbujas de dato a la izquierda, acciones a la derecha.
-    footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    footerSpacer: { flex: 1 },
-    routineName: {
-      flex: 1,
-      color: theme.colors.text,
-      fontSize: 18,
-      fontWeight: '800',
-      lineHeight: 24,
-    },
-    description: {
-      color: theme.colors.textSecondary,
-      fontSize: 14,
-      lineHeight: 19,
     },
     userRow: {
       flexDirection: 'row',

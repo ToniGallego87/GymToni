@@ -26,6 +26,8 @@ interface TrendDeltaProps {
    * signo.
    */
   color?: string;
+  /** Encoge el número si no cabe en el ancho del contenedor (no salta de línea). */
+  shrinkToFit?: boolean;
 }
 
 /**
@@ -48,6 +50,7 @@ export function TrendDelta({
   iconSize = 15,
   textStyle,
   color: colorOverride,
+  shrinkToFit = false,
 }: TrendDeltaProps) {
   const isFlat = value === 0;
   const isUp = improved ?? value >= 0;
@@ -59,7 +62,7 @@ export function TrendDelta({
       ? theme.colors.success
       : theme.colors.error);
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, shrinkToFit && styles.rowFit]}>
       <MaterialCommunityIcons
         name={isFlat ? 'equal' : isUp ? 'arrow-up-bold' : 'arrow-down-bold'}
         size={iconSize}
@@ -69,7 +72,13 @@ export function TrendDelta({
         value={Math.abs(value)}
         decimals={decimals}
         suffix={suffix}
-        style={[styles.text, { color }, textStyle]}
+        style={[
+          styles.text,
+          { color },
+          textStyle,
+          shrinkToFit && styles.textFit,
+        ]}
+        shrinkToFit={shrinkToFit}
       />
     </View>
   );
@@ -81,6 +90,12 @@ const makeStyles = () =>
       flexDirection: 'row',
       alignItems: 'center',
       gap: 2,
+    },
+    rowFit: {
+      maxWidth: '100%',
+    },
+    textFit: {
+      flexShrink: 1,
     },
     text: {
       fontSize: 15,

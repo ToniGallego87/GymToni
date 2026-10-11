@@ -193,6 +193,39 @@ export function sortExercises(
 }
 
 /**
+ * Serie de la sesión en curso que queda como récord del ejercicio: más peso
+ * que nunca, o mejor 1RM estimado. Cada serie se mide también contra las
+ * anteriores de la misma sesión, así que repetir el peso del récord no vuelve a
+ * contar. Si varias lo baten, solo se marca la ÚLTIMA (la que superó a todas
+ * las de antes, también a los récords previos de hoy): dos burbujas de oro en
+ * el mismo ejercicio decían "récord" de una serie que ya no lo es.
+ * Sin historial previo no hay récord que batir (la primera vez todo lo sería).
+ * Devuelve un Set vacío o con un único índice.
+ */
+export function getRecordSetIndexes(
+  previousSets: ParsedSet[],
+  currentSets: ParsedSet[]
+): Set<number> {
+  const valid = previousSets.filter(isValidSet);
+  if (valid.length === 0) return new Set();
+  let lastRecord = -1;
+  let bestOneRepMax = Math.max(
+    ...valid.map((s) => getEstimatedOneRepMax(s.weight, s.reps))
+  );
+  let bestWeight = Math.max(...valid.map((s) => s.weight));
+  currentSets.forEach((set, index) => {
+    if (!isValidSet(set) || set.weight <= 0) return;
+    const oneRepMax = getEstimatedOneRepMax(set.weight, set.reps);
+    if (oneRepMax > bestOneRepMax || set.weight > bestWeight) {
+      lastRecord = index;
+    }
+    bestOneRepMax = Math.max(bestOneRepMax, oneRepMax);
+    bestWeight = Math.max(bestWeight, set.weight);
+  });
+  return new Set(lastRecord === -1 ? [] : [lastRecord]);
+}
+
+/**
  * Récords personales del ejercicio. En caso de empate gana la fecha en la que
  * se consiguió POR PRIMERA VEZ (el récord es de ese día), de ahí el `>` estricto
  * recorriendo las sesiones de la más antigua a la más reciente.
@@ -243,4 +276,25 @@ export function getExerciseRecords(
   }
 
   return records;
+}
+
+/** Saltos de disco/mancuerna que se reconocen al deducir el de un ejercicio. */
+const WEIGHT_STEPS = [0.5, 1, 1.25, 2, 2.5, 5];
+
+/**
+ * Cuánto suben y bajan las flechas del peso de un ejercicio: el escalón más
+ * pequeño entre los pesos distintos que ya se han usado en él (60 → 62,5 → 65
+ * da 2,5; mancuernas de 20, 22 y 24 dan 2). Sin historial, o con un escalón que
+ * no es de material de gimnasio (0,25, 7…), 1 kg, como antes.
+ */
+export function weightStepFromHistory(weights: number[]): number {
+  const distinct = Array.from(new Set(weights.filter((w) => w > 0))).sort(
+    (a, b) => a - b
+  );
+  let smallest = Infinity;
+  for (let i = 1; i < distinct.length; i++) {
+    smallest = Math.min(smallest, distinct[i] - distinct[i - 1]);
+  }
+  const step = WEIGHT_STEPS.find((s) => Math.abs(s - smallest) < 1e-6);
+  return step ?? 1;
 }

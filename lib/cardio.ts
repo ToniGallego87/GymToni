@@ -1,6 +1,6 @@
-import { WorkoutDay, WorkoutLog } from '../types';
-import { fmtNum } from './i18n';
-import { dateKey, getToday } from './utils';
+import { CardioEntryData, CardioLog, WorkoutDay, WorkoutLog } from '../types';
+import { englishOf, fmtNum, t } from './i18n';
+import { dateKey, getLogTimestamp, getToday } from './utils';
 
 /**
  * Lógica pura del cardio "de primera clase".
@@ -31,6 +31,8 @@ export interface CardioEntry {
   speed: number | null; // km/h
   pendiente: number | null; // % de inclinación (cinta)
   raw: string;
+  /** Id fijo de la disciplina (`CARDIO_DISCIPLINES`), si se conoce. */
+  discipline?: string | null;
 }
 
 export interface CardioSession {
@@ -142,6 +144,30 @@ function disciplineKcalFactor(type: string): number {
   return 0.9;
 }
 
+/** Modelo de kcal de cada disciplina con id fijo. */
+const GAIT_BY_ID: Record<string, 'walk' | 'run' | 'other'> = {
+  'treadmill-walk': 'walk',
+  treadmill: 'run',
+  'outdoor-run': 'run',
+  'stationary-bike': 'other',
+  elliptical: 'other',
+};
+
+/**
+ * Andar, correr u otra cosa: por el id de la disciplina si se conoce; si no
+ * (cardio de antes de las entradas estructuradas, o "Otro"), por las palabras
+ * del rótulo en español o inglés.
+ */
+function gaitOf(e: CardioEntry): 'walk' | 'run' | 'other' {
+  const byId = e.discipline ? GAIT_BY_ID[e.discipline] : undefined;
+  if (byId) return byId;
+  const t = e.type.toLowerCase();
+  if (t.includes('andar') || t.includes('walk')) return 'walk';
+  if (t.includes('correr') || t.includes('cinta') || t.includes('run'))
+    return 'run';
+  return 'other';
+}
+
 /**
  * Estima kcal de una entrada. Para andar/correr usa las ecuaciones ACSM (VO2),
  * que incorporan la PENDIENTE; para bici/elíptica/otros, un modelo simple
@@ -155,16 +181,16 @@ export function estimateEntryKcal(
 ): number {
   if (e.speed == null || e.minutes == null) return 0;
 
-  const t = e.type.toLowerCase();
+  const kind = gaitOf(e);
   const grade = (e.pendiente ?? 0) / 100; // fracción de pendiente
   const speedMPerMin = (e.speed * 1000) / 60;
 
-  if (t.includes('andar') || t.includes('walk')) {
+  if (kind === 'walk') {
     // ACSM andar: incluye la pendiente con peso 1.8 (mucho más que correr).
     const vo2 = 3.5 + 0.1 * speedMPerMin + 1.8 * speedMPerMin * grade;
     return (vo2 * weightKg * e.minutes) / 200;
   }
-  if (t.includes('correr') || t.includes('cinta') || t.includes('run')) {
+  if (kind === 'run') {
     // ACSM correr.
     const vo2 = 3.5 + 0.2 * speedMPerMin + 0.9 * speedMPerMin * grade;
     return (vo2 * weightKg * e.minutes) / 200;
@@ -203,6 +229,163 @@ export function parseCardioEntries(rawInput: string): CardioEntry[] {
     .map(parseCardioEntry);
 }
 
+/**
+ * Disciplinas del selector, con id FIJO. El rótulo es la clave en español (se
+ * traduce al pintar): guardar el id y no el texto hace que el cardio se lea en
+ * el idioma activo y que nada dependa de buscar palabras en un rótulo. "Otro"
+ * no está: es texto libre y se guarda tal cual.
+ */
+export const CARDIO_DISCIPLINES: { id: string; label: string }[] = [
+  { id: 'treadmill', label: 'Correr en cinta' },
+  { id: 'treadmill-walk', label: 'Andar en cinta' },
+  { id: 'outdoor-run', label: 'Correr en exterior' },
+  { id: 'stationary-bike', label: 'Bici estática' },
+  { id: 'elliptical', label: 'Elíptica' },
+];
+
+/** Id de la disciplina de un rótulo (en español o en inglés), o null. */
+export function disciplineIdFromLabel(label: string): string | null {
+  const wanted = label.trim().toLowerCase();
+  const match = CARDIO_DISCIPLINES.find(
+    (d) =>
+      d.label.toLowerCase() === wanted ||
+      englishOf(d.label)?.toLowerCase() === wanted
+  );
+  return match?.id ?? null;
+}
+
+/**
+ * Entradas estructuradas de un texto de cardio: lo que se guarda en la tabla
+ * `cardio_entries`, una fila por esfuerzo. Se deriva al GUARDAR, no en cada
+ * lectura.
+ */
+export function cardioEntriesFromRaw(rawInput: string): CardioEntryData[] {
+  return parseCardioEntries(rawInput).map((e) => {
+    const discipline = disciplineIdFromLabel(e.type);
+    return {
+      discipline,
+      label:
+        CARDIO_DISCIPLINES.find((d) => d.id === discipline)?.label ?? e.type,
+      minutes: e.minutes,
+      speed: e.speed,
+      incline: e.pendiente,
+    };
+  });
+}
+
+/** El cardio con sus entradas estructuradas al día con su texto. */
+export function withCardioEntries<T extends { rawInput: string }>(
+  cardio: T
+): T & { entries: CardioEntryData[] } {
+  return { ...cardio, entries: cardioEntriesFromRaw(cardio.rawInput ?? '') };
+}
+
+const sameEntry = (a: CardioEntryData, b: CardioEntryData): boolean =>
+  a.discipline === b.discipline &&
+  (a.discipline != null || a.label === b.label) &&
+  a.minutes === b.minutes &&
+  a.speed === b.speed &&
+  a.incline === b.incline;
+
+/**
+ * ¿Las entradas guardadas cuadran con el texto? Mientras convivan los dos, un
+ * móvil sin actualizar edita SOLO el texto y deja las filas viejas: si no
+ * cuadran, manda el texto.
+ */
+export function entriesMatchRaw(
+  entries: CardioEntryData[],
+  rawInput: string
+): boolean {
+  const derived = cardioEntriesFromRaw(rawInput);
+  return (
+    derived.length === entries.length &&
+    derived.every((entry, i) => sameEntry(entry, entries[i]))
+  );
+}
+
+/**
+ * Entradas de un cardio para calcular y pintar: las estructuradas si las hay
+ * (rótulo traducido desde el id), o el texto troceado si no (datos de antes).
+ */
+export function cardioEntriesOf(cardio: CardioLog | undefined): CardioEntry[] {
+  if (!cardio) return [];
+  if (!cardio.entries?.length) return parseCardioEntries(cardio.rawInput ?? '');
+  return cardio.entries.map((entry) => {
+    const known = CARDIO_DISCIPLINES.find((d) => d.id === entry.discipline);
+    return {
+      type: known ? t(known.label) : entry.label,
+      minutes: entry.minutes,
+      speed: entry.speed,
+      pendiente: entry.incline,
+      raw: '',
+      discipline: entry.discipline,
+    };
+  });
+}
+
+/**
+ * Clave con la que se recuerda una disciplina: su id fijo si lo tiene, y si es
+ * de las propias ("Otro"), su nombre en minúsculas.
+ */
+export function cardioDisciplineKey(entry: {
+  type: string;
+  discipline?: string | null;
+}): string {
+  const id = entry.discipline ?? disciplineIdFromLabel(entry.type);
+  return id ?? `label:${entry.type.trim().toLowerCase()}`;
+}
+
+/**
+ * La última entrada registrada de cada disciplina (por `cardioDisciplineKey`):
+ * lo que el registro de cardio sugiere al volver a elegirla. "Última" es la del
+ * log más reciente y, dentro de él, la de más abajo.
+ */
+export function lastCardioEntryByDiscipline(
+  logs: WorkoutLog[]
+): Record<string, CardioEntry> {
+  const byKey: Record<string, CardioEntry> = {};
+  [...logs]
+    .filter((log) => log.cardio)
+    .sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b))
+    .forEach((log) => {
+      cardioEntriesOf(log.cardio).forEach((entry) => {
+        if (entry.minutes == null) return;
+        byKey[cardioDisciplineKey(entry)] = entry;
+      });
+    });
+  return byKey;
+}
+
+/**
+ * Nombres de las disciplinas PROPIAS (las de "Otro": remo, escaladora…) usadas
+ * más recientemente, sin repetir (por `cardioDisciplineKey`) y con el nombre tal
+ * como se tecleó la última vez. El registro las ofrece como casillas tras las
+ * fijas para no tener que volver a teclearlas.
+ */
+export function recentCustomDisciplines(
+  logs: WorkoutLog[],
+  limit = 3
+): string[] {
+  const seen = new Set<string>();
+  const names: string[] = [];
+  const sorted = [...logs]
+    .filter((log) => log.cardio)
+    .sort((a, b) => getLogTimestamp(b) - getLogTimestamp(a));
+  for (const log of sorted) {
+    // Dentro de un log, la de más abajo es la más reciente.
+    const entries = [...cardioEntriesOf(log.cardio)].reverse();
+    for (const entry of entries) {
+      const key = cardioDisciplineKey(entry);
+      const name = entry.type.trim();
+      if (!key.startsWith('label:') || !name || seen.has(key)) continue;
+      seen.add(key);
+      names.push(name);
+      if (names.length >= limit) return names;
+    }
+  }
+  return names;
+}
+
 /** ¿La entrada se hizo en cuesta? (pendiente 0 o sin pendiente es llano). */
 export const hasIncline = (pendiente: number | null): boolean =>
   pendiente != null && pendiente > 0;
@@ -214,13 +397,6 @@ export const hasIncline = (pendiente: number | null): boolean =>
  */
 const disciplineKey = (type: string, incline: boolean): string =>
   `${type.trim().toLowerCase()}|${incline ? 'cuesta' : 'llano'}`;
-
-/** ¿Hay al menos un log con cardio registrado? */
-export function hasAnyCardio(logs: WorkoutLog[]): boolean {
-  return logs.some(
-    (l) => parseCardioEntries(l.cardio?.rawInput ?? '').length > 0
-  );
-}
 
 /** Id del día sintético "Solo cardio" (sin ejercicios de fuerza). */
 export const CARDIO_ONLY_DAY_ID = '__cardio_only__';
@@ -375,8 +551,7 @@ export function cardioSessionFromLog(
   log: WorkoutLog,
   weight: number | WeightSegment[] = ASSUMED_WEIGHT_KG
 ): CardioSession | null {
-  const raw = log.cardio?.rawInput ?? '';
-  const parsed = parseCardioEntries(raw);
+  const parsed = cardioEntriesOf(log.cardio);
   if (parsed.length === 0) return null;
 
   // Peso del log: constante, o el vigente cuando se registró (por createdAt).

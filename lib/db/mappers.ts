@@ -8,6 +8,7 @@ import {
   WorkoutRoutine,
 } from '../../types';
 import { generateId } from '../utils';
+import { cardioEntriesFromRaw, entriesMatchRaw } from '../cardio';
 
 // Marca que distingue "datos guardados (aunque vacíos)" de "BD virgen".
 // Sin ella, borrar todas las rutinas resucitaría las de fábrica al reiniciar.
@@ -100,6 +101,21 @@ export interface CardioLogRow {
   notes: string | null;
 }
 
+// Una entrada de cardio (como `LogSetRow` para la fuerza). Lleva también el
+// `workout_logs_id` del log, no solo el del cardio: el sync filtra y concilia
+// los hijos por log, y así no hace falta cruzar con `cardio_logs`.
+export interface CardioEntryRow {
+  id: string;
+  cardio_logs_id: string;
+  workout_logs_id: string;
+  entry_order: number;
+  discipline: string | null;
+  label: string;
+  minutes: number | null;
+  speed: number | null;
+  incline: number | null;
+}
+
 export interface DbRows {
   settings: SettingRow[];
   routines: RoutineRow[];
@@ -109,6 +125,9 @@ export interface DbRows {
   exerciseLogs: ExerciseLogRow[];
   logSets: LogSetRow[];
   cardioLogs: CardioLogRow[];
+  // Opcional: copias y filas de antes de las entradas estructuradas no lo
+  // traen (el cardio se lee entonces de su texto).
+  cardioEntries?: CardioEntryRow[];
 }
 
 export interface RoutineRows {
@@ -127,6 +146,7 @@ export interface LogRows {
   exerciseLogs: ExerciseLogRow[];
   logSets: LogSetRow[];
   cardio: CardioLogRow | null;
+  cardioEntries: CardioEntryRow[];
 }
 
 function exerciseToRow(exercise: WorkoutExercise, dayId: string): ExerciseRow {
@@ -220,9 +240,10 @@ export function logToRows(
     });
   }
 
+  const cardioId = log.cardio ? log.cardio.id || newId() : '';
   const cardio: CardioLogRow | null = log.cardio
     ? {
-        id: log.cardio.id || newId(),
+        id: cardioId,
         workout_logs_id: log.id,
         type: log.cardio.type,
         raw_input: log.cardio.rawInput ?? '',
@@ -249,6 +270,21 @@ export function logToRows(
     exerciseLogs,
     logSets,
     cardio,
+    // Siempre derivadas del texto mientras convivan (el texto manda: ver
+    // CardioLog.rawInput). Id determinista, como las series: `cardioId:orden`.
+    cardioEntries: log.cardio
+      ? cardioEntriesFromRaw(log.cardio.rawInput ?? '').map((entry, index) => ({
+          id: `${cardioId}:${index + 1}`,
+          cardio_logs_id: cardioId,
+          workout_logs_id: log.id,
+          entry_order: index + 1,
+          discipline: entry.discipline,
+          label: entry.label,
+          minutes: entry.minutes,
+          speed: entry.speed,
+          incline: entry.incline,
+        }))
+      : [],
   };
 }
 
@@ -265,6 +301,7 @@ export function appDataToRows(
     exerciseLogs: [],
     logSets: [],
     cardioLogs: [],
+    cardioEntries: [],
   };
 
   if (data.activeRoutineId) {
@@ -302,6 +339,7 @@ export function appDataToRows(
     rows.logSets.push(...mapped.logSets);
     if (mapped.cardio) {
       rows.cardioLogs.push(mapped.cardio);
+      rows.cardioEntries!.push(...mapped.cardioEntries);
     }
   }
 
@@ -422,12 +460,41 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
     exerciseLogsByLog.set(row.workout_logs_id, list);
   }
 
+  // Entradas de cada cardio, en orden y sin repetidas (mismo criterio que las
+  // series).
+  const entriesByCardio = new Map<string, CardioEntryRow[]>();
+  const seenEntries = new Set<string>();
+  for (const row of [...(rows.cardioEntries ?? [])].sort(
+    byNumber((r) => r.entry_order)
+  )) {
+    const key = `${row.cardio_logs_id}:${row.entry_order}`;
+    if (seenEntries.has(key)) continue;
+    seenEntries.add(key);
+    const list = entriesByCardio.get(row.cardio_logs_id) ?? [];
+    list.push(row);
+    entriesByCardio.set(row.cardio_logs_id, list);
+  }
+
   const cardioByLog = new Map<string, CardioLog>();
   for (const row of rows.cardioLogs) {
+    const entries = (entriesByCardio.get(row.id) ?? []).map((entry) => ({
+      discipline: entry.discipline ?? null,
+      label: entry.label,
+      minutes: entry.minutes ?? null,
+      speed: entry.speed ?? null,
+      incline: entry.incline ?? null,
+    }));
     cardioByLog.set(row.workout_logs_id, {
       id: row.id,
       type: row.type,
       rawInput: row.raw_input,
+      // Las filas solo valen si cuadran con el texto: un móvil sin actualizar
+      // edita solo el texto y deja las entradas viejas. Entonces manda el
+      // texto y las entradas se vuelven a derivar de él.
+      entries:
+        entries.length && entriesMatchRaw(entries, row.raw_input)
+          ? entries
+          : cardioEntriesFromRaw(row.raw_input),
       duration: row.duration ?? undefined,
       distance: row.distance ?? undefined,
       pace: row.pace ?? undefined,

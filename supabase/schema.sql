@@ -136,6 +136,24 @@ create table if not exists public.cardio_logs (
   deleted         boolean not null default false
 );
 
+-- Una fila por entrada de cardio, como log_sets para la fuerza. Convive con
+-- cardio_logs.raw_input mientras haya móviles que solo entienden el texto.
+-- discipline = id fijo del selector (treadmill-walk…), null para "Otro" (label).
+create table if not exists public.cardio_entries (
+  id              text primary key,
+  user_id         uuid not null references auth.users(id) on delete cascade,
+  cardio_logs_id  text not null,
+  workout_logs_id text not null,
+  entry_order     integer not null,
+  discipline      text,
+  label           text not null,
+  minutes         double precision,
+  speed           double precision,
+  incline         double precision,
+  updated_at      bigint not null default 0,
+  deleted         boolean not null default false
+);
+
 -- Índices para el pull incremental (Fase 3): por usuario y updated_at.
 create index if not exists idx_routines_user      on public.routines(user_id, updated_at);
 create index if not exists idx_days_user          on public.workout_days(user_id, updated_at);
@@ -144,6 +162,28 @@ create index if not exists idx_logs_user          on public.workout_logs(user_id
 create index if not exists idx_exlogs_user        on public.exercise_logs(user_id, updated_at);
 create index if not exists idx_sets_user          on public.log_sets(user_id, updated_at);
 create index if not exists idx_cardio_user        on public.cardio_logs(user_id, updated_at);
+create index if not exists idx_centries_user      on public.cardio_entries(user_id, updated_at);
+
+-- Sello de "¿hay algo nuevo?" para el sync: el mayor updated_at del usuario en
+-- todas sus tablas, en UNA petición. Si no supera el cursor local, el cliente
+-- se ahorra las ocho consultas del pull (lib/cloud/sync.ts → remoteHasChanges).
+-- Usa los índices (user_id, updated_at) de arriba; security invoker: la RLS
+-- sigue mandando.
+create or replace function public.sync_max_updated()
+returns bigint language sql stable security invoker set search_path = public as $$
+  select greatest(
+    coalesce((select max(updated_at) from routines      where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from workout_days  where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from exercises     where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from workout_logs  where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from exercise_logs where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from log_sets      where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from cardio_logs   where user_id = auth.uid()), 0),
+    coalesce((select max(updated_at) from cardio_entries where user_id = auth.uid()), 0),
+    coalesce((select updated_at      from user_settings where user_id = auth.uid()), 0)
+  );
+$$;
+grant execute on function public.sync_max_updated() to authenticated;
 
 -- ─────────────────────────── RLS ───────────────────────────
 -- Cada usuario solo accede a sus filas. En las tablas de dominio la clave es
@@ -157,6 +197,7 @@ alter table public.workout_logs  enable row level security;
 alter table public.exercise_logs enable row level security;
 alter table public.log_sets      enable row level security;
 alter table public.cardio_logs   enable row level security;
+alter table public.cardio_entries enable row level security;
 
 create policy "own profile" on public.profiles
   for all using (id = auth.uid()) with check (id = auth.uid());
@@ -177,6 +218,8 @@ create policy "own exlogs" on public.exercise_logs
 create policy "own sets" on public.log_sets
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "own cardio" on public.cardio_logs
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
+create policy "own cardio entries" on public.cardio_entries
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 -- Crear la fila de profile automáticamente al registrarse un usuario.

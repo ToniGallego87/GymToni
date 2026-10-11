@@ -250,7 +250,15 @@ export function BodyWeightScreen({ onBack }: BodyWeightScreenProps) {
       <GlassTopBar
         title={t('Peso corporal')}
         icon="scale-bathroom"
-        subtitle={t('Tu peso y cómo ha ido cambiando')}
+        subtitle={
+          daysSince == null
+            ? undefined
+            : daysSince === 0
+            ? t('Actualizado hoy')
+            : daysSince === 1
+            ? t('Actualizado ayer')
+            : t('Actualizado hace {n} días', { n: daysSince })
+        }
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />

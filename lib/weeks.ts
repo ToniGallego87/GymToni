@@ -4,11 +4,45 @@ import {
   getComparableWorkoutScores,
   ImprovementResult,
 } from './progress';
-import { getLogTimestamp, logDateKey } from './utils';
+import { dateKey, getLogTimestamp, getToday, logDateKey } from './utils';
 import { isCardioOnlyLog } from './cardio';
 
 /** Mapa { numeroDeBloque (empezando en 1) -> logs ordenados por fecha ascendente }. */
 export type WeekBlocks = Record<number, WorkoutLog[]>;
+
+/** Una semana caduca a los 7 días de su primer entreno. */
+export const WEEK_LENGTH_DAYS = 7;
+
+/**
+ * Fecha desde la que rige la caducidad de las semanas. Solo afecta a entrenos
+ * de esta fecha en adelante: el histórico anterior se agrupa como siempre (sin
+ * reloj), para no partir semanas viejas que se estiraron más de 7 días y mover
+ * a posteriori sus %, rachas, retos e insignias.
+ */
+export const WEEK_EXPIRY_FROM = '2026-10-05';
+
+/** Días de calendario entre dos claves `YYYY-MM-DD` (b - a). */
+function daysBetweenKeys(a: string, b: string): number {
+  const toUtc = (key: string) => {
+    const [y, m, d] = key.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((toUtc(b) - toUtc(a)) / (24 * 3600 * 1000));
+}
+
+/**
+ * ¿Un entreno en la fecha `dateKeyStr` cae fuera de la semana que abrió
+ * `firstLog`? Pasa cuando han pasado 7 días o más desde el primer entreno de la
+ * semana: volver tras una pausa empieza semana nueva sin que el usuario tenga
+ * que forzarla. Se cuenta por fecha de calendario, no por hora.
+ */
+export function isPastWeekWindow(
+  firstLog: WorkoutLog,
+  dateKeyStr: string
+): boolean {
+  if (dateKeyStr < WEEK_EXPIRY_FROM) return false;
+  return daysBetweenKeys(logDateKey(firstLog), dateKeyStr) >= WEEK_LENGTH_DAYS;
+}
 
 /**
  * Agrupa los logs en "bloques" (semanas de entrenamiento).
@@ -38,11 +72,18 @@ export function groupLogsIntoWeekBlocks(
     const dayKey = getDayKey(log);
 
     // Se cierra el bloque y empieza otro cuando: (a) el usuario forzó una nueva
-    // semana con este entreno (startsNewWeek), o (b) reaparece un día ya
-    // entrenado dentro del bloque.
+    // semana con este entreno (startsNewWeek), (b) reaparece un día ya
+    // entrenado dentro del bloque, o (c) han pasado 7 días desde el primer
+    // entreno del bloque (ver `isPastWeekWindow`).
     const forcesNewWeek = !!log.startsNewWeek;
     const repeatsDay = !!dayKey && seenDays.has(dayKey);
-    if ((forcesNewWeek || repeatsDay) && currentBlockLogs.length > 0) {
+    const expired =
+      currentBlockLogs.length > 0 &&
+      isPastWeekWindow(currentBlockLogs[0], logDateKey(log));
+    if (
+      (forcesNewWeek || repeatsDay || expired) &&
+      currentBlockLogs.length > 0
+    ) {
       groupedByBlock[block] = currentBlockLogs;
       block += 1;
       currentBlockLogs = [];
@@ -112,19 +153,22 @@ function assignBlocks(
   const blockOf: number[] = new Array(sorted.length);
 
   let block = 1;
-  let started = false;
+  let blockFirst: WorkoutLog | undefined;
   let seenDays = new Set<string | number>();
 
   sorted.forEach((log, i) => {
     const dayKey = getDayKey(log);
     const forcesNewWeek = !!log.startsNewWeek;
     const repeatsDay = dayKey != null && seenDays.has(dayKey);
-    if ((forcesNewWeek || repeatsDay) && started) {
+    const expired =
+      !!blockFirst && isPastWeekWindow(blockFirst, logDateKey(log));
+    if ((forcesNewWeek || repeatsDay || expired) && blockFirst) {
       block += 1;
       seenDays = new Set();
+      blockFirst = undefined;
     }
     blockOf[i] = block;
-    started = true;
+    if (!blockFirst) blockFirst = log;
     if (dayKey != null) seenDays.add(dayKey);
   });
 
@@ -206,6 +250,14 @@ export function planWeekMove(
     if (movedKey != null && keysOfBlock(blockOf[idx + 1]).has(movedKey)) {
       return null;
     }
+    // Al encabezarla, la semana siguiente pasa a contar sus 7 días desde el
+    // movido: si alguno de sus días queda fuera, la semana se partiría.
+    const nextBlock = blockOf[idx + 1];
+    const nextOverflows = sorted.some(
+      (log, i) =>
+        blockOf[i] === nextBlock && isPastWeekWindow(moved, logDateKey(log))
+    );
+    if (nextOverflows) return null;
     // El día movido pasa a encabezar la semana siguiente; se limpia la frontera
     // manual del que era su primer día para no dejar el movido solo en un bloque.
     if (!moved.startsNewWeek) changedLogs.push(setFlag(moved));
@@ -228,6 +280,10 @@ export function planWeekMove(
   const prevBlock = blockOf[idx - 1];
   // La semana anterior no puede tener ya ese mismo día.
   if (movedKey != null && keysOfBlock(prevBlock).has(movedKey)) return null;
+  // Ni puede quedar a 7 días o más de su primer entreno: la semana anterior ya
+  // habría caducado y el día volvería a abrir semana (el movimiento no haría nada).
+  const prevFirst = sorted[blockOf.indexOf(prevBlock)];
+  if (isPastWeekWindow(prevFirst, logDateKey(moved))) return null;
 
   const changedLogs: WorkoutLog[] = [];
   // El día movido se une a la semana anterior: se quita su frontera.
@@ -304,6 +360,78 @@ export function assignmentDuplicatesDayInWeek(
   return false;
 }
 
+/**
+ * ¿Reasignar un log a `newTimestamp` lo deja solo en una semana, con otras
+ * semanas después? Es el día olvidado metido entre dos semanas ya cerradas:
+ * repite un día de la anterior, abre bloque propio y la siguiente abre el suyo,
+ * así que el histórico gana una semana de un solo día que baja el % y la racha.
+ * `assignmentDuplicatesDayInWeek` no lo ve porque la fecha cae en el hueco
+ * entre semanas. Abrir la semana en curso (nada después) no cuenta, y con una
+ * rutina de un solo día todas las semanas son de un día.
+ */
+export function assignmentOpensLoneWeek(
+  logs: WorkoutLog[],
+  movedLog: WorkoutLog,
+  newTimestamp: number,
+  getDayKey: DayKeyFn,
+  routineDayCount: number
+): boolean {
+  if (routineDayCount <= 1) return false;
+  const others = logs.filter(
+    (log) => log.id !== movedLog.id && !isCardioOnlyLog(log)
+  );
+  if (!others.some((log) => getLogTimestamp(log) > newTimestamp)) return false;
+  const placed: WorkoutLog = {
+    ...movedLog,
+    createdAt: newTimestamp,
+    date: dateKey(new Date(newTimestamp)),
+  };
+  const blocks = groupLogsIntoWeekBlocks([...others, placed], getDayKey);
+  return Object.values(blocks).some(
+    (block) => block.length === 1 && block[0].id === movedLog.id
+  );
+}
+
+/**
+ * ¿Poner un entreno en `newTimestamp` descoloca las semanas? 'split' si cae en
+ * una semana que ya tiene ese mismo día (se parte en dos); 'lone' si queda solo
+ * en una semana entre otras (día olvidado entre dos semanas cerradas). Fuente
+ * única del aviso que dan el registro y el Detalle al cambiar la fecha: los
+ * dos tienen que avisar de lo mismo. El cardio suelto no forma semanas, así que
+ * para él solo cuenta 'split'.
+ */
+export function dateAssignmentConflict(
+  routineLogs: WorkoutLog[],
+  movedLog: WorkoutLog,
+  newTimestamp: number,
+  getDayKey: DayKeyFn,
+  routineDayCount: number
+): 'split' | 'lone' | null {
+  if (
+    assignmentDuplicatesDayInWeek(
+      routineLogs,
+      movedLog,
+      newTimestamp,
+      getDayKey
+    )
+  ) {
+    return 'split';
+  }
+  if (
+    !isCardioOnlyLog(movedLog) &&
+    assignmentOpensLoneWeek(
+      routineLogs,
+      movedLog,
+      newTimestamp,
+      getDayKey,
+      routineDayCount
+    )
+  ) {
+    return 'lone';
+  }
+  return null;
+}
+
 /** Una semana está completa cuando tiene entrenados todos los días de la rutina. */
 export function isWeekCompleted(
   weekLogs: WorkoutLog[],
@@ -346,17 +474,37 @@ function trainedDayIds(weekLogs: WorkoutLog[]): Set<string> {
  * elegir otro sigue estando a un toque. Es el primero de la rutina que aún no
  * se ha entrenado esta semana.
  *
- * Con la semana ya completa el próximo entreno abre semana NUEVA, así que
- * `trained` vuelve a salir vacío (nada entrenado en la que empieza) y el día
- * que toca es el primero de la rutina.
+ * Con la semana ya completa —o caducada: 7 días desde su primer entreno, ver
+ * `isPastWeekWindow`— el próximo entreno abre semana NUEVA, así que `trained`
+ * vuelve a salir vacío (nada entrenado en la que empieza) y el día que toca es
+ * el primero de la rutina.
+ *
+ * @param today Fecha de referencia (`YYYY-MM-DD`); por defecto, hoy.
  */
+export interface CurrentWeekState {
+  /** Días ya entrenados en la semana en curso (vacío si toca semana nueva). */
+  trained: Set<string>;
+  /** El día que toca: el primero sin entrenar, o el Día 1 si toca semana nueva. */
+  nextDay: WorkoutDay | undefined;
+  /** Número de la semana en curso, el mismo que pinta Inicio ("Semana N"). */
+  weekNumber: number;
+  /** Registro de cada día ya entrenado esta semana (para abrir su detalle). */
+  logByDayId: Record<string, WorkoutLog>;
+}
+
 export function currentWeekDayState(
   routine: WorkoutRoutine | undefined,
-  logs: WorkoutLog[]
-): { trained: Set<string>; nextDay: WorkoutDay | undefined } {
+  logs: WorkoutLog[],
+  today: string = getToday()
+): CurrentWeekState {
   const days = routine?.days ?? [];
   if (!routine || days.length === 0) {
-    return { trained: new Set<string>(), nextDay: undefined };
+    return {
+      trained: new Set<string>(),
+      nextDay: undefined,
+      weekNumber: 1,
+      logByDayId: {},
+    };
   }
 
   // Solo la fuerza de ESTA rutina: el cardio suelto no ocupa un día del plan.
@@ -368,16 +516,26 @@ export function currentWeekDayState(
     dayNumberById.get(log.dayId)
   );
   const ordered = orderedBlockNumbers(blocks);
-  const currentWeekLogs = ordered.length
+  const lastWeekLogs = ordered.length
     ? blocks[ordered[ordered.length - 1]]
     : [];
+  // Semana caducada: el próximo entreno ya no cabe en ella.
+  const currentWeekLogs =
+    lastWeekLogs.length && isPastWeekWindow(lastWeekLogs[0], today)
+      ? []
+      : lastWeekLogs;
 
   const trained = trainedDayIds(currentWeekLogs);
   const pending = days.find((day) => !trained.has(day.id));
+  // Semana completa o caducada: la que toca es la SIGUIENTE (aún sin entrenos).
+  const opensNewWeek = !pending || currentWeekLogs.length === 0;
+  const lastBlock = ordered.length ? ordered[ordered.length - 1] : 0;
 
   return {
     trained: pending ? trained : new Set<string>(),
     nextDay: pending ?? days[0],
+    weekNumber: opensNewWeek ? lastBlock + 1 : lastBlock,
+    logByDayId: pending ? latestLogsByDayId(currentWeekLogs) : {},
   };
 }
 

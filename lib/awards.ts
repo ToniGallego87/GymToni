@@ -2,7 +2,7 @@ import { useSyncExternalStore } from 'react';
 
 /**
  * Cola de "premios" por avisar: un reto superado, un logro desbloqueado o una
- * subida de nivel. La alimenta `useAccountLevel({ record: true })` (la raíz)
+ * subida de nivel. La alimenta `useRecordAccountLevel` (la raíz)
  * al detectar lo nuevo, y la consume `App.tsx`, que enseña un popup por
  * premio, en orden. Store de módulo con suscriptores, como `level.ts`.
  *

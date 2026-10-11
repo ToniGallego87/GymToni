@@ -116,6 +116,22 @@ Los rangos de t1→t2 (296-336 vs 250-271) y de p99 (250-300 vs 200) no se solap
 en ninguna muestra. Que se pinten MÁS frames es lo buscado: las pestañas de fondo
 se montan de una en una, en commits pequeños, en vez de todas en uno enorme.
 
+Referencia 2026-10-09 (garnet, medianas; antes n=13, después n=9, dos bloques
+alternados), midiendo la sesión como store único, los repintados agrupados y el
+trabajo de fondo en huecos sin toques (`lib/userQuiet.ts`):
+
+|                                  | antes     | después   |
+| -------------------------------- | --------- | --------- |
+| TotalTime (primer frame, splash) | 373 ms    | 371 ms    |
+| t0→t2                            | 729 ms    | 698 ms    |
+| frames en 14 s sin tocar         | 197       | 149       |
+| **frames janky**                 | **23 %**  | **15 %**  |
+| frame p50 / p90 / p99            | 29/61/200 | 22/46/200 |
+
+Janky en número: 39-54 antes, 19-23 después, sin solape. Aquí MENOS frames es lo
+buscado: son repintados que sobraban (sesión, perfil, peso). En esta ronda el
+marcador `Running "main"` (t1) no salió en el log, así que solo hay t0→t2.
+
 ## Verificación
 
 ```bash

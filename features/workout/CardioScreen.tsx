@@ -14,10 +14,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
 import { useAccountLevel } from '@hooks/useAccountLevel';
-import { getToday, shortDayMonth } from '@lib/utils';
+import {
+  dateKey,
+  findDayInRoutines,
+  getToday,
+  shortDayMonth,
+  weekdayDayMonth,
+} from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
-import { dayNameText, weekTitleText } from '@lib/textStyles';
+import { weekTitleText } from '@lib/textStyles';
 import { t, dateLocale, fmtNum } from '@lib/i18n';
 import {
   buildCardioDays,
@@ -36,6 +42,7 @@ import { loadBodyWeight, useBodyWeight } from '@lib/bodyWeight';
 import {
   BarChart,
   ChartCard,
+  ChartCardStat,
   BarChartPoint,
   getChartWidth,
   ChallengesModal,
@@ -46,6 +53,8 @@ import {
   useGlassTopBarHeight,
   GradientFill,
   HeroCard,
+  HistoryCard,
+  HistoryCardRow,
   ChallengesStrip,
   HeroCardStat,
   SEGMENTED_FILTER_CHART_GAP,
@@ -96,6 +105,8 @@ type ChartMetric = {
   fmt: (v: number) => string;
 };
 
+// Rótulos con getter: t() se evalúa al pintar, no al cargar el módulo, así
+// que siguen al idioma en caliente (ver lib/i18n.ts).
 const CHART_METRICS: ChartMetric[] = [
   {
     id: 'kcal',
@@ -107,7 +118,9 @@ const CHART_METRICS: ChartMetric[] = [
   },
   {
     id: 'min',
-    label: t('Minutos'),
+    get label() {
+      return t('Minutos');
+    },
     unit: 'min',
     icon: 'clock-outline',
     get: (m) => m.totalMinutes,
@@ -115,7 +128,9 @@ const CHART_METRICS: ChartMetric[] = [
   },
   {
     id: 'km',
-    label: t('Distancia'),
+    get label() {
+      return t('Distancia');
+    },
     unit: 'km',
     icon: 'map-marker-distance',
     get: (m) => m.totalKm,
@@ -124,7 +139,9 @@ const CHART_METRICS: ChartMetric[] = [
   },
   {
     id: 'speed',
-    label: t('Velocidad'),
+    get label() {
+      return t('Velocidad');
+    },
     unit: 'km/h',
     icon: 'speedometer',
     get: (m) => m.avgSpeed,
@@ -136,7 +153,9 @@ const CHART_METRICS: ChartMetric[] = [
 const METRIC_OPTIONS: SegmentedOption<string>[] = CHART_METRICS.map(
   (chartMetric) => ({
     id: chartMetric.id,
-    label: chartMetric.label,
+    get label() {
+      return chartMetric.label;
+    },
     icon: chartMetric.icon,
   })
 );
@@ -239,6 +258,14 @@ export function CardioScreen({
     () => buildCardioWeeks(state.logs, weightHistory),
     [state.logs, weightHistory]
   );
+  // Subtítulo de la barra: las sesiones de la semana natural en curso.
+  const weekSessionCount = weeks.find((w) => w.isCurrent)?.sessionCount ?? 0;
+  const weekSessionsSubtitle =
+    weekSessionCount === 0
+      ? t('Sin cardio esta semana')
+      : weekSessionCount === 1
+      ? t('1 sesión esta semana')
+      : t('{n} sesiones esta semana', { n: weekSessionCount });
 
   // Abre la vista de resultados (DetailScreen) de un log de cardio ya cerrado.
   // Se resuelve el log completo por id y su día dentro de las rutinas.
@@ -251,14 +278,7 @@ export function CardioScreen({
       onSelectLog?.(log, CARDIO_ONLY_DAY);
       return;
     }
-    let day: WorkoutDay | undefined;
-    for (const routine of state.routines) {
-      const found = routine.days.find((d) => d.id === log.dayId);
-      if (found) {
-        day = found;
-        break;
-      }
-    }
+    const day = findDayInRoutines(state.routines, log.dayId);
     if (day) onSelectLog?.(log, day);
   };
 
@@ -292,14 +312,19 @@ export function CardioScreen({
     () => buildCardioDays(state.logs, weightHistory),
     [state.logs, weightHistory]
   );
+  // Lo de hoy, si ya hay cardio: la hero lo dice en vez de "Insertar cardio".
+  // Sin kcal (entradas sin velocidad) se dicen los minutos.
+  const todayCardio = days.find((d) => d.isToday);
+  const heroTitle = !todayCardio
+    ? t('Insertar cardio')
+    : todayCardio.totalKcal > 0
+    ? t('Hoy: {n} kcal', { n: Math.round(todayCardio.totalKcal) })
+    : t('Hoy: {n} min', { n: Math.round(todayCardio.totalMinutes) });
   // Compara lunes con lunes: el mismo día de la semana anterior (hoy - 7).
   const sameDayLastWeek = useMemo(() => {
     const d = new Date(`${todayKey}T00:00:00`);
     d.setDate(d.getDate() - 7);
-    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-      2,
-      '0'
-    )}-${String(d.getDate()).padStart(2, '0')}`;
+    const key = dateKey(d);
     return days.find((x) => x.date === key) ?? null;
   }, [days, todayKey]);
   // La media es de días CON cardio y ya cerrados: hoy aún está sumando.
@@ -387,7 +412,9 @@ export function CardioScreen({
         <HeroCard
           variant="start"
           icon="run-fast"
-          title={t('Insertar cardio')}
+          // Con cardio hoy, el título es lo que llevas (el dato con el que se
+          // comparan las tres referencias de debajo); tocarla sigue sumando.
+          title={heroTitle}
           onPress={() => onInsertCardioOnly?.()}
           // Referencias diarias de kcal bajo la acción, en cuanto hay cardio.
           stats={days.length > 0 ? heroStats : undefined}
@@ -448,14 +475,10 @@ export function CardioScreen({
                 // La cifra es la del MES en curso, no un total ni una media: se
                 // dice debajo, como el "desde la semana 1" de Fuerza. Sin el
                 // rótulo parecía el acumulado de todo el cardio registrado.
-                <View style={styles.progressLatestWrap}>
-                  <Text style={styles.progressLatestKcal}>
-                    {metric.fmt(latestMonthValue)} {metric.unit}
-                  </Text>
-                  <Text style={styles.progressLatestBase}>
-                    {t('este mes')}
-                  </Text>
-                </View>
+                <ChartCardStat
+                  text={`${metric.fmt(latestMonthValue)} ${metric.unit}`}
+                  caption={t('este mes')}
+                />
               ) : null
             }
           >
@@ -550,72 +573,50 @@ export function CardioScreen({
                   </View>
                 </Pressable>
 
-                {/* Una tarjeta por DÍA: fecha y kcal del día arriba, y dentro el
-                  listado de disciplinas que se hicieron ese día. La altura la
-                  anima <Collapsible/>, el mismo motor que las semanas de Inicio
+                {/* Una tarjeta por DÍA, con el mismo formato que la tarjeta de
+                  día de Inicio (icono grande a la izquierda, título y fecha
+                  debajo, kcal y minutos/km-h a la derecha — `HistoryCard` /
+                  `HistoryCardRow`, compartidos con Inicio): una fila por
+                  disciplina, la fecha solo en la primera (si hay más de una,
+                  las demás ya están bajo el mismo día). La altura la anima
+                  <Collapsible/>, el mismo motor que las semanas de Inicio
                   (antes: FadeInDown escalonado por día + animateLayout). */}
                 <Collapsible open={isExpanded}>
                   {week.days
                     .slice()
                     .reverse()
                     .map((day) => {
-                      const d = new Date(`${day.date}T00:00:00`);
-                      const weekday = d.toLocaleDateString(dateLocale, {
-                        weekday: 'long',
-                      });
-                      const weekdayCap =
-                        weekday.charAt(0).toUpperCase() + weekday.slice(1);
-                      const dateStr = d.toLocaleDateString(dateLocale);
                       const isToday = day.date === todayKey;
                       return (
-                        <View key={day.date}>
-                          {/* "Hoy" se marca con el aro dorado y el GradientFill,
-                              como en Inicio; el texto va en sus colores de
-                              siempre (fecha y resultados en gris). */}
-                          <Pressable
-                            onPress={() => handleDayPress(day)}
-                            style={({ pressed }) => [
-                              styles.dailyCard,
-                              isToday && styles.dailyCardToday,
-                              pressed && { opacity: 0.7 },
-                            ]}
-                          >
-                            {isToday && (
-                              <GradientFill accent={theme.colors.primaryLine} />
-                            )}
-                            <View style={styles.dailyHeader}>
-                              <Text style={styles.dailyDate} numberOfLines={1}>
-                                <Text style={styles.dailyWeekday}>
-                                  {weekdayCap}{' '}
-                                </Text>
-                                <Text style={styles.dailyDateBold}>
-                                  {dateStr}
-                                </Text>
-                              </Text>
-                              <Text style={styles.dailyBadge}>
-                                {Math.round(day.totalKcal)} kcal
-                              </Text>
-                            </View>
-
-                            {day.disciplines.map((entry, eIdx) => (
-                              <View
-                                key={`${day.date}-${eIdx}`}
-                                style={styles.disciplineRow}
-                              >
+                        <HistoryCard
+                          key={day.date}
+                          isToday={isToday}
+                          onPress={() => handleDayPress(day)}
+                        >
+                          {day.disciplines.map((entry, eIdx) => (
+                            <HistoryCardRow
+                              key={`${day.date}-${eIdx}`}
+                              spaced={eIdx > 0}
+                              icon={
                                 <MaterialCommunityIcons
                                   name={disciplineIcon(
                                     entry.type,
                                     hasIncline(entry.maxPendiente)
                                   )}
-                                  size={28}
+                                  size={36}
                                   color={theme.colors.white}
                                 />
-                                <View style={styles.dailyInfo}>
-                                  <Text
-                                    style={styles.dailyName}
-                                    numberOfLines={1}
-                                  >
-                                    {entry.type}
+                              }
+                              title={entry.type}
+                              date={
+                                eIdx === 0
+                                  ? weekdayDayMonth(day.date)
+                                  : undefined
+                              }
+                              right={
+                                <>
+                                  <Text style={styles.dailyKcal}>
+                                    {Math.round(entry.kcal)} kcal
                                   </Text>
                                   <Text
                                     style={styles.dailyResults}
@@ -623,18 +624,11 @@ export function CardioScreen({
                                   >
                                     {formatMergedResults(entry)}
                                   </Text>
-                                </View>
-                                {/* Las kcal por disciplina solo aportan si hay
-                                    más de una: si no, repiten las del día. */}
-                                {day.disciplines.length > 1 && (
-                                  <Text style={styles.disciplineKcal}>
-                                    {Math.round(entry.kcal)} kcal
-                                  </Text>
-                                )}
-                              </View>
-                            ))}
-                          </Pressable>
-                        </View>
+                                </>
+                              }
+                            />
+                          ))}
+                        </HistoryCard>
                       );
                     })}
                 </Collapsible>
@@ -665,7 +659,7 @@ export function CardioScreen({
       <GlassTopBar
         title={t('Cardio')}
         icon="run-fast"
-        subtitle={t('Consulta tus resultados')}
+        subtitle={weekSessionsSubtitle}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -717,21 +711,6 @@ const makeStyles = () =>
       marginHorizontal: theme.spacing.md,
       marginBottom: theme.spacing.lg,
     },
-    progressLatestWrap: {
-      alignItems: 'flex-end',
-      marginLeft: 12,
-    },
-    progressLatestKcal: {
-      fontSize: 17,
-      fontWeight: '800',
-      color: theme.colors.white,
-    },
-    progressLatestBase: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: theme.colors.textSecondary,
-      lineHeight: 14,
-    },
     // La cabecera del historial se alinea con las tarjetas de semana, que
     // llevan su propio margen horizontal (el scroll no tiene padding).
     weeksLegendWrap: {
@@ -780,81 +759,20 @@ const makeStyles = () =>
     // Mismo ajuste (y mismas medidas) que la tarjeta de día de Inicio: padding
     // vertical menor que el horizontal y sin `minHeight`, que era quien fijaba
     // el alto por encima de lo que pide el contenido.
-    dailyCard: {
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.borderRadius.md,
-      paddingVertical: 10,
-      paddingHorizontal: theme.spacing.md,
-      marginTop: 10,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      justifyContent: 'center',
-      overflow: 'hidden',
-      ...theme.shadow.soft,
-    },
-    // Mismo "hoy" que la tarjeta de Inicio: aro dorado + GradientFill. NO pisar
-    // aquí el backgroundColor con un tinte translúcido: la tarjeta lleva
-    // elevation (shadow.soft) y Android, sin fondo opaco, pinta el relleno como
-    // un rectángulo con esquinas vivas dentro del redondeo.
-    dailyCardToday: {
-      borderColor: theme.colors.primaryLine,
-      borderWidth: 2.5,
-    },
-    // Cabecera de la tarjeta del día: fecha a la izquierda, kcal del día a la
-    // derecha. Debajo va una fila por disciplina.
-    dailyHeader: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center',
-      gap: 10,
-    },
-    disciplineRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginTop: 10,
-    },
-    disciplineKcal: {
-      fontSize: 13,
+    // Kcal de la disciplina/fila, arriba a la derecha (bajo va `dailyResults`
+    // con minutos y km/h). El marco de la tarjeta y la fila icono+título+fecha
+    // son `HistoryCard`/`HistoryCardRow`, compartidos con Inicio.
+    dailyKcal: {
+      fontSize: 15,
       fontWeight: '800',
-      color: theme.colors.textSecondary,
+      color: theme.colors.text,
     },
-    dailyInfo: {
-      flex: 1,
-    },
-    // Nombre de la disciplina/día: estilo display compartido con Inicio y el
-    // selector de día.
-    dailyName: dayNameText(),
     dailyResults: {
       fontSize: 13,
       fontWeight: '500',
       color: theme.colors.textSecondary,
       marginTop: 2,
       lineHeight: 16,
-    },
-    dailyDate: {
-      fontSize: 14,
-      lineHeight: 16,
-    },
-    dailyWeekday: {
-      fontWeight: '500',
-      color: theme.colors.textSecondary,
-    },
-    dailyDateBold: {
-      fontWeight: '800',
-      color: theme.colors.text,
-    },
-    dailyBadge: {
-      paddingHorizontal: 10,
-      paddingVertical: 2,
-      borderRadius: theme.borderRadius.pill,
-      fontSize: 15,
-      fontFamily: theme.fonts.display,
-      fontWeight: '800',
-      lineHeight: 21,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.surfaceAlt,
-      overflow: 'hidden',
     },
     // Solo el margen horizontal propio de Cardio; el resto del botón "Cargar más"
     // vive en el componente compartido LoadMoreButton.

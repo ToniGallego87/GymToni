@@ -10,6 +10,8 @@ interface TopBarActionButtonProps {
   onPress: () => void;
   /** Relleno de oro: el modo que el botón activa está en marcha ("Hecho"). */
   active?: boolean;
+  /** Solo el icono (el `label` queda como etiqueta de accesibilidad). */
+  iconOnly?: boolean;
 }
 
 /**
@@ -25,11 +27,13 @@ export function TopBarActionButton({
   icon,
   onPress,
   active = false,
+  iconOnly = false,
 }: TopBarActionButtonProps) {
   return (
     <Pressable
       style={({ pressed }) => [
         styles.button,
+        iconOnly && styles.buttonIconOnly,
         active && styles.buttonActive,
         pressed && styles.pressed,
       ]}
@@ -40,10 +44,12 @@ export function TopBarActionButton({
     >
       <MaterialCommunityIcons
         name={icon}
-        size={16}
+        size={iconOnly ? 18 : 16}
         color={active ? theme.colors.onGold : theme.colors.primary}
       />
-      <Text style={[styles.text, active && styles.textActive]}>{label}</Text>
+      {!iconOnly && (
+        <Text style={[styles.text, active && styles.textActive]}>{label}</Text>
+      )}
     </Pressable>
   );
 }
@@ -62,6 +68,12 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.primaryLine,
+    },
+    // Redondo: mismo alto que el rotulado, sin texto.
+    buttonIconOnly: {
+      width: 34,
+      paddingHorizontal: 0,
+      justifyContent: 'center',
     },
     buttonActive: {
       backgroundColor: theme.colors.primaryFill,

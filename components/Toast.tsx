@@ -19,6 +19,12 @@ interface ToastProps {
    */
   actionLabel?: string;
   onAction?: () => void;
+  /**
+   * Píldora corta en el centro de la pantalla en vez de cartel al pie: para
+   * celebraciones de un vistazo ("Récord") que no deben competir con el
+   * descanso flotante ni con "Volver". Ignora `bottom` y la acción.
+   */
+  centered?: boolean;
 }
 
 // Con acción el aviso dura más: hay que leerlo Y decidir tocarlo.
@@ -32,13 +38,22 @@ export function Toast({
   bottom,
   actionLabel,
   onAction,
+  centered = false,
 }: ToastProps) {
   const insets = useSafeAreaInsets();
   const opacity = React.useRef(new Animated.Value(1)).current;
   const actionable = !!onAction && !!actionLabel;
   const resolvedDuration = duration ?? (actionable ? ACTION_DURATION_MS : 3000);
 
+  // `onDismiss` va por ref y NO en las dependencias: los padres lo pasan como
+  // función en línea, nueva en cada render, y el efecto reiniciaba la cuenta en
+  // cada uno. En el registro el descanso re-renderiza cada segundo, así que un
+  // aviso de 2,5 s se quedaba en pantalla hasta que acababa el descanso.
+  const onDismissRef = React.useRef(onDismiss);
+  onDismissRef.current = onDismiss;
+
   useEffect(() => {
+    opacity.setValue(1);
     const timer = setTimeout(() => {
       Animated.timing(opacity, {
         toValue: 0,
@@ -46,12 +61,12 @@ export function Toast({
         easing: Easing.ease,
         useNativeDriver: true,
       }).start(() => {
-        onDismiss?.();
+        onDismissRef.current?.();
       });
     }, resolvedDuration);
 
     return () => clearTimeout(timer);
-  }, [resolvedDuration, onDismiss, opacity]);
+  }, [resolvedDuration, opacity, message]);
 
   const backgroundColor =
     type === 'success'
@@ -60,21 +75,51 @@ export function Toast({
       ? theme.colors.error
       : theme.colors.surfaceAlt;
 
+  // El cartel al pie es una tarjeta de la app (superficie + borde), no un bloque
+  // de color: el estado lo dice el icono. Un verde a toda la anchura con la
+  // acción en contorno blanco parecía otra app y la acción no leía como botón.
+  const accentColor =
+    type === 'success'
+      ? theme.colors.success
+      : type === 'error'
+      ? theme.colors.error
+      : theme.colors.primary;
+  const statusIcon =
+    type === 'success'
+      ? 'check-circle'
+      : type === 'error'
+      ? 'alert-circle'
+      : 'information';
+
   // Flota por encima del control inferior más alto (barra de navegación 70 o
   // botón "Volver" 58, ambos con su margen). Así no queda tapado.
   const resolvedBottom = bottom ?? Math.max(insets.bottom, 10) + 94;
 
+  if (centered) {
+    return (
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.centerLayer, { opacity }]}
+      >
+        <Animated.View style={[styles.centerPill, { backgroundColor }]}>
+          <Text style={styles.text}>{message}</Text>
+        </Animated.View>
+      </Animated.View>
+    );
+  }
+
   return (
     <Animated.View
       pointerEvents={actionable ? 'auto' : 'none'}
-      style={[
-        styles.container,
-        { backgroundColor, opacity, bottom: resolvedBottom },
-      ]}
+      style={[styles.container, { opacity, bottom: resolvedBottom }]}
     >
-      <Text style={styles.text}>{message}</Text>
+      <MaterialCommunityIcons name={statusIcon} size={22} color={accentColor} />
+      <Text style={styles.message} numberOfLines={2}>
+        {message}
+      </Text>
       {actionable && (
         <Pressable
+          hitSlop={8}
           style={({ pressed }) => [styles.action, pressed && styles.pressed]}
           onPress={() => {
             onAction?.();
@@ -84,11 +129,6 @@ export function Toast({
           accessibilityLabel={actionLabel}
         >
           <Text style={styles.actionText}>{actionLabel}</Text>
-          <MaterialCommunityIcons
-            name="arrow-right"
-            size={16}
-            color={theme.colors.text}
-          />
         </Pressable>
       )}
     </Animated.View>
@@ -102,9 +142,30 @@ const makeStyles = () =>
       left: 16,
       right: 16,
       zIndex: 60,
-      paddingVertical: 14,
-      paddingHorizontal: 18,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      minHeight: 56,
+      paddingVertical: 10,
+      paddingLeft: 16,
+      paddingRight: 10,
       borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surfaceAlt,
+      ...theme.shadow.card,
+      elevation: 24,
+    },
+    centerLayer: {
+      ...StyleSheet.absoluteFillObject,
+      zIndex: 60,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    centerPill: {
+      paddingVertical: 12,
+      paddingHorizontal: 28,
+      borderRadius: theme.borderRadius.pill,
       borderWidth: 1,
       borderColor: theme.colors.border,
       ...theme.shadow.card,
@@ -117,21 +178,23 @@ const makeStyles = () =>
       textAlign: 'center',
       lineHeight: 20,
     },
-    // La acción va debajo del mensaje y ocupa todo el ancho: es lo que se
-    // busca tocar cuando el aviso dice que falta algo.
+    message: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '700',
+      lineHeight: 20,
+    },
+    // La acción es un botón dorado a la derecha, como los primarios de la app:
+    // es lo que se busca tocar cuando el aviso ofrece arreglar algo.
     action: {
-      marginTop: 10,
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 6,
-      paddingVertical: 8,
+      paddingVertical: 9,
+      paddingHorizontal: 16,
       borderRadius: theme.borderRadius.pill,
-      borderWidth: 1,
-      borderColor: theme.colors.text,
+      backgroundColor: theme.colors.primaryFill,
     },
     actionText: {
-      color: theme.colors.text,
+      color: theme.colors.onGold,
       fontSize: 14,
       fontWeight: '800',
     },

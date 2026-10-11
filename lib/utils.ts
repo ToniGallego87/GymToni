@@ -33,20 +33,6 @@ export function generateId(): string {
   });
 }
 
-export function formatDate(timestamp: number): string {
-  // Sigue el idioma activo (dateLocale, binding vivo de i18n), como el resto de
-  // fechas de la app; antes fijaba 'es-ES' y en inglés salía el día en español.
-  const date = new Date(timestamp);
-  return date
-    .toLocaleDateString(dateLocale, {
-      weekday: 'long',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    })
-    .replace(/^[a-z]/, (c) => c.toUpperCase());
-}
-
 /**
  * Una clave `YYYY-MM-DD` leída como fecha LOCAL, al mediodía.
  *
@@ -75,6 +61,27 @@ export function shortDayMonth(dateStr: string): string {
 }
 
 /**
+ * "Lun 12 jul" a partir de una clave `YYYY-MM-DD`: lo que se recuerda de un
+ * entreno es el día de la semana, no el número. Si no es del año en curso
+ * lleva el año ("Lun 12 jul 2025"). Fuente única de la fecha de un entreno:
+ * historiales, registro, Detalle y Elige la sesión la escriben igual.
+ */
+export function weekdayDayMonth(
+  dateStr: string,
+  currentYear: number = new Date().getFullYear()
+): string {
+  const date = dateFromKey(dateStr);
+  const weekday = date
+    .toLocaleDateString(dateLocale, { weekday: 'short' })
+    .replace('.', '');
+  const year =
+    date.getFullYear() === currentYear ? '' : ` ${date.getFullYear()}`;
+  return `${weekday.charAt(0).toUpperCase()}${weekday.slice(1)} ${shortDayMonth(
+    dateStr
+  )}${year}`;
+}
+
+/**
  * "12 de julio de 2025" a partir de una clave `YYYY-MM-DD`. El hermano largo
  * de `shortDayMonth`, con los mismos dos consumidores que lo tenían repetido
  * (Progreso por ejercicio y Logros).
@@ -88,17 +95,6 @@ export function longDate(dateStr: string): string {
     })
     .replace('.', '');
 }
-
-/**
- * `formatDate` desde una clave `YYYY-MM-DD` en vez de un timestamp:
- * "Lunes, 12/07/2025". El Detalle lo escribía a mano con las mismas opciones y
- * la misma capitalización, en la otra rama de la misma expresión en la que ya
- * llamaba a `formatDate`.
- */
-export function formatDateFromKey(dateStr: string): string {
-  return formatDate(dateFromKey(dateStr).getTime());
-}
-
 /**
  * Día de una fecha como clave `YYYY-MM-DD` en la zona horaria DEL MÓVIL.
  *

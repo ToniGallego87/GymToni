@@ -22,8 +22,6 @@ type FloatingPrimaryNavKey =
 interface FloatingPrimaryNavProps {
   bottom: number;
   activeTab: FloatingPrimaryNavKey;
-  /** Oculta el botón de Cardio cuando no hay ningún registro de cardio. */
-  showCardio?: boolean;
   /**
    * Foto del perfil público. Si la hay, la pestaña de Perfil la pinta en lugar
    * del icono genérico: la cara propia se reconoce antes que una silueta, y de
@@ -47,7 +45,6 @@ type NavItem = {
 export function FloatingPrimaryNav({
   bottom,
   activeTab,
-  showCardio = true,
   profileAvatarUri,
   onPressHome,
   onPressCardio,
@@ -91,13 +88,9 @@ export function FloatingPrimaryNav({
     },
   ];
 
-  const visibleItems = showCardio
-    ? items
-    : items.filter((item) => item.key !== 'cardio');
-
   return (
     <FloatingGlassBar bottom={bottom}>
-      {visibleItems.map((item) => {
+      {items.map((item) => {
         const isActive = item.key === activeTab;
 
         return (
@@ -112,6 +105,9 @@ export function FloatingPrimaryNav({
             // un toque en la pestaña en la que ya estás no debe parecer roto).
             disabled={!item.onPress}
             activeOpacity={0.88}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected: isActive }}
           >
             {isActive && (
               <Animated.View

@@ -423,6 +423,12 @@ export function NewRoutineScreen({
               pressed && styles.buttonPressed,
             ]}
             onPress={() => setIconPickerDayId(day.id)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              dayIcon
+                ? `${t('Icono del día')}: ${t(GYM_ICON_LABELS[dayIcon])}`
+                : t('Elegir icono')
+            }
           >
             {dayIcon ? (
               <>
@@ -510,6 +516,7 @@ export function NewRoutineScreen({
             pressed && styles.buttonPressed,
           ]}
           onPress={() => handleAddExercise(day.id)}
+          accessibilityRole="button"
         >
           <MaterialCommunityIcons
             name="plus-circle-outline"
@@ -576,6 +583,7 @@ export function NewRoutineScreen({
               pressed && styles.qrButtonPressed,
             ]}
             onPress={() => setShowLinkImport(true)}
+            accessibilityRole="button"
           >
             <MaterialCommunityIcons
               name="link-variant"
@@ -592,6 +600,7 @@ export function NewRoutineScreen({
               pressed && styles.qrButtonPressed,
             ]}
             onPress={() => setShowImport(true)}
+            accessibilityRole="button"
           >
             <MaterialCommunityIcons
               name="text-box-plus-outline"
@@ -609,6 +618,7 @@ export function NewRoutineScreen({
                 pressed && styles.qrButtonPressed,
               ]}
               onPress={onOpenCommunity}
+              accessibilityRole="button"
             >
               <MaterialCommunityIcons
                 name="account-group-outline"
@@ -681,6 +691,8 @@ export function NewRoutineScreen({
             style={[styles.dayChip, !canAddMoreDays && styles.dayChipDisabled]}
             onPress={handleAddDay}
             disabled={!canAddMoreDays}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: !canAddMoreDays }}
           >
             <MaterialCommunityIcons
               name="plus-thick"
@@ -725,7 +737,6 @@ export function NewRoutineScreen({
       <GlassTopBar
         title={t('Nueva rutina')}
         icon="playlist-plus"
-        subtitle={t('Define los ejercicios que realizarás cada día')}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />

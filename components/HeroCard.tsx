@@ -33,6 +33,12 @@ interface HeroCardProps {
   titleIcon?: string;
   subtitle?: string;
   /**
+   * Icono delante del subtítulo (p. ej. la flecha de "X % de mejora"). Un
+   * icono aparte, no un glifo dentro del texto: la tipografía display (Anton)
+   * no tiene buen trazo para flechas Unicode, se ven deformes.
+   */
+  subtitleIcon?: string;
+  /**
    * Pone junto al subtítulo un botón "Cambiar" (icono de intercambiar),
    * independiente del toque de la tarjeta. Lo usa Inicio: el subtítulo NOMBRA
    * el día que toca, tocar la tarjeta entra en él y "Cambiar" abre "Elige la
@@ -66,6 +72,7 @@ export function HeroCard({
   title,
   titleIcon,
   subtitle,
+  subtitleIcon,
   onSubtitlePress,
   subtitleAccessibilityLabel,
   stats,
@@ -163,6 +170,13 @@ export function HeroCard({
           </View>
           {!!subtitle && (
             <View style={styles.subtitleRow}>
+              {!!subtitleIcon && (
+                <MaterialCommunityIcons
+                  name={subtitleIcon as any}
+                  size={16}
+                  color={theme.colors.onGold}
+                />
+              )}
               <Text style={styles.subtitle} numberOfLines={1}>
                 {subtitle}
               </Text>
@@ -312,7 +326,9 @@ const makeStyles = () =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'center',
-      gap: 10,
+      // Pegado: la flecha de "X % de mejora" es parte del dato. El botón
+      // "Cambiar" se separa con su propio margen.
+      gap: 3,
       marginTop: 4,
       maxWidth: '100%',
     },
@@ -320,6 +336,7 @@ const makeStyles = () =>
     // que el círculo del icono), tinta `onGold`. Tiene forma de botón a
     // propósito: es una acción distinta de la tarjeta.
     changeChip: {
+      marginLeft: 7,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 4,

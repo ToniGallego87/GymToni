@@ -7,8 +7,8 @@ import {
   TextInput,
   StyleSheet,
   Pressable,
-  GestureResponderEvent,
   Keyboard,
+  LayoutChangeEvent,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -19,7 +19,7 @@ import Animated, {
 import { ParsedSet, ExerciseLog } from '../types';
 import { LinearGradient } from 'expo-linear-gradient';
 import { theme } from '@lib/theme';
-import { localizeDecimals, parseTypedNumber, t } from '@lib/i18n';
+import { language, localizeDecimals, parseTypedNumber, t } from '@lib/i18n';
 import {
   MAX_SET_REPS,
   MAX_SET_WEIGHT_KG,
@@ -71,6 +71,8 @@ interface ExerciseInputFieldProps {
     reps?: string;
   };
   addedSets: ParsedSet[];
+  // Índices de `addedSets` que baten el récord del ejercicio: burbuja en oro.
+  recordSetIndexes?: Set<number>;
   onAddSet: (set: ParsedSet) => void;
   // Se invoca al pulsar "Añadir serie" sin datos válidos (p. ej. 0×0 sin caso
   // anterior que rellene los placeholders, un valor negativo o uno disparatado).
@@ -81,9 +83,9 @@ interface ExerciseInputFieldProps {
   // registro, sin arrastrar las de después.
   onRemoveSet: (index: number) => void;
   onFinishExercise: () => void;
-  // El evento solo llega cuando lo dispara un toque directo (el bloque de nota);
-  // desde el menú de acciones se invoca sin él.
-  onNotesPress: (event?: GestureResponderEvent) => void;
+  // Nota del ejercicio: se escribe en la propia tarjeta y se autoguarda (como la
+  // de la sesión); borrarla es vaciarla.
+  onNotesChange: (text: string) => void;
   notes?: string;
   previousLog?: ExerciseLog | null;
   improvement?: { isImproved: boolean; percent: number } | null;
@@ -95,6 +97,11 @@ interface ExerciseInputFieldProps {
   // Semana de descarga: sin porcentaje ni comparación con la anterior, y el peso
   // por defecto en la casilla baja al ~75% del de la semana previa.
   deload?: boolean;
+  // Posición de la tarjeta en la lista: el registro la usa para bajar solo al
+  // ejercicio siguiente al completar uno.
+  onLayout?: (event: LayoutChangeEvent) => void;
+  // Salto de las flechas del peso (`weightStepFromHistory`); 1 kg por defecto.
+  weightStep?: number;
 }
 
 export function ExerciseInputField({
@@ -103,17 +110,20 @@ export function ExerciseInputField({
   onAssignGif,
   target,
   addedSets,
+  recordSetIndexes,
   onAddSet,
   onInvalidAdd,
   onRemoveSet,
   onFinishExercise,
-  onNotesPress,
+  onNotesChange,
   notes,
   previousLog,
   improvement,
   accent = theme.colors.primary,
   isCurrent,
   deload = false,
+  onLayout,
+  weightStep = 1,
 }: ExerciseInputFieldProps) {
   const [weightValue, setWeightValue] = useState('');
   const [repsValue, setRepsValue] = useState('');
@@ -126,7 +136,8 @@ export function ExerciseInputField({
       holdTimerRef.current = null;
     }
   };
-  // Primer paso inmediato; luego cada vez más rápido (mín. 45 ms entre pasos).
+  // Arranca con el pulsado largo (el toque suelto da su paso en `onPress`):
+  // primer paso inmediato y luego cada vez más rápido (mín. 45 ms entre pasos).
   const startHold = (fn: () => void) => {
     stopHold();
     fn();
@@ -154,16 +165,23 @@ export function ExerciseInputField({
   };
   const sanitizeIntInput = (txt: string): string => txt.replace(/[^0-9]/g, '');
 
-  // Sube/baja el peso en kilos enteros desde el valor actual (o el sugerido si el
-  // campo está vacío), sin bajar de 0. Si el valor tenía decimales, la flecha lo
-  // lleva al entero contiguo en el sentido pulsado (61,5 → arriba 62 / abajo 61).
+  // Sube/baja el peso a saltos de `weightStep` (lo que sueles subir en este
+  // ejercicio: 2,5 en barra, 2 en mancuernas…) desde el valor actual (o el
+  // sugerido si el campo está vacío), sin bajar de 0. Un valor fuera de la
+  // rejilla va al escalón contiguo en el sentido pulsado (61 con saltos de 2,5
+  // → arriba 62,5 / abajo 60).
   const stepWeight = (dir: 1 | -1) => {
     const base = parseTypedNumber(
       weightValue.trim() || getWeightPlaceholder() || '0'
     );
     const safe = isNaN(base) ? 0 : base;
-    const next = dir > 0 ? Math.floor(safe) + 1 : Math.ceil(safe) - 1;
-    setWeightValue(localizeDecimals(String(Math.max(0, next))));
+    const steps = safe / weightStep;
+    const next =
+      dir > 0
+        ? (Math.floor(steps + 1e-9) + 1) * weightStep
+        : (Math.ceil(steps - 1e-9) - 1) * weightStep;
+    const rounded = Math.round(Math.max(0, next) * 100) / 100;
+    setWeightValue(localizeDecimals(String(rounded)));
   };
   // Sube/baja reps o segundos en unidades enteras, sin bajar de 0.
   const stepReps = (dir: 1 | -1) => {
@@ -175,21 +193,34 @@ export function ExerciseInputField({
   };
 
   // Secciones desplegables (contexto arriba, inputs abajo). Se renderizan de
-  // forma condicional y la tarjeta reajusta su altura con `LinearTransition`
-  // de Reanimated: medir la altura a mano (onLayout) para animarla fallaba en
-  // el build de release (devolvía 0 y dejaba el cuerpo recortado).
+  // forma condicional y su contenido entra/sale con fundido. La tarjeta NO
+  // lleva `layout` (LinearTransition): en Android (arquitectura antigua), si un
+  // segundo cambio de alto llegaba con la animación del primero en marcha, las
+  // tarjetas de debajo se quedaban en la posición vieja, solapadas con la
+  // abierta. Sin ella, cada tarjeta salta a su sitio final, que siempre es el
+  // bueno. Medir la altura a mano (onLayout) para animarla fallaba en release.
   const [expanded, setExpanded] = useState(!!isCurrent);
 
   const toggleExpanded = () => setExpanded((prev) => !prev);
 
-  // Al convertirse en el ejercicio en curso (el padre lo marca al completarse el
-  // anterior), abrir la tarjeta si estaba colapsada. Solo en la transición
-  // false→true: no pelea con el usuario si luego la cierra a mano.
-  const wasCurrentRef = useRef(!!isCurrent);
+  // Campo de la nota, en la tarjeta. Se ve si hay nota o si se ha abierto (⋯,
+  // o el icono de nota con la tarjeta plegada); vacío y sin foco, se recoge.
+  const hasNote = !!notes?.trim();
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noteInputRef = useRef<TextInput>(null);
+  const [noteFocusRequest, setNoteFocusRequest] = useState(0);
+  const openNote = () => {
+    setExpanded(true);
+    setNoteOpen(true);
+    setNoteFocusRequest((n) => n + 1);
+  };
   useEffect(() => {
-    if (isCurrent && !wasCurrentRef.current) setExpanded(true);
-    wasCurrentRef.current = !!isCurrent;
-  }, [isCurrent]);
+    if (!noteFocusRequest) return;
+    // Tras el render que monta (o despliega) el campo.
+    const id = setTimeout(() => noteInputRef.current?.focus(), 60);
+    return () => clearTimeout(id);
+  }, [noteFocusRequest]);
+  const showNoteField = expanded && (noteOpen || hasNote);
 
   // Acciones poco frecuentes del ejercicio (saltar, nota, cronómetro): viven en
   // el ⋯ de la cabecera en vez de en una fila de botones bajo "Añadir serie".
@@ -289,26 +320,43 @@ export function ExerciseInputField({
     ? addedSets.length >= target.sets
     : false;
   const hasAddedSets = addedSets.length > 0;
-  // Rótulo del botón de añadir: la serie que entra sobre el objetivo ("3/4").
-  // Sin objetivo, solo la acción.
-  const addSetLabel = target?.sets
-    ? t('Añadir serie {n}/{total}', {
-        n: addedSets.length + 1,
-        total: target.sets,
-      })
-    : t('Añadir serie');
+  // Rótulo del botón de añadir: la serie que ENTRA, en ordinal ("Añadir 3.ª
+  // serie") y "última" al llegar al objetivo. Antes era "Añadir serie 3/3", y
+  // con formato de recuento se leía como "ya van 3 de 3". Lo hecho lo cuentan
+  // los puntos junto a las burbujas. Sin objetivo, la acción a secas. Con
+  // objetivo de UNA serie, "última" desde el principio: no hay puntos ni fila
+  // de objetivo que lo digan.
+  const nextSet = addedSets.length + 1;
+  const addSetLabel = !target?.sets
+    ? t('Añadir serie')
+    : nextSet >= target.sets
+    ? t('Añadir última serie')
+    : t('Añadir {ord} serie', { ord: ordinal(nextSet) });
+  // Puntos de progreso (●●○): solo en curso y con objetivo de varias series.
+  const showSetDots =
+    expanded && !isMaxSetsReached && !!target?.sets && target.sets > 1;
 
   // Al completarse (todas las series hechas) la tarjeta se tiñe de verde para
   // marcarla como terminada, esté colapsada o desplegada.
   const cardAccent = isMaxSetsReached ? theme.colors.success : accent;
 
-  const wasMaxReachedRef = useRef(isMaxSetsReached);
-  useEffect(() => {
-    if (isMaxSetsReached && !wasMaxReachedRef.current) {
-      setExpanded(false);
-    }
-    wasMaxReachedRef.current = isMaxSetsReached;
-  }, [isMaxSetsReached]);
+  // Plegado/desplegado automático, en el MISMO render que lo provoca (patrón de
+  // "ajustar estado durante el render", no `useEffect`): al meter la última
+  // serie, plegar esta tarjeta y abrir la siguiente llegan en una sola pasada de
+  // layout junto con la serie, y no en un segundo render detrás.
+  // - Al completarse (todas las series), se pliega.
+  // - Al convertirse en el ejercicio en curso, se abre si estaba plegada.
+  // Solo en las transiciones: no pelea con el usuario si luego la abre o cierra.
+  const [prevMaxReached, setPrevMaxReached] = useState(isMaxSetsReached);
+  if (isMaxSetsReached !== prevMaxReached) {
+    setPrevMaxReached(isMaxSetsReached);
+    if (isMaxSetsReached) setExpanded(false);
+  }
+  const [prevIsCurrent, setPrevIsCurrent] = useState(!!isCurrent);
+  if (!!isCurrent !== prevIsCurrent) {
+    setPrevIsCurrent(!!isCurrent);
+    if (isCurrent) setExpanded(true);
+  }
 
   // Peso de la primera serie de la semana anterior (null si no hay historial).
   const previousFirstWeight = (): number | null => {
@@ -347,6 +395,9 @@ export function ExerciseInputField({
     return String(Math.max(...nums.map(Number)));
   };
 
+  // Rango objetivo para el rótulo de la casilla ("REPETICIONES · 8-10").
+  const targetReps = target?.reps?.trim() || null;
+
   const getRepPlaceholder = () => {
     if (addedSets.length > 0)
       return String(addedSets[addedSets.length - 1].reps);
@@ -381,6 +432,9 @@ export function ExerciseInputField({
     }
     return '';
   };
+  // ¿Hay algo de la vez anterior que enseñar (series o su nota)?
+  const hasPreviousContext =
+    !!previousLog && (!!getPreviousSetsSummary() || !!previousLog.notes);
 
   const renderImprovementBadge = () => {
     // En descarga no hay porcentaje ni comparación con la semana anterior.
@@ -415,64 +469,113 @@ export function ExerciseInputField({
     if (!hasAddedSets) return null;
     return (
       <View style={styles.seriesRow}>
-        {addedSets.map((set, idx) => (
-          <Animated.View
-            key={idx}
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={styles.serieTagWrap}
-          >
-            <View
-              style={[
-                styles.serieTag,
-                expanded && styles.serieTagEditable,
-                { backgroundColor: cardAccent + '2E' },
-              ]}
+        {addedSets.map((set, idx) => {
+          const isRecord = !!recordSetIndexes?.has(idx);
+          return (
+            <Animated.View
+              key={idx}
+              entering={fadeIn}
+              exiting={fadeOut}
+              layout={layoutTransition}
+              style={styles.serieTagWrap}
             >
-              <Text style={[styles.serieTagText, { color: cardAccent }]}>
-                {set.weight === -1 || set.reps === -1
-                  ? '—'
-                  : localizeDecimals(`${set.weight}×${set.reps}`)}
-              </Text>
-            </View>
-            {/* Borrado por registro: la × quita ESA serie. Va DENTRO de la
+              <View
+                style={[
+                  styles.serieTag,
+                  isRecord && styles.serieTagRecord,
+                  expanded && styles.serieTagEditable,
+                  {
+                    backgroundColor: isRecord
+                      ? theme.colors.primaryFill
+                      : cardAccent + '2E',
+                  },
+                ]}
+                accessible
+                accessibilityLabel={
+                  isRecord
+                    ? `${localizeDecimals(`${set.weight}×${set.reps}`)}. ${t(
+                        'Récord personal'
+                      )}`
+                    : undefined
+                }
+              >
+                {isRecord && (
+                  <MaterialCommunityIcons
+                    name="trophy"
+                    size={13}
+                    color={theme.colors.onGold}
+                  />
+                )}
+                <Text
+                  style={[
+                    styles.serieTagText,
+                    { color: isRecord ? theme.colors.onGold : cardAccent },
+                  ]}
+                >
+                  {set.weight === -1 || set.reps === -1
+                    ? '—'
+                    : localizeDecimals(`${set.weight}×${set.reps}`)}
+                </Text>
+              </View>
+              {/* Borrado por registro: la × quita ESA serie. Va DENTRO de la
                 burbuja, en su esquina superior derecha (el dato se lee de
                 izquierda a derecha, así que la acción cierra por el final y no
                 tapa el número). Solo con la tarjeta desplegada: plegada las
                 burbujas son resumen y no hay nada que editar. */}
-            {expanded && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.serieTagRemove,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={() => onRemoveSet(idx)}
-                hitSlop={10}
-                accessibilityRole="button"
-                accessibilityLabel={t('Borrar serie {n}', { n: idx + 1 })}
-              >
-                {/* Disco lleno con la × recortada (transparente), no un aro con
+              {expanded && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.serieTagRemove,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={() => onRemoveSet(idx)}
+                  hitSlop={10}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Borrar serie {n}', { n: idx + 1 })}
+                >
+                  {/* Disco lleno con la × recortada (transparente), no un aro con
                     la × dibujada: sobre la burbuja de color la marca se lee de
                     lejos y no compite con el número. */}
-                <MaterialCommunityIcons
-                  name="close-circle"
-                  size={SERIE_REMOVE_SIZE}
-                  color={theme.colors.white}
-                />
-              </Pressable>
-            )}
-          </Animated.View>
-        ))}
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={SERIE_REMOVE_SIZE}
+                    color={theme.colors.white}
+                  />
+                </Pressable>
+              )}
+            </Animated.View>
+          );
+        })}
+        {showSetDots && target?.sets && (
+          <View
+            style={styles.setDots}
+            accessible
+            accessibilityLabel={t('{a} de {b} series hechas', {
+              a: addedSets.length,
+              b: target.sets,
+            })}
+          >
+            {Array.from({ length: target.sets }, (_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.setDot,
+                  { borderColor: cardAccent },
+                  i < addedSets.length && { backgroundColor: cardAccent },
+                ]}
+              />
+            ))}
+          </View>
+        )}
         {renderImprovementBadge()}
       </View>
     );
   };
 
   return (
-    <Animated.View
-      layout={layoutTransition}
+    <View
       style={[styles.container, { borderColor: cardAccent }]}
+      onLayout={onLayout}
     >
       <GradientFill accent={cardAccent} />
 
@@ -499,7 +602,13 @@ export function ExerciseInputField({
         {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta a
             dos líneas; al desplegar se ve entero (sin límite de líneas), así el
             mismo gesto hace siempre lo mismo y el nombre largo sigue accesible. */}
-        <Pressable style={styles.nameWrap} onPress={toggleExpanded}>
+        <Pressable
+          style={styles.nameWrap}
+          onPress={toggleExpanded}
+          accessibilityRole="button"
+          accessibilityLabel={exerciseName}
+          accessibilityState={{ expanded }}
+        >
           <Text
             style={styles.exerciseName}
             numberOfLines={expanded ? undefined : 2}
@@ -510,14 +619,15 @@ export function ExerciseInputField({
         {/* Marca de nota: plegada la tarjeta el bloque de la nota no se pinta,
             así que un ejercicio ya completado escondía por completo lo que
             hubieras apuntado. El icono va pegado al título para que se vea que
-            hay algo escrito, y pulsarlo abre la nota sin desplegar nada. */}
-        {!expanded && !!notes && (
+            hay algo escrito, y pulsarlo despliega la tarjeta con el campo de la
+            nota listo para escribir. */}
+        {!expanded && hasNote && (
           <Pressable
             style={({ pressed }) => [
               styles.headerNote,
               pressed && styles.buttonPressed,
             ]}
-            onPress={onNotesPress}
+            onPress={openNote}
             hitSlop={6}
             accessibilityRole="button"
             accessibilityLabel={t('Ver la nota del ejercicio')}
@@ -556,27 +666,16 @@ export function ExerciseInputField({
           montado siempre (solo se alterna el contenido) para que `exiting` se
           reproduzca al colapsar con un padre estable. */}
       <View style={styles.topSection}>
-        {/* Bloque de contexto: objetivo + anterior (o aviso de descarga) */}
-        {expanded && (target?.sets || previousLog || deload) && (
+        {/* Bloque de contexto: la vez anterior (o el aviso de descarga). El
+            objetivo ya no va aquí: las series las dicen el botón y los puntos,
+            y el rango de repeticiones va en el rótulo de su casilla. */}
+        {expanded && (deload || hasPreviousContext) && (
           <Animated.View
             entering={fadeIn}
             exiting={fadeOut}
             layout={layoutTransition}
             style={styles.contextBlock}
           >
-            {target?.sets && target?.reps && (
-              <View style={styles.contextItem}>
-                <MaterialCommunityIcons
-                  name="target"
-                  size={13}
-                  color={theme.colors.textSecondary}
-                />
-                <Text style={styles.contextLabel}>{t('Objetivo')}</Text>
-                <Text style={styles.contextValue}>
-                  {target.sets}×{target.reps}
-                </Text>
-              </View>
-            )}
             {/* En descarga se sustituye el "Anterior" (comparación) por el aviso
                 de que el peso propuesto es una bajada respecto a la semana previa. */}
             {deload ? (
@@ -612,29 +711,39 @@ export function ExerciseInputField({
           </Animated.View>
         )}
 
-        {/* Nota actual (pulsable: abre el editor de nota) */}
-        {expanded && notes && (
+        {/* Nota del ejercicio: se escribe aquí mismo y se autoguarda, como la
+            de la sesión (antes abría un popup con Cancelar/Borrar/Guardar).
+            Borrarla es vaciarla: vacía y sin foco, el campo se recoge. */}
+        {showNoteField && (
           <Animated.View
             entering={fadeIn}
             exiting={fadeOut}
             layout={layoutTransition}
+            style={styles.noteOwnBlock}
           >
-            <Pressable
-              style={({ pressed }) => [
-                styles.noteOwnBlock,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={onNotesPress}
-            >
-              <MaterialCommunityIcons
-                name="note-text-outline"
-                size={13}
-                color={cardAccent}
-              />
-              <Text style={[styles.noteOwnText, { color: cardAccent }]}>
-                {notes}
-              </Text>
-            </Pressable>
+            <MaterialCommunityIcons
+              name="note-text-outline"
+              size={15}
+              color={cardAccent}
+              style={styles.noteOwnIcon}
+            />
+            <TextInput
+              ref={noteInputRef}
+              style={[styles.noteOwnInput, { color: cardAccent }]}
+              value={notes ?? ''}
+              onChangeText={onNotesChange}
+              onBlur={() => {
+                if (!notes?.trim()) setNoteOpen(false);
+              }}
+              placeholder={t(
+                'Añade una nota (ej: muy cansado, fallo en última serie)'
+              )}
+              placeholderTextColor={theme.colors.textSecondary}
+              accessibilityLabel={t('Nota del ejercicio')}
+              multiline
+              textAlignVertical="top"
+              maxLength={280}
+            />
           </Animated.View>
         )}
       </View>
@@ -642,12 +751,7 @@ export function ExerciseInputField({
       {/* Sección inferior desplegable: inputs, series insertadas y estado.
           Wrapper persistente (igual que la superior) para que `exiting` se
           reproduzca al colapsar. */}
-      <View
-        style={[
-          styles.bottomSection,
-          !expanded && styles.bottomSectionCollapsed,
-        ]}
-      >
+      <View>
         {/* Estado: en progreso — las cajas de peso × reps */}
         {expanded && !isMaxSetsReached && (
           <Animated.View
@@ -675,14 +779,18 @@ export function ExerciseInputField({
                   <View style={styles.stepperCol}>
                     <StepButton
                       icon="chevron-up"
+                      label={t('Subir peso')}
                       accent={accent}
-                      onHoldStart={() => startHold(() => stepWeight(1))}
+                      onStep={() => stepWeight(1)}
+                      onHoldStart={startHold}
                       onHoldStop={stopHold}
                     />
                     <StepButton
                       icon="chevron-down"
+                      label={t('Bajar peso')}
                       accent={accent}
-                      onHoldStart={() => startHold(() => stepWeight(-1))}
+                      onStep={() => stepWeight(-1)}
+                      onHoldStart={startHold}
                       onHoldStop={stopHold}
                     />
                   </View>
@@ -692,8 +800,16 @@ export function ExerciseInputField({
               <Text style={styles.timesGlyph}>×</Text>
 
               <View style={styles.inputField}>
-                <Text style={styles.inputLabel}>
+                {/* El rango objetivo, junto al número que se teclea (antes iba
+                    en una fila "Objetivo" aparte). Si no cabe, encoge. */}
+                <Text
+                  style={styles.inputLabel}
+                  numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.7}
+                >
                   {isTimeBased ? t('Segundos') : t('Repeticiones')}
+                  {targetReps ? ` · ${targetReps}` : ''}
                 </Text>
                 <View style={styles.inputWithStepper}>
                   <TextInput
@@ -708,14 +824,26 @@ export function ExerciseInputField({
                   <View style={styles.stepperCol}>
                     <StepButton
                       icon="chevron-up"
+                      label={
+                        isTimeBased
+                          ? t('Subir segundos')
+                          : t('Subir repeticiones')
+                      }
                       accent={accent}
-                      onHoldStart={() => startHold(() => stepReps(1))}
+                      onStep={() => stepReps(1)}
+                      onHoldStart={startHold}
                       onHoldStop={stopHold}
                     />
                     <StepButton
                       icon="chevron-down"
+                      label={
+                        isTimeBased
+                          ? t('Bajar segundos')
+                          : t('Bajar repeticiones')
+                      }
                       accent={accent}
-                      onHoldStart={() => startHold(() => stepReps(-1))}
+                      onStep={() => stepReps(-1)}
+                      onHoldStart={startHold}
                       onHoldStop={stopHold}
                     />
                   </View>
@@ -729,7 +857,7 @@ export function ExerciseInputField({
                 encogía a un "+" pegado a la última burbuja, que cambiaba de sitio
                 con cada serie y quedaba junto a la × que borra la de al lado. Las
                 burbujas van DEBAJO, así que crecer no lo mueve. Lleva la serie que
-                se va a añadir sobre el objetivo ("3/4"). */}
+                se va a añadir ("Añadir 3.ª serie"). */}
             <Pressable
               style={({ pressed }) => [
                 styles.addButton,
@@ -817,6 +945,7 @@ export function ExerciseInputField({
                     pressed && styles.buttonPressed,
                   ]}
                   onPress={useTimerAsReps}
+                  accessibilityRole="button"
                 >
                   <MaterialCommunityIcons
                     name="check"
@@ -868,10 +997,14 @@ export function ExerciseInputField({
           pressed && styles.collapseBarPressed,
         ]}
         onPress={toggleExpanded}
+        // 26 de alto: el hitSlop sube la zona de toque hacia dentro de la
+        // tarjeta (abajo es el borde).
+        hitSlop={{ top: 14 }}
         accessibilityRole="button"
         accessibilityLabel={
           expanded ? t('Plegar ejercicio') : t('Desplegar ejercicio')
         }
+        accessibilityState={{ expanded }}
       >
         <LinearGradient
           colors={theme.gradients.heroStep}
@@ -900,8 +1033,8 @@ export function ExerciseInputField({
         items={[
           {
             icon: 'note-text-outline',
-            label: notes ? t('Editar nota') : t('Añadir nota'),
-            onPress: onNotesPress,
+            label: hasNote ? t('Editar nota') : t('Añadir nota'),
+            onPress: openNote,
           },
           // Cronómetro SIEMPRE: es una acción del ⋯, no estorba a nadie, y
           // antes solo existía si el objetivo llevaba escrita una unidad de
@@ -927,27 +1060,45 @@ export function ExerciseInputField({
             : []),
         ]}
       />
-    </Animated.View>
+    </View>
   );
 }
 
-// Flecha +/- de un stepper: mantener pulsado repite la acción (acelerando).
+// Ordinal de la serie para el botón de añadir: "3.ª" / "3rd".
+function ordinal(n: number): string {
+  if (language !== 'en') return `${n}.ª`;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}
+
+// Flecha +/- de un stepper: un toque da un paso y mantener pulsado lo repite
+// (acelerando). Nada se aplica al APOYAR el dedo: antes el primer paso iba en
+// `onPressIn`, y arrastrar para hacer scroll empezando sobre la flecha subía
+// el peso. `onPress` y `onLongPress` no llegan si el scroll se queda el gesto.
 function StepButton({
   icon,
+  label,
   accent,
+  onStep,
   onHoldStart,
   onHoldStop,
 }: {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  label: string;
   accent: string;
-  onHoldStart: () => void;
+  onStep: () => void;
+  onHoldStart: (fn: () => void) => void;
   onHoldStop: () => void;
 }) {
   return (
     <Pressable
-      onPressIn={onHoldStart}
+      onPress={onStep}
+      onLongPress={() => onHoldStart(onStep)}
+      delayLongPress={320}
       onPressOut={onHoldStop}
       accessibilityRole="button"
+      accessibilityLabel={label}
       style={({ pressed }) => [
         styles.stepBtn,
         pressed && styles.stepBtnPressed,
@@ -972,12 +1123,6 @@ const makeStyles = () =>
     },
     topSection: {
       gap: 10,
-    },
-    bottomSection: {
-      paddingBottom: 0,
-    },
-    bottomSectionCollapsed: {
-      paddingBottom: 0,
     },
 
     // Cabecera
@@ -1044,6 +1189,19 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: 6,
     },
+    // Recuento de series hechas sobre el objetivo, tras las burbujas.
+    setDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginLeft: 6,
+    },
+    setDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      borderWidth: 1.5,
+    },
     // Envoltorio de cada burbuja: solo da el marco de posición a la ×, que va
     // absoluta DENTRO de sus límites (fuera, con offsets negativos, Android la
     // recorta). Sin padding propio, así la fila no se descuadra y el badge de
@@ -1073,6 +1231,11 @@ const makeStyles = () =>
       minWidth: 56,
       alignItems: 'center',
     },
+    // Récord: trofeo delante del dato, en la misma burbuja.
+    serieTagRecord: {
+      flexDirection: 'row',
+      gap: 4,
+    },
     // Con la × dentro, el dato se aparta de ella por la derecha en vez de
     // quedar debajo.
     serieTagEditable: {
@@ -1090,7 +1253,7 @@ const makeStyles = () =>
       alignSelf: 'center',
     },
 
-    // Bloque de contexto (objetivo + anterior)
+    // Bloque de contexto (anterior o aviso de descarga)
     contextBlock: {
       backgroundColor: theme.colors.inputBg,
       borderRadius: theme.borderRadius.sm,
@@ -1133,12 +1296,24 @@ const makeStyles = () =>
     noteOwnBlock: {
       flexDirection: 'row',
       alignItems: 'flex-start',
-      gap: 6,
+      gap: 8,
+      backgroundColor: theme.colors.inputBg,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
     },
-    noteOwnText: {
-      fontSize: 13,
-      fontStyle: 'italic',
+    noteOwnIcon: {
+      marginTop: 2,
+    },
+    noteOwnInput: {
       flex: 1,
+      minHeight: 20,
+      padding: 0,
+      fontSize: 13,
+      lineHeight: 18,
+      fontStyle: 'italic',
     },
 
     // Bloque de inputs. Encabeza siempre la mitad inferior de la tarjeta (las
@@ -1163,6 +1338,9 @@ const makeStyles = () =>
     },
     inputLabel: {
       fontSize: 12,
+      // Alto fijo: si el rótulo encoge para caber, la casilla no sube.
+      lineHeight: 16,
+      height: 16,
       fontWeight: '800',
       color: theme.colors.textSecondary,
       textTransform: 'uppercase',

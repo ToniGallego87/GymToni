@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -31,9 +31,13 @@ import { ProfileEditModal } from './ProfileEditModal';
 import { hasProfileFilled, useMyProfile } from '@hooks/useMyProfile';
 import { useAvatarPicker } from '@hooks/useAvatarPicker';
 import { useSession } from '@lib/cloud/auth';
-import { cardioSessionFromLog } from '@lib/cardio';
+import { cardioSessionFromLog, isCardioOnlyLog } from '@lib/cardio';
 import { theme } from '@lib/theme';
-import { t } from '@lib/i18n';
+import { fmtNum, t } from '@lib/i18n';
+import { currentBodyWeight, useBodyWeight } from '@lib/bodyWeight';
+import { buildLocalActivity } from '@lib/activity';
+import { useChallengeWins } from '@lib/level';
+import { logDateKey, shortDayMonth } from '@lib/utils';
 
 interface ProfileScreenProps {
   onOpenRoutines?: () => void;
@@ -43,6 +47,10 @@ interface ProfileScreenProps {
   onOpenBodyWeight?: () => void;
   // Logros: insignias que se desbloquean con el histórico de entrenos.
   onOpenAchievements?: () => void;
+  // Actividad: tu trayectoria (días, retos e insignias) desde el móvil.
+  onOpenActivity?: () => void;
+  onOpenCalendar?: () => void;
+  onOpenCardio?: () => void;
   onOpenSettings?: () => void;
   // Pantalla de cuenta (Datos y nube): sin sesión no hay perfil público que
   // completar, así que la tarjeta lleva a crearla en vez de al formulario.
@@ -63,6 +71,8 @@ const MENU_CHAR_WIDTH = 0.6;
 type MenuEntry = {
   icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
+  /** Estado de lo que hay detrás (rutina activa, último peso…), si lo hay. */
+  hint?: string;
   onPress?: () => void;
 };
 
@@ -82,13 +92,18 @@ export function ProfileScreen({
   onOpenExerciseProgress,
   onOpenBodyWeight,
   onOpenAchievements,
+  onOpenActivity,
+  onOpenCalendar,
+  onOpenCardio,
   onOpenSettings,
   onOpenAccount,
 }: ProfileScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   // Nivel de la cuenta: lo permanente que dejan los retos y los logros.
-  const { level } = useAccountLevel();
+  const { level, badges, challenges } = useAccountLevel();
+  const wins = useChallengeWins();
+  const weightSegments = useBodyWeight();
   const { user, loading: sessionLoading } = useSession();
   const { profile, loading: profileLoading } = useMyProfile();
   // Cambiar la foto desde el lápiz de su esquina, sin abrir el editor.
@@ -109,28 +124,100 @@ export function ProfileScreen({
   const cardioSessionsCount = state.logs.filter(
     (l) => cardioSessionFromLog(l) != null
   ).length;
+  // Solo fuerza: una sesión de solo cardio ya cuenta en "Sesiones cardio".
+  const workoutsCount = state.logs.filter((l) => !isCardioOnlyLog(l)).length;
+  // Subtítulo de la barra: desde cuándo entrenas (primer registro, de lo que sea).
+  const firstLogDate = state.logs.reduce<string | null>((min, log) => {
+    const key = logDateKey(log);
+    return min === null || key < min ? key : min;
+  }, null);
+
+  // Cada cifra es el camino a su lista (mismo patrón que los contadores de
+  // Comunidad).
+  const summary = [
+    {
+      value: state.routines.length,
+      label: t('Rutinas'),
+      onPress: onOpenRoutines,
+    },
+    {
+      value: workoutsCount,
+      label: t('Entrenamientos'),
+      onPress: onOpenCalendar,
+    },
+    {
+      value: cardioSessionsCount,
+      label: t('Sesiones cardio'),
+      onPress: onOpenCardio,
+    },
+  ];
 
   // El perfil público se edita en un popup sobre esta pantalla.
   const [showProfileEdit, setShowProfileEdit] = useState(false);
 
-  // Cinco casillas, tres por fila: icono + nombre corto. Sin subtítulos: una
-  // cuadrícula se lee de un vistazo y cabe sin scroll junto a la identidad.
+  // Seis casillas, tres por fila: icono + nombre corto y, debajo, el estado
+  // de lo que hay detrás cuando hay algo que contar (como "Datos y nube" en
+  // Configuración): así no hay que entrar en cada una para saber si hay algo
+  // que mirar. Ejercicios y Configuración no tienen un dato que resumir.
   //
   // Todas NAVEGAN a una pantalla, que es la promesa del dibujo. La sexta era
   // "Temporizador" y rompía esa promesa: mismo tamaño y mismo peso para abrir
   // un modal con un número. Ese ajuste vive ahora en Configuración, con el tema
   // y el idioma (y se sigue tocando desde el ⋯ del registro, que es donde se
   // nota que el descanso se queda corto).
+  const activeRoutine = state.routines.find((routine) => routine.isActive);
+  const bodyWeight = currentBodyWeight(weightSegments);
+  const unlockedBadges = badges.filter((badge) => badge.unlocked).length;
+  const latestActivity = useMemo(
+    () =>
+      buildLocalActivity({
+        logs: state.logs,
+        routines: state.routines,
+        badges,
+        challenges,
+        wins,
+      })[0],
+    [state.logs, state.routines, badges, challenges, wins]
+  );
   const menu: MenuEntry[] = [
-    { icon: 'book-open-variant', label: t('Rutinas'), onPress: onOpenRoutines },
+    {
+      icon: 'book-open-variant',
+      label: t('Rutinas'),
+      hint: activeRoutine
+        ? activeRoutine.name
+        : state.routines.length
+        ? t('Ninguna activa')
+        : t('Crea la primera'),
+      onPress: onOpenRoutines,
+    },
     {
       icon: 'chart-line',
       label: t('Ejercicios'),
       onPress: onOpenExerciseProgress,
     },
-    { icon: 'scale-bathroom', label: t('Peso'), onPress: onOpenBodyWeight },
+    {
+      icon: 'scale-bathroom',
+      label: t('Peso'),
+      hint: bodyWeight != null ? `${fmtNum(bodyWeight)} kg` : t('Sin anotar'),
+      onPress: onOpenBodyWeight,
+    },
+    {
+      icon: 'timeline-text-outline',
+      label: t('Actividad'),
+      // El último hito: lo que hay de nuevo en tu trayectoria.
+      hint: latestActivity
+        ? shortDayMonth(latestActivity.happenedOn)
+        : t('Sin hitos'),
+      onPress: onOpenActivity,
+    },
+    {
+      icon: 'trophy-outline',
+      label: t('Logros'),
+      hint: t('{n} de {total}', { n: unlockedBadges, total: badges.length }),
+      onPress: onOpenAchievements,
+    },
+    // Configuración, la última: se toca poco y no tiene estado que resumir.
     { icon: 'cog-outline', label: t('Configuración'), onPress: onOpenSettings },
-    { icon: 'trophy-outline', label: t('Logros'), onPress: onOpenAchievements },
   ];
   const menuRows: MenuEntry[][] = [];
   for (let i = 0; i < menu.length; i += 3) menuRows.push(menu.slice(i, i + 3));
@@ -266,20 +353,25 @@ export function ProfileScreen({
               Los números van a 24: son contexto, no el héroe. */}
           <View style={styles.summaryDividerLine} />
           <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{state.routines.length}</Text>
-              <Text style={styles.summaryLabel}>{t('Rutinas')}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{state.logs.length}</Text>
-              <Text style={styles.summaryLabel}>{t('Entrenamientos')}</Text>
-            </View>
-            <View style={styles.summaryDivider} />
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryValue}>{cardioSessionsCount}</Text>
-              <Text style={styles.summaryLabel}>{t('Sesiones cardio')}</Text>
-            </View>
+            {summary.map((item, index) => (
+              <React.Fragment key={item.label}>
+                {index > 0 && <View style={styles.summaryDivider} />}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.summaryItem,
+                    pressed && styles.menuTilePressed,
+                  ]}
+                  onPress={item.onPress}
+                  disabled={!item.onPress}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${item.value} ${item.label}`}
+                >
+                  <Text style={styles.summaryValue}>{item.value}</Text>
+                  <Text style={styles.summaryLabel}>{item.label}</Text>
+                </Pressable>
+              </React.Fragment>
+            ))}
           </View>
         </View>
 
@@ -296,12 +388,14 @@ export function ProfileScreen({
                 ]}
                 onPress={entry.onPress}
                 accessibilityRole="button"
-                accessibilityLabel={entry.label}
+                accessibilityLabel={
+                  entry.hint ? `${entry.label}. ${entry.hint}` : entry.label
+                }
               >
                 {/* Icono y texto ocupan la casilla: es lo que se toca a diario. */}
                 <MaterialCommunityIcons
                   name={entry.icon}
-                  size={38}
+                  size={32}
                   color={theme.colors.text}
                 />
                 <Text
@@ -310,6 +404,11 @@ export function ProfileScreen({
                 >
                   {entry.label}
                 </Text>
+                {!!entry.hint && (
+                  <Text style={styles.menuHint} numberOfLines={1}>
+                    {entry.hint}
+                  </Text>
+                )}
               </Pressable>
             ))}
           </View>
@@ -319,7 +418,13 @@ export function ProfileScreen({
       <GlassTopBar
         title={t('Perfil')}
         icon="account-circle-outline"
-        subtitle={t('Tu rutina, tus datos y la configuración')}
+        subtitle={
+          firstLogDate
+            ? t('Entrenando desde el {date}', {
+                date: firstLogDate.split('-').reverse().join('/'),
+              })
+            : undefined
+        }
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -481,6 +586,14 @@ const makeStyles = () =>
       fontWeight: '800',
       color: theme.colors.text,
       lineHeight: 20,
+      textAlign: 'center',
+    },
+    // Estado de la casilla, debajo del nombre: secundario y de una línea.
+    menuHint: {
+      marginTop: -4,
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+      lineHeight: 15,
       textAlign: 'center',
     },
   });

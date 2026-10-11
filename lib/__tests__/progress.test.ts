@@ -5,6 +5,7 @@ import {
   buildImprovementFromStrengthScores,
   BODYWEIGHT_VIRTUAL_LOAD,
   FIRST_TIME_IMPROVEMENT_PERCENT,
+  workoutDurationMinutes,
 } from '../progress';
 import { ParsedSet, WorkoutLog } from '../../types';
 
@@ -165,5 +166,42 @@ describe('buildWorkoutImprovement', () => {
 
     expect(buildWorkoutImprovement(current, previous)).toBeNull();
     expect(buildWorkoutImprovement(current, null)).toBeNull();
+  });
+});
+
+describe('workoutDurationMinutes', () => {
+  const start = 1_700_000_000_000;
+  const logWith = (stamps: number[]): WorkoutLog => ({
+    id: 'l1',
+    routineId: 'r1',
+    dayId: 'd1',
+    date: '2026-10-09',
+    createdAt: start,
+    updatedAt: start,
+    exercises: stamps.map((timestamp, i) => ({
+      id: `e${i}`,
+      exerciseId: `x${i}`,
+      exerciseName: `Ej ${i}`,
+      order: i,
+      rawInput: '60x8',
+      parsedSets: [{ weight: 60, reps: 8 }],
+      timestamp,
+    })),
+  });
+
+  it('del inicio de la sesión a la última serie', () => {
+    expect(
+      workoutDurationMinutes(logWith([start + 20 * 60000, start + 55 * 60000]))
+    ).toBe(55);
+  });
+
+  it('0 si todo se apuntó de golpe al empezar', () => {
+    expect(workoutDurationMinutes(logWith([start, start]))).toBe(0);
+  });
+
+  it('0 si sale una duración que no es de un entreno seguido', () => {
+    expect(
+      workoutDurationMinutes(logWith([start + 3 * 24 * 3600 * 1000]))
+    ).toBe(0);
   });
 });

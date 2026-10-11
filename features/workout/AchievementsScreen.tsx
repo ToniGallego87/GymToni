@@ -302,7 +302,10 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
       <GlassTopBar
         title={t('Logros')}
         icon="trophy-outline"
-        subtitle={t('Insignias y tu nivel')}
+        subtitle={t('{a} de {b} logros', {
+          a: unlockedCount,
+          b: badges.length,
+        })}
         topInset={insets.top}
         onLayout={onTopBarLayout}
         showLevelPill={false}

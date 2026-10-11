@@ -1,5 +1,487 @@
 # UPDATES
 
+## Version 0.9.0 - 2026-10-11
+
+### Arquitectura
+
+- **Arranque: fuera los repintados sueltos de los primeros segundos.** Con la
+  arquitectura antigua (sin `newArch`, raíz legacy de React) los `setState` que
+  llegan desde una promesa NO se agrupan: cada uno es un render completo y
+  síncrono. Y al arrancar llegaban muchos:
+  - `useSession` (`lib/cloud/auth.ts`) pasa a ser un store de módulo con UNA
+    suscripción a Supabase. Antes cada instancia (más de veinte montadas: la
+    barra superior de cada pestaña llevaba dos) hacía su `getSession()` y su
+    `onAuthStateChange`, leía y parseaba la sesión de AsyncStorage dos veces y
+    repintaba su pantalla dos o tres veces. Ahora se avisa una vez, a todos en
+    un pase (`unstable_batchedUpdates`), y solo si cambia el usuario: refrescar
+    el token ya no repinta nada. `startSession()` la arranca bajo el splash.
+  - `useMyProfile`: una sola carga en vuelo aunque la pidan varios a la vez,
+    avisos agrupados y sin aviso si la nube devuelve lo mismo que la copia
+    local (lo normal). El peso corporal (`lib/bodyWeight.ts`) también avisa
+    agrupado.
+  - `useAccountLevel` solo calcula; apuntar retos, avisar de premios y subir
+    nivel y Actividad pasa a `useRecordAccountLevel`, montado una vez. Así las
+    instancias de la barra superior, Inicio, Cardio y Perfil ya no escuchan
+    sesión ni perfil.
+  - `AppContent` deja de escuchar sesión, perfil, sync y nivel: lo que la hace
+    repintar repinta la app ENTERA (las cinco pestañas). Pasan a componentes
+    hoja sin UI (`CloudSync`, `AccountLevelRecorder`) y a `PrimaryNav`, que lee
+    la foto del perfil para la barra.
+  - El peso corporal se lee en la hidratación, junto a SQLite y bajo el splash,
+    y datos + `hydrated` entran en un solo render. Leído en la fase 2 obligaba a
+    recalcular los retos y repintar media app cuando el usuario ya tocaba.
+- **Arranque: el trabajo de fondo, en los huecos sin toques.** Montar las
+  pestañas que no se ven (80-210 ms de JS cada una) y abrir la fase 2 (sync,
+  versión, backup) iban a reloj fijo y caían a menudo encima de un toque o un
+  scroll: el "va a trompicones". Nuevo `lib/userQuiet.ts`: la vista raíz apunta
+  los toques (`onTouchStart/End/Cancel`) y `runWhenQuiet` espera, además del
+  hueco de siempre, a que el dedo lleve 0,7 s fuera (1,5 s si un scroll o el
+  pager se quedó el gesto, por la inercia). Tope de 8 s (`BOOT_MAX_WAIT_MS`)
+  para que nada quede esperando a quien no suelta la pantalla.
+- **Medido en garnet** (arranque en frío, 14 s sin tocar; medianas, antes n=13
+  / después n=9, alternando APK; tabla en `COMMANDS.md`): frames con tirón del
+  **23 % al 15 %** (47 → 22, rangos 39-54 vs 19-23, sin solape), mediana de
+  frame de 29 a 22 ms, p90 de 61 a 46 ms y 197 → 149 frames pintados (menos
+  repintados). El p99 (200 ms) y el tiempo hasta el primer render no cambian:
+  queda algún frame largo, presumiblemente al montar las pestañas de fondo, que
+  ahora cae en un hueco sin toques. Esa parte, la de tocar durante el arranque,
+  no la recoge esta medida.
+
+### Nuevas funcionalidades
+
+- **Los retos de cardio que mueve la sesión, en el registro.** Bajo lo
+  apuntado sale "Retos que has movido" con los retos de cardio que ha hecho
+  avanzar (kcal de hoy, de la semana, sesiones), pulsable hacia
+  `ChallengesModal`, como el remate de fuerza. `sessionChallenges` filtra por
+  la categoría de la sesión y en cardio se calcula en cuanto hay algo apuntado;
+  la lista es `renderSessionChallenges`, común a los dos.
+- **Las disciplinas propias de cardio se quedan como casilla.** Tras las
+  cinco fijas sale una casilla por cada disciplina propia usada (las tres más
+  recientes, `recentCustomDisciplines` en `lib/cardio.ts`), con su nombre, y
+  abre directamente sus datos; "Otro" pasa al final. Antes había que volver a
+  teclear "Remo" en cada sesión.
+- **Corregir una entrada de cardio sin borrarla.** Tocar una fila ya apuntada
+  abre el mismo popup con sus datos y "Guardar" la sustituye en su sitio
+  (`editingIndex` en `CardioInputField`); la × sigue siendo borrar. Al
+  corregir no se sugieren los datos de la última vez: un campo vaciado es
+  "sin dato".
+- **Apuntar un cardio olvidado desde el Calendario.** En modo Cardio, una
+  celda pasada sin cardio abre "Insertar cardio" con esa fecha
+  (`onLogForgottenCardio` → `workout-log` con `cardioOnly` + `initialDate`,
+  vuelta al Calendario), y se explica bajo la rejilla como en Fuerza. Las
+  celdas pasadas vacías que se pueden tocar (en los dos modos) llevan ahora
+  borde discontinuo y un "+" tenue (`dayCellLoggable`, `renderLoggableEmpty`),
+  para que se distingan de las que no responden.
+- **Apuntar un entreno olvidado desde el Calendario.** En modo Fuerza, una
+  celda pasada sin entreno abre "Elige la sesión" con esa fecha (`forDate`:
+  lista de días sin estado de semana) y el registro arranca en ella
+  (`initialDate` en `WorkoutLogScreen`, sin continuar el de hoy ni lanzar
+  descanso). Una línea bajo la rejilla lo explica.
+- **Aviso de "semana aparte".** Nuevo `assignmentOpensLoneWeek` en
+  `lib/weeks.ts`: detecta cuando una fecha deja el entreno solo en una semana
+  con otras después (día olvidado entre dos semanas cerradas), que
+  `assignmentDuplicatesDayInWeek` no veía. El registro avisa con
+  `ConfirmModal` al cambiar la fecha y al abrirse desde el Calendario
+  (cancelar ahí sale del registro). No avisa con rutinas de un solo día.
+- **Récord personal al meter la serie.** `getRecordSetIndexes`
+  (`lib/exerciseProgress.ts`) marca las series que superan el mayor peso o el
+  mejor 1RM estimado del ejercicio (por nombre, entre rutinas, solo historial
+  anterior a la sesión). La burbuja sale en oro con trofeo y un toast
+  "¡Récord personal!". Sin historial previo no hay récord.
+- **Retos que ha movido el entreno.** La tarjeta "Entreno completado" lista
+  los retos de fuerza que avanzan con esta sesión (comparando
+  `computeChallenges` sin y con ella) y abre `ChallengesModal`.
+- **Buscar rutinas en Comunidad.** La lupa busca personas y rutinas públicas
+  (`searchPublicRoutines` en `lib/cloud/social.ts`, por nombre o
+  descripción), con una sección "Rutinas" bajo "Personas". Antes solo se
+  alcanzaban las 50 del tablón.
+
+- **Restaurar una copia automática desde la app.** Datos y nube lista las
+  copias diarias del móvil (`listAutoBackups` en `lib/backup.ts`: fecha y
+  tamaño, la más reciente primero) con un "Restaurar" por copia y su
+  confirmación. Reutiliza el importador: `App.tsx` separa `importFromJson`, que
+  usan tanto el fichero (`handleImportData`) como la copia
+  (`handleRestoreAutoBackup`). La tarjeta sale aunque la app esté vacía.
+- **La semana se cierra sola a los 7 días de su primer entreno.** Un entreno
+  con fecha 7 o más días posterior al primero de la semana en curso abre
+  semana nueva (`isPastWeekWindow` en `lib/weeks.ts`, aplicada en
+  `groupLogsIntoWeekBlocks` y en `assignBlocks`, por fecha de calendario).
+  `currentWeekDayState` da la semana por cerrada si HOY ya está fuera, así que
+  Inicio y "Elige la sesión" vuelven a sugerir el Día 1 tras una pausa. Solo
+  rige para entrenos desde el 2026-10-05 (`WEEK_EXPIRY_FROM`): el histórico
+  anterior se agrupa igual que antes. `planWeekMove` rechaza los movimientos
+  que la regla desharía (unirse a una semana ya caducada, o adelantar un día
+  que dejaría la semana siguiente con más de 7 días).
+
+- **Recordatorio de entreno.** Media hora antes de la hora a la que
+  entrenaste la semana pasada salta "Hora de entrenar"; tocarlo abre el día
+  que toca AHORA (`currentWeekDayState`), así el aviso no nombra un día que
+  podría haber cambiado. Si pasan 14 días sin entrenar, un aviso para volver.
+  Solo si la rutina activa tiene algún entreno de fuerza; el cardio suelto no
+  cuenta. Plan puro en `planWorkoutReminders` (`lib/workoutReminder.ts`);
+  `App.tsx` rehace los avisos al abrir y cada vez que cambian los entrenos o
+  la rutina activa (guardar el de hoy cancela el de hoy). Canal propio
+  "Recordatorios de entreno" e interruptor en Configuración (activado por
+  defecto; al encenderlo pide permiso y, si se deniega, vuelve a apagado).
+
+- **Actividad propia en Perfil.** Nueva casilla "Actividad" (con la fecha del
+  último hito, en el sitio que tenía Configuración, que pasa al final) que abre
+  `ActivityScreen`: logros, retos superados y días entrenados en una línea de
+  tiempo, con el recuento de cada tipo arriba. Carga de 10 en 10 con scroll
+  infinito: al tirar de la lista hacia arriba más allá del final (nuevo
+  onPullPastEnd de StretchScrollView, sobre su estiramiento) aparece una rueda
+  que gira mientras entra la siguiente tanda (si una tanda no llena la
+  pantalla, la siguiente se pide sola). Sale de los datos del móvil con el mismo
+  `buildLocalActivity` que se publica, así que funciona sin cuenta, sin red y
+  con "No compartir". Un día enlaza a la ficha de su rutina si sigue existiendo.
+
+### Correcciones
+
+- **Rótulos que no cambiaban de idioma en caliente.** El filtro de la gráfica
+  de Cardio, el de Progreso por ejercicio (métrica y orden), el selector
+  Fuerza | Cardio del Calendario y las casillas de disciplina del registro de
+  cardio llamaban a `t()` al cargar el módulo y se quedaban en el idioma de
+  arranque hasta reiniciar. Ahora el rótulo es un getter (`get label()`), que
+  traduce al pintar y deja la clave literal para el test de cobertura del
+  diccionario.
+- **La duración del entreno vuelve al Detalle.** Cada autoguardado ponía la
+  hora actual a todos los ejercicios, así que la duración (diferencia entre
+  ellos) salía 0 y la celda "min" no se veía nunca. Ahora cada ejercicio
+  guarda la hora de su última serie y no se pisa; corregir un entreno de otro
+  día no la toca. El Detalle mide del inicio de la sesión a la última serie
+  (`workoutDurationMinutes` en `lib/progress.ts`, con tope de 4 h).
+- **Cambiar la fecha desde el Detalle avisa de "semana aparte".** El registro
+  avisaba de los dos conflictos ("¿Dividir la semana?" y "¿Semana aparte?") y
+  el Detalle solo del primero, aunque es adonde manda Inicio para rellenar un
+  día que faltó. Nuevo `dateAssignmentConflict` en `lib/weeks.ts` (con su
+  test): una sola comprobación para las dos pantallas.
+
+- **"Semana completa" (y demás retos/insignias) con el día a medias.** Salir
+  del registro soltaba el entreno abierto y contaba aunque solo tuviera un
+  ejercicio. `logsForAwards` (`lib/openWorkout.ts`, sustituye a
+  `logsWithoutOpenWorkout`) aparta además el log de fuerza de HOY mientras no
+  esté completo (`isStrengthLogComplete`, mismo criterio que el registro:
+  descarga = una serie menos, sin objetivo no bloquea). Cuenta al completarse o
+  al pasar el día.
+- **Un solo récord por ejercicio.** `getRecordSetIndexes` marca solo la última
+  serie que bate el récord (la mejor); antes dos series seguidas salían ambas
+  en oro.
+- **Los avisos (`Toast`) duraban hasta acabar el descanso.** El efecto del
+  temporizador dependía de `onDismiss`, función nueva en cada render, y el
+  descanso re-renderiza cada segundo: la cuenta se reiniciaba sin parar. Ahora
+  va por ref.
+- **Tarjetas de ejercicio solapadas al terminar uno.** Al meter la última
+  serie, plegar la tarjeta y abrir la siguiente iban en un segundo render
+  (`useEffect`) con el `LinearTransition` del primero aún en marcha, y en
+  Android (arquitectura antigua) las tarjetas de debajo se quedaban en la
+  posición vieja, tapando la abierta. `ExerciseInputField` ajusta ahora
+  `expanded` durante el render (llega en la misma pasada que la serie) y la
+  tarjeta exterior ya no lleva `layout`: se coloca de golpe en su sitio final;
+  el contenido sigue entrando y saliendo con fundido.
+- **Un toque antiguo en una notificación ya no vuelve a navegar.** El efecto
+  de `App.tsx` que lee `getLastNotificationResponseAsync` se repite al cambiar
+  las rutinas y la "última respuesta" seguía siendo la misma: editar una rutina
+  podía llevar de nuevo al registro de un descanso viejo. Ahora se recuerdan
+  los toques ya atendidos.
+- **Dos registros de solo cardio con la misma fecha ya no suman dos veces.**
+  `mergeSameDateCardioLogs` (nuevo en `lib/normalize.ts`, dentro de
+  `normalizeAppData`) los junta en el más reciente: añade las entradas que la
+  base no tenga (multiconjunto) y descarta la copia vieja si ya estaban todas.
+  Nunca pierde una entrada. Al cargar, `storage.ts` ahora también encola la
+  SUBIDA de los logs que la reparación reescribe (`dbEnqueueLogUpserts`, por
+  `updatedAt` cambiado), no solo el borrado de los descartados; cubre también
+  la fusión de días de fuerza duplicados, que tenía el mismo hueco.
+- **El cardio conserva su id entre guardados.** `WorkoutLogScreen` fija
+  `sessionCardioId` al montar (como `sessionLogId`); antes cada autoguardado
+  estrenaba `generateId()` y dejaba en la nube una fila `cardio_logs` marcada
+  como borrada.
+- **Calendario de Cardio: el "min" ya no desaparece.** Se quita
+  `adjustsFontSizeToFit` de la celda (en Android encogía a saltos y cortaba en
+  el espacio); la unidad va en un `Text` anidado más pequeño.
+- **Tarjeta de disciplina del detalle de cardio.** El nombre ya no se corta
+  ("ANDAR EN"): el bloque de texto tiene `flex: 1` y parte línea. El icono pasa
+  de 20 a 44 y se coloca a la izquierda de título y cifras.
+
+- **Perfil: "Entrenamientos" ya no cuenta el cardio.** Contaba
+  `state.logs.length`, así que una sesión de solo cardio sumaba a la vez ahí y
+  en "Sesiones cardio". Ahora excluye `isCardioOnlyLog`.
+- **Retos y logros ya no saltan a mitad de entreno.** El registro se autoguarda
+  serie a serie y retos/insignias se recalculaban con cada serie: como la
+  comparación de días solo mira los ejercicios presentes en las dos sesiones,
+  un solo ejercicio mejorado daba "¡Reto superado! +3 %". Nuevo
+  `lib/openWorkout.ts`: `WorkoutLogScreen` aparta su `sessionLogId` mientras el
+  día no está completo (`allExercisesDone`) y lo suelta al completarlo o al
+  salir; `useAccountLevel` calcula sin él (`logsWithoutOpenWorkout`, con caché
+  de una entrada para no romper las de retos e insignias). Editar un entreno de
+  otro día no lo aparta. El aviso de nivel recuerda el máximo visto, para no
+  repetirse si apartar el entreno de hoy lo baja un momento.
+- **Arrastrar sobre las flechas ▲▼ ya no cambia el peso.** `StepButton` daba el
+  primer paso en `onPressIn`, antes de saber si el gesto era scroll. Ahora el
+  toque da su paso en `onPress` y la repetición acelerada arranca en
+  `onLongPress` (320 ms); ninguno llega si el scroll se queda el gesto.
+
+### Cambios
+
+- **Asa visible en el bloque de descanso.** El bloque flotante ya se podía
+  apartar arrastrándolo en vertical, pero nada lo decía; ahora lleva un asa
+  arriba al centro: una barra "grabber" de 44×5 (como la de las hojas
+  inferiores; el icono `drag-horizontal` de 18 px apenas se veía). Solo pinta:
+  el gesto sigue siendo de todo el bloque.
+- **Avisos con acción (`Toast`) con piel de la app.** El cartel al pie era un
+  bloque del color del estado (verde a toda la anchura en "Serie borrada") con
+  la acción en contorno blanco, que no leía como botón. Ahora es una tarjeta
+  `surfaceAlt` con borde, icono de estado coloreado, mensaje a la izquierda y
+  la acción ("Deshacer", "Crear cuenta"…) como botón dorado a la derecha. La
+  píldora centrada ("Récord") no cambia.
+- **Calendario: mes, Fuerza/Cardio y días de la semana fijos.** Salen del
+  scroll a una cabecera fija bajo la barra; solo se desplazan la rejilla y sus
+  chuletas.
+- **Rutina: "Editar"/"Hecho" solo con icono** (`TopBarActionButton iconOnly`);
+  el rótulo queda como etiqueta de accesibilidad.
+- **Comunidad con subtítulo** ("Rutinas y gente que entrena"): la barra
+  reserva la línea del subtítulo y sin él quedaba un hueco vacío.
+- **Hero "Entrenamiento completado": la flecha pegada al %.** La fila del
+  subtítulo separaba sus piezas 10 px (pensados para el botón "Cambiar"); ahora
+  3, y "Cambiar" lleva su propio margen.
+- **Inicio: el subtítulo lleva a su rutina y fuera el ⋯.** El nombre de la
+  rutina del subtítulo es pulsable (chevron) y abre la ficha de ESA rutina, la
+  que se enseña; antes el ⋯ tenía una sola opción, "Ir a la rutina", que abría
+  la activa aunque Inicio enseñara otra. `GlassTopBar` gana `subtitleIcon`
+  (por defecto `calendar-edit`) y `HomeScreen` cambia `onOpenActiveRoutine`
+  por `onOpenDisplayedRoutine`.
+- **La nota del ejercicio se escribe en su tarjeta**, como la de la sesión:
+  campo en la propia tarjeta que se autoguarda, y borrarla es vaciarla (vacía
+  y sin foco, se recoge). Fuera el popup "Notas del ejercicio" con
+  Cancelar/Borrar/Guardar; el ⋯ ("Añadir/Editar nota") y el icono de nota con
+  la tarjeta plegada despliegan la tarjeta y ponen el foco en el campo.
+  `ExerciseInputField` cambia `onNotesPress` por `onNotesChange`, y una nota
+  vacía se guarda como `undefined`.
+- **El objetivo de repeticiones, en su casilla.** Fuera la fila "Objetivo
+  3×8-10" de la tarjeta en curso: el rango va en el rótulo de la casilla
+  ("REPETICIONES · 8-10", que encoge si no cabe; alto fijo para no mover las
+  casillas) y las series ya las dicen el botón y los puntos. Con objetivo de
+  una sola serie el botón dice "Añadir última serie" desde el principio.
+- **Niveles al doble de ritmo.** Cada nivel pide la mitad de puntos
+  (`LEVEL_STEP_XP` 25 → 12,5 en `lib/level.ts`, redondeado hacia arriba: 13,
+  38, 75, 125…); con casi un año entrenando se rondaba el nivel 7. El nivel
+  público se corrige solo: `useRecordAccountLevel` sube también cuando la nube
+  tiene los mismos puntos pero otro nivel, y el perfil ajeno deriva el nivel de
+  `profiles.xp` (con `level` de reserva), así que no espera a que su dueño
+  actualice.
+- **Detalle del día: "Editar" solo con el lápiz** (prop `iconOnly` de
+  `TopBarActionButton`; el texto queda como etiqueta de accesibilidad) y la
+  tira-resumen en columnas iguales (un tercio cada una con tres cifras); la
+  cifra o el rótulo que no cabe encoge (`shrinkToFit` nuevo en `TrendDelta` /
+  `AnimatedCounter`) en vez de ensanchar su columna.
+- **Calendario de cardio: el "min" sale siempre.** Número y unidad van en
+  `Text` separados y es el número el que encoge; en un solo `Text`, Android
+  cortaba en el espacio y se comía la unidad.
+- **Tarjetas de gráfica colapsadas del mismo alto en Inicio y Cardio.** El dato
+  de la derecha es ahora `ChartCardStat` (en `ChartCard.tsx`), común a las dos:
+  cifra 15/18 y rótulo 11/14, tanto el % de progreso como las kcal del mes (que
+  iban a 17 y hacían más alta la de Cardio). La cabecera tiene alto mínimo 32 y
+  el "¡Ánimo con tu nueva rutina!" baja a interlineado 16 para no pasarlo.
+- **Recordatorio de entreno una hora antes** (antes media) y con texto nuevo:
+  "¿Listo para tu siguiente entrenamiento?" / "Pulsa cuando quieras
+  comenzar." (`LEAD_MS` en `lib/workoutReminder.ts`; Ajustes lo explica igual).
+- **Aviso "Récord" breve y centrado.** Antes "¡Récord personal!" al pie;
+  ahora píldora en el centro 1,2 s (prop `centered` de `Toast`).
+- **Sin avisos de descanso apilados.** El "Descanso finalizado" usa un
+  identificador fijo (`REST_NOTIFICATION_ID` en `restTimerStore`): el nuevo
+  sustituye al que siga en la bandeja, y al empezar otro descanso se quita el
+  viejo sin tocar. Como mucho hay uno, el del último descanso.
+- **Subtítulos de la barra superior con dato vivo.** Fuera los eslóganes fijos:
+  Configuración enseña la versión (y desaparece del pie), Cardio las sesiones
+  de la semana, Perfil desde cuándo entrenas, Calendario los entrenos (o días
+  de cardio) del mes visible, Rutinas cuántas hay, Logros "N de M", Peso
+  cuándo se actualizó, Datos y nube el estado de la sincronización, rutina
+  pública su autor, Hitos la semana y la rutina, y Progreso el ejercicio o
+  cuántos hay. Comunidad y Nueva rutina se quedan sin subtítulo. Los de texto
+  variable van a una línea para que la barra no cambie de alto al medirse.
+- **Ficha de rutina: "Enviar a alguien" y visibilidad como interruptor.** La
+  fila "Compartir rutina" pasa a "Enviar a alguien" (QR o texto), y "Compartir
+  en la comunidad" a un bloque "En la comunidad" con `OptionToggle` Privada |
+  Pública. Desaparece la pastilla `publicPill` (tinta `onGold` sobre `success`)
+  y el borde de la cabecera usa `primaryLine`.
+- **Accesibilidad con TalkBack.** Rol y etiqueta en los controles que no los
+  tenían: flechas ▲▼ y nombre del ejercicio del registro, Nueva rutina,
+  Calendario (celdas y flechas de mes, ahora de 48 dp), campo de cardio,
+  Configuración, "Fecha del entreno", barra inferior (rol de pestaña y
+  seleccionada) y cabecera plegable de `ChartCard` (estado abierta/cerrada).
+- **"Añadir 3.ª serie" en vez de "Añadir serie 3/3".** El recuento se leía como
+  "ya van 3 de 3". El botón dice la serie que entra en ordinal ("Add 3rd set"),
+  "Añadir última serie" en la última y solo "Añadir serie" sin objetivo o con
+  una sola serie. Lo hecho lo cuentan unos puntos ●●○ tras las burbujas de
+  series (solo en curso y con objetivo de varias series).
+
+- **Un solo nombre: "logro".** La app llamaba igual "logros" e "insignias" a lo
+  mismo; ahora todo dice logro (Logros y tu nivel, la Actividad, el perfil de
+  Comunidad, "Tu perfil enseña tus logros…"), y en inglés "achievement" (antes
+  mezclaba "badge" y "achievement"). El código sigue llamándolo `badge`.
+
+- **Elige la sesión: la semana en curso, a la vista, y semana nueva explícita.**
+  Encima de la lista, una cabecera "SEMANA 5 · 1 de 4 días" con una barra por
+  día y el botón "Nueva semana" (solo con la semana a medias y sin entreno
+  hoy): confirma con cuántos días se cierra y abre el Día 1 con
+  `startsNewWeek` (el prop vuelve: `DaySelectorScreen` → `App.tsx` →
+  `WorkoutLogScreen`), así abre semana aunque el Día 1 no estuviera hecho.
+  Tocar un día ya hecho abre un menú: "Ver lo que hiciste" (el Detalle, que
+  vuelve a Elige la sesión con el nuevo `back` de la pantalla `detail`) o
+  "Repetirlo y empezar semana nueva". `currentWeekDayState` devuelve además
+  `weekNumber` (el mismo de Inicio) y `logByDayId`. La rutina pasa del chip
+  de la derecha al subtítulo (una línea: con dos, la barra se estimaba más baja
+  y la lista nacía pegada al título y se recolocaba). El menú no lleva fecha y
+  sus dos opciones pesan igual ("Empezar una nueva semana con este día"). La
+  tarjeta hecha ya no se
+  apaga entera: visto en la ceja ("DÍA 1 ✓ HECHO") y chevron del menú; la de
+  hoy dice "Toca para seguir" y abre su registro.
+- **Perfil: las casillas dicen qué hay detrás.** Rutinas enseña la rutina
+  activa, Peso el último anotado y Logros cuántas insignias llevas ("12 de
+  30"), como la fila "Datos y nube" de Configuración. Icono de 38 a 32 para
+  que quepa la línea.
+- **Inicio sin rutinas: un solo "Crear rutina".** "Primeros pasos" ya no
+  repite el botón dorado de la hero; solo queda el camino alternativo, "Traer
+  una de la comunidad".
+- **El cardio se guarda como las series: una fila por entrada.** Nueva tabla
+  `cardio_entries` (local, SQLite v9, y en Supabase) con orden, disciplina como
+  id fijo (`treadmill-walk`…; null para "Otro", que guarda su nombre en
+  `label`), minutos, velocidad y pendiente. Ids deterministas
+  (`cardioId:orden`) y `workout_logs_id` duplicado para que el sync filtre por
+  log. Las entradas se derivan del texto al guardar (`withCardioEntries`,
+  `cardioEntriesFromRaw` en `lib/cardio.ts`), no en cada lectura; el rótulo
+  se traduce desde el id y las kcal eligen modelo por id (`gaitOf`). La
+  migración v9 rellena el histórico local y, en el primer sync de cada cuenta
+  con la versión nueva, `backfillCloudCardioEntries` sube a la nube las filas de
+  todo su cardio (una vez por cuenta; si falla, se reintenta en el siguiente
+  sync). No se borra nada de lo viejo. **Convivencia:** `raw_input` sigue
+  siendo la verdad mientras haya móviles sin actualizar; si las filas no
+  cuadran con el texto (`entriesMatchRaw`), manda el texto. Push, pull,
+  backup y restauración toleran que la tabla aún no exista en la nube.
+- **Sync: arranque sin novedades en una petición.** Antes del pull,
+  `remoteHasChanges` (`lib/cloud/sync.ts`) llama a la función
+  `sync_max_updated` (nueva en `supabase/schema.sql`), que devuelve el mayor
+  `updated_at` del usuario en todas sus tablas; si no supera el cursor, no se
+  hacen las ocho consultas del pull. Si la función no existe o falla, se hace
+  el pull completo de siempre.
+- Configuración: "Qué ha cambiado en la versión X" pasa a "Qué ha cambiado en
+  la última versión".
+- **La pestaña de Cardio siempre está en la barra.** Se quita `hasAnyCardio` y
+  el ocultado: sin cardio, deslizar llegaba igual a la pantalla y la barra no
+  marcaba ninguna pestaña. El selector Fuerza/Cardio del Calendario también se
+  ve siempre.
+- **Las cifras de Perfil llevan a su lista:** Rutinas → lista de rutinas,
+  Entrenamientos → Calendario, Sesiones cardio → Cardio (mismo patrón que los
+  contadores de Comunidad).
+- **Ficha de rutina en edición:** "Editar" ya no pliega los días abiertos; la
+  cabecera de un día pliega siempre y "Editar día" tiene su lápiz propio (fuera
+  la insignia de 9 px). En una rutina cerrada, el candado sin explicar pasa a
+  una línea que dice qué se bloquea (nombre y descripción).
+- **Fechas legibles en los historiales:** Inicio pinta "Jue 1 oct" en vez de
+  "1/10/2026" (`weekdayDayMonth`, nuevo en `lib/utils.ts`) y Cardio "Jueves
+  1 oct" con `shortDayMonth`.
+- **El popup de cardio dice qué disciplina es y cuánto vale.** Se titula con
+  el nombre y el icono de la disciplina tocada (antes "Detalles del cardio"
+  para todas) y enseña las kcal estimadas mientras se teclea; sin velocidad
+  avisa "Sin velocidad no se calculan kcal", porque esa entrada cuenta 0 para
+  la hero, la gráfica y los retos.
+- **Cardio recuerda la última vez.** Al elegir una disciplina, minutos,
+  velocidad y pendiente salen sugeridos con la última entrada de esa
+  disciplina (también las propias de "Otro", por nombre), y "Guardar" acepta
+  la sugerencia sin teclear, como "Añadir serie" con el peso. Nuevo
+  `lastCardioEntryByDiscipline` en `lib/cardio.ts` (con su test).
+- **El registro baja solo al ejercicio siguiente.** Al completar (o saltar)
+  el ejercicio en curso, la lista se desplaza hasta dejar el siguiente bajo la
+  barra, o hasta "Entreno completado" si era el último. Desplegar otra tarjeta
+  a mano no mueve nada. `StretchScrollView` ahora pasa su `ref` al scroll de
+  dentro.
+- **Borrar una serie o una entrada de cardio se puede deshacer.** El aviso
+  "Serie borrada · Deshacer" / "Cardio borrado · Deshacer" la devuelve a su
+  sitio. La × de las entradas de cardio pasa a ser la misma que la de las
+  series (disco con la × recortada) en vez de un aspa roja en caja.
+- **Una sola forma de escribir la fecha de un entreno.** El registro
+  ("09/10/2026"), el Detalle ("Jueves, 09/10/2026") y Elige la sesión
+  ("Entreno del 09/10/2026") pasan a la de los historiales, "Jue 9 oct"
+  (`weekdayDayMonth`), que ahora añade el año si no es el actual. Fuera
+  `formatDate` y `formatDateFromKey`, que ya no usaba nadie.
+- **La hero de Cardio dice lo de hoy.** Con cardio hoy, su título pasa de
+  "Insertar cardio" a "Hoy: 380 kcal" (o los minutos si no hay kcal), el dato
+  con el que se comparan las tres referencias de debajo. Tocarla sigue
+  abriendo el registro. Va en el título y no en un subtítulo porque la hero
+  tiene alto fijo y ya lleva la fila de referencias.
+- **Lo apuntado de cardio, debajo de las casillas y con su total.** Guardar
+  una disciplina ya no empuja la rejilla hacia abajo: las casillas quedan
+  arriba y la lista debajo, con cabecera "Hoy · 75 min · 540 kcal" (la fecha si
+  se corrige otro día) en vez de "Cardio", y las kcal de cada entrada.
+- **Las flechas de peso saltan lo que sueles subir.** El salto sale del
+  historial del ejercicio (`weightStepFromHistory`: el menor escalón entre
+  pesos usados, de 0,5 / 1 / 1,25 / 2 / 2,5 / 5; si no, 1 kg como antes), y un
+  peso fuera de esa rejilla va al escalón contiguo (61 → 62,5 / 60).
+- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.9.0
+  (minor: tabla nueva `cardio_entries` con migración SQLite v9 y función
+  `sync_max_updated` en Supabase, más recordatorios, Actividad propia y
+  récords); `versionCode` 31 → 32.
+
+- **Revisión completa (`/revision-app`) del 2026-10-09.** ROADMAP reescrito
+  entero: salen las 2 fichas ya hechas (subtítulos con dato vivo y "Enviar a
+  alguien" con su interruptor de visibilidad), se conservan las 2 vivas
+  (ejercicio improvisado en el registro y retirar `raw_input` del cardio, con
+  sus referencias al código puestas al día) y entran 12: la fecha de un
+  entreno escrita de tres formas, el Detalle que no avisa de "semana aparte" al
+  cambiar la fecha, la duración del Detalle que nunca sale (el registro
+  reescribe todos los `timestamp`), el bloque de descanso que se arrastra sin
+  asa, la semana en curso dibujada distinta en Inicio y en Elige la sesión,
+  rótulos que no cambian de idioma en caliente, el cardio que no recuerda los
+  datos de la última vez, las flechas de peso de kilo en kilo, la nota del
+  ejercicio en popup frente a la de la sesión en el sitio, el subtítulo y el ⋯
+  de Inicio que llevan a rutinas distintas y, como ideas nuevas, añadir un día
+  a una rutina ya creada y apuntar un cardio olvidado desde el Calendario.
+  Después, `/revisar-vista` a fondo sobre las tres vistas nominadas: el
+  **registro de fuerza** (la lista que no baja sola al ejercicio siguiente,
+  borrar una serie sin deshacer y la fila "Objetivo" que repite lo que dicen
+  el botón y los puntos), el **registro de cardio** (el popup que no nombra la
+  disciplina ni avisa de que sin velocidad la sesión vale 0 kcal, la hero de
+  Cardio sin el dato de hoy, la lista que empuja las casillas, corregir una
+  entrada sin borrarla, las disciplinas propias que no se recuerdan y los
+  retos de cardio que el registro no enseña) y la **ficha de rutina** (el
+  editor que oculta series × reps, ordenar días plegándolos uno a uno y el
+  ejercicio de la ficha sin camino a su evolución), más el refuerzo de cinco
+  fichas ya escritas. Total: 26 fichas pendientes. Limpieza sin efecto en el
+  comportamiento:
+
+  - Código muerto: `getActivityCount` (`lib/cloud/activity.ts`), sustituida por
+    `getActivityCounts`; el modo "lista dentro del popup" de
+    `CardioInputField` (botón "Añadir cardio", botón "Añadir" y paso de
+    elegir disciplina en el modal), que su único consumidor nunca usaba porque
+    siempre pasaba `inlinePicker` —el prop desaparece y las casillas son el
+    único modo—; la rama "fallback legado" del cardio del Detalle, inalcanzable
+    (iba dentro de una condición que ya exigía `cardioSession`), con sus
+    `extractIncline` / `extractPaceNumber`; seis estilos de `CommunityScreen`
+    que se quedaron sin uso al pasar la tarjeta a `PublicRoutineCard`,
+    `buttonContainer` del registro y los `bottomSection*` de
+    `ExerciseInputField` (`paddingBottom: 0`, no hacían nada).
+  - `lib/i18n.ts`: fuera 23 traducciones que ningún `t()` puede pedir ("Entre
+    series", "media semanal", "Abriendo…", "Subir"/"Bajar"…) y 28 claves
+    repetidas en dos o tres `register()`; se deja la última aparición, que es
+    la que ganaba, así que ningún texto cambia ("Borrar" seguía siendo
+    "Delete", no el "Clear" de la primera).
+  - Redundancia: Cardio y Inicio recorrían a mano las rutinas para encontrar un
+    día (ahora `findDayInRoutines`, la fuente única) y Cardio montaba a mano la
+    clave de "hace 7 días" (`dateKey`); el Calendario construía el prefijo del
+    mes en tres sitios; el registro calculaba la rutina del día dos veces
+    (`getRoutineIdForDay`); Inicio envolvía `buildWorkoutImprovement` en una
+    función que no añadía nada.
+  - `CardioInputField` tipa sus iconos en vez de `as any`, y
+    `GLASS_TOP_BAR_BASE_HEIGHT` sale del barril de `components` (nadie fuera
+    de la barra la usaba, y sumar sobre ella es justo lo que AGENTS prohíbe).
+  - Docs: `ARCHITECTURE.md` decía que la pestaña de Cardio se oculta sin
+    cardio (ya no), su árbol de navegación no tenía Peso, Logros ni Actividad
+    y la lista de `hooks/` y de `lib/` no citaba `useMyProfile`,
+    `useAccountLevel`, `useAvatarPicker`, `openWorkout`, `workoutReminder` ni
+    `userQuiet`; `SETUP.md` daba 19 suites / 260 tests (son 21 / 300), no
+    listaba `BodyWeightScreen`, `ActivityScreen`, `HistoryCard` ni
+    `storage-avatars.sql`, y decía que el cardio se guarda solo como texto.
+  - `npm run type-check` y `npm test` (21 suites, 300 tests) en verde.
+
 ## Version 0.8.2 - 2026-10-02
 
 ### Cambios
@@ -39,7 +521,7 @@
     desaparece sola. Efecto también en los entrenos de fuerza: sus bloques para
     mover de semana se calculan ya sin las sesiones de cardio, igual que en el
     resto de la app.
-  Tres tests nuevos de `topDisciplineIconName` en `cardio.test.ts`.
+    Tres tests nuevos de `topDisciplineIconName` en `cardio.test.ts`.
 - **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.2;
   `versionCode` 30 → 31.
 
@@ -331,7 +813,7 @@
   amarilla en su leyenda.
 - **El botón "Seguir" ya no miente mientras carga.** `following` nacía en `false`,
   así que un perfil al que YA seguías enseñaba "Seguir" en oro durante la
-  consulta y tocarlo en ese instante ejecutaba un *unfollow* creyendo empezar a
+  consulta y tocarlo en ese instante ejecutaba un _unfollow_ creyendo empezar a
   seguirlo. Ahora es `null` hasta saberse, con un hueco del alto exacto del botón
   (44) en su lugar; igual el avatar, que estrena `loading` en `Avatar` para
   pintar un círculo neutro en vez del marcador de "no tiene foto".

@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
+import { Platform, unstable_batchedUpdates } from 'react-native';
 import { WeightSegment } from './cardio';
 import { getCardioWeightHistory, setCardioWeightHistory } from './storage';
 import { REST_TIMER_CHANNEL_ID } from './restTimerStore';
@@ -50,7 +50,11 @@ export function getBodyWeightSegments(): WeightSegment[] {
 
 function publish(next: WeightSegment[]): void {
   segments = next;
-  for (const listener of Array.from(listeners)) listener();
+  // En un solo pase de render: llega desde promesas (la carga, el guardado) y,
+  // con la arquitectura antigua, sin agrupar cada suscriptor repintaba aparte.
+  unstable_batchedUpdates(() => {
+    for (const listener of Array.from(listeners)) listener();
+  });
 }
 
 function subscribe(listener: Listener): () => void {

@@ -28,6 +28,7 @@ import {
   useGlassTopBarHeight,
   GradientFill,
   GymIconGrid,
+  OptionToggle,
   resolveDayIcon,
   RoutineIntensityPill,
   RoutineOriginPill,
@@ -262,11 +263,10 @@ export function RoutineDetailScreen({
       commitAllDrafts();
       setDrafts({});
       setEditingExerciseId(null);
-    } else {
-      // Entrar en edición pliega los días: así el asa para ordenarlos está
-      // desde el primer momento, y cada día se abre con su peldaño.
-      setExpandedDayIds(new Set());
     }
+    // Entrar en edición respeta los días abiertos: lo habitual es cambiar un
+    // ejercicio del día que estabas mirando. Ordenar días sigue pidiendo
+    // plegarlos (lo dice `dragHint`).
     setIsEditing(!isEditing);
   };
 
@@ -619,38 +619,21 @@ export function RoutineDetailScreen({
           {/* Asa de arrastre (la pone SortableList) para ordenar los
                 días: solo en edición y con todos plegados. */}
           {dragHandle}
-          {/* En edición la cabecera entera abre "Editar día" (nombre +
-                icono), con el lápiz que lo delata. En lectura pliega y
-                despliega el día, igual que el nombre de un ejercicio en la
-                pantalla de registro. */}
+          {/* La cabecera pliega y despliega SIEMPRE, en lectura y en edición,
+                igual que el nombre de un ejercicio en la pantalla de registro.
+                "Editar día" (nombre + icono) tiene su propio lápiz. */}
           <Pressable
             style={({ pressed }) => [
               styles.dayHeaderLeft,
               pressed && styles.buttonPressed,
             ]}
-            onPress={() =>
-              isEditing ? handleOpenDayModal(day.id) : toggleDay(day)
-            }
+            onPress={() => toggleDay(day)}
             accessibilityRole="button"
-            accessibilityLabel={
-              isEditing
-                ? t('Editar día')
-                : expanded
-                ? t('Plegar día')
-                : t('Desplegar día')
-            }
+            accessibilityLabel={expanded ? t('Plegar día') : t('Desplegar día')}
+            accessibilityState={{ expanded }}
           >
             <View style={styles.dayIconButton}>
               <DayAccentIcon emoji={day.emoji} name={day.name} size={32} />
-              {isEditing && (
-                <View style={styles.dayIconEditBadge}>
-                  <MaterialCommunityIcons
-                    name="pencil"
-                    size={9}
-                    color={theme.colors.onGold}
-                  />
-                </View>
-              )}
             </View>
             <View style={styles.dayTitleWrap}>
               {/* El número del día baja a ceja: es la referencia, no el
@@ -672,6 +655,25 @@ export function RoutineDetailScreen({
             <Text style={styles.dayCount} numberOfLines={1}>
               {exerciseCountLabel(day)}
             </Text>
+          )}
+          {isEditing && canEdit && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.infoEditChip,
+                styles.infoEditChipEditable,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => handleOpenDayModal(day.id)}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('Editar día')}
+            >
+              <MaterialCommunityIcons
+                name="pencil"
+                size={16}
+                color={theme.colors.onGold}
+              />
+            </Pressable>
           )}
         </View>
 
@@ -842,19 +844,12 @@ export function RoutineDetailScreen({
             {totalSets > 0 && (
               <RoutineIntensityPill level={routineIntensity(totalSets)} />
             )}
-            {isEditing && canEdit && (
-              <View
-                style={[
-                  styles.infoEditChip,
-                  !isClosed && styles.infoEditChipEditable,
-                ]}
-              >
+            {isEditing && canEdit && !isClosed && (
+              <View style={[styles.infoEditChip, styles.infoEditChipEditable]}>
                 <MaterialCommunityIcons
-                  name={isClosed ? 'lock-outline' : 'pencil'}
+                  name="pencil"
                   size={16}
-                  color={
-                    isClosed ? theme.colors.textSecondary : theme.colors.onGold
-                  }
+                  color={theme.colors.onGold}
                 />
               </View>
             )}
@@ -876,6 +871,22 @@ export function RoutineDetailScreen({
             <Text style={styles.infoDescription}>
               {currentRoutine.description}
             </Text>
+          )}
+          {/* Antes un candado sin explicar, mientras días y ejercicios se
+              editaban igual: prometía más de lo que bloquea. */}
+          {isEditing && canEdit && isClosed && (
+            <View style={styles.closedNote}>
+              <MaterialCommunityIcons
+                name="lock-outline"
+                size={14}
+                color={theme.colors.textSecondary}
+              />
+              <Text style={styles.closedNoteText}>
+                {t(
+                  'Rutina cerrada: el nombre y la descripción ya no se cambian. Los días y ejercicios, sí.'
+                )}
+              </Text>
+            </View>
           )}
         </Pressable>
 
@@ -907,21 +918,23 @@ export function RoutineDetailScreen({
         {/* El descanso entre series ya no es de la rutina: es un ajuste de la
             persona y se toca desde Configuración (o desde el ⋯ del registro). */}
 
-        {/* Una sola acción de compartir: la hoja de dentro ofrece QR y texto. */}
+        {/* Mandársela a alguien (QR o texto). Se llama por lo que hace: antes
+            era "Compartir rutina", con el mismo verbo que publicar en el tablón. */}
         <Pressable
           style={({ pressed }) => [
             styles.settingRow,
             pressed && styles.buttonPressed,
           ]}
           onPress={() => setShowShareModal(true)}
+          accessibilityRole="button"
         >
           <MaterialCommunityIcons
-            name="share-variant"
+            name="send-outline"
             size={20}
             color={theme.colors.text}
           />
           <View style={styles.settingRowTextWrap}>
-            <Text style={styles.settingRowLabel}>{t('Compartir rutina')}</Text>
+            <Text style={styles.settingRowLabel}>{t('Enviar a alguien')}</Text>
             <Text style={styles.settingRowHint}>
               {t('Por QR o copiando el texto')}
             </Text>
@@ -933,41 +946,44 @@ export function RoutineDetailScreen({
           />
         </Pressable>
 
-        {/* Publicar en la comunidad (tablón). is_public vive en la nube; requiere
-            sesión. Es un interruptor visible, no un gesto oculto. Una rutina
+        {/* Visibilidad en la comunidad: un ajuste de dos posiciones, así que es
+            `OptionToggle` (como Tema e Idioma) y no una fila que cambia al
+            tocarla. is_public vive en la nube y requiere sesión. Una rutina
             ajena no se republica: no es tuya. */}
         {!isLinked && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.settingRow,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={handleTogglePublic}
-            disabled={publishing}
-          >
-            <MaterialCommunityIcons
-              name={isPublic ? 'earth' : 'earth-off'}
-              size={20}
-              color={isPublic ? theme.colors.success : theme.colors.text}
-            />
-            <View style={styles.settingRowTextWrap}>
-              <Text style={styles.settingRowLabel}>
-                {t('Compartir en la comunidad')}
-              </Text>
-              <Text style={styles.settingRowHint}>
-                {!user
-                  ? t('Inicia sesión para compartir')
-                  : isPublic
-                  ? profileVisible
-                    ? t('Pública · aparece en el tablón')
-                    : t('Pública · firmada como «Anónimo»')
-                  : t('Privada · solo tú la ves')}
-              </Text>
+          <View style={[styles.settingRow, styles.visibilityBlock]}>
+            <View style={styles.visibilityHead}>
+              <MaterialCommunityIcons
+                name={isPublic ? 'earth' : 'earth-off'}
+                size={20}
+                color={theme.colors.text}
+              />
+              <View style={styles.settingRowTextWrap}>
+                <Text style={styles.settingRowLabel}>
+                  {t('En la comunidad')}
+                </Text>
+                <Text style={styles.settingRowHint}>
+                  {!user
+                    ? t('Inicia sesión para compartir')
+                    : isPublic
+                    ? profileVisible
+                      ? t('Aparece en el tablón')
+                      : t('Aparece en el tablón firmada como «Anónimo»')
+                    : t('Solo tú la ves')}
+                </Text>
+              </View>
             </View>
-            <Text style={[styles.publicPill, isPublic && styles.publicPillOn]}>
-              {isPublic ? t('Pública') : t('Privada')}
-            </Text>
-          </Pressable>
+            <OptionToggle
+              options={[
+                { value: 'private', label: t('Privada'), icon: 'lock-outline' },
+                { value: 'public', label: t('Pública'), icon: 'earth' },
+              ]}
+              value={isPublic ? 'public' : 'private'}
+              onChange={() => {
+                if (!publishing) handleTogglePublic();
+              }}
+            />
+          </View>
         )}
 
         {/* Rutina ajena: se dice qué se puede y qué no, con la salida al lado.
@@ -1029,6 +1045,7 @@ export function RoutineDetailScreen({
               label={isEditing ? t('Hecho') : t('Editar')}
               icon={isEditing ? 'check' : 'pencil'}
               active={isEditing}
+              iconOnly
               onPress={toggleEditing}
             />
           ) : (
@@ -1136,7 +1153,7 @@ export function RoutineDetailScreen({
       <AppModal
         visible={showShareModal}
         onRequestClose={() => setShowShareModal(false)}
-        title={t('Compartir rutina')}
+        title={t('Enviar a alguien')}
         icon="share-variant"
         message={
           qrTooBig
@@ -1322,7 +1339,7 @@ const makeStyles = () =>
       backgroundColor: theme.colors.primaryMuted,
       borderRadius: theme.borderRadius.lg,
       borderWidth: 1,
-      borderColor: theme.colors.primary + '55',
+      borderColor: theme.colors.primaryLine,
       padding: theme.spacing.md,
       marginBottom: 16,
       overflow: 'hidden',
@@ -1357,6 +1374,17 @@ const makeStyles = () =>
     infoEditChipEditable: {
       backgroundColor: theme.colors.primaryFill,
       borderColor: theme.colors.primaryFillDark,
+    },
+    closedNote: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    closedNoteText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+      color: theme.colors.textSecondary,
     },
     infoDescription: {
       fontSize: 14,
@@ -1442,22 +1470,9 @@ const makeStyles = () =>
       alignItems: 'center',
       flex: 1,
     },
-    // El icono lleva el micro-badge de lápiz que delata la cabecera como
-    // editable (en edición, tocarla abre "Editar día": nombre + icono).
     dayIconButton: {
       marginRight: 10,
       paddingTop: 2,
-    },
-    dayIconEditBadge: {
-      position: 'absolute',
-      right: -4,
-      bottom: -4,
-      width: 15,
-      height: 15,
-      borderRadius: 8,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primaryFill,
     },
     dayTitleWrap: {
       flex: 1,
@@ -1591,21 +1606,15 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
       lineHeight: 17,
     },
-    // Pastilla de estado público/privado a la derecha de la fila de comunidad.
-    publicPill: {
-      fontSize: 12,
-      fontWeight: '800',
-      color: theme.colors.textSecondary,
-      backgroundColor: theme.colors.surfaceAlt,
-      borderRadius: theme.borderRadius.pill,
-      paddingHorizontal: 10,
-      paddingVertical: 4,
-      overflow: 'hidden',
-      lineHeight: 16,
+    // Bloque de visibilidad: cabecera (icono + estado) y el interruptor debajo.
+    visibilityBlock: {
+      flexDirection: 'column',
+      alignItems: 'stretch',
     },
-    publicPillOn: {
-      color: theme.colors.onGold,
-      backgroundColor: theme.colors.success,
+    visibilityHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
     },
     shareModalFooter: {
       gap: 10,

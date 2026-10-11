@@ -22,13 +22,14 @@ import {
 } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
-import { t, dateLocale } from '@lib/i18n';
+import { t } from '@lib/i18n';
 import { buildWorkoutImprovement, ImprovementResult } from '@lib/progress';
 import {
   findDayInRoutines,
   getLogTimestamp,
   getToday,
   logDateKey,
+  weekdayDayMonth,
 } from '@lib/utils';
 import { animateLayout } from '@lib/layoutAnimation';
 import {
@@ -63,9 +64,12 @@ import {
   ProgressRing,
   HeroVariant,
   GradientFill,
+  HistoryCard,
+  HistoryCardRow,
   TrendDelta,
   BarChart,
   ChartCard,
+  ChartCardStat,
   BarChartPoint,
   getChartWidth,
   resolveDayIcon,
@@ -83,10 +87,10 @@ interface HomeScreenProps {
   onEditLog?: (log: WorkoutLog, day: WorkoutDay) => void;
   onOpenDaySelector?: () => void;
   onOpenRoutineSelector?: () => void;
-  // Ficha de la rutina ACTIVA desde el ⋯. Sin rutina activa no se pasa.
-  onOpenActiveRoutine?: () => void;
+  // Ficha de la rutina que se ENSEÑA (la del subtítulo). Sin rutina no se pasa.
+  onOpenDisplayedRoutine?: () => void;
   onCreateRoutine?: () => void;
-  // "Ver la comunidad" de Primeros pasos: salta a la pestaña Comunidad.
+  // "Traer una de la comunidad" de Primeros pasos: salta a la pestaña Comunidad.
   onOpenCommunity?: () => void;
   onShowWeekAchievement?: (
     achievements: WeekAchievements,
@@ -182,7 +186,7 @@ export function HomeScreen({
   onEditLog,
   onOpenDaySelector,
   onOpenRoutineSelector,
-  onOpenActiveRoutine,
+  onOpenDisplayedRoutine,
   onCreateRoutine,
   onOpenCommunity,
   onShowWeekAchievement,
@@ -286,15 +290,7 @@ export function HomeScreen({
   const todayExerciseProgress = useMemo((): number | null => {
     if (!todayLog) return null;
 
-    let todayDay: WorkoutDay | undefined;
-    for (const routine of state.routines) {
-      const day = routine.days.find((d) => d.id === todayLog.dayId);
-      if (day) {
-        todayDay = day;
-        break;
-      }
-    }
-
+    const todayDay = findDayInRoutines(state.routines, todayLog.dayId);
     if (!todayDay || todayDay.exercises.length === 0) return 1;
 
     // Un ejercicio está completo cuando alcanza su número de series objetivo
@@ -468,18 +464,12 @@ export function HomeScreen({
     );
   };
 
-  // Mejora entre dos sesiones: se agregan los ejercicios que tienen las DOS y
-  // se saca UN solo porcentaje (mismo criterio que Detail y la gráfica). Los
-  // ejercicios que hoy no se hicieron quedan fuera, no cuentan como cero.
-  const computeImprovementBetweenLogs = (
-    currentLog: WorkoutLog,
-    previousLog: WorkoutLog | null
-  ): ImprovementResult | null =>
-    buildWorkoutImprovement(currentLog, previousLog);
-
-  // Mejora de una sesión respecto a la anterior del mismo día (independiente de la semana).
+  // Mejora de una sesión respecto a la anterior del mismo día (independiente de
+  // la semana). Se agregan los ejercicios que tienen las DOS y se saca UN solo
+  // porcentaje (mismo criterio que Detail y la gráfica). Los ejercicios que hoy
+  // no se hicieron quedan fuera, no cuentan como cero.
   const getLogImprovement = (currentLog: WorkoutLog) =>
-    computeImprovementBetweenLogs(
+    buildWorkoutImprovement(
       currentLog,
       getPreviousFilledLogForSameDay(currentLog)
     );
@@ -637,8 +627,7 @@ export function HomeScreen({
   // ¿Se puede desplegar la gráfica de progreso? Primera semana de la rutina:
   // no hay previa con la que comparar. Y puede haber varias semanas y aun así
   // ninguna barra: si todas las posteriores a la base son de descarga o no
-  // entrenaron el día filtrado, no hay nada que dibujar. Lo usan la tarjeta
-  // de progreso y la hero de estadísticas (que la abre al tocarla).
+  // entrenaron el día filtrado, no hay nada que dibujar.
   const canOpenProgressChart =
     filteredWeeklyProgress.length > 1 && progressChart.bars.length > 0;
 
@@ -654,26 +643,6 @@ export function HomeScreen({
     return 0;
   })();
 
-  // Resumen del entreno de hoy para la hero de "completado": ejercicios hechos
-  // y, si hay con qué comparar, el % frente a la vez anterior (el mismo dato
-  // que su tarjeta del historial). En descarga no se compara.
-  const todayResultLabel = (): string | undefined => {
-    if (!todayLog) return undefined;
-    const done = todayLog.exercises.filter((ex) =>
-      (ex.parsedSets || []).some((set) => set.weight !== -1 && set.reps !== -1)
-    ).length;
-    const parts = [
-      done === 1 ? t('1 ejercicio') : t('{n} ejercicios', { n: done }),
-    ];
-    const improvement = todayLog.isDeload ? null : getLogImprovement(todayLog);
-    if (improvement) {
-      const pct = Math.round(improvement.percent);
-      const sign = pct === 0 ? '' : improvement.isImproved ? '+' : '-';
-      parts.push(`${sign}${pct} %`);
-    }
-    return parts.join(' · ');
-  };
-
   // Estado visual de la tarjeta principal según la situación de la rutina/día.
   const getHeroState = (): {
     variant: HeroVariant;
@@ -681,6 +650,11 @@ export function HomeScreen({
     title: string;
     titleIcon?: string;
     subtitle?: string;
+    // Flecha arriba junto al subtítulo, solo cuando hay mejora que mostrar
+    // (completado, mejora). El glifo "↑" dentro del texto se veía mal con la
+    // tipografía display (Anton no tiene un buen trazo para él): un icono
+    // aparte, como el resto de flechas de la app (`TrendDelta`).
+    subtitleIcon?: string;
     // El subtítulo NOMBRA el día que toca, así que puede llevar a cambiarlo.
     // Solo en ese estado: los otros subtítulos de la hero dicen otra cosa
     // ("Pulsa para compartir resultados", "Pulsa para cambiar la rutina") y
@@ -728,13 +702,21 @@ export function HomeScreen({
       };
     }
     if (todayWorkoutStatus === 'completed') {
+      // El resultado de hoy: el % frente a la vez anterior (el mismo dato que
+      // su tarjeta del historial), o "Sin mejora" si no hay con qué comparar
+      // o no se ha mejorado. En descarga no se compara. Es la recompensa del
+      // momento y dice qué hay detrás del toque (abre el registro de hoy).
+      const improvement =
+        todayLog && !todayLog.isDeload ? getLogImprovement(todayLog) : null;
+      const improved = !!improvement?.isImproved;
       return {
         variant: 'completed',
         icon: 'check-bold',
         title: t('Entrenamiento completado'),
-        // El resultado de hoy: es la recompensa del momento y dice qué hay
-        // detrás del toque (abre el registro de hoy para revisarlo).
-        subtitle: todayResultLabel(),
+        subtitle: improved
+          ? t('{n} % de mejora', { n: Math.round(improvement!.percent) })
+          : t('Sin mejora'),
+        subtitleIcon: improved ? 'arrow-up-bold' : undefined,
       };
     }
     return {
@@ -763,13 +745,8 @@ export function HomeScreen({
     () => computeStreak(completionGroupedByBlock, activeDays),
     [completionGroupedByBlock, activeDays]
   );
-  const getExecutionDateLabel = (log: WorkoutLog): string => {
-    if (log.date) {
-      return new Date(`${log.date}T00:00:00`).toLocaleDateString(dateLocale);
-    }
-
-    return new Date(log.createdAt).toLocaleDateString(dateLocale);
-  };
+  const getExecutionDateLabel = (log: WorkoutLog): string =>
+    weekdayDayMonth(logDateKey(log));
 
   // Una sola forma de responder "¿es de hoy?" en toda la pantalla: la clave
   // de día del log contra la de hoy (ambas locales, `logDateKey`/`getToday`).
@@ -859,6 +836,7 @@ export function HomeScreen({
               title={hero.title}
               titleIcon={hero.titleIcon}
               subtitle={hero.subtitle}
+              subtitleIcon={hero.subtitleIcon}
               onPress={handleStartPress}
             />
             <View style={styles.firstStepsCard}>
@@ -890,24 +868,20 @@ export function HomeScreen({
                   <Text style={styles.firstStepText}>{step.text}</Text>
                 </View>
               ))}
-              <View style={styles.firstStepsActions}>
-                <Button
-                  title={t('Crear rutina')}
-                  onPress={() => onCreateRoutine?.()}
-                  variant="primary"
-                  size="medium"
-                  style={styles.firstStepsButton}
-                />
-                {!!onOpenCommunity && (
+              {/* Crear ya lo hace la hero de arriba: aquí solo el camino
+                  alternativo. Dos botones dorados con la misma acción hacían
+                  dudar de si eran cosas distintas. */}
+              {!!onOpenCommunity && (
+                <View style={styles.firstStepsActions}>
                   <Button
-                    title={t('Ver la comunidad')}
+                    title={t('Traer una de la comunidad')}
                     onPress={onOpenCommunity}
                     variant="secondary"
                     size="medium"
                     style={styles.firstStepsButton}
                   />
-                )}
-              </View>
+                </View>
+              )}
             </View>
           </>
         ) : (
@@ -923,6 +897,7 @@ export function HomeScreen({
               title={hero.title}
               titleIcon={hero.titleIcon}
               subtitle={hero.subtitle}
+              subtitleIcon={hero.subtitleIcon}
               onPress={handleStartPress}
               // El subtítulo nombra el día que toca (tocar la tarjeta entra en
               // él); su botón "Cambiar" abre "Elige la sesión" para coger otro.
@@ -945,7 +920,6 @@ export function HomeScreen({
             // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
             // sin flecha ni porcentaje, solo un mensaje de ánimo.
             const isFirstWeek = filteredWeeklyProgress.length <= 1;
-            const canOpenChart = canOpenProgressChart;
             // El borde de la tarjeta de la gráfica es siempre el acento
             // estructural. El verde/rojo solo aparece en el dato de
             // subida/bajada de dentro.
@@ -959,7 +933,7 @@ export function HomeScreen({
                 accent={progressAccent}
                 icon="chart-bar"
                 title={t('Progreso / semana')}
-                expandable={canOpenChart}
+                expandable={canOpenProgressChart}
                 expanded={showWeeklyProgressChart}
                 onToggle={() => {
                   animateLayout();
@@ -975,22 +949,17 @@ export function HomeScreen({
                     // la rutina (cada día contra su primera sesión), no contra la
                     // semana anterior como el de las cabeceras del historial. Se
                     // dice debajo para que las dos cifras no parezcan la misma.
-                    <View style={styles.progressDeltaWrap}>
-                      <TrendDelta
-                        value={
-                          latestIsDeload
-                            ? lastLoadImprovement
-                            : latestPoint.improvement
-                        }
-                        iconSize={16}
-                        color={
-                          latestIsDeload ? theme.colors.emoji_blue : undefined
-                        }
-                      />
-                      <Text style={styles.progressDeltaBase}>
-                        {t('desde la semana 1')}
-                      </Text>
-                    </View>
+                    <ChartCardStat
+                      trend={{
+                        value: latestIsDeload
+                          ? lastLoadImprovement
+                          : latestPoint.improvement,
+                        color: latestIsDeload
+                          ? theme.colors.emoji_blue
+                          : undefined,
+                      }}
+                      caption={t('desde la semana 1')}
+                    />
                   ) : // Sin punto que mostrar no se inventa un dato: antes caía a
                   // un "0%" verde en texto plano —una TERCERA forma de pintar
                   // la mejora— que además decía "no has progresado" donde en
@@ -1000,22 +969,16 @@ export function HomeScreen({
                 summary={
                   /* La racha de semanas completas (antes un chip suelto sobre
                      la tarjeta). Sustituye a las cifras de kg levantados. Solo
-                     con la rutina activa: una cerrada ya no suma racha. */
-                  isDisplayedRoutineActive ? (
+                     con la rutina activa (una cerrada ya no suma racha) y con
+                     al menos 2 semanas seguidas: con 0 o 1 no hay racha que
+                     contar todavía. */
+                  isDisplayedRoutineActive && streak.weeks >= 2 ? (
                     <StatsStrip
                       icon="fire"
                       iconColor={theme.colors.emoji_orange}
                       value={String(streak.weeks)}
-                      unit={
-                        streak.weeks === 1
-                          ? t('semana seguida')
-                          : t('semanas seguidas')
-                      }
-                      meta={
-                        streak.weeks > 0
-                          ? t('{n} días entrenados', { n: streak.days })
-                          : t('completa la semana para empezarla')
-                      }
+                      unit={t('semanas seguidas')}
+                      meta={t('{n} días entrenados', { n: streak.days })}
                     />
                   ) : null
                 }
@@ -1172,13 +1135,14 @@ export function HomeScreen({
                                 todayWorkoutStatus === 'in-progress';
                               const dayDone = !!dayLog && !dayInProgress;
                               // El aro dorado marca el día que TOCA INSERTAR.
-                              // Con el de hoy a medias no toca ningún otro
-                              // todavía: seguimos dentro de ese, así que nadie
-                              // se lleva el dorado hasta cerrarlo.
+                              // Mientras hoy esté a medias o ya completado,
+                              // seguimos "dentro" de ese día: nadie se lleva
+                              // el dorado hasta que hoy vuelva a estar sin
+                              // empezar (es decir, hasta que toque de verdad).
                               const dayNext =
                                 !dayLog &&
                                 day.id === suggestedDay?.id &&
-                                todayWorkoutStatus !== 'in-progress';
+                                todayWorkoutStatus === 'none';
                               if (dayInProgress) {
                                 return (
                                   <ProgressRing
@@ -1409,14 +1373,32 @@ export function HomeScreen({
                         const improvement = getLogImprovement(log);
                         const isToday = isLogFromToday(log);
 
+                        // El % por sesión solo en la semana en curso y en hoy,
+                        // donde es accionable ("¿voy mejor que la última vez?").
+                        // En semanas cerradas el % de la cabecera ya resume y el
+                        // detalle de la sesión conserva su %. Las semanas de
+                        // descarga no lo llevan: la cabecera ya rotula "Descarga",
+                        // así que sus días se ven como el resto.
+                        //
+                        // Mide lo mismo que el de la cabecera de la semana (contra
+                        // la vez anterior), así que se pinta con el mismo
+                        // TrendDelta. OJO: el de la tarjeta de progreso NO es este
+                        // dato, es el acumulado desde la semana 1, y por eso lleva
+                        // su rótulo debajo. El "igual" (el "=" en ámbar) lo cubre ya
+                        // el propio TrendDelta, y cuando no hay con qué comparar no
+                        // se pinta nada en vez de un "—" suelto. Si es el día de hoy
+                        // y aún está a medias, tampoco: comparar una sesión sin
+                        // cerrar no tiene sentido hasta que se completa.
+                        const showTrend =
+                          (isCurrentWeek || isToday) &&
+                          !isDeloadWeek &&
+                          !!improvement &&
+                          (!isToday || todayWorkoutStatus === 'completed');
+
                         return (
                           <View key={key}>
-                            <Pressable
-                              style={({ pressed }: { pressed: boolean }) => [
-                                styles.historyLogCard,
-                                isToday && styles.historyLogCardToday,
-                                pressed && styles.historyLogCardPressed,
-                              ]}
+                            <HistoryCard
+                              isToday={isToday}
                               onPress={() => {
                                 if (isToday) {
                                   // Hoy: toque directo continúa/edita el registro
@@ -1429,91 +1411,60 @@ export function HomeScreen({
                                 }
                               }}
                             >
-                              {isToday && (
-                                <GradientFill
-                                  accent={theme.colors.primaryLine}
-                                />
-                              )}
-                              <View style={styles.historyLogHeader}>
-                                <View style={styles.historyLogLeft}>
-                                  <View style={styles.historyLogAccent}>
-                                    <DayAccentIcon
-                                      emoji={day.emoji}
-                                      name={day.name}
-                                      size={36}
-                                    />
-                                  </View>
-                                  <View style={styles.historyLogInfo}>
-                                    <View style={styles.historyLogNameRow}>
-                                      <Text
-                                        style={styles.historyLogDayName}
-                                        numberOfLines={1}
+                              <HistoryCardRow
+                                icon={
+                                  <DayAccentIcon
+                                    emoji={day.emoji}
+                                    name={day.name}
+                                    size={36}
+                                  />
+                                }
+                                title={getDisplayDayName(day.name)}
+                                date={getExecutionDateLabel(log)}
+                                right={
+                                  <View style={styles.historyLogRight}>
+                                    {showTrend && (
+                                      <TrendDelta
+                                        value={improvement!.percent}
+                                        improved={improvement!.isImproved}
+                                      />
+                                    )}
+                                    {/* Solo el día de HOY lleva el ⋯ aquí (Ver
+                                        detalle / Eliminar): un toque en un día
+                                        pasado ya abre el Detalle, la única
+                                        superficie de acciones del log (editar,
+                                        fecha, mover semana, borrar). */}
+                                    {isToday && (
+                                      <Pressable
+                                        ref={todayOptionsRef}
+                                        style={({
+                                          pressed,
+                                        }: {
+                                          pressed: boolean;
+                                        }) => [
+                                          styles.logOptionsButton,
+                                          pressed &&
+                                            styles.logOptionsButtonPressed,
+                                        ]}
+                                        onPress={() => {
+                                          setLogWithOptionsId(log.id);
+                                          setSelectedLogDayForOptions(day);
+                                        }}
+                                        hitSlop={8}
+                                        accessibilityRole="button"
+                                        accessibilityLabel={t('Más opciones')}
                                       >
-                                        {getDisplayDayName(day.name)}
-                                      </Text>
-                                    </View>
-                                    <Text style={styles.historyLogDate}>
-                                      {getExecutionDateLabel(log)}
-                                    </Text>
+                                        <MaterialCommunityIcons
+                                          name="dots-horizontal"
+                                          size={20}
+                                          color={theme.colors.textSecondary}
+                                        />
+                                      </Pressable>
+                                    )}
                                   </View>
-                                </View>
-                                {/* El % por sesión solo en la semana en curso y en hoy,
-                                    donde es accionable ("¿voy mejor que la última vez?").
-                                    En semanas cerradas el % de la cabecera ya resume y el
-                                    detalle de la sesión conserva su %. Las semanas de
-                                    descarga no lo llevan: la cabecera ya rotula "Descarga",
-                                    así que sus días se ven como el resto.
-
-                                    Mide lo mismo que el de la cabecera de la semana (contra
-                                    la vez anterior), así que se pinta con el mismo
-                                    TrendDelta. OJO: el de la tarjeta de progreso NO es este
-                                    dato, es el acumulado desde la semana 1, y por eso lleva
-                                    su rótulo debajo. Antes era una píldora con fondo de color y el
-                                    número en Anton, con cuatro paletas: nadie podía saber
-                                    que medía lo mismo que la flecha de la semana. El "igual"
-                                    (el "=" en ámbar) lo cubre ya el propio TrendDelta, y
-                                    cuando no hay con qué comparar no se pinta nada en vez
-                                    de un "—" suelto. */}
-                                {(isCurrentWeek || isToday) &&
-                                  !isDeloadWeek &&
-                                  !!improvement && (
-                                    <TrendDelta
-                                      value={improvement.percent}
-                                      improved={improvement.isImproved}
-                                    />
-                                  )}
-                                {/* Solo el día de HOY lleva el ⋯ aquí (Ver detalle /
-                                    Eliminar): un toque en un día pasado ya abre el
-                                    Detalle, la única superficie de acciones del log
-                                    (editar, fecha, mover semana, borrar). */}
-                                {isToday && (
-                                  <Pressable
-                                    ref={todayOptionsRef}
-                                    style={({
-                                      pressed,
-                                    }: {
-                                      pressed: boolean;
-                                    }) => [
-                                      styles.logOptionsButton,
-                                      pressed && styles.logOptionsButtonPressed,
-                                    ]}
-                                    onPress={() => {
-                                      setLogWithOptionsId(log.id);
-                                      setSelectedLogDayForOptions(day);
-                                    }}
-                                    hitSlop={8}
-                                    accessibilityRole="button"
-                                    accessibilityLabel={t('Más opciones')}
-                                  >
-                                    <MaterialCommunityIcons
-                                      name="dots-horizontal"
-                                      size={20}
-                                      color={theme.colors.textSecondary}
-                                    />
-                                  </Pressable>
-                                )}
-                              </View>
-                            </Pressable>
+                                }
+                              />
+                            </HistoryCard>
                           </View>
                         );
                       })}
@@ -1647,19 +1598,13 @@ export function HomeScreen({
         // es la activa). Antes gastaba el sitio más visto de la app en el
         // número de versión, que ya vive al pie de Configuración.
         subtitle={displayedRoutine?.name ?? t('Añade tu primera rutina')}
+        // El subtítulo lleva a la ficha de ESA rutina (antes un ⋯ con una sola
+        // opción, "Ir a la rutina", que abría la ACTIVA aunque se enseñara
+        // otra).
+        onSubtitlePress={displayedRoutine ? onOpenDisplayedRoutine : undefined}
+        subtitleIcon="chevron-right"
         topInset={insets.top}
         onLayout={onTopBarLayout}
-        menuItems={
-          onOpenActiveRoutine
-            ? [
-                {
-                  icon: 'file-document-edit-outline',
-                  label: t('Ir a la rutina'),
-                  onPress: onOpenActiveRoutine,
-                },
-              ]
-            : undefined
-        }
       />
     </View>
   );
@@ -1747,25 +1692,15 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: 2,
     },
-    // La cifra de la tarjeta de progreso con su base debajo ("desde la
-    // semana 1"): es otro dato que el % de las semanas y tiene que verse.
-    progressDeltaWrap: {
-      alignItems: 'flex-end',
-      marginLeft: 12,
-    },
-    progressDeltaBase: {
-      fontSize: 11,
-      fontWeight: '600',
-      color: theme.colors.textSecondary,
-      lineHeight: 14,
-    },
+    // Dos líneas de 16 = 32, el alto de `ChartCardStat`: la tarjeta colapsada
+    // no crece en la primera semana.
     progressEncourage: {
       flexShrink: 1,
       marginLeft: 12,
       fontSize: 13,
       fontWeight: '700',
       color: theme.colors.primary,
-      lineHeight: 17,
+      lineHeight: 16,
       textAlign: 'right',
     },
     weeksSection: {
@@ -1899,12 +1834,6 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
-    historyLogCardToday: {
-      borderColor: theme.colors.primaryLine,
-      borderWidth: 2.5,
-      borderLeftWidth: 2.5,
-      borderLeftColor: theme.colors.primaryLine,
-    },
     historyLogCardPressed: {
       opacity: 0.8,
     },
@@ -1951,19 +1880,14 @@ const makeStyles = () =>
       flex: 1,
       minWidth: 0,
     },
-    historyLogNameRow: {
+    // Nombre de día: estilo display compartido con Cardio y el selector de día.
+    historyLogDayName: dayNameText(),
+    // TrendDelta y el botón de opciones de HOY, uno junto al otro, pegados al
+    // borde derecho de la fila (el resto de la cabecera lo pone HistoryCardRow).
+    historyLogRight: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-    },
-    // Nombre de día: estilo display compartido con Cardio y el selector de día.
-    historyLogDayName: dayNameText(),
-    historyLogDate: {
-      fontSize: 14,
-      color: theme.colors.textSecondary,
-      marginTop: 2,
-      lineHeight: 16,
-      fontWeight: '500',
     },
     // Zona de toque de 36 (icono de 20 + 8 por lado) más su hitSlop: dentro de
     // una tarjeta que también se pulsa, quedarse corto abría el registro.

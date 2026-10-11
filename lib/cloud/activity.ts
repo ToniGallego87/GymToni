@@ -59,16 +59,6 @@ export async function getActivity(
   };
 }
 
-/** Cuántos hitos tiene alguien en total (la cabecera de la sección). */
-export async function getActivityCount(userId: string): Promise<number> {
-  const { count, error } = await supabase
-    .from('activity')
-    .select('ref', { count: 'exact', head: true })
-    .eq('user_id', userId);
-  if (error) throw new Error(`activity: ${error.message}`);
-  return count ?? 0;
-}
-
 /**
  * Cuántos hitos de cada tipo tiene alguien EN TOTAL, que es lo que rotula la
  * cabecera de la Actividad. Se cuenta en el servidor (`head: true`: no baja ni

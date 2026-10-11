@@ -107,6 +107,18 @@ export function setAutoBackupEnabled(enabled: boolean): void {
   writeSetting(AUTO_BACKUP_KEY, enabled ? 'true' : 'false');
 }
 
+// Recordatorios de entreno (lib/workoutReminder.ts): activados por defecto;
+// solo avisan a quien ya entrena y con el permiso de notificaciones concedido.
+const WORKOUT_REMINDERS_KEY = 'workoutRemindersEnabled';
+
+export function getWorkoutRemindersEnabled(): boolean {
+  return readSetting(WORKOUT_REMINDERS_KEY) !== 'false';
+}
+
+export function setWorkoutRemindersEnabled(enabled: boolean): void {
+  writeSetting(WORKOUT_REMINDERS_KEY, enabled ? 'true' : 'false');
+}
+
 /** Marca de tiempo (ms) del último backup automático, o 0 si nunca. */
 export function getLastAutoBackupAt(): number {
   const raw = readSetting(LAST_AUTO_BACKUP_KEY);

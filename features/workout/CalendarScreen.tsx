@@ -18,7 +18,6 @@ import {
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
 import {
-  hasAnyCardio,
   cardioSessionFromLog,
   CardioDay,
   CardioSession,
@@ -29,16 +28,30 @@ import {
 } from '@lib/cardio';
 import { animateLayout } from '@lib/layoutAnimation';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
-import { theme, getTrainingAccent } from '@lib/theme';
+import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { findDayInRoutines, getToday } from '@lib/utils';
 import { groupLogsIntoWeekBlocks } from '@lib/weeks';
 
 type CalendarMode = 'fuerza' | 'cardio';
 
+// Rótulos con getter: t() se evalúa al pintar, no al cargar el módulo, así
+// que siguen al idioma en caliente (ver lib/i18n.ts).
 const MODE_OPTIONS: OptionToggleOption<CalendarMode>[] = [
-  { value: 'fuerza', label: t('Fuerza'), icon: 'dumbbell' },
-  { value: 'cardio', label: t('Cardio'), icon: 'run-fast' },
+  {
+    value: 'fuerza',
+    get label() {
+      return t('Fuerza');
+    },
+    icon: 'dumbbell',
+  },
+  {
+    value: 'cardio',
+    get label() {
+      return t('Cardio');
+    },
+    icon: 'run-fast',
+  },
 ];
 
 // Icono de la celda de cardio: la disciplina que más kcal quemó ese día (cuesta
@@ -57,12 +70,18 @@ interface CalendarScreenProps {
   onEditCardioOnly?: (log: WorkoutLog) => void;
   // Salida del estado vacío: empezar un entreno o crear la primera rutina.
   emptyAction?: { label: string; onPress: () => void };
+  // Celda pasada sin entreno de fuerza: apuntar el entreno olvidado de ese día.
+  onLogForgottenDay?: (date: string) => void;
+  // Celda pasada sin cardio (modo Cardio): apuntar el cardio olvidado de ese día.
+  onLogForgottenCardio?: (date: string) => void;
 }
 
 export function CalendarScreen({
   onSelectLog,
   onEditCardioOnly,
   emptyAction,
+  onLogForgottenDay,
+  onLogForgottenCardio,
 }: CalendarScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
@@ -94,12 +113,28 @@ export function CalendarScreen({
   ];
   const [monthOffset, setMonthOffset] = useState(0);
   const [mode, setMode] = useState<CalendarMode>('fuerza');
-  const cardioAvailable = hasAnyCardio(state.logs);
   const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
 
   const getDayById = (dayId: string) =>
     findDayInRoutines(state.routines, dayId);
+
+  // Celda pasada vacía que se puede tocar para apuntar lo olvidado (fuerza o
+  // cardio): borde discontinuo (`dayCellLoggable`) y un "+" tenue donde iría el
+  // icono, para que se note que responde frente a las que no (futuro).
+  const renderLoggableEmpty = (dayNumber: number) => (
+    <>
+      <Text style={styles.dayNumber}>{dayNumber}</Text>
+      <View style={styles.dayIconSlot}>
+        <MaterialCommunityIcons
+          name="plus"
+          size={20}
+          color={theme.colors.textMuted}
+        />
+      </View>
+      <View style={styles.dayWeekSpacer} />
+    </>
+  );
 
   // Número de semana (bloque) dentro de su rutina para cada log.
   const logToWeekBlock = useMemo(() => {
@@ -196,19 +231,25 @@ export function CalendarScreen({
     );
   }, [state.logs, state.routines]);
 
+  // Clave de día del mes visible sin el día ("2026-07-"): con ella se filtran
+  // los entrenos del mes y se arma la clave de cada celda.
+  const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(
+    2,
+    '0'
+  )}-`;
+
   // Rutinas que aparecen en el mes visible. La celda de fuerza rotula la suya
   // con su inicial numerada ("R1", "R2"…) y la leyenda de debajo la resuelve a
   // su nombre. Sale SIEMPRE que haya alguna, también con una sola en el mes: el
   // chip no solo distingue entre rutinas, también dice DE QUÉ rutina es ese
   // entreno (y su color, si sigue activa o ya está cerrada).
   const monthRoutines = useMemo(() => {
-    const prefix = `${currentYear}-${String(currentMonth + 1).padStart(
-      2,
-      '0'
-    )}-`;
-    const found = new Map<string, { id: string; index: number; name: string }>();
+    const found = new Map<
+      string,
+      { id: string; index: number; name: string }
+    >();
     state.logs.forEach((log: WorkoutLog) => {
-      if (!log.date?.startsWith(prefix)) return;
+      if (!log.date?.startsWith(monthPrefix)) return;
       // Solo los logs de fuerza: son los únicos que pintan el chip.
       if (!getDayById(log.dayId)) return;
       if (found.has(log.routineId)) return;
@@ -223,19 +264,40 @@ export function CalendarScreen({
       });
     });
     return [...found.values()].sort((a, b) => a.index - b.index);
-  }, [state.logs, state.routines, currentYear, currentMonth]);
+  }, [state.logs, state.routines, monthPrefix]);
 
   const showRoutineChip = monthRoutines.length > 0;
 
+  // Subtítulo de la barra: lo que hay en el mes visible, del modo que se mira.
+  const monthCount =
+    mode === 'fuerza'
+      ? new Set(
+          state.logs
+            .filter(
+              (log: WorkoutLog) =>
+                log.date?.startsWith(monthPrefix) && !!getDayById(log.dayId)
+            )
+            .map((log: WorkoutLog) => log.date)
+        ).size
+      : Object.keys(cardioByDate).filter((date) => date.startsWith(monthPrefix))
+          .length;
+  const monthName = MONTH_NAMES[currentMonth].toLowerCase();
+  const monthSubtitle =
+    mode === 'fuerza'
+      ? monthCount === 1
+        ? t('1 entreno en {month}', { month: monthName })
+        : t('{n} entrenos en {month}', { n: monthCount, month: monthName })
+      : monthCount === 1
+      ? t('1 día de cardio en {month}', { month: monthName })
+      : t('{n} días de cardio en {month}', { n: monthCount, month: monthName });
+
   // ¿Hay cardio en el mes visible? Decide si el modo cardio pinta su leyenda,
   // igual que `monthRoutines` decide la del modo fuerza.
-  const monthHasCardio = useMemo(() => {
-    const prefix = `${currentYear}-${String(currentMonth + 1).padStart(
-      2,
-      '0'
-    )}-`;
-    return Object.keys(cardioByDate).some((date) => date.startsWith(prefix));
-  }, [cardioByDate, currentYear, currentMonth]);
+  const monthHasCardio = useMemo(
+    () =>
+      Object.keys(cardioByDate).some((date) => date.startsWith(monthPrefix)),
+    [cardioByDate, monthPrefix]
+  );
 
   const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
   const firstWeekDay = (firstDayOfMonth.getDay() + 6) % 7;
@@ -251,9 +313,7 @@ export function CalendarScreen({
   }
 
   const toDateKey = (dayNumber: number) =>
-    `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(
-      dayNumber
-    ).padStart(2, '0')}`;
+    `${monthPrefix}${String(dayNumber).padStart(2, '0')}`;
 
   const todayKey = getToday();
 
@@ -295,12 +355,10 @@ export function CalendarScreen({
           )}
         </View>
 
-        {/* Mismo subtítulo que con datos: la pantalla es la misma y el hueco
-            orienta sobre lo que hace, no sobre lo que hay dentro. */}
+        {/* Sin entrenos no hay dato que contar: sin subtítulo. */}
         <GlassTopBar
           title={t('Calendario')}
           icon="calendar-month-outline"
-          subtitle={t('Repasa tus ejercicios mes por mes')}
           topInset={insets.top}
           onLayout={onTopBarLayout}
         />
@@ -318,16 +376,14 @@ export function CalendarScreen({
         backgroundColor="transparent"
       />
 
-      <StretchScrollView
-        style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP,
-            paddingBottom: scrollBottomPadding,
-          },
+      {/* Mes, Fuerza/Cardio y días de la semana quedan FIJOS: son los mandos
+          y la clave de lectura de la rejilla, y al hacer scroll se iban con
+          ella. Solo el mes (y sus chuletas) se desplaza. */}
+      <View
+        style={[
+          styles.fixedHeader,
+          { paddingTop: topBarHeight + GLASS_TOP_BAR_CONTENT_GAP },
         ]}
-        showsVerticalScrollIndicator={false}
       >
         <View style={styles.monthCard}>
           <GradientFill accent={theme.colors.primaryLine} />
@@ -338,6 +394,10 @@ export function CalendarScreen({
             ]}
             disabled={!canGoPrev}
             onPress={() => setMonthOffset((prev: number) => prev - 1)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('Mes anterior')}
+            accessibilityState={{ disabled: !canGoPrev }}
           >
             <MaterialCommunityIcons
               name="chevron-left"
@@ -357,6 +417,10 @@ export function CalendarScreen({
             ]}
             disabled={!canGoNext}
             onPress={() => setMonthOffset((prev: number) => prev + 1)}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('Mes siguiente')}
+            accessibilityState={{ disabled: !canGoNext }}
           >
             <MaterialCommunityIcons
               name="chevron-right"
@@ -370,17 +434,15 @@ export function CalendarScreen({
             estado activo translúcido) que Configuración y Datos. Antes esto era
             un par de botones a mano con relleno dorado sólido: otra piel para la
             misma tarea. */}
-        {cardioAvailable && (
-          <OptionToggle
-            style={styles.modeToggle}
-            options={MODE_OPTIONS}
-            value={mode}
-            onChange={(next) => {
-              animateLayout();
-              setMode(next);
-            }}
-          />
-        )}
+        <OptionToggle
+          style={styles.modeToggle}
+          options={MODE_OPTIONS}
+          value={mode}
+          onChange={(next) => {
+            animateLayout();
+            setMode(next);
+          }}
+        />
 
         <View style={styles.weekHeader}>
           {WEEK_DAYS.map((label) => (
@@ -389,7 +451,16 @@ export function CalendarScreen({
             </Text>
           ))}
         </View>
+      </View>
 
+      <StretchScrollView
+        style={styles.scroll}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: scrollBottomPadding },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.grid}>
           {dayCells.map((dayNumber, index) => {
             if (!dayNumber) {
@@ -408,12 +479,34 @@ export function CalendarScreen({
             if (mode === 'cardio') {
               const cardio = cardioByDate[dateKey];
               const hasCardio = !!cardio;
+              // Día pasado sin cardio: se puede apuntar el cardio olvidado
+              // (mismo patrón que la fuerza, más abajo).
+              const canLogCardio =
+                !hasCardio && dateKey < todayKey && !!onLogForgottenCardio;
 
               return (
                 <Pressable
                   key={dateKey}
-                  disabled={!hasCardio}
+                  disabled={!hasCardio && !canLogCardio}
+                  accessibilityRole={
+                    hasCardio || canLogCardio ? 'button' : undefined
+                  }
+                  accessibilityLabel={
+                    hasCardio
+                      ? `${dayNumber} ${MONTH_NAMES[currentMonth]}. ${t(
+                          'Cardio'
+                        )}, ${Math.round(cardio.cardioDay.totalMinutes)} min`
+                      : canLogCardio
+                      ? `${dayNumber} ${MONTH_NAMES[currentMonth]}. ${t(
+                          'Apuntar cardio olvidado'
+                        )}`
+                      : `${dayNumber} ${MONTH_NAMES[currentMonth]}`
+                  }
                   onPress={() => {
+                    if (canLogCardio) {
+                      onLogForgottenCardio?.(dateKey);
+                      return;
+                    }
                     if (!cardio) return;
                     // Solo cardio de hoy: la sesión sigue viva, se abre la
                     // inserción en vez de la consulta.
@@ -427,6 +520,7 @@ export function CalendarScreen({
                     styles.dayCell,
                     hasCardio && styles.dayCellActive,
                     hasCardio && { borderColor: theme.colors.accentLine },
+                    canLogCardio && styles.dayCellLoggable,
                     dateKey === todayKey && styles.dayCellToday,
                   ]}
                 >
@@ -450,18 +544,37 @@ export function CalendarScreen({
                           color={theme.colors.white}
                         />
                       </View>
-                      <Text
-                        style={[
-                          styles.dayWeekLabel,
-                          { color: theme.colors.textSecondary },
-                        ]}
-                        numberOfLines={1}
-                        adjustsFontSizeToFit
-                        minimumFontScale={0.6}
-                      >
-                        {Math.round(cardio.cardioDay.totalMinutes)} min
-                      </Text>
+                      {/* Número y unidad en Text separados: si fueran uno
+                          solo, adjustsFontSizeToFit en Android corta en el
+                          espacio y se come el "min". Así el "min" (fijo,
+                          pequeño) sale siempre y es el número el que encoge
+                          lo que haga falta. */}
+                      <View style={styles.dayMinutesRow}>
+                        <Text
+                          style={[
+                            styles.dayWeekLabel,
+                            styles.dayMinutesValue,
+                            { color: theme.colors.textSecondary },
+                          ]}
+                          numberOfLines={1}
+                          adjustsFontSizeToFit
+                          minimumFontScale={0.4}
+                        >
+                          {Math.round(cardio.cardioDay.totalMinutes)}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dayMinutesUnit,
+                            { color: theme.colors.textSecondary },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          min
+                        </Text>
+                      </View>
                     </>
+                  ) : canLogCardio ? (
+                    renderLoggableEmpty(dayNumber)
                   ) : (
                     <>
                       {dateKey === todayKey && (
@@ -509,20 +622,41 @@ export function CalendarScreen({
             const weekNumber = primaryLog
               ? logToWeekBlock[primaryLog.id]
               : undefined;
+            // Día pasado sin fuerza: se puede apuntar el entreno olvidado.
+            const canLogForgotten =
+              !hasLogs && dateKey < todayKey && !!onLogForgottenDay;
+            const cellDate = `${dayNumber} ${MONTH_NAMES[currentMonth]}`;
 
             return (
               <Pressable
                 key={dateKey}
-                disabled={!hasLogs || !primaryDay || !primaryLog}
+                disabled={!hasLogs && !canLogForgotten}
                 onPress={() => {
                   if (primaryLog && primaryDay) {
                     onSelectLog(primaryLog, primaryDay);
+                  } else if (canLogForgotten) {
+                    onLogForgottenDay?.(dateKey);
                   }
                 }}
+                accessibilityRole={
+                  hasLogs || canLogForgotten ? 'button' : undefined
+                }
+                accessibilityLabel={
+                  hasLogs && primaryDay
+                    ? `${cellDate}. ${getDisplayDayName(primaryDay.name)}${
+                        typeof weekNumber === 'number'
+                          ? `, ${t('Semana')} ${weekNumber}`
+                          : ''
+                      }`
+                    : canLogForgotten
+                    ? `${cellDate}. ${t('Apuntar entreno olvidado')}`
+                    : cellDate
+                }
                 style={[
                   styles.dayCell,
                   hasLogs && styles.dayCellActive,
                   hasLogs && { borderColor: dayBorderColor },
+                  canLogForgotten && styles.dayCellLoggable,
                   dateKey === todayKey && styles.dayCellToday,
                 ]}
               >
@@ -580,6 +714,8 @@ export function CalendarScreen({
                       <View style={styles.dayWeekSpacer} />
                     )}
                   </>
+                ) : canLogForgotten ? (
+                  renderLoggableEmpty(dayNumber)
                 ) : (
                   <>
                     {dateKey === todayKey && (
@@ -622,6 +758,42 @@ export function CalendarScreen({
           </View>
         )}
 
+        {/* Las celdas vacías pasadas se pueden tocar: se dice aquí, en vez de
+            llenar el mes de "+". */}
+        {mode === 'fuerza' && !!onLogForgottenDay && (
+          <View style={styles.legend}>
+            <View style={styles.legendRow}>
+              <View style={styles.legendIcon}>
+                <MaterialCommunityIcons
+                  name="calendar-plus"
+                  size={15}
+                  color={theme.colors.textSecondary}
+                />
+              </View>
+              <Text style={styles.legendText}>
+                {t('Toca un día vacío para apuntar un entreno olvidado')}
+              </Text>
+            </View>
+          </View>
+        )}
+
+        {mode === 'cardio' && !!onLogForgottenCardio && (
+          <View style={styles.legend}>
+            <View style={styles.legendRow}>
+              <View style={styles.legendIcon}>
+                <MaterialCommunityIcons
+                  name="calendar-plus"
+                  size={15}
+                  color={theme.colors.textSecondary}
+                />
+              </View>
+              <Text style={styles.legendText}>
+                {t('Toca un día vacío para apuntar un cardio olvidado')}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* El modo cardio también tiene su chuleta: el icono de la celda NO es
             "el cardio" sino la disciplina que más quemó ese día. */}
         {mode === 'cardio' && monthHasCardio && (
@@ -645,7 +817,7 @@ export function CalendarScreen({
       <GlassTopBar
         title={t('Calendario')}
         icon="calendar-month-outline"
-        subtitle={t('Repasa tus ejercicios mes por mes')}
+        subtitle={monthSubtitle}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -664,6 +836,9 @@ const makeStyles = () =>
     scroll: {
       flex: 1,
     },
+    fixedHeader: {
+      paddingHorizontal: theme.spacing.md,
+    },
     content: {
       paddingHorizontal: theme.spacing.md,
       paddingBottom: theme.spacing.xl,
@@ -678,8 +853,9 @@ const makeStyles = () =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 12,
-      paddingVertical: 12,
+      // Poco relleno: las flechas ya miden 48 (zona de toque recomendada).
+      paddingHorizontal: 4,
+      paddingVertical: 2,
       marginBottom: 14,
       ...theme.shadow.soft,
     },
@@ -696,8 +872,10 @@ const makeStyles = () =>
       transform: [{ translateY: 2 }],
     },
     monthNavButton: {
-      paddingHorizontal: 10,
-      paddingVertical: 6,
+      minWidth: 48,
+      minHeight: 48,
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     monthNavButtonDisabled: {
       opacity: 0.25,
@@ -743,6 +921,11 @@ const makeStyles = () =>
     dayCellActive: {
       ...theme.shadow.soft,
     },
+    // Día pasado vacío que se puede apuntar: discontinuo = "hueco por rellenar".
+    dayCellLoggable: {
+      borderStyle: 'dashed',
+      borderColor: theme.colors.textMuted,
+    },
     dayCellToday: {
       borderWidth: 2.5,
       borderColor: theme.colors.primaryLine,
@@ -787,6 +970,25 @@ const makeStyles = () =>
       lineHeight: 21,
       textAlign: 'center',
       textAlignVertical: 'center',
+    },
+    // Mismo alto que la etiqueta "Sem N" del modo fuerza (lineHeight 21).
+    dayMinutesRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'center',
+      height: 21,
+      gap: 1,
+    },
+    dayMinutesValue: {
+      flexShrink: 1,
+      letterSpacing: 0,
+    },
+    dayMinutesUnit: {
+      flexShrink: 0,
+      fontFamily: theme.fonts.display,
+      fontSize: 10,
+      lineHeight: 21,
+      letterSpacing: 0,
     },
     dayWeekSpacer: {
       height: 19,

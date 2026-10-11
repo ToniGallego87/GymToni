@@ -8,7 +8,10 @@
 // orquesta el "cada cuánto" y el "dónde", reutilizando lib/fileIO.ts.
 import {
   canWriteLocalBackup,
+  getLocalBackupSize,
+  listLocalBackups,
   pruneLocalBackups,
+  readLocalBackup,
   writeLocalBackup,
 } from './fileIO';
 import {
@@ -45,4 +48,30 @@ export async function runAutoBackup(
   await pruneLocalBackups(AUTO_BACKUP_DIR, MAX_AUTO_BACKUPS);
   setLastAutoBackupAt(now);
   return uri;
+}
+
+export interface AutoBackupFile {
+  fileName: string;
+  /** Clave `YYYY-MM-DD` sacada del nombre (`gymbro-backup-AAAA-MM-DD.json`). */
+  date: string | null;
+  size: number;
+}
+
+const BACKUP_DATE = /(\d{4}-\d{2}-\d{2})\.json$/;
+
+/** Backups automáticos del dispositivo, el más reciente primero. */
+export async function listAutoBackups(): Promise<AutoBackupFile[]> {
+  const names = await listLocalBackups(AUTO_BACKUP_DIR);
+  const files = await Promise.all(
+    names.map(async (fileName) => ({
+      fileName,
+      date: fileName.match(BACKUP_DATE)?.[1] ?? null,
+      size: await getLocalBackupSize(AUTO_BACKUP_DIR, fileName),
+    }))
+  );
+  return files.reverse();
+}
+
+export function readAutoBackup(fileName: string): Promise<string> {
+  return readLocalBackup(AUTO_BACKUP_DIR, fileName);
 }

@@ -238,3 +238,72 @@ describe('rowsToAppData', () => {
     ]);
   });
 });
+
+describe('entradas de cardio (cardio_entries)', () => {
+  const withCardio = (rawInput: string): WorkoutAppData => {
+    const data = buildAppData();
+    data.logs[0].cardio = { id: 'c1', type: 'Cardio', rawInput };
+    return data;
+  };
+
+  it('una fila por entrada, con id determinista y la disciplina como id fijo', () => {
+    const rows = appDataToRows(
+      withCardio('Andar en cinta: 20min, 5kmh, 8% | Remo: 10min'),
+      stubId
+    );
+    expect(rows.cardioEntries).toEqual([
+      {
+        id: 'c1:1',
+        cardio_logs_id: 'c1',
+        workout_logs_id: rows.workoutLogs[0].id,
+        entry_order: 1,
+        discipline: 'treadmill-walk',
+        label: 'Andar en cinta',
+        minutes: 20,
+        speed: 5,
+        incline: 8,
+      },
+      {
+        id: 'c1:2',
+        cardio_logs_id: 'c1',
+        workout_logs_id: rows.workoutLogs[0].id,
+        entry_order: 2,
+        discipline: null,
+        label: 'Remo',
+        minutes: 10,
+        speed: null,
+        incline: null,
+      },
+    ]);
+  });
+
+  it('reconoce el rótulo en inglés y lo guarda con el mismo id', () => {
+    const rows = appDataToRows(withCardio('Treadmill walk: 30min, 6kmh'), stubId);
+    expect(rows.cardioEntries?.[0]).toMatchObject({
+      discipline: 'treadmill-walk',
+      label: 'Andar en cinta',
+    });
+  });
+
+  it('ida y vuelta: el log recupera sus entradas', () => {
+    const restored = rowsToAppData(
+      appDataToRows(withCardio('Bici estática: 25min, 20kmh'), stubId)
+    );
+    expect(restored.logs[0].cardio?.entries).toEqual([
+      {
+        discipline: 'stationary-bike',
+        label: 'Bici estática',
+        minutes: 25,
+        speed: 20,
+        incline: null,
+      },
+    ]);
+  });
+
+  it('si un móvil viejo cambió solo el texto, manda el texto', () => {
+    const rows = appDataToRows(withCardio('Elíptica: 15min'), stubId);
+    rows.cardioLogs[0].raw_input = 'Elíptica: 40min';
+    const restored = rowsToAppData(rows);
+    expect(restored.logs[0].cardio?.entries?.[0].minutes).toBe(40);
+  });
+});

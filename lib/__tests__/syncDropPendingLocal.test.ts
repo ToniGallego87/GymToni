@@ -33,6 +33,7 @@ const vacio = (): RemoteChanges => ({
   exerciseLogs: { upserts: [], deletes: [] },
   logSets: { upserts: [], deletes: [] },
   cardioLogs: { upserts: [], deletes: [] },
+  cardioEntries: { upserts: [], deletes: [] },
   settings: null,
 });
 
@@ -54,6 +55,22 @@ describe('dropPendingLocal: borrados de hijos', () => {
     const out = dropPendingLocal(changes, pendiente(['log1']));
 
     expect(out.cardioLogs.deletes.map((r) => r.id)).toEqual(['c2']);
+  });
+
+  it('y con las entradas de cardio del log pendiente (altas y borrados)', () => {
+    const changes = vacio();
+    changes.cardioEntries.deletes = [
+      { id: 'c1:1', cardio_logs_id: 'c1', workout_logs_id: 'log1' },
+      { id: 'c2:1', cardio_logs_id: 'c2', workout_logs_id: 'log2' },
+    ];
+    changes.cardioEntries.upserts = [
+      { id: 'c1:2', cardio_logs_id: 'c1', workout_logs_id: 'log1' },
+    ];
+
+    const out = dropPendingLocal(changes, pendiente(['log1']));
+
+    expect(out.cardioEntries.deletes.map((r) => r.id)).toEqual(['c2:1']);
+    expect(out.cardioEntries.upserts).toHaveLength(0);
   });
 
   it('hace lo mismo con los ejercicios y las series del log pendiente', () => {

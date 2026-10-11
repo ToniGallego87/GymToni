@@ -59,6 +59,8 @@ let running = false;
 
 const cursorKey = (userId: string) => `gymbro_sync_cursor_${userId}`;
 const lastSyncKey = (userId: string) => `gymbro_sync_last_${userId}`;
+const cardioBackfillKey = (userId: string) =>
+  `gymbro_cardio_entries_backfill_${userId}`;
 
 async function getCursor(userId: string): Promise<number> {
   const raw = await AsyncStorage.getItem(cursorKey(userId));
@@ -271,7 +273,8 @@ async function pushLogUpsert(
   userId: string,
   now: number
 ): Promise<void> {
-  const { log: logRow, exerciseLogs, logSets, cardio } = logToRows(log);
+  const { log: logRow, exerciseLogs, logSets, cardio, cardioEntries } =
+    logToRows(log);
   await cloudUpsert('workout_logs', [own(logRow, userId, now)]);
 
   const exLogIds = exerciseLogs.map((e) => e.id);
@@ -313,6 +316,37 @@ async function pushLogUpsert(
     now
   );
   if (cardio) await cloudUpsert('cardio_logs', [own(cardio, userId, now)]);
+
+  await tolerateCardioEntries(async () => {
+    await reconcileChildren(
+      'cardio_entries',
+      'workout_logs_id',
+      [log.id],
+      cardioEntries.map((e) => e.id),
+      userId,
+      now
+    );
+    if (cardioEntries.length)
+      await cloudUpsert(
+        'cardio_entries',
+        cardioEntries.map((e) => own(e, userId, now))
+      );
+  });
+}
+
+/**
+ * `cardio_entries` es nueva: si la tabla aún no existe en la nube (SQL sin
+ * aplicar) o falla, no puede tumbar la subida del log entero, porque el texto
+ * de `cardio_logs` sigue llevando el dato. Sin red sí se propaga (aborta el
+ * push y se reintenta).
+ */
+async function tolerateCardioEntries(work: () => Promise<unknown>): Promise<void> {
+  try {
+    await work();
+  } catch (e) {
+    if (isNetworkError(e)) throw e;
+    console.warn('cardio_entries:', e instanceof Error ? e.message : e);
+  }
 }
 
 async function markLogsDeleted(
@@ -345,6 +379,16 @@ async function markLogsDeleted(
   );
   if (cardioIds.length)
     await cloudMarkDeleted('cardio_logs', cardioIds, userId, now);
+  await tolerateCardioEntries(async () => {
+    const entryIds = await fetchChildIds(
+      'cardio_entries',
+      'workout_logs_id',
+      logIds,
+      userId
+    );
+    if (entryIds.length)
+      await cloudMarkDeleted('cardio_entries', entryIds, userId, now);
+  });
 }
 
 async function pushSettings(
@@ -636,6 +680,15 @@ export function dropPendingLocal(
     ),
   };
 
+  const cardioEntries: RemoteTableChange = {
+    upserts: changes.cardioEntries.upserts.filter(
+      (r) => !logIds.has(parentOf(r, 'workout_logs_id'))
+    ),
+    deletes: changes.cardioEntries.deletes.filter(
+      (r) => !logIds.has(parentOf(r, 'workout_logs_id'))
+    ),
+  };
+
   return {
     routines,
     workoutDays,
@@ -644,6 +697,7 @@ export function dropPendingLocal(
     exerciseLogs,
     logSets,
     cardioLogs,
+    cardioEntries,
     settings: changes.settings,
   };
 }
@@ -657,6 +711,7 @@ function countChanges(changes: RemoteChanges): number {
     changes.exerciseLogs,
     changes.logSets,
     changes.cardioLogs,
+    changes.cardioEntries,
   ];
   return (
     tables.reduce((n, t) => n + t.upserts.length + t.deletes.length, 0) +
@@ -664,10 +719,26 @@ function countChanges(changes: RemoteChanges): number {
   );
 }
 
+/**
+ * ¿Hay en la nube algo posterior al cursor? Una sola petición (la función
+ * `sync_max_updated` de supabase/schema.sql) en vez de las ocho del pull, que
+ * en un arranque en frío tardaban ~8 s para devolver casi siempre nada. Si la
+ * función no existe o falla, se responde "sí" y se hace el pull completo de
+ * siempre: el atajo nunca puede saltarse cambios.
+ */
+async function remoteHasChanges(cursor: number): Promise<boolean> {
+  const { data, error } = await supabase.rpc('sync_max_updated');
+  if (error || data == null) return true;
+  return Number(data) > cursor;
+}
+
 async function pullDelta(
   userId: string,
   cursor: number
 ): Promise<{ pulled: number; newCursor: number }> {
+  if (!(await remoteHasChanges(cursor))) {
+    return { pulled: 0, newCursor: cursor };
+  }
   const [
     routines,
     workoutDays,
@@ -676,6 +747,7 @@ async function pullDelta(
     exerciseLogs,
     logSets,
     cardioLogs,
+    cardioEntries,
   ] = await Promise.all([
     pullTable('routines', userId, cursor),
     pullTable('workout_days', userId, cursor),
@@ -684,6 +756,14 @@ async function pullDelta(
     pullTable('exercise_logs', userId, cursor),
     pullTable('log_sets', userId, cursor),
     pullTable('cardio_logs', userId, cursor),
+    // Tolerante: sin la tabla en la nube, el cardio baja igual por su texto.
+    pullTable('cardio_entries', userId, cursor).catch((e) => {
+      if (isNetworkError(e)) throw e;
+      return {
+        change: { upserts: [], deletes: [] },
+        maxUpdated: cursor,
+      } as PulledTable;
+    }),
   ]);
 
   // Ajustes del usuario (rutina activa/seleccionada): fila única por usuario.
@@ -711,6 +791,7 @@ async function pullDelta(
     exerciseLogs,
     logSets,
     cardioLogs,
+    cardioEntries,
   ];
 
   // Lo que el outbox aún no ha subido manda sobre lo que baja la nube.
@@ -723,6 +804,7 @@ async function pullDelta(
       exerciseLogs: exerciseLogs.change,
       logSets: logSets.change,
       cardioLogs: cardioLogs.change,
+      cardioEntries: cardioEntries.change,
       settings,
     },
     await getPendingOutboxIds()
@@ -766,10 +848,47 @@ export async function syncNow(userId: string): Promise<SyncResult> {
     }
     const { pulled, newCursor } = await pullDelta(userId, cursor);
     await setCursor(userId, newCursor);
+    await backfillCloudCardioEntries(userId);
     await AsyncStorage.setItem(lastSyncKey(userId), String(Date.now()));
     return { pushed, pulled };
   } finally {
     running = false;
+  }
+}
+
+/**
+ * Migración única por cuenta al pasar a la versión con `cardio_entries`: sube
+ * las filas de TODO el cardio del histórico. Sin esto, la nube solo las tendría
+ * de los entrenos que se vuelvan a guardar (el resto vive en local, rellenado
+ * por la migración v9). No borra nada: `raw_input` se queda y los móviles sin
+ * actualizar siguen igual.
+ *
+ * Va DESPUÉS del pull, con el local ya al día: las filas salen del texto de cada
+ * cardio, idénticas a las que generaría cualquier otro móvil nuevo. Si falla (sin
+ * red, o la tabla aún no existe en la nube) no se marca hecha y se reintenta en
+ * el siguiente sync; nunca tumba el sync.
+ */
+async function backfillCloudCardioEntries(userId: string): Promise<void> {
+  try {
+    if (await AsyncStorage.getItem(cardioBackfillKey(userId))) return;
+    const data = await loadAppDataFromDb();
+    if (!data) return;
+    const now = Date.now();
+    const rows = data.logs.flatMap((log) =>
+      log.cardio ? logToRows(log).cardioEntries : []
+    );
+    if (rows.length) {
+      await cloudUpsert(
+        'cardio_entries',
+        rows.map((row) => own(row, userId, now))
+      );
+    }
+    await AsyncStorage.setItem(cardioBackfillKey(userId), String(now));
+  } catch (e) {
+    console.warn(
+      'Migración de cardio_entries pendiente:',
+      e instanceof Error ? e.message : e
+    );
   }
 }
 

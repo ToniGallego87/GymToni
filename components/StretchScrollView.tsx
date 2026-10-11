@@ -1,8 +1,15 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { forwardRef, ReactNode } from 'react';
+import React, {
+  forwardRef,
+  ReactNode,
+  useCallback,
+  useImperativeHandle,
+  useRef,
+} from 'react';
 import { LayoutChangeEvent, ScrollViewProps, StyleSheet } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
+  runOnJS,
   useAnimatedRef,
   useAnimatedStyle,
   useScrollViewOffset,
@@ -20,23 +27,55 @@ import Animated, {
 const RESISTANCE = 0.2; // cuánto sigue el contenido al dedo (menor = más rígido)
 const MAX_STRETCH = 45; // desplazamiento máximo en px
 const SPRING = { damping: 20, stiffness: 220, mass: 0.45 };
+// Estiramiento por abajo a partir del cual cuenta como "tirar para cargar más"
+// (de los MAX_STRETCH posibles): hace falta un tirón deliberado, no un roce.
+const PULL_TRIGGER = 30;
+// Margen para dar por alcanzado el borde: Android redondea el desplazamiento a
+// píxeles físicos y la altura del contenido puede llevar decimales, así que la
+// igualdad exacta fallaba (tras crecer la lista ya no dejaba estirar por abajo).
+const EDGE_TOLERANCE = 2;
 
 export interface StretchScrollViewProps extends ScrollViewProps {
   children?: ReactNode;
+  /**
+   * Se llama cuando el usuario estira la lista hacia arriba más allá de su
+   * final (el "tirar para cargar más"). Una vez por gesto.
+   */
+  onPullPastEnd?: () => void;
 }
 
 export const StretchScrollView = forwardRef<
   Animated.ScrollView,
   StretchScrollViewProps
 >(function StretchScrollView(
-  { children, onLayout, onContentSizeChange, contentContainerStyle, ...props },
-  _ref
+  {
+    children,
+    onLayout,
+    onContentSizeChange,
+    contentContainerStyle,
+    onPullPastEnd,
+    ...props
+  },
+  ref
 ) {
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  // El `ref` de fuera llega al scroll de dentro: quien lo usa puede desplazar
+  // la lista (`scrollTo`), p. ej. el registro al pasar al ejercicio siguiente.
+  useImperativeHandle(ref, () => scrollRef.current as Animated.ScrollView, [
+    scrollRef,
+  ]);
   const scrollOffset = useScrollViewOffset(scrollRef);
   const stretch = useSharedValue(0);
   const contentHeight = useSharedValue(0);
   const containerHeight = useSharedValue(0);
+  // Ya se avisó del tirón en este gesto (se rearma al soltar).
+  const pullFired = useSharedValue(false);
+  // El gesto llama siempre a la versión ACTUAL del callback: sin el ref, el
+  // worklet podía quedarse con el de un render anterior.
+  const pullRef = useRef(onPullPastEnd);
+  pullRef.current = onPullPastEnd;
+  const firePullPastEnd = useCallback(() => pullRef.current?.(), []);
+  const listensPull = !!onPullPastEnd;
 
   // Gesto nativo del propio scroll: se compone como simultáneo para que el
   // scroll normal siga funcionando mientras leemos el desplazamiento del dedo.
@@ -54,8 +93,8 @@ export const StretchScrollView = forwardRef<
         contentHeight.value - containerHeight.value,
         0
       );
-      const atTop = scrollOffset.value <= 0;
-      const atBottom = scrollOffset.value >= maxOffset;
+      const atTop = scrollOffset.value <= EDGE_TOLERANCE;
+      const atBottom = scrollOffset.value >= maxOffset - EDGE_TOLERANCE;
 
       let next = stretch.value;
       if (atTop) {
@@ -70,10 +109,16 @@ export const StretchScrollView = forwardRef<
 
       // Tope duro para que el estiramiento sea siempre leve.
       stretch.value = Math.max(-MAX_STRETCH, Math.min(MAX_STRETCH, next));
+
+      if (listensPull && !pullFired.value && stretch.value <= -PULL_TRIGGER) {
+        pullFired.value = true;
+        runOnJS(firePullPastEnd)();
+      }
     })
     .onFinalize(() => {
       'worklet';
       stretch.value = withSpring(0, SPRING);
+      pullFired.value = false;
     });
 
   const composedGesture = Gesture.Simultaneous(nativeGesture, panGesture);

@@ -5,8 +5,8 @@ import {
   WorkoutLog,
   WorkoutRoutine,
 } from '../types';
-import { isCardioOnlyLog } from './cardio';
-import { parseSeriesString } from './parsers';
+import { isCardioOnlyLog, withCardioEntries } from './cardio';
+import { parseCardioString, parseSeriesString } from './parsers';
 
 /**
  * Ensures the isActive flag on each routine matches the given activeRoutineId.
@@ -227,6 +227,92 @@ export function mergeDuplicateDayLogs(logs: WorkoutLog[]): WorkoutLog[] {
     .map((log) => mergedById.get(log.id) ?? log);
 }
 
+const CARDIO_ENTRY_SEPARATOR = ' | ';
+
+function cardioEntries(log: WorkoutLog): string[] {
+  return (log.cardio?.rawInput ?? '')
+    .split('|')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+}
+
+/** Entradas de `entries` que no están en `pool` (multiconjunto: cuenta repetidas). */
+function missingEntries(entries: string[], pool: string[]): string[] {
+  const left = [...pool];
+  const missing: string[] = [];
+  for (const entry of entries) {
+    const index = left.indexOf(entry);
+    if (index >= 0) left.splice(index, 1);
+    else missing.push(entry);
+  }
+  return missing;
+}
+
+function joinDistinct(values: (string | undefined)[]): string | undefined {
+  const distinct = [
+    ...new Set(values.map((v) => v?.trim()).filter((v): v is string => !!v)),
+  ];
+  return distinct.length ? distinct.join('\n') : undefined;
+}
+
+/**
+ * Una fecha tiene UN registro de solo cardio: el registro reabre el de hoy y le
+ * va sumando entradas. Si aparecen dos (copias del autoguardado antiguo, una
+ * bajada de la nube, mover un cardio a una fecha que ya tenía), Inicio y
+ * Cardio los sumaban los dos mientras el detalle enseñaba uno.
+ *
+ * Base: el más reciente (el que reabre el registro). De cada otro se AÑADEN
+ * las entradas que la base no tenga; si ya las tiene todas era una copia y no
+ * aporta nada. Nunca se pierde una entrada: es lo que diferencia esto de la
+ * `mergeSameDayCardio` retirada en 0.8.1, que mezclaba cardio con fuerza.
+ */
+export function mergeSameDateCardioLogs(logs: WorkoutLog[]): WorkoutLog[] {
+  const byDate = new Map<string, WorkoutLog[]>();
+  for (const log of logs) {
+    if (!isCardioOnlyLog(log) || !cardioEntries(log).length) continue;
+    const group = byDate.get(log.date);
+    if (group) group.push(log);
+    else byDate.set(log.date, [log]);
+  }
+
+  const mergedById = new Map<string, WorkoutLog>();
+  const dropped = new Set<string>();
+
+  for (const group of byDate.values()) {
+    if (group.length < 2) continue;
+
+    const sorted = [...group].sort(
+      (a, b) =>
+        (b.createdAt ?? 0) - (a.createdAt ?? 0) ||
+        (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+    );
+    const [base, ...rest] = sorted;
+
+    const entries = cardioEntries(base);
+    for (const log of rest) {
+      entries.push(...missingEntries(cardioEntries(log), entries));
+      dropped.add(log.id);
+    }
+
+    const rawInput = entries.join(CARDIO_ENTRY_SEPARATOR);
+    mergedById.set(base.id, {
+      ...base,
+      cardio: withCardioEntries({
+        ...parseCardioString(rawInput),
+        id: base.cardio!.id,
+        notes: joinDistinct(sorted.map((log) => log.cardio?.notes)),
+      }),
+      notes: joinDistinct(sorted.map((log) => log.notes)),
+      updatedAt: Date.now(),
+    });
+  }
+
+  if (!dropped.size) return logs;
+  return logs
+    .filter((log) => !dropped.has(log.id))
+    .map((log) => mergedById.get(log.id) ?? log);
+}
+
 /**
  * Resolves the activeRoutineId from available data.
  * Priority: explicit id → first routine with isActive → last routine → undefined
@@ -253,7 +339,8 @@ export function resolveActiveRoutineId(
  * (`mergeSameDayCardio`) y eso DESHACÍA la separación de cardio y fuerza en
  * cada arranque: `loadAppData` normaliza al hidratar, la autorreparación de
  * storage.ts reescribía la BD al ver que faltaban logs y el borrado subía a la
- * nube. Las sesiones de solo cardio son registros propios; no se tocan.
+ * nube. Las sesiones de solo cardio son registros propios: solo se juntan
+ * entre ellas, por fecha y sin perder entradas (ver mergeSameDateCardioLogs).
  */
 export function normalizeAppData(
   payload: Partial<WorkoutAppData> | null | undefined,
@@ -279,11 +366,12 @@ export function normalizeAppData(
     activeRoutineId,
     selectedRoutineId,
     // El orden importa: primero se limpia cada entreno (series y ejercicios) y
-    // luego se fusionan los días repetidos. El cardio suelto NO se toca: desde
-    // 0.8.1 una sesión de solo cardio es un registro legítimo y propio, no un
-    // resto que haya que meter en el día de fuerza (ver lib/cardio.ts).
-    logs: mergeDuplicateDayLogs(
-      repairDuplicatedSets(dedupeExerciseLogs(ensureParsedSets(rawLogs)))
+    // luego se fusionan los días repetidos. El cardio suelto nunca va al día de
+    // fuerza: desde 0.8.1 una sesión de solo cardio es un registro propio.
+    logs: mergeSameDateCardioLogs(
+      mergeDuplicateDayLogs(
+        repairDuplicatedSets(dedupeExerciseLogs(ensureParsedSets(rawLogs)))
+      )
     ),
   };
 }

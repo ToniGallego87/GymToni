@@ -19,7 +19,12 @@ import {
 import { theme, setThemeMode } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t, formatAgo, language, setLanguage } from '@lib/i18n';
-import { Language, ThemeMode } from '@lib/appSettings';
+import {
+  getWorkoutRemindersEnabled,
+  Language,
+  ThemeMode,
+} from '@lib/appSettings';
+import { setWorkoutReminders } from '@lib/workoutReminder';
 import { CHANGELOG } from '@data/changelog';
 import {
   MAX_REST_SECONDS,
@@ -47,6 +52,13 @@ interface SettingsScreenProps {
 export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [remindersOn, setRemindersOn] = useState(getWorkoutRemindersEnabled);
+  // Encender pide el permiso de notificaciones; si se deniega, el ajuste
+  // vuelve a apagado en vez de prometer avisos que no van a llegar.
+  const changeReminders = (enabled: boolean) => {
+    setRemindersOn(enabled);
+    setWorkoutReminders(enabled).then(setRemindersOn);
+  };
   const { user } = useSession();
   const [lastSync, setLastSync] = useState<number | null>(null);
   // Descanso por defecto entre series (lib/restTimerStore): ajuste de la
@@ -182,9 +194,40 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
           </Text>
         </View>
 
+        {/* Recordatorios de entreno: sin días ni horas que configurar (salen de
+            tus entrenos de la semana pasada), así que el único ajuste es
+            encenderlos o apagarlos. */}
+        <View style={styles.sectionCard}>
+          <GradientFill accent={theme.colors.primaryLine} />
+          <View style={styles.sectionTitleRow}>
+            <MaterialCommunityIcons
+              name="bell-outline"
+              size={18}
+              color={theme.colors.text}
+            />
+            <Text style={styles.sectionTitle}>
+              {t('Recordatorios de entreno')}
+            </Text>
+          </View>
+          <OptionToggle
+            options={[
+              { value: true, label: t('Activados') },
+              { value: false, label: t('Desactivados') },
+            ]}
+            value={remindersOn}
+            onChange={changeReminders}
+          />
+          <Text style={styles.sectionHint}>
+            {t(
+              'Una hora antes de la hora a la que entrenaste la semana pasada, y un aviso si llevas dos semanas sin entrenar'
+            )}
+          </Text>
+        </View>
+
         <Pressable
           style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
           onPress={onOpenData}
+          accessibilityRole="button"
         >
           <View style={styles.linkIconWrap}>
             <MaterialCommunityIcons
@@ -210,6 +253,7 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
           <Pressable
             style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
             onPress={() => setShowWhatsNew(true)}
+            accessibilityRole="button"
           >
             <View style={styles.linkIconWrap}>
               <MaterialCommunityIcons
@@ -221,9 +265,7 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
             <View style={styles.linkTextWrap}>
               <Text style={styles.linkLabel}>{t('Novedades')}</Text>
               <Text style={styles.linkHint}>
-                {t('Qué ha cambiado en la versión {v}', {
-                  v: latestChangelog.version,
-                })}
+                {t('Qué ha cambiado en la última versión')}
               </Text>
             </View>
             <MaterialCommunityIcons
@@ -233,16 +275,16 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
             />
           </Pressable>
         )}
-
-        <Text style={styles.versionText}>
-          GymBro · {t('Versión')} {Constants.expoConfig?.version ?? '—'}
-        </Text>
       </StretchScrollView>
 
+      {/* El subtítulo lleva la versión instalada: antes era un eslogan arriba
+          y la versión vivía al pie, donde había que bajar a buscarla. */}
       <GlassTopBar
         title={t('Configuración')}
         icon="cog-outline"
-        subtitle={t('Ajusta la app a tu gusto')}
+        subtitle={`GymBro · ${t('Versión')} ${
+          Constants.expoConfig?.version ?? '—'
+        }`}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -345,12 +387,6 @@ const makeStyles = () =>
       fontSize: 12,
       color: theme.colors.textSecondary,
       lineHeight: 16,
-    },
-    versionText: {
-      marginTop: 4,
-      textAlign: 'center',
-      fontSize: 12,
-      color: theme.colors.textMuted,
     },
   });
 

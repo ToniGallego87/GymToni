@@ -1,4 +1,5 @@
 import { useEffect, useReducer } from 'react';
+import { unstable_batchedUpdates } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSession } from '@lib/cloud/auth';
 import { getProfile, Profile } from '@lib/cloud/social';
@@ -24,7 +25,25 @@ type MyProfileState = {
 
 let state: MyProfileState = { userId: null, profile: null, loading: false };
 const listeners = new Set<() => void>();
-const notify = () => listeners.forEach((l) => l());
+
+// Solo avisa si algo cambia, y a todos en UN pase de render: los avisos llegan
+// desde promesas y, con la arquitectura antigua, sin agrupar cada suscriptor
+// repintaba por separado.
+function setState(next: MyProfileState): void {
+  if (
+    next.userId === state.userId &&
+    next.profile === state.profile &&
+    next.loading === state.loading
+  ) {
+    return;
+  }
+  state = next;
+  unstable_batchedUpdates(() => listeners.forEach((l) => l()));
+}
+
+// Carga en vuelo: la barra, Perfil, Comunidad y el registro del nivel montan a
+// la vez y cada uno pedía el mismo perfil por su cuenta.
+let inFlight: { userId: string; promise: Promise<void> } | null = null;
 
 const cacheKey = (userId: string) => `gymbro_profile_${userId}`;
 
@@ -58,37 +77,55 @@ export async function loadMyProfile(
   force = false
 ): Promise<void> {
   if (!userId) {
-    state = { userId: null, profile: null, loading: false };
-    notify();
+    setState({ userId: null, profile: null, loading: false });
     return;
   }
   if (!force && state.userId === userId && state.profile) return;
+  if (!force && inFlight?.userId === userId) return inFlight.promise;
+  const promise = fetchMyProfile(userId);
+  inFlight = { userId, promise };
+  try {
+    await promise;
+  } finally {
+    if (inFlight?.promise === promise) inFlight = null;
+  }
+}
+
+async function fetchMyProfile(userId: string): Promise<void> {
   const known = state.userId === userId ? state.profile : null;
-  state = { userId, profile: known, loading: true };
-  notify();
+  setState({ userId, profile: known, loading: true });
 
   // Arranque en frío: el store de módulo nace vacío, así que la copia local es
   // lo único que hay hasta que conteste la nube.
   if (!known) {
     const cached = await readCachedProfile(userId);
     if (cached && state.userId === userId && !state.profile) {
-      state = { userId, profile: cached, loading: true };
-      notify();
+      setState({ userId, profile: cached, loading: true });
     }
   }
 
   try {
     const fresh = await getProfile(userId);
+    // Cambio de cuenta mientras tanto: no es el perfil de la cuenta abierta.
+    if (state.userId !== userId) return;
+    // Lo normal al arrancar es que la nube diga lo mismo que la copia local: se
+    // conserva la referencia y quien lo pinta no tiene nada que repintar.
+    const changed =
+      !!fresh && JSON.stringify(fresh) !== JSON.stringify(state.profile);
+    if (changed) writeCachedProfile(userId, fresh);
     // `fresh` puede ser null si la fila aún no existe; en ese caso se conserva
     // lo que ya se estuviera enseñando en vez de vaciarlo.
-    state = { userId, profile: fresh ?? state.profile, loading: false };
-    if (fresh) writeCachedProfile(userId, fresh);
+    setState({
+      userId,
+      profile: changed ? fresh : state.profile,
+      loading: false,
+    });
   } catch {
     // Sin red: se queda la copia local (o lo que hubiera en memoria). Antes
     // aquí se ponía `null` y Perfil pasaba a decir "Sin perfil".
-    state = { userId, profile: state.profile, loading: false };
+    if (state.userId !== userId) return;
+    setState({ userId, profile: state.profile, loading: false });
   }
-  notify();
 }
 
 export function useMyProfile(): { profile: Profile | null; loading: boolean } {

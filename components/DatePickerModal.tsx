@@ -144,6 +144,8 @@ export function DatePickerModal({
           style={styles.navButton}
           onPress={() => goMonth(-1)}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('Mes anterior')}
         >
           <MaterialCommunityIcons
             name="chevron-left"
@@ -159,6 +161,9 @@ export function DatePickerModal({
           onPress={() => canGoNext && goMonth(1)}
           disabled={!canGoNext}
           hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('Mes siguiente')}
+          accessibilityState={{ disabled: !canGoNext }}
         >
           <MaterialCommunityIcons
             name="chevron-right"
@@ -197,6 +202,11 @@ export function DatePickerModal({
               style={styles.cell}
               disabled={disabled}
               onPress={() => setPending(key)}
+              accessibilityRole="button"
+              accessibilityLabel={`${dayNumber} ${MONTH_NAMES[view.month]}${
+                isTaken ? `. ${t('Ya tiene un entreno')}` : ''
+              }`}
+              accessibilityState={{ selected, disabled }}
             >
               {/* Caja interna cuadrada de tamaño fijo: el realce y el número
                   quedan centrados sin depender de la altura de la celda. */}

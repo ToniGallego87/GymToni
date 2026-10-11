@@ -182,7 +182,13 @@ export function RoutineSelectorScreen({
       <GlassTopBar
         title={t('Rutinas')}
         icon="book-open-variant"
-        subtitle={t('Consulta la que desees o crea una nueva')}
+        subtitle={
+          routines.length === 0
+            ? undefined
+            : routines.length === 1
+            ? t('1 rutina')
+            : t('{n} rutinas', { n: routines.length })
+        }
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />

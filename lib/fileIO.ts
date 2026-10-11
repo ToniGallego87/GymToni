@@ -148,6 +148,30 @@ export async function listLocalBackups(subdir: string): Promise<string[]> {
   }
 }
 
+/** Tamaño en bytes de un backup (0 si no se puede leer). */
+export async function getLocalBackupSize(
+  subdir: string,
+  fileName: string
+): Promise<number> {
+  try {
+    const info = await FileSystem.getInfoAsync(
+      `${backupDir(subdir)}${fileName}`
+    );
+    return info.exists ? info.size ?? 0 : 0;
+  } catch {
+    return 0;
+  }
+}
+
+export async function readLocalBackup(
+  subdir: string,
+  fileName: string
+): Promise<string> {
+  return FileSystem.readAsStringAsync(`${backupDir(subdir)}${fileName}`, {
+    encoding: FileSystem.EncodingType.UTF8,
+  });
+}
+
 /** Deja solo los `keep` backups más recientes (por nombre, que lleva fecha). */
 export async function pruneLocalBackups(
   subdir: string,

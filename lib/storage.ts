@@ -7,6 +7,7 @@ import { WeightSegment } from './cardio';
 import {
   clearAppDataInDb,
   dbEnqueueLogDeletes,
+  dbEnqueueLogUpserts,
   loadAppDataFromDb,
   saveAppDataToDb,
 } from './db';
@@ -172,6 +173,15 @@ export async function loadAppData(): Promise<WorkoutAppData | null> {
         // el entreno eliminado seguiría vivo en la nube y volvería en el
         // siguiente pull.
         await dbEnqueueLogDeletes(removedLogIds);
+        // Las bases de una fusión se reescriben con `updatedAt` nuevo.
+        const updatedAtById = new Map(
+          fromDb.logs.map((log) => [log.id, log.updatedAt])
+        );
+        await dbEnqueueLogUpserts(
+          normalized.logs.filter(
+            (log) => updatedAtById.get(log.id) !== log.updatedAt
+          )
+        );
       }
       return normalized;
     }

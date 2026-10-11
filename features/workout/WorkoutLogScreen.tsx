@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   Pressable,
+  LayoutChangeEvent,
   PanResponder,
   Platform,
   useWindowDimensions,
@@ -20,7 +21,7 @@ import { useWorkout } from '@hooks/useWorkout';
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
 import {
-  AppModal,
+  ChallengesModal,
   ConfirmModal,
   RestTimerModal,
   DatePickerModal,
@@ -28,7 +29,6 @@ import {
   ExerciseInputField,
   InvalidAddReason,
   CardioInputField,
-  Button,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
@@ -48,13 +48,19 @@ import {
   GLASS_REST_TIMER_BG,
 } from '../../components/glassTokens';
 import {
-  assignmentDuplicatesDayInWeek,
+  dateAssignmentConflict,
   groupLogsIntoWeekBlocks,
   isDeloadBlock,
   orderedBlockNumbers,
   takenStrengthDates,
 } from '@lib/weeks';
-import { isCardioOnlyLog } from '@lib/cardio';
+import {
+  isCardioOnlyLog,
+  lastCardioEntryByDiscipline,
+  recentCustomDisciplines,
+  weightForTimestamp,
+  withCardioEntries,
+} from '@lib/cardio';
 import {
   MAX_SET_REPS,
   MAX_SET_WEIGHT_KG,
@@ -68,6 +74,7 @@ import {
   generateId,
   getLogTimestamp,
   getToday,
+  weekdayDayMonth,
 } from '@lib/utils';
 import {
   WorkoutDay,
@@ -84,7 +91,11 @@ import {
   getTotalSetsStrengthScore,
 } from '@lib/progress';
 import { withExerciseCatalogId } from '@lib/routines';
-import { exerciseKey } from '@lib/exerciseProgress';
+import {
+  exerciseKey,
+  getRecordSetIndexes,
+  weightStepFromHistory,
+} from '@lib/exerciseProgress';
 import {
   extendRestTimer,
   getRestDuration,
@@ -95,6 +106,9 @@ import {
   useRestTimer,
 } from '@lib/restTimerStore';
 import { useRestFillStyle } from '@lib/restFill';
+import { setOpenWorkoutLog } from '@lib/openWorkout';
+import { useBodyWeight } from '@lib/bodyWeight';
+import { challengeProgressLabel, computeChallenges } from '@lib/challenges';
 
 interface WorkoutLogScreenProps {
   day: WorkoutDay;
@@ -102,6 +116,12 @@ interface WorkoutLogScreenProps {
   // Sesión de solo cardio: se oculta todo lo de fuerza y el log se marca para
   // no aparecer en Inicio (solo en Cardio).
   cardioOnly?: boolean;
+  // Este entreno abre semana nueva aunque el día no se repita ("Nueva semana"
+  // en Elige la sesión). Solo cuenta si el registro es nuevo.
+  startsNewWeek?: boolean;
+  // Fecha de un entreno olvidado (desde una celda vacía del Calendario). Abre
+  // un registro nuevo en esa fecha en vez de continuar el de hoy.
+  initialDate?: string;
   onSave: () => void;
   onBack: () => void;
   // Abrir la ficha de la rutina a la que pertenece este día (con él desplegado).
@@ -121,11 +141,18 @@ const TIMER_DRAG_TOP_GAP = 10;
 // Desplazamiento mínimo para que un arrastre sea un arrastre y no un toque en
 // el "+30s" o en la ×.
 const TIMER_DRAG_SLOP = 6;
+// Espera antes de bajar al ejercicio siguiente: el tiempo de que la tarjeta
+// completada se pliegue y las de debajo informen de su nueva posición.
+const SCROLL_SETTLE_MS = 120;
+// Clave de la tarjeta "Entreno completado" entre las posiciones de tarjetas.
+const COMPLETED_CARD_KEY = '__completed__';
 
 export function WorkoutLogScreen({
   day,
   log,
   cardioOnly,
+  startsNewWeek,
+  initialDate,
   onSave,
   onBack,
   onOpenRoutine,
@@ -169,7 +196,7 @@ export function WorkoutLogScreen({
   };
 
   // Obtener el log existente: si se pasa log, usarlo; sino el último de hoy
-  const existingLog = log || getLatestTodayLog();
+  const existingLog = log || (initialDate ? null : getLatestTodayLog());
 
   // Identidad de ESTA sesión, fijada al montar y ya inmutable: el log que se
   // edita, el entreno de hoy que se continúa, o uno nuevo.
@@ -183,6 +210,11 @@ export function WorkoutLogScreen({
   // semana siguiente". Con id fijo el autoguardado siempre actualiza el mismo
   // log y no hay nada que borrar.
   const [sessionLogId] = useState(() => existingLog?.id ?? generateId());
+  // Mismo motivo para el cardio: un id nuevo por guardado dejaba en la nube una
+  // fila marcada como borrada por cada autoguardado de la sesión.
+  const [sessionCardioId] = useState(
+    () => existingLog?.cardio?.id ?? generateId()
+  );
   // Mismo motivo para `createdAt` (con él se ordenan y agrupan las semanas): si
   // se recalcula en cada guardado, la sesión se va desplazando hacia delante.
   const [sessionCreatedAt] = useState(
@@ -192,19 +224,37 @@ export function WorkoutLogScreen({
   // dos guardados seguidos sin re-render en medio verían el mismo estado y
   // crearían dos logs.
   const sessionLogExistsRef = useRef(!!existingLog);
+  // Hora de la última serie de cada ejercicio (su `timestamp`, que el Detalle
+  // usa para la duración del entreno). Se conserva entre autoguardados: antes
+  // cada guardado ponía la hora actual a TODOS y la duración salía siempre 0.
+  const exerciseStampRef = useRef<Record<string, number>>(
+    Object.fromEntries(
+      (existingLog?.exercises ?? [])
+        .filter((e) => typeof e.timestamp === 'number')
+        .map((e) => [e.exerciseId, e.timestamp])
+    )
+  );
 
   // Fecha del entreno: se puede registrar un día olvidado o reasignar uno
   // guardado a otro día. Arranca en la del log editado (o hoy al crear).
   const originalDate = log?.date ?? existingLog?.date ?? getToday();
-  const [selectedDate, setSelectedDate] = useState(originalDate);
+  const [selectedDate, setSelectedDate] = useState(initialDate ?? originalDate);
   const [showDatePicker, setShowDatePicker] = useState(false);
-  // Fecha elegida pendiente de confirmar por partir una semana ya existente.
-  const [pendingSplitDate, setPendingSplitDate] = useState<string | null>(null);
+  // Fecha pendiente de confirmar porque parte una semana existente ('split') o
+  // deja el entreno solo en una semana entre otras ('lone'). `initial`: es la
+  // fecha con la que se abrió desde el Calendario, y cancelar sale del registro.
+  const [pendingDate, setPendingDate] = useState<{
+    date: string;
+    reason: 'split' | 'lone';
+    initial?: boolean;
+  } | null>(null);
 
   // Editando una sesión que NO es de hoy: rellenar o corregir un entreno de otro
   // día no es entrenar, así que no se lanza la cuenta atrás de descanso (ni su
   // notificación). Editar el log de hoy sí mantiene el temporizador.
-  const isEditingPastLog = !!log && (log.date ?? getToday()) !== getToday();
+  const isEditingPastLog =
+    (!!log && (log.date ?? getToday()) !== getToday()) ||
+    (!!initialDate && initialDate !== getToday());
 
   // Cargar datos iniciales del log existente si existe
   const initialExerciseSets = selectedDay.exercises.reduce(
@@ -258,6 +308,10 @@ export function WorkoutLogScreen({
   // Estado para almacenar las series agregadas por cada ejercicio
   const [exerciseSets, setExerciseSets] =
     useState<Record<string, ParsedSet[]>>(initialExerciseSets);
+  // Las series vivas, para el "Deshacer" de un borrado: su aviso se creó en un
+  // render anterior y no ve lo que haya pasado después.
+  const exerciseSetsRef = useRef(exerciseSets);
+  exerciseSetsRef.current = exerciseSets;
 
   const [exerciseNotes, setExerciseNotes] =
     useState<Record<string, string>>(initialNotes);
@@ -267,23 +321,29 @@ export function WorkoutLogScreen({
   // Distinta de las notas por ejercicio (exerciseNotes) y, desde que cardio y
   // fuerza son sesiones aparte, propia de CADA una: la nota del cardio ya no es
   // la del entreno de fuerza de ese mismo día.
-  const [sessionNote, setSessionNote] = useState(() => existingLog?.notes ?? '');
+  const [sessionNote, setSessionNote] = useState(
+    () => existingLog?.notes ?? ''
+  );
   // La nota solo ocupa sitio si ya hay algo escrito; si no, se ofrece como un
   // botón (mismo criterio que el cardio: quien no la usa no la arrastra al pie
   // de la pantalla que más se usa).
   const [sessionNoteOpen, setSessionNoteOpen] = useState(
     () => !!existingLog?.notes
   );
+  // Rutina a la que pertenece el día (si ya no está en ninguna, la activa).
+  const getRoutineIdForDay = () => {
+    const owningRoutine = state.routines.find((routine) =>
+      routine.days.some((d) => d.id === selectedDay.id)
+    );
+    return owningRoutine?.id || state.activeRoutineId || '';
+  };
+
   // ¿Semana de descarga? La marca vive en cada log del bloque (semana). Se decide
   // por el bloque al que se une esta sesión:
   //  - Continuar una semana ya marcada como descarga la hereda automáticamente.
   //  - Iniciar una semana nueva (primer día) permite marcarla desde el menú ⋯.
   const deloadWeekInfo = (() => {
-    const routineId =
-      state.routines.find((r) => r.days.some((d) => d.id === selectedDay.id))
-        ?.id ||
-      state.activeRoutineId ||
-      '';
+    const routineId = getRoutineIdForDay();
     // Se excluye el log de ESTA sesión: decidimos si abre semana nueva frente
     // al resto, sin contarse a sí misma.
     const others = state.logs.filter(
@@ -336,8 +396,6 @@ export function WorkoutLogScreen({
     null
   );
 
-  const [showNotesModal, setShowNotesModal] = useState<string | null>(null);
-  const [notesText, setNotesText] = useState('');
   // Editar el descanso por defecto sin salir del registro (opción del ⋯). Es
   // donde de verdad se toca: estás entrenando y se te queda corto.
   const [showTimerModal, setShowTimerModal] = useState(false);
@@ -345,6 +403,12 @@ export function WorkoutLogScreen({
     message: string;
     type: 'success' | 'error';
     duration?: number;
+    // Píldora breve en el centro (el aviso de récord), no cartel al pie.
+    centered?: boolean;
+    // "Deshacer" de un borrado (serie o entrada de cardio).
+    undo?: () => void;
+    // Cambia en cada aviso: dos borrados seguidos reinician la cuenta.
+    key?: number;
   } | null>(null);
   // El descanso ya no vive aquí: es un singleton (lib/restTimerStore) que
   // sobrevive a salir de esta pantalla. Antes era estado local y la navegación
@@ -425,13 +489,6 @@ export function WorkoutLogScreen({
     emoji: selectedDay.emoji,
     name: selectedDay.name,
   });
-
-  const getRoutineIdForDay = () => {
-    const owningRoutine = state.routines.find((routine) =>
-      routine.days.some((d) => d.id === selectedDay.id)
-    );
-    return owningRoutine?.id || state.activeRoutineId || '';
-  };
 
   // Descanso por defecto entre series (ajuste de la PERSONA, el mismo que
   // Configuración): el modal lo cambia al momento con flechas.
@@ -568,6 +625,52 @@ export function WorkoutLogScreen({
       return (sets[ex.id]?.length || 0) < target;
     }).length;
 
+  // Momento de esta sesión, para que los récords se midan solo contra lo
+  // anterior (al rellenar un día pasado no cuenta lo que vino después).
+  const sessionTimestamp = existingLog
+    ? getLogTimestamp(existingLog)
+    : combineDateWithTime(selectedDate, sessionCreatedAt);
+
+  // Todas las series previas de cada ejercicio de la sesión, por nombre (como
+  // Progreso por ejercicio): el récord atraviesa rutinas.
+  const previousSetsByExercise = useMemo(() => {
+    const keys = new Map(
+      selectedDay.exercises.map((ex) => [exerciseKey(ex.name), ex.id])
+    );
+    const byId: Record<string, ParsedSet[]> = {};
+    state.logs.forEach((l) => {
+      if (l.id === sessionLogId || getLogTimestamp(l) >= sessionTimestamp) {
+        return;
+      }
+      l.exercises.forEach((ex) => {
+        const id = keys.get(exerciseKey(ex.exerciseName));
+        if (!id) return;
+        const sets = ex.parsedSets?.length
+          ? ex.parsedSets
+          : parseSeriesString(ex.rawInput || '');
+        (byId[id] ??= []).push(...sets);
+      });
+    });
+    return byId;
+  }, [state.logs, selectedDay, sessionLogId, sessionTimestamp]);
+
+  // ── Bajar solo al ejercicio siguiente ─────────────────────────────────────
+  //
+  // Al completar el ejercicio en curso su tarjeta se pliega y se abre la
+  // siguiente, que solía quedar abajo o detrás del bloque de descanso. La lista
+  // baja hasta dejarla bajo la barra (o hasta "Entreno completado" si era el
+  // último). Solo en ese cambio: desplegar otra tarjeta a mano no mueve nada.
+  const listRef = useRef<Animated.ScrollView>(null);
+  // Posición de cada tarjeta dentro de la lista (onLayout), por id.
+  const cardTopRef = useRef<Record<string, number>>({});
+  const [scrollRequest, setScrollRequest] = useState(0);
+  const noteCardTop = (key: string) => (e: LayoutChangeEvent) => {
+    cardTopRef.current[key] = e.nativeEvent.layout.y;
+  };
+
+  const recordSetsOf = (exerciseId: string, sets: ParsedSet[]) =>
+    getRecordSetIndexes(previousSetsByExercise[exerciseId] ?? [], sets);
+
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     const targetSets = effectiveTargetSets(
       selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets
@@ -577,8 +680,30 @@ export function WorkoutLogScreen({
       ...exerciseSets,
       [exerciseId]: [...(exerciseSets[exerciseId] || []), set],
     };
+    // Corregir un entreno de otro día no es entrenar: su hora no se toca.
+    if (!isEditingPastLog) exerciseStampRef.current[exerciseId] = Date.now();
     setExerciseSets(updated);
     autoSaveWorkout(updated);
+    if (
+      exerciseId === currentExerciseId &&
+      targetSets > 0 &&
+      updated[exerciseId].length === targetSets
+    ) {
+      setScrollRequest((n) => n + 1);
+    }
+
+    if (
+      recordSetsOf(exerciseId, updated[exerciseId]).has(
+        updated[exerciseId].length - 1
+      )
+    ) {
+      setToast({
+        message: t('Récord'),
+        type: 'success',
+        duration: 1200,
+        centered: true,
+      });
+    }
 
     // Editando un entreno de otro día: se guarda la serie pero no hay descanso.
     if (isEditingPastLog) return;
@@ -619,6 +744,7 @@ export function WorkoutLogScreen({
       }
     }
 
+    const before = exerciseSets[exerciseId] || [];
     const updated = { ...exerciseSets, [exerciseId]: updatedSets };
     setExerciseSets(updated);
     autoSaveWorkout(updated);
@@ -627,7 +753,22 @@ export function WorkoutLogScreen({
     if (activeTimerId === exerciseId) {
       void stopTimer();
     }
+
+    // La × es pequeña y está pegada a la burbuja de al lado: el borrado se
+    // puede deshacer (en vez de confirmarse, que encarecería el borrado bueno).
+    // Solo si el ejercicio no ha cambiado desde entonces.
+    showUndo(t('Serie borrada'), () => {
+      const current = exerciseSetsRef.current;
+      if (current[exerciseId] !== updatedSets) return;
+      const restored = { ...current, [exerciseId]: before };
+      setExerciseSets(restored);
+      autoSaveRef.current(restored);
+    });
   };
+
+  // Aviso "… · Deshacer" de un borrado.
+  const showUndo = (message: string, undo: () => void) =>
+    setToast({ message, type: 'success', undo, key: Date.now() });
   // Todas las ejecuciones anteriores de un ejercicio (ordenadas de más reciente
   // a más antigua), respetando el tope temporal al editar un log existente.
   // Salta las semanas de descarga: un deload nunca es la referencia "anterior"
@@ -755,6 +896,7 @@ export function WorkoutLogScreen({
         const finalSets = { ...exerciseSets, [exerciseId]: filledSets };
         setExerciseSets(finalSets);
         autoSaveWorkout(finalSets);
+        if (exerciseId === currentExerciseId) setScrollRequest((n) => n + 1);
       }
 
       // Saltar NO es descansar: el ejercicio se cierra porque no se va a hacer
@@ -790,16 +932,19 @@ export function WorkoutLogScreen({
         order: ex.order,
         rawInput,
         parsedSets: exSets,
-        notes: exerciseNotes[ex.id],
-        timestamp: Date.now(),
+        // Vaciar la nota es borrarla: no se guarda una cadena vacía.
+        notes: exerciseNotes[ex.id]?.trim() || undefined,
+        // Hora de su última serie; sin series, la del inicio de la sesión.
+        timestamp: exerciseStampRef.current[ex.id] ?? sessionCreatedAt,
       };
     });
 
+    // Con sus entradas estructuradas (una fila por esfuerzo, como las series).
     const cardioLog: CardioLog | undefined = cardioInput.trim()
-      ? {
-          id: generateId(),
+      ? withCardioEntries({
           ...(parseCardioString(cardioInput) as Omit<CardioLog, 'id'>),
-        }
+          id: sessionCardioId,
+        })
       : undefined;
 
     // Al reasignar la fecha hay que mover también `createdAt`: es con lo que se
@@ -822,7 +967,10 @@ export function WorkoutLogScreen({
       // Marca de "este entreno abre semana" (la pone y la quita mover el día
       // entre semanas desde el detalle, ver lib/weeks.ts): se conserva tanto al
       // editar como al continuar el entreno de hoy.
-      startsNewWeek: log?.startsNewWeek ?? existingLog?.startsNewWeek,
+      startsNewWeek:
+        log?.startsNewWeek ??
+        existingLog?.startsNewWeek ??
+        (startsNewWeek || undefined),
       cardioOnly: log?.cardioOnly ?? (cardioOnly || undefined),
       // Semana de descarga: se marca este día para que el bloque entero cuente
       // como descarga (ver isDeloadBlock).
@@ -856,6 +1004,10 @@ export function WorkoutLogScreen({
       console.error('Error auto-saving workout:', error);
     }
   };
+  // La versión de este render, para quien guarda desde un aviso viejo
+  // ("Deshacer"): así guarda con las notas y el cardio de ahora.
+  const autoSaveRef = useRef(autoSaveWorkout);
+  autoSaveRef.current = autoSaveWorkout;
 
   // Hay series ya insertadas en esta sesión (lo que se borraría al pasar a
   // descarga, porque cambian los objetivos de series y el peso propuesto).
@@ -925,72 +1077,55 @@ export function WorkoutLogScreen({
     }
   };
 
-  const handleExerciseNotesPress = (exerciseId: string) => {
-    setShowNotesModal(exerciseId);
-    setNotesText(exerciseNotes[exerciseId] || '');
-  };
+  // Nota de un ejercicio: se escribe en su tarjeta y se autoguarda (el efecto
+  // de cardio y notas la vuelca). Vaciarla es borrarla.
+  const handleExerciseNoteChange = (exerciseId: string, text: string) =>
+    setExerciseNotes((prev) => ({ ...prev, [exerciseId]: text }));
 
-  const handleSaveNotes = () => {
-    if (showNotesModal) {
-      setExerciseNotes((prev) => ({
-        ...prev,
-        [showNotesModal]: notesText,
-      }));
-    }
-    setShowNotesModal(null);
-    setNotesText('');
-  };
-
-  const handleDeleteNotes = () => {
-    if (showNotesModal) {
-      setExerciseNotes((prev) => {
-        const next = { ...prev };
-        delete next[showNotesModal];
-        return next;
-      });
-    }
-    setShowNotesModal(null);
-    setNotesText('');
-  };
-
-  // Fecha mostrada en el subtítulo, en formato dd/mm/aaaa.
-  const getSubtitleDate = (): string =>
-    selectedDate.split('-').reverse().join('/');
+  // Fecha del subtítulo: la misma forma que el historial y el Detalle.
+  const getSubtitleDate = (): string => weekdayDayMonth(selectedDate);
 
   // Clave de día (dayNumber) para agrupar semanas, igual que Inicio.
   const dayNumberForLog = (l: WorkoutLog): number | undefined =>
     findDayInRoutines(state.routines, l.dayId)?.dayNumber;
 
-  // Aplica la fecha elegida. Si cae en una semana que ya tiene este mismo día,
-  // asignarla parte esa semana en dos (ver lib/weeks): se avisa antes.
+  // ¿Poner el entreno en `date` descoloca las semanas? (ver
+  // `dateAssignmentConflict`, el mismo aviso que da el Detalle).
+  const dateConflict = (date: string): 'split' | 'lone' | null => {
+    const routineId = getRoutineIdForDay();
+    const movedLog: WorkoutLog = {
+      ...(log || existingLog || ({ id: sessionLogId } as WorkoutLog)),
+      dayId: selectedDay.id,
+    };
+    return dateAssignmentConflict(
+      state.logs.filter((l) => l.routineId === routineId),
+      movedLog,
+      combineDateWithTime(date, log?.createdAt || Date.now()),
+      dayNumberForLog,
+      state.routines.find((r) => r.id === routineId)?.days.length ?? 0
+    );
+  };
+
   const applyChosenDate = (date: string) => {
     setShowDatePicker(false);
     if (date === selectedDate) return;
-
-    const routineId = getRoutineIdForDay();
-    const routineLogs = state.logs.filter((l) => l.routineId === routineId);
-    const movedLog: WorkoutLog = {
-      ...(log || existingLog || ({ id: 'new-log' } as WorkoutLog)),
-      dayId: selectedDay.id,
-    };
-    const newTimestamp = combineDateWithTime(
-      date,
-      log?.createdAt || Date.now()
-    );
-
-    if (
-      assignmentDuplicatesDayInWeek(
-        routineLogs,
-        movedLog,
-        newTimestamp,
-        dayNumberForLog
-      )
-    ) {
-      setPendingSplitDate(date);
+    const reason = dateConflict(date);
+    if (reason) {
+      setPendingDate({ date, reason });
       return;
     }
     setSelectedDate(date);
   };
+
+  // Entreno olvidado abierto desde el Calendario: la fecha ya viene puesta, así
+  // que el aviso se da al entrar, antes de meter nada.
+  useEffect(() => {
+    if (!initialDate) return;
+    const reason = dateConflict(initialDate);
+    if (reason) setPendingDate({ date: initialDate, reason, initial: true });
+    // Solo al montar: la fecha inicial no cambia.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Fija un GIF del catálogo al ejercicio de la rutina (botón "Asignar" del
   // buscador). Se guarda en la rutina, no en el log, para que el play quede
@@ -1034,11 +1169,135 @@ export function WorkoutLogScreen({
     hasInsertedData &&
     countIncompleteExercises(exerciseSets) === 0;
 
+  // Retos e insignias no cuentan este entreno hasta que el día está terminado:
+  // todos los ejercicios completos o salir del registro. Si no, se recalculaban
+  // con cada serie autoguardada y saltaba un "reto superado" a mitad de sesión.
+  // Corregir un entreno de otro día no es entrenar: ese no se aparta (lo que ya
+  // ganó no debe desaparecer mientras se edita).
+  useEffect(() => {
+    if (isEditingPastLog) return;
+    setOpenWorkoutLog(allExercisesDone ? null : sessionLogId);
+  }, [isEditingPastLog, allExercisesDone, sessionLogId]);
+  useEffect(() => () => setOpenWorkoutLog(null), []);
+
+  // Retos que ha movido ESTA sesión (de fuerza en la tarjeta de completado; de
+  // cardio bajo lo apuntado):
+  // los de antes (sin ella) contra los de ahora. Si la sesión abre semana, la
+  // ventana es otra y lo de antes cuenta como cero.
+  const bodyWeight = useBodyWeight();
+  // Cardio: lo de la última vez en cada disciplina (sugerido al elegirla) y el
+  // peso con el que se estiman las kcal del popup.
+  const lastCardioEntries = useMemo(
+    () => (cardioOnly ? lastCardioEntryByDiscipline(state.logs) : {}),
+    [cardioOnly, state.logs]
+  );
+  // Disciplinas propias recientes: casilla con su nombre tras las fijas.
+  const customCardioDisciplines = useMemo(
+    () => (cardioOnly ? recentCustomDisciplines(state.logs) : []),
+    [cardioOnly, state.logs]
+  );
+  // En cardio, los retos de cardio en cuanto hay algo apuntado (se autoguarda
+  // al meterlo): no hay "día terminado" que esperar.
+  const hasCardioInput = cardioOnly && !!cardioInput.trim();
+  const sessionChallenges = useMemo(() => {
+    if (!allExercisesDone && !hasCardioInput) return null;
+    const category = cardioOnly ? 'cardio' : 'strength';
+    const input = {
+      routines: state.routines,
+      activeRoutineId: state.activeRoutineId,
+      weight: bodyWeight,
+    };
+    const ofSession = (logs: WorkoutLog[]) =>
+      computeChallenges({ ...input, logs }).filter(
+        (c) => c.category === category
+      );
+    const before = ofSession(state.logs.filter((l) => l.id !== sessionLogId));
+    const after = ofSession(state.logs);
+    const advanced = after.filter((c) => {
+      const prev = before.find(
+        (b) => b.id === c.id && b.periodKey === c.periodKey
+      );
+      return c.current > (prev?.current ?? 0);
+    });
+    return { all: after, advanced };
+  }, [
+    allExercisesDone,
+    hasCardioInput,
+    cardioOnly,
+    state.logs,
+    state.routines,
+    state.activeRoutineId,
+    bodyWeight,
+    sessionLogId,
+  ]);
+  const [showChallenges, setShowChallenges] = useState(false);
+
+  // Los retos que ha movido la sesión, pulsables hacia la lista de la semana.
+  // Lo comparten el remate de fuerza y el registro de cardio.
+  const renderSessionChallenges = () =>
+    sessionChallenges?.advanced.length ? (
+      <Pressable
+        style={({ pressed }) => [
+          styles.completedChallenges,
+          pressed && styles.buttonPressed,
+        ]}
+        onPress={() => setShowChallenges(true)}
+        accessibilityRole="button"
+        accessibilityHint={t('Ver los retos de la semana')}
+      >
+        {sessionChallenges.advanced.map((c) => (
+          <View key={c.id} style={styles.completedChallengeRow}>
+            <MaterialCommunityIcons
+              name={
+                (c.done
+                  ? 'check-circle'
+                  : c.icon) as React.ComponentProps<
+                  typeof MaterialCommunityIcons
+                >['name']
+              }
+              size={16}
+              color={
+                c.done ? theme.colors.success : theme.colors.primary
+              }
+            />
+            <Text
+              style={styles.completedChallengeName}
+              numberOfLines={1}
+            >
+              {c.name}
+            </Text>
+            <Text style={styles.completedChallengeValue}>
+              {challengeProgressLabel(c, true)}
+            </Text>
+          </View>
+        ))}
+      </Pressable>
+    ) : null;
+
   const currentExerciseId = selectedDay.exercises.find((ex) => {
     const target = effectiveTargetSets(ex.targetSets);
     const sets = exerciseSets[ex.id] || [];
     return !(target > 0 && sets.length >= target);
   })?.id;
+
+  // Atiende la petición de bajar (ver `listRef`): con la tarjeta anterior ya
+  // plegada, espera a que la nueva se recoloque y la deja bajo la barra.
+  useEffect(() => {
+    if (!scrollRequest) return;
+    const key = allExercisesDone ? COMPLETED_CARD_KEY : currentExerciseId;
+    if (!key) return;
+    const timer = setTimeout(() => {
+      const top = cardTopRef.current[key];
+      if (top == null) return;
+      listRef.current?.scrollTo({
+        y: Math.max(0, top - topBarHeight - GLASS_TOP_BAR_CONTENT_GAP),
+        animated: true,
+      });
+    }, SCROLL_SETTLE_MS);
+    return () => clearTimeout(timer);
+    // Solo la petición: el resto se lee tal como está al atenderla.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scrollRequest]);
 
   // Contenido del temporizador de descanso (cuenta atrás + acciones). Antes se
   // inyectaba dentro de la tarjeta del ejercicio (o debajo, si ya estaba
@@ -1061,6 +1320,13 @@ export function WorkoutLogScreen({
 
   const renderRestTimerContent = () => (
     <>
+      {/* Asa de arrastre: el bloque se aparta arrastrándolo en vertical, y
+          sin ella nada lo decía (AGENTS: nada escondido tras un
+          gesto). Barra "grabber" como la de las hojas inferiores: el icono
+          de 18 px apenas se veía. Solo pinta: el gesto es de todo el bloque. */}
+      <View style={styles.timerHandle} pointerEvents="none">
+        <View style={styles.timerHandleBar} />
+      </View>
       {/* Qué se está esperando: sin él, el bloque era un número suelto. */}
       <Text style={styles.timerCaption} numberOfLines={1}>
         {restBeforeNextExercise
@@ -1128,6 +1394,7 @@ export function WorkoutLogScreen({
       />
 
       <StretchScrollView
+        ref={listRef}
         style={styles.scrollView}
         contentContainerStyle={[
           styles.scrollContent,
@@ -1155,37 +1422,46 @@ export function WorkoutLogScreen({
               ? getPreviousWeightLog(exercise.id)
               : previousLog;
           return (
-            <React.Fragment key={exercise.id}>
-              <ExerciseInputField
-                exerciseName={exercise.name}
-                catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
-                onAssignGif={(catalogId) =>
-                  handleAssignGif(exercise.id, catalogId)
-                }
-                target={{
-                  sets: effectiveTargetSets(exercise.targetSets),
-                  reps: exercise.targetReps,
-                }}
-                deload={isDeloadSession}
-                addedSets={currentSets}
-                onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
-                onInvalidAdd={(reason) =>
-                  setToast({
-                    message: getInvalidAddMessage(reason),
-                    type: 'error',
-                    duration: 2000,
-                  })
-                }
-                onRemoveSet={(index) => handleRemoveSet(exercise.id, index)}
-                onFinishExercise={() => handleFinishExercise(exercise.id)}
-                onNotesPress={() => handleExerciseNotesPress(exercise.id)}
-                notes={exerciseNotes[exercise.id]}
-                previousLog={previousLogForField}
-                improvement={isDeloadSession ? null : improvement}
-                accent={dayAccent}
-                isCurrent={exercise.id === currentExerciseId}
-              />
-            </React.Fragment>
+            <ExerciseInputField
+              key={exercise.id}
+              exerciseName={exercise.name}
+              catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
+              onAssignGif={(catalogId) =>
+                handleAssignGif(exercise.id, catalogId)
+              }
+              target={{
+                sets: effectiveTargetSets(exercise.targetSets),
+                reps: exercise.targetReps,
+              }}
+              deload={isDeloadSession}
+              addedSets={currentSets}
+              recordSetIndexes={recordSetsOf(exercise.id, currentSets)}
+              weightStep={weightStepFromHistory(
+                [
+                  ...(previousSetsByExercise[exercise.id] ?? []),
+                  ...currentSets,
+                ].map((s) => s.weight)
+              )}
+              onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
+              onInvalidAdd={(reason) =>
+                setToast({
+                  message: getInvalidAddMessage(reason),
+                  type: 'error',
+                  duration: 2000,
+                })
+              }
+              onRemoveSet={(index) => handleRemoveSet(exercise.id, index)}
+              onFinishExercise={() => handleFinishExercise(exercise.id)}
+              onNotesChange={(text) =>
+                handleExerciseNoteChange(exercise.id, text)
+              }
+              notes={exerciseNotes[exercise.id]}
+              previousLog={previousLogForField}
+              improvement={isDeloadSession ? null : improvement}
+              accent={dayAccent}
+              isCurrent={exercise.id === currentExerciseId}
+              onLayout={noteCardTop(exercise.id)}
+            />
           );
         })}
 
@@ -1197,8 +1473,27 @@ export function WorkoutLogScreen({
             value={cardioInput}
             onChangeText={setCardioInput}
             accent={dayAccent}
-            inlinePicker
+            lastEntries={lastCardioEntries}
+            customDisciplines={customCardioDisciplines}
+            weightKg={weightForTimestamp(bodyWeight, sessionTimestamp)}
+            onEntryDeleted={(undo) => showUndo(t('Cardio borrado'), undo)}
+            dateLabel={
+              selectedDate === getToday()
+                ? undefined
+                : weekdayDayMonth(selectedDate)
+            }
           />
+        )}
+        {/* Los retos de cardio que ha movido lo apuntado (kcal de hoy, de la
+            semana, sesiones), en el momento de apuntarlo, como el remate de
+            fuerza; antes había que salir a la pestaña para ver "¡superado!". */}
+        {cardioOnly && !!sessionChallenges?.advanced.length && (
+          <View style={styles.cardioChallenges}>
+            <Text style={styles.cardioChallengesTitle}>
+              {t('Retos que has movido')}
+            </Text>
+            {renderSessionChallenges()}
+          </View>
         )}
 
         {/* Nota de la SESIÓN, al pie y junto al cardio: lo que pasó hoy y no
@@ -1261,7 +1556,10 @@ export function WorkoutLogScreen({
             registro ya está en el historial): no añade un paso, le pone nombre
             al que existe, que es lo que le faltaba al primer entreno. */}
         {allExercisesDone && (
-          <View style={styles.completedCard}>
+          <View
+            style={styles.completedCard}
+            onLayout={noteCardTop(COMPLETED_CARD_KEY)}
+          >
             <GradientFill accent={theme.colors.success} />
             <View style={styles.completedRow}>
               <MaterialCommunityIcons
@@ -1278,6 +1576,10 @@ export function WorkoutLogScreen({
             <Text style={styles.completedHint}>
               {t('Ya está guardado en tu historial.')}
             </Text>
+            {/* Lo que ha movido esta sesión en los retos de la semana: el
+                momento de más motivación, y el progreso parcial no se veía en
+                ningún sitio hasta volver a Inicio. */}
+            {renderSessionChallenges()}
             <GradientCtaButton
               icon="check-bold"
               title={t('Terminar')}
@@ -1375,18 +1677,32 @@ export function WorkoutLogScreen({
       />
 
       <ConfirmModal
-        visible={pendingSplitDate !== null}
-        title={t('¿Dividir la semana?')}
-        message={t(
-          'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?'
-        )}
+        visible={pendingDate !== null}
+        title={
+          pendingDate?.reason === 'lone'
+            ? t('¿Semana aparte?')
+            : t('¿Dividir la semana?')
+        }
+        message={
+          pendingDate?.reason === 'lone'
+            ? t(
+                'Esa fecha no encaja en ninguna semana ya registrada: este entreno quedará como una semana aparte, solo con este día, y puede afectar a la racha y al progreso. ¿Continuar?'
+              )
+            : t(
+                'Esa fecha cae en una semana que ya tiene este día. Se partirá en dos y puede afectar a la racha y al progreso. ¿Continuar?'
+              )
+        }
         confirmLabel={t('Continuar')}
         confirmVariant="primary"
         onConfirm={() => {
-          if (pendingSplitDate) setSelectedDate(pendingSplitDate);
-          setPendingSplitDate(null);
+          if (pendingDate) setSelectedDate(pendingDate.date);
+          setPendingDate(null);
         }}
-        onCancel={() => setPendingSplitDate(null)}
+        onCancel={() => {
+          const leave = !!pendingDate?.initial;
+          setPendingDate(null);
+          if (leave) onBack();
+        }}
       />
 
       <ConfirmModal
@@ -1420,6 +1736,13 @@ export function WorkoutLogScreen({
           setPendingDeload(null);
         }}
         onCancel={() => setPendingDeload(null)}
+      />
+
+      <ChallengesModal
+        visible={showChallenges}
+        onClose={() => setShowChallenges(false)}
+        title={t('Retos de la semana')}
+        challenges={sessionChallenges?.all ?? []}
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
@@ -1457,58 +1780,24 @@ export function WorkoutLogScreen({
 
       {toast && (
         <Toast
+          key={toast.key}
           message={toast.message}
           type={toast.type}
           duration={toast.duration}
+          centered={toast.centered}
+          actionLabel={toast.undo ? t('Deshacer') : undefined}
+          onAction={
+            toast.undo
+              ? () => {
+                  toast.undo?.();
+                  setToast(null);
+                }
+              : undefined
+          }
           onDismiss={() => setToast(null)}
         />
       )}
 
-      <AppModal
-        visible={showNotesModal !== null}
-        onRequestClose={() => setShowNotesModal(null)}
-        title={t('Notas del ejercicio')}
-        icon="note-text-outline"
-        align="left"
-        footer={
-          <View style={styles.modalButtons}>
-            <Button
-              title={t('Cancelar')}
-              onPress={() => setShowNotesModal(null)}
-              variant="secondary"
-              size="medium"
-              style={styles.modalButton}
-            />
-            {showNotesModal && exerciseNotes[showNotesModal] ? (
-              <Button
-                title={t('Borrar')}
-                onPress={handleDeleteNotes}
-                variant="danger"
-                size="medium"
-                style={styles.modalButton}
-              />
-            ) : null}
-            <Button
-              title={t('Guardar')}
-              onPress={handleSaveNotes}
-              variant="primary"
-              size="medium"
-              style={styles.modalButton}
-            />
-          </View>
-        }
-      >
-        <TextInput
-          style={styles.notesInput}
-          placeholder={t(
-            'Añade una nota (ej: muy cansado, fallo en última serie)'
-          )}
-          value={notesText}
-          onChangeText={setNotesText}
-          multiline
-          placeholderTextColor={theme.colors.textSecondary}
-        />
-      </AppModal>
 
       {/* Descanso por defecto entre series, sin salir del registro. Ajuste de
           la PERSONA (el mismo que edita Configuración); cambia el de las
@@ -1533,9 +1822,6 @@ const makeStyles = () =>
     scrollContent: {
       paddingHorizontal: 16,
       paddingTop: 0,
-    },
-    buttonContainer: {
-      marginTop: 15,
     },
     // Remate del día completado: tarjeta verde con el CTA de cierre.
     completedCard: {
@@ -1563,6 +1849,44 @@ const makeStyles = () =>
     completedHint: {
       fontSize: 13,
       color: theme.colors.textSecondary,
+    },
+    // Retos que ha movido la sesión: una fila por reto, pulsable en bloque.
+    completedChallenges: {
+      gap: 6,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.inputBg,
+    },
+    cardioChallenges: {
+      marginTop: 12,
+      gap: 8,
+    },
+    cardioChallengesTitle: {
+      fontSize: 13,
+      fontWeight: '800',
+      letterSpacing: 0.6,
+      textTransform: 'uppercase',
+      color: theme.colors.textSecondary,
+    },
+    completedChallengeRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    completedChallengeName: {
+      flex: 1,
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    completedChallengeValue: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.textSecondary,
+      fontVariant: ['tabular-nums'],
     },
     // "Añadir cardio": ocupa el hueco del campo cuando está plegado. Contorno
     // discontinuo, como el resto de "añadir" de la app (Añadir ejercicio/día).
@@ -1622,30 +1946,6 @@ const makeStyles = () =>
     buttonPressed: {
       opacity: 0.85,
     },
-    notesInput: {
-      marginTop: 4,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      borderRadius: theme.borderRadius.sm,
-      padding: 14,
-      fontSize: 16,
-      minHeight: 88,
-      color: theme.colors.text,
-      backgroundColor: theme.colors.inputBg,
-      lineHeight: 22,
-      textAlignVertical: 'top',
-    },
-    modalButtons: {
-      flexDirection: 'row',
-      gap: 8,
-    },
-    // Reparto equitativo y sin la sombra fuerte del Button: dentro de la tarjeta
-    // del modal la sombra grande dejaba una mancha oscura debajo.
-    modalButton: {
-      flex: 1,
-      shadowOpacity: 0,
-      elevation: 0,
-    },
     // Mismo patrón que las burbujas de serie (`serieTag` de ExerciseInputField):
     // relleno del acento al 18% y tinta del acento. Sin sombra: un fondo
     // translúcido con `elevation` pinta en Android un rectángulo de esquinas
@@ -1697,9 +1997,25 @@ const makeStyles = () =>
     },
     timerContainer: {
       borderRadius: theme.borderRadius.lg,
-      paddingVertical: 12,
+      // Arriba, hueco para el asa de arrastre.
+      paddingTop: 20,
+      paddingBottom: 12,
       paddingHorizontal: 14,
       justifyContent: 'center',
+    },
+    timerHandle: {
+      position: 'absolute',
+      top: 7,
+      left: 0,
+      right: 0,
+      alignItems: 'center',
+    },
+    timerHandleBar: {
+      width: 44,
+      height: 5,
+      borderRadius: 3,
+      backgroundColor: GLASS_BACK_BUTTON_TEXT,
+      opacity: 0.55,
     },
     // Fila única del descanso, centrada en el bloque. El hueco lateral es
     // simétrico (no solo a la derecha) para que el centrado sea el real y de

@@ -50,8 +50,8 @@ function estimateTextWidth(text: string, fontSize: number): number {
 
 // Etiquetas que conviven en una misma fila de botones dentro de un modal.
 const MODAL_BUTTON_ROWS: { name: string; keys: string[] }[] = [
-  // Modal "Notas del ejercicio": 3 botones (el caso que reventaba).
-  { name: 'notas del ejercicio', keys: ['Cancelar', 'Borrar', 'Guardar'] },
+  // Popup de una disciplina de cardio: 2 botones.
+  { name: 'datos de cardio', keys: ['Atrás', 'Guardar'] },
   // Modal "Editar Temporizador": 2 botones.
   { name: 'editar temporizador', keys: ['Cancelar', 'Guardar'] },
 ];

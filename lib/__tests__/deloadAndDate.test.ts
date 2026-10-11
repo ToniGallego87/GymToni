@@ -1,9 +1,11 @@
 import {
   assignmentDuplicatesDayInWeek,
+  assignmentOpensLoneWeek,
+  dateAssignmentConflict,
   buildWeekProgress,
   isDeloadBlock,
 } from '../weeks';
-import { combineDateWithTime } from '../utils';
+import { combineDateWithTime, weekdayDayMonth } from '../utils';
 import { parseImportedExercise, buildWorkoutExercises } from '../exerciseForm';
 import { ParsedSet, WorkoutDay, WorkoutLog } from '../../types';
 
@@ -133,6 +135,56 @@ describe('assignmentDuplicatesDayInWeek', () => {
   });
 });
 
+describe('assignmentOpensLoneWeek', () => {
+  const dayKeyAt = (days: number) =>
+    new Date(1_700_000_000_000 + days * 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+  // Semana A (días 0-2) y semana B (días 14-16), las dos completas.
+  const twoFullWeeks = [
+    makeLog('a1', 1, 0),
+    makeLog('a2', 2, 1),
+    makeLog('a3', 3, 2),
+    makeLog('b1', 1, 14),
+    makeLog('b2', 2, 15),
+    makeLog('b3', 3, 16),
+  ];
+
+  it('avisa al meter un día entre dos semanas completas', () => {
+    const moved = makeLog('new', 1, 0);
+    const ts = combineDateWithTime(dayKeyAt(8), moved.createdAt);
+    expect(
+      assignmentOpensLoneWeek(twoFullWeeks, moved, ts, dayNumberOf, 3)
+    ).toBe(true);
+  });
+
+  it('no avisa si el día completa la semana a la que le faltaba', () => {
+    const logs = twoFullWeeks.filter((l) => l.id !== 'a3');
+    const moved = makeLog('new', 3, 0);
+    const ts = combineDateWithTime(dayKeyAt(3), moved.createdAt);
+    expect(assignmentOpensLoneWeek(logs, moved, ts, dayNumberOf, 3)).toBe(
+      false
+    );
+  });
+
+  it('no avisa al abrir la semana en curso (no hay nada después)', () => {
+    const moved = makeLog('new', 1, 0);
+    const ts = combineDateWithTime(dayKeyAt(20), moved.createdAt);
+    expect(
+      assignmentOpensLoneWeek(twoFullWeeks, moved, ts, dayNumberOf, 3)
+    ).toBe(false);
+  });
+
+  it('no avisa en una rutina de un solo día', () => {
+    const logs = [makeLog('a', 1, 0), makeLog('b', 1, 14)];
+    const moved = makeLog('new', 1, 0);
+    const ts = combineDateWithTime(dayKeyAt(7), moved.createdAt);
+    expect(assignmentOpensLoneWeek(logs, moved, ts, dayNumberOf, 1)).toBe(
+      false
+    );
+  });
+});
+
 describe('round-trip del GIF asignado en texto', () => {
   it('conserva el catalogId al exportar e importar la línea', () => {
     const line = 'Press banca [4x6-8] {#0025}';
@@ -149,5 +201,64 @@ describe('round-trip del GIF asignado en texto', () => {
   it('sin etiqueta, no hay catalogId', () => {
     const parsed = parseImportedExercise('Sentadilla [5x5]');
     expect(parsed.catalogId).toBeUndefined();
+  });
+});
+
+// Registro y Detalle dan el mismo aviso al cambiar la fecha.
+describe('dateAssignmentConflict', () => {
+  const dayKeyAt = (days: number) =>
+    new Date(1_700_000_000_000 + days * 24 * 3600 * 1000)
+      .toISOString()
+      .slice(0, 10);
+  const twoFullWeeks = [
+    makeLog('a1', 1, 0),
+    makeLog('a2', 2, 1),
+    makeLog('a3', 3, 2),
+    makeLog('b1', 1, 14),
+    makeLog('b2', 2, 15),
+    makeLog('b3', 3, 16),
+  ];
+
+  it("'split' si la fecha cae en una semana que ya tiene ese día", () => {
+    const moved = makeLog('new', 1, 0);
+    const ts = combineDateWithTime(dayKeyAt(1), moved.createdAt);
+    expect(
+      dateAssignmentConflict(twoFullWeeks, moved, ts, dayNumberOf, 3)
+    ).toBe('split');
+  });
+
+  it("'lone' si deja el entreno solo entre dos semanas", () => {
+    const moved = makeLog('new', 1, 0);
+    const ts = combineDateWithTime(dayKeyAt(8), moved.createdAt);
+    expect(
+      dateAssignmentConflict(twoFullWeeks, moved, ts, dayNumberOf, 3)
+    ).toBe('lone');
+  });
+
+  it('null si la fecha no descoloca nada', () => {
+    const moved = makeLog('new', 1, 0);
+    const ts = combineDateWithTime(dayKeyAt(20), moved.createdAt);
+    expect(
+      dateAssignmentConflict(twoFullWeeks, moved, ts, dayNumberOf, 3)
+    ).toBeNull();
+  });
+
+  it('el cardio suelto nunca abre "semana aparte"', () => {
+    const moved = makeLog('new', 1, 0, { cardioOnly: true });
+    const ts = combineDateWithTime(dayKeyAt(8), moved.createdAt);
+    expect(
+      dateAssignmentConflict(twoFullWeeks, moved, ts, dayNumberOf, 3)
+    ).toBeNull();
+  });
+});
+
+// Fecha de un entreno: una sola forma en toda la app, con año solo si no es
+// el del año en curso.
+describe('weekdayDayMonth', () => {
+  it('sin año si es del año en curso', () => {
+    expect(weekdayDayMonth('2026-10-09', 2026)).not.toMatch(/2026/);
+  });
+  it('con el año si es de otro', () => {
+    expect(weekdayDayMonth('2025-10-09', 2026)).toMatch(/ 2025$/);
   });
 });

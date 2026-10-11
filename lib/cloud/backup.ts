@@ -11,6 +11,7 @@ import {
   WorkoutLogRow,
   ExerciseLogRow,
   LogSetRow,
+  CardioEntryRow,
   CardioLogRow,
   SETTING_ACTIVE_ROUTINE_ID,
   SETTING_SELECTED_ROUTINE_ID,
@@ -116,6 +117,15 @@ export async function backupToCloud(
     await upsertAll(table, tableRows);
     await tombstoneMissing(table, tableRows, userId, now);
   }
+  // Entradas de cardio: tabla nueva. Si aún no existe en la nube, la copia
+  // sigue valiendo (el texto de cardio_logs lleva el dato).
+  try {
+    const entryRows = (rows.cardioEntries ?? []).map(own);
+    await upsertAll('cardio_entries', entryRows);
+    await tombstoneMissing('cardio_entries', entryRows, userId, now);
+  } catch (error) {
+    console.warn('cardio_entries:', error instanceof Error ? error.message : error);
+  }
 
   const active =
     rows.settings.find((s) => s.key === SETTING_ACTIVE_ROUTINE_ID)?.value ??
@@ -193,6 +203,8 @@ export async function restoreFromCloud(
     fetchTable('log_sets'),
     fetchTable('cardio_logs'),
   ]);
+  // Tolerante, como en el backup: sin la tabla, el cardio sale de su texto.
+  const cardioEntries = await fetchTable('cardio_entries').catch(() => []);
 
   const { data: us } = await supabase
     .from('user_settings')
@@ -223,6 +235,7 @@ export async function restoreFromCloud(
     exerciseLogs: exerciseLogs as unknown as ExerciseLogRow[],
     logSets: logSets as unknown as LogSetRow[],
     cardioLogs: cardioLogs as unknown as CardioLogRow[],
+    cardioEntries: cardioEntries as unknown as CardioEntryRow[],
   };
   return rowsToAppData(rows);
 }

@@ -187,3 +187,23 @@ export function buildImprovementFromStrengthScores(
   const deltaPct = ((currentScore - previousScore) / previousScore) * 100;
   return { isImproved: deltaPct > 0, percent: Math.abs(deltaPct) };
 }
+
+/** Tope de duración creíble: por encima, el dato no es un entreno seguido. */
+export const MAX_WORKOUT_MINUTES = 240;
+
+/**
+ * Duración de un entreno en minutos: del inicio de la sesión (`createdAt`, la
+ * primera serie) a la última serie apuntada (el mayor `timestamp` de sus
+ * ejercicios). Mide cuándo se registró, no el tiempo real bajo la barra: si
+ * todo se mete al acabar sale 0. Fuera de 1..MAX_WORKOUT_MINUTES devuelve 0
+ * (no se enseña): una fecha cambiada o un entreno corregido días después
+ * darían horas que no son de entreno.
+ */
+export function workoutDurationMinutes(log: WorkoutLog): number {
+  const stamps = (log.exercises ?? [])
+    .map((e) => e.timestamp)
+    .filter((ts): ts is number => typeof ts === 'number' && ts > 0);
+  if (!stamps.length || typeof log.createdAt !== 'number') return 0;
+  const minutes = Math.round((Math.max(...stamps) - log.createdAt) / 60000);
+  return minutes >= 1 && minutes <= MAX_WORKOUT_MINUTES ? minutes : 0;
+}

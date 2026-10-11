@@ -3,8 +3,10 @@ import {
   exerciseKey,
   ExerciseSummary,
   getExerciseRecords,
+  getRecordSetIndexes,
   listExercises,
   sortExercises,
+  weightStepFromHistory,
 } from '../exerciseProgress';
 import { ParsedSet, WorkoutLog } from '../../types';
 
@@ -332,5 +334,73 @@ describe('getExerciseRecords', () => {
       maxReps: null,
       bestVolume: null,
     });
+  });
+});
+
+describe('getRecordSetIndexes', () => {
+  const previous = [
+    { weight: 80, reps: 8 },
+    { weight: 85, reps: 5 },
+  ];
+
+  it('marca la serie con más peso que nunca', () => {
+    expect([
+      ...getRecordSetIndexes(previous, [{ weight: 87.5, reps: 3 }]),
+    ]).toEqual([0]);
+  });
+
+  it('marca la serie con mejor 1RM estimado aunque no suba el peso', () => {
+    expect([
+      ...getRecordSetIndexes(previous, [{ weight: 80, reps: 12 }]),
+    ]).toEqual([0]);
+  });
+
+  it('no marca series por debajo del récord', () => {
+    expect(getRecordSetIndexes(previous, [{ weight: 80, reps: 8 }]).size).toBe(
+      0
+    );
+  });
+
+  it('repetir el peso del récord en la misma sesión no vuelve a contar', () => {
+    const current = [
+      { weight: 90, reps: 5 },
+      { weight: 90, reps: 5 },
+    ];
+    expect([...getRecordSetIndexes(previous, current)]).toEqual([0]);
+  });
+
+  it('con varias series de récord solo marca la última (la mejor)', () => {
+    const current = [
+      { weight: 87.5, reps: 5 },
+      { weight: 90, reps: 5 },
+      { weight: 85, reps: 5 },
+    ];
+    expect([...getRecordSetIndexes(previous, current)]).toEqual([1]);
+  });
+
+  it('sin historial no hay récord, ni cuentan las series saltadas', () => {
+    expect(getRecordSetIndexes([], [{ weight: 100, reps: 5 }]).size).toBe(0);
+    expect(getRecordSetIndexes(previous, [{ weight: -1, reps: -1 }]).size).toBe(
+      0
+    );
+  });
+});
+
+describe('weightStepFromHistory', () => {
+  it('saca el escalón de barra del historial', () => {
+    expect(weightStepFromHistory([60, 62.5, 65, 62.5])).toBe(2.5);
+  });
+  it('mancuernas de 2 en 2', () => {
+    expect(weightStepFromHistory([20, 22, 24])).toBe(2);
+  });
+  it('1 kg sin historial o con un solo peso', () => {
+    expect(weightStepFromHistory([])).toBe(1);
+    expect(weightStepFromHistory([60, 60])).toBe(1);
+  });
+  it('1 kg si el escalón no es de material de gimnasio', () => {
+    expect(weightStepFromHistory([60, 67])).toBe(1);
+  });
+  it('ignora el peso corporal (-1) y el 0', () => {
+    expect(weightStepFromHistory([-1, 0, 40, 45])).toBe(5);
   });
 });

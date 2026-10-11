@@ -1,5 +1,6 @@
 import {
   parseCardioEntries,
+  withCardioEntries,
   cardioSessionFromLog,
   isoWeekKey,
   isoWeekRange,
@@ -17,6 +18,8 @@ import {
   toCardioOnlyLog,
   splitMixedCardioLogs,
   CARDIO_ONLY_DAY_ID,
+  lastCardioEntryByDiscipline,
+  recentCustomDisciplines,
 } from '../cardio';
 import { WorkoutLog } from '../../types';
 
@@ -473,13 +476,18 @@ describe('splitMixedCardioLogs', () => {
   });
 
   it('no toca lo que ya está separado: solo cardio, solo fuerza, o sin cardio', () => {
-    const cardioOnly = toCardioOnlyLog(makeLog('L2', '2026-05-05', 'Bici: 30min'));
+    const cardioOnly = toCardioOnlyLog(
+      makeLog('L2', '2026-05-05', 'Bici: 30min')
+    );
     const strengthOnly: WorkoutLog = {
       ...mixed(),
       id: 'L3',
       cardio: undefined,
     };
-    const { updated, created } = splitMixedCardioLogs([cardioOnly, strengthOnly]);
+    const { updated, created } = splitMixedCardioLogs([
+      cardioOnly,
+      strengthOnly,
+    ]);
     expect(updated).toEqual([]);
     expect(created).toEqual([]);
   });
@@ -507,5 +515,89 @@ describe('splitMixedCardioLogs', () => {
     expect(updated[0].cardio).toBeUndefined();
     // …pero el log de cardio no se recrea.
     expect(created).toEqual([]);
+  });
+});
+
+describe('cardio con entradas estructuradas', () => {
+  it('la sesión sale igual desde las entradas que desde el texto', () => {
+    const raw =
+      'Andar en cinta: 30min, 5.5kmh, 10% | Bici estática: 20min, 22kmh';
+    const base: WorkoutLog = {
+      id: 'l1',
+      routineId: '',
+      dayId: '',
+      date: '2026-10-05',
+      exercises: [],
+      createdAt: 1,
+      updatedAt: 1,
+      cardio: { id: 'c1', type: 'Cardio', rawInput: raw },
+    };
+    const structured: WorkoutLog = {
+      ...base,
+      cardio: withCardioEntries(base.cardio!),
+    };
+    const fromText = cardioSessionFromLog(base)!;
+    const fromEntries = cardioSessionFromLog(structured)!;
+    expect(fromEntries.totalMinutes).toBe(fromText.totalMinutes);
+    expect(fromEntries.totalKcal).toBeCloseTo(fromText.totalKcal);
+    expect(fromEntries.entries.map((e) => e.type)).toEqual([
+      'Andar en cinta',
+      'Bici estática',
+    ]);
+  });
+});
+
+describe('lastCardioEntryByDiscipline', () => {
+  it('guarda la última entrada de cada disciplina, por id o por nombre propio', () => {
+    const logs = [
+      makeLog(
+        'b',
+        '2026-10-08',
+        'Correr en cinta: 30min, 10kmh, 2% | Remo: 15min, 8kmh'
+      ),
+      makeLog('a', '2026-10-01', 'Correr en cinta: 20min, 9kmh'),
+      makeLog('c', '2026-10-09', 'Andar en cinta: 40min, 5kmh, 12%'),
+    ];
+    const last = lastCardioEntryByDiscipline(logs);
+    expect(last.treadmill).toMatchObject({
+      minutes: 30,
+      speed: 10,
+      pendiente: 2,
+    });
+    expect(last['treadmill-walk']).toMatchObject({ minutes: 40, speed: 5 });
+    expect(last['label:remo']).toMatchObject({ minutes: 15, speed: 8 });
+  });
+
+  it('dentro de un mismo día manda la entrada de más abajo', () => {
+    const last = lastCardioEntryByDiscipline([
+      makeLog(
+        'a',
+        '2026-10-01',
+        'Bici estática: 10min, 20kmh | Bici estática: 25min, 24kmh'
+      ),
+    ]);
+    expect(last['stationary-bike']).toMatchObject({ minutes: 25, speed: 24 });
+  });
+});
+
+describe('recentCustomDisciplines', () => {
+  it('da las propias más recientes, sin repetir ni incluir las fijas', () => {
+    const logs = [
+      makeLog('a', '2026-10-01', 'Remo: 15min | Comba: 10min'),
+      makeLog('b', '2026-10-05', 'Escaladora: 20min | Correr en cinta: 30min'),
+      makeLog('c', '2026-10-08', 'remo: 12min | Bici estática: 20min'),
+    ];
+    expect(recentCustomDisciplines(logs)).toEqual([
+      'remo',
+      'Escaladora',
+      'Comba',
+    ]);
+    expect(recentCustomDisciplines(logs, 1)).toEqual(['remo']);
+  });
+
+  it('sin cardio propio no hay casillas', () => {
+    expect(
+      recentCustomDisciplines([makeLog('a', '2026-10-01', 'Elíptica: 20min')])
+    ).toEqual([]);
   });
 });

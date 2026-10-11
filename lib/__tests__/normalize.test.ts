@@ -1,6 +1,7 @@
 import {
   dedupeExerciseLogs,
   mergeDuplicateDayLogs,
+  mergeSameDateCardioLogs,
   normalizeAppData,
   repairDuplicatedSets,
 } from '../normalize';
@@ -293,12 +294,72 @@ describe('normalizeAppData y el cardio suelto', () => {
     expect(logs.find((l) => l.id === 'log1')?.cardio).toBeUndefined();
   });
 
-  it('no fusiona varias sesiones de solo cardio del mismo día', () => {
+  it('junta las sesiones de solo cardio del mismo día sin perder entradas', () => {
+    const older = makeLog('c1', '2026-10-02', 'Correr: 10min', {
+      cardioOnly: true,
+    });
+    const newer = {
+      ...makeLog('c2', '2026-10-02', 'Bici: 20min', { cardioOnly: true }),
+      createdAt: older.createdAt + 1000,
+    };
+
+    const { logs } = normalizeAppData({ ...base, logs: [older, newer] }, base);
+
+    expect(logs).toHaveLength(1);
+    expect(logs[0].id).toBe('c2');
+    expect(logs[0].cardio?.id).toBe('c-c2');
+    expect(logs[0].cardio?.rawInput).toBe('Bici: 20min | Correr: 10min');
+  });
+});
+
+describe('mergeSameDateCardioLogs', () => {
+  const cardio = (
+    id: string,
+    date: string,
+    raw: string,
+    createdAt: number
+  ) => ({
+    ...makeLog(id, date, raw, { cardioOnly: true }),
+    createdAt,
+  });
+
+  it('una copia vieja contenida en la nueva se descarta (no suma dos veces)', () => {
     const logs = [
-      makeLog('c1', '2026-10-02', 'Correr: 10min', { cardioOnly: true }),
-      makeLog('c2', '2026-10-02', 'Bici: 20min', { cardioOnly: true }),
+      cardio('a', '2026-10-02', 'Andar en cinta: 65min, 3kmh', 1),
+      cardio(
+        'b',
+        '2026-10-02',
+        'Andar en cinta: 65min, 3kmh | Correr: 8min',
+        2
+      ),
     ];
 
-    expect(normalizeAppData({ ...base, logs }, base).logs).toHaveLength(2);
+    const merged = mergeSameDateCardioLogs(logs);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].cardio?.rawInput).toBe(
+      'Andar en cinta: 65min, 3kmh | Correr: 8min'
+    );
+  });
+
+  it('respeta entradas repetidas legítimas (cuenta como multiconjunto)', () => {
+    const logs = [
+      cardio('a', '2026-10-02', 'Bici: 10min | Bici: 10min', 1),
+      cardio('b', '2026-10-02', 'Bici: 10min', 2),
+    ];
+
+    expect(mergeSameDateCardioLogs(logs)[0].cardio?.rawInput).toBe(
+      'Bici: 10min | Bici: 10min'
+    );
+  });
+
+  it('no toca fechas distintas ni los logs de fuerza', () => {
+    const logs = [
+      cardio('a', '2026-10-01', 'Bici: 10min', 1),
+      cardio('b', '2026-10-02', 'Bici: 10min', 2),
+      makeLog('f', '2026-10-02', 'Cinta: 5min'),
+    ];
+
+    expect(mergeSameDateCardioLogs(logs)).toBe(logs);
   });
 });

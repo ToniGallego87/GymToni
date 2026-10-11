@@ -26,6 +26,8 @@ import {
   getLastAutoBackupAt,
 } from '@lib/appSettings';
 import { canWriteLocalBackup } from '@lib/fileIO';
+import { AutoBackupFile, listAutoBackups } from '@lib/backup';
+import { weekdayDayMonth } from '@lib/utils';
 import {
   useSession,
   signUp,
@@ -43,6 +45,7 @@ import type { WorkoutAppData } from '../../types';
 
 interface DataScreenProps {
   onImportData: () => Promise<void>;
+  onRestoreAutoBackup: (fileName: string) => Promise<void>;
   onExportData: () => Promise<void>;
   onBackupNow: () => Promise<void>;
   onClearData: () => Promise<void> | void;
@@ -68,6 +71,7 @@ type BusyAction =
   | 'sync'
   | 'cloud-backup'
   | 'restore'
+  | 'local-restore'
   | null;
 
 /**
@@ -83,6 +87,7 @@ type BusyAction =
  */
 export function DataScreen({
   onImportData,
+  onRestoreAutoBackup,
   onExportData,
   onBackupNow,
   onClearData,
@@ -95,6 +100,11 @@ export function DataScreen({
   const [showImportModal, setShowImportModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [autoBackups, setAutoBackups] = useState<AutoBackupFile[]>([]);
+  // Copia automática elegida para restaurar, pendiente de confirmar.
+  const [pendingBackup, setPendingBackup] = useState<AutoBackupFile | null>(
+    null
+  );
   const [busyAction, setBusyAction] = useState<BusyAction>(null);
   // Estado del backup automático (se lee de appSettings, no del estado de la
   // app). `lastBackupAt` se refresca al hacer un backup manual desde aquí.
@@ -298,10 +308,45 @@ export function DataScreen({
     setAutoBackupEnabled(enabled);
   };
 
+  const refreshAutoBackups = useCallback(async () => {
+    if (canBackup) setAutoBackups(await listAutoBackups());
+  }, [canBackup]);
+
+  useEffect(() => {
+    refreshAutoBackups();
+  }, [refreshAutoBackups]);
+
+  const handleRestoreAutoBackup = async () => {
+    const backup = pendingBackup;
+    setPendingBackup(null);
+    if (!backup) return;
+    try {
+      setBusyAction('local-restore');
+      await onRestoreAutoBackup(backup.fileName);
+      notify(t('Copia restaurada'), 'success');
+    } catch (error) {
+      notify(
+        error instanceof Error
+          ? error.message
+          : t('No se pudo completar la acción'),
+        'error'
+      );
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const formatBackupLabel = (backup: AutoBackupFile) =>
+    backup.date ? weekdayDayMonth(backup.date) : backup.fileName;
+
+  const formatBackupSize = (bytes: number) =>
+    `${Math.max(1, Math.round(bytes / 1024))} KB`;
+
   const handleBackupNow = async () => {
     try {
       setBusyAction('backup');
       await onBackupNow();
+      await refreshAutoBackups();
       setLastBackupAt(getLastAutoBackupAt());
       setToast({
         message: t('Backup guardado en el dispositivo'),
@@ -639,6 +684,46 @@ export function DataScreen({
           />
         </View>
 
+        {/* Va aunque la app esté vacía: es justo cuando más falta hace. */}
+        {autoBackups.length > 0 && (
+          <View style={styles.actionCard}>
+            <GradientFill accent={theme.colors.primaryLine} />
+            <View style={styles.titleRow}>
+              <MaterialCommunityIcons
+                name="history"
+                size={18}
+                color={theme.colors.text}
+              />
+              <Text style={styles.actionTitle}>
+                {t('Restaurar una copia del móvil')}
+              </Text>
+            </View>
+            <Text style={styles.actionSubtitle}>
+              {t(
+                'Vuelve a los datos de una de las copias automáticas de los últimos días.'
+              )}
+            </Text>
+            {autoBackups.map((backup) => (
+              <View key={backup.fileName} style={styles.backupRow}>
+                <View style={styles.backupInfo}>
+                  <Text style={styles.backupDate}>
+                    {formatBackupLabel(backup)}
+                  </Text>
+                  <Text style={styles.metaLine}>
+                    {formatBackupSize(backup.size)}
+                  </Text>
+                </View>
+                <Button
+                  title={t('Restaurar')}
+                  variant="secondary"
+                  onPress={() => setPendingBackup(backup)}
+                  disabled={busy}
+                />
+              </View>
+            ))}
+          </View>
+        )}
+
         {!!user && (
           <View style={styles.actionCard}>
             <GradientFill accent={theme.colors.primaryLine} />
@@ -702,7 +787,16 @@ export function DataScreen({
       <GlassTopBar
         title={t('Datos y nube')}
         icon="folder-cog-outline"
-        subtitle={t('Tu cuenta, tus copias y tus datos')}
+        subtitle={
+          sessionLoading
+            ? undefined
+            : session && user
+            ? lastSync
+              ? `${t('Última sincronización')}: ${formatAgo(lastSync)}`
+              : t('Aún sin sincronizar')
+            : t('Sin cuenta: tus datos solo están en este móvil')
+        }
+        subtitleNumberOfLines={1}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -731,6 +825,19 @@ export function DataScreen({
         confirmLabel={t('Restaurar')}
         onConfirm={handleRestore}
         onCancel={() => setShowRestoreConfirm(false)}
+      />
+
+      <ConfirmModal
+        visible={!!pendingBackup}
+        title={t('Restaurar una copia del móvil')}
+        message={t(
+          'Se reemplazarán los datos actuales por los de la copia del {date}. ¿Continuar?',
+          { date: pendingBackup ? formatBackupLabel(pendingBackup) : '' }
+        )}
+        confirmLabel={t('Restaurar')}
+        confirmVariant="primary"
+        onConfirm={handleRestoreAutoBackup}
+        onCancel={() => setPendingBackup(null)}
       />
 
       <ConfirmModal
@@ -846,6 +953,19 @@ const makeStyles = () =>
       fontSize: 24,
       fontWeight: '700',
       letterSpacing: 6,
+    },
+    backupRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    backupInfo: {
+      flex: 1,
+    },
+    backupDate: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.colors.text,
     },
     emailHighlight: {
       color: theme.colors.text,

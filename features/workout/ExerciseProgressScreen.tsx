@@ -86,11 +86,32 @@ const MIN_EXERCISES_FOR_SEARCH = 10;
 // Sin icono, a diferencia del filtro de métrica: los cuatro criterios con
 // icono + texto no caben de ancho, y "ordenar por sesiones" no tiene un dibujo
 // que se entienda solo (el filtro de días de Inicio sí: son sus siluetas).
+// Rótulos con getter para que sigan al idioma en caliente.
 const SORT_OPTIONS: SegmentedOption<ExerciseSort>[] = [
-  { id: 'recent', label: t('Reciente') },
-  { id: 'name', label: t('Nombre') },
-  { id: 'sessions', label: t('Sesiones') },
-  { id: 'best', label: t('1RM') },
+  {
+    id: 'recent',
+    get label() {
+      return t('Reciente');
+    },
+  },
+  {
+    id: 'name',
+    get label() {
+      return t('Nombre');
+    },
+  },
+  {
+    id: 'sessions',
+    get label() {
+      return t('Sesiones');
+    },
+  },
+  {
+    id: 'best',
+    get label() {
+      return t('1RM');
+    },
+  },
 ];
 
 type ChartMetric = {
@@ -101,31 +122,41 @@ type ChartMetric = {
   fmt: (value: number) => string;
 };
 
+// Rótulos con getter: t() se evalúa al pintar, no al cargar el módulo, así
+// que siguen al idioma en caliente (ver lib/i18n.ts).
 const CHART_METRICS: ChartMetric[] = [
   {
     id: '1rm',
-    label: t('1RM'),
+    get label() {
+      return t('1RM');
+    },
     icon: 'trophy-outline',
     get: (session) => session.bestOneRepMax,
     fmt: fmtNum,
   },
   {
     id: 'weight',
-    label: t('Peso'),
+    get label() {
+      return t('Peso');
+    },
     icon: 'weight-kilogram',
     get: (session) => session.maxWeight,
     fmt: fmtNum,
   },
   {
     id: 'volume',
-    label: t('Volumen'),
+    get label() {
+      return t('Volumen');
+    },
     icon: 'chart-box-outline',
     get: (session) => session.volume,
     fmt: (value) => String(Math.round(value)),
   },
   {
     id: 'reps',
-    label: t('Reps'),
+    get label() {
+      return t('Reps');
+    },
     icon: 'repeat',
     get: (session) => session.totalReps,
     fmt: (value) => String(Math.round(value)),
@@ -133,7 +164,13 @@ const CHART_METRICS: ChartMetric[] = [
 ];
 
 const METRIC_OPTIONS: SegmentedOption<string>[] = CHART_METRICS.map(
-  (metric) => ({ id: metric.id, label: metric.label, icon: metric.icon })
+  (metric) => ({
+    id: metric.id,
+    get label() {
+      return metric.label;
+    },
+    icon: metric.icon,
+  })
 );
 
 /**
@@ -506,9 +543,14 @@ export function ExerciseProgressScreen({
         icon="chart-line"
         subtitle={
           selected
-            ? t('Sesión a sesión y tus mejores marcas')
-            : t('Elige un ejercicio para ver su evolución')
+            ? selected.name
+            : exercises.length === 0
+            ? undefined
+            : exercises.length === 1
+            ? t('1 ejercicio')
+            : t('{n} ejercicios', { n: exercises.length })
         }
+        subtitleNumberOfLines={1}
         topInset={insets.top}
         onLayout={onTopBarLayout}
         // Salto a la rutina desde la ficha. Con el ejercicio en varias rutinas,

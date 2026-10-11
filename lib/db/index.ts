@@ -6,6 +6,7 @@ import {
   WorkoutRoutine,
 } from '../../types';
 import {
+  CardioEntryRow,
   CardioLogRow,
   DbRows,
   ExerciseLogRow,
@@ -25,6 +26,7 @@ import {
   rowsToAppData,
 } from './mappers';
 import { SCHEMA_SQL, SCHEMA_VERSION } from './schema';
+import { cardioEntriesFromRaw } from '../cardio';
 import { generateId } from '../utils';
 import { seedRestDuration } from '../restTimerStore';
 
@@ -116,6 +118,38 @@ async function seedRestDurationFromRoutines(db: SQLiteDatabase): Promise<void> {
   } catch {}
 }
 
+// Rellena cardio_entries para los cardios que aún no tienen filas (migración
+// v9). Idempotente: los ids son deterministas y se inserta con OR IGNORE.
+async function backfillCardioEntries(db: SQLiteDatabase): Promise<void> {
+  try {
+    const cardios = await db.getAllAsync<CardioLogRow>(
+      'SELECT * FROM cardio_logs WHERE id NOT IN (SELECT DISTINCT cardio_logs_id FROM cardio_entries)'
+    );
+    if (!cardios.length) return;
+    await db.withTransactionAsync(async () => {
+      for (const cardio of cardios) {
+        const entries = cardioEntriesFromRaw(cardio.raw_input);
+        for (let i = 0; i < entries.length; i++) {
+          await insertCardioEntry(
+            db,
+            {
+              id: `${cardio.id}:${i + 1}`,
+              cardio_logs_id: cardio.id,
+              workout_logs_id: cardio.workout_logs_id,
+              entry_order: i + 1,
+              ...entries[i],
+            },
+            'INSERT OR IGNORE'
+          );
+        }
+      }
+    });
+  } catch (error) {
+    // No es grave: sin filas, el cardio se sigue leyendo de su texto.
+    console.error('Error rellenando cardio_entries:', error);
+  }
+}
+
 // require perezoso: en web este módulo puede importarse (storage.ts) pero
 // nunca debe ejecutar expo-sqlite, que no está soportado en web en SDK 51.
 function getDb(): Promise<SQLiteDatabase> {
@@ -195,6 +229,9 @@ function getDb(): Promise<SQLiteDatabase> {
         try {
           await db.execAsync('ALTER TABLE workout_logs ADD COLUMN notes TEXT');
         } catch {}
+        // v9: el cardio pasa a una fila por entrada (cardio_entries, creada por
+        // SCHEMA_SQL). Se rellena una vez con el histórico, troceando su texto.
+        await backfillCardioEntries(db);
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -299,6 +336,30 @@ function insertCardioLog(
   );
 }
 
+// OR REPLACE por defecto: los ids son deterministas (`cardioId:orden`) y una
+// fila huérfana de un borrado anterior no debe bloquear la inserción.
+function insertCardioEntry(
+  runner: SQLiteRunner,
+  row: CardioEntryRow,
+  verb: 'INSERT OR REPLACE' | 'INSERT OR IGNORE' = 'INSERT OR REPLACE'
+): Promise<unknown> {
+  return runner.runAsync(
+    `${verb} INTO cardio_entries (id, cardio_logs_id, workout_logs_id, entry_order, discipline, label, minutes, speed, incline, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      row.id,
+      row.cardio_logs_id,
+      row.workout_logs_id,
+      row.entry_order,
+      row.discipline,
+      row.label,
+      row.minutes,
+      row.speed,
+      row.incline,
+      Date.now(),
+    ]
+  );
+}
+
 async function insertLogRows(
   runner: SQLiteRunner,
   log: WorkoutLog
@@ -313,6 +374,9 @@ async function insertLogRows(
   }
   if (rows.cardio) {
     await insertCardioLog(runner, rows.cardio);
+  }
+  for (const entry of rows.cardioEntries) {
+    await insertCardioEntry(runner, entry);
   }
 }
 
@@ -340,6 +404,7 @@ export async function loadAppDataFromDb(): Promise<WorkoutAppData | null> {
     exerciseLogs,
     logSets,
     cardioLogs,
+    cardioEntries,
   ] = await Promise.all([
     db.getAllAsync<RoutineRow>('SELECT * FROM routines'),
     db.getAllAsync<WorkoutDayRow>('SELECT * FROM workout_days'),
@@ -348,6 +413,7 @@ export async function loadAppDataFromDb(): Promise<WorkoutAppData | null> {
     db.getAllAsync<ExerciseLogRow>('SELECT * FROM exercise_logs'),
     db.getAllAsync<LogSetRow>('SELECT * FROM log_sets'),
     db.getAllAsync<CardioLogRow>('SELECT * FROM cardio_logs'),
+    db.getAllAsync<CardioEntryRow>('SELECT * FROM cardio_entries'),
   ]);
 
   const rows: DbRows = {
@@ -359,6 +425,7 @@ export async function loadAppDataFromDb(): Promise<WorkoutAppData | null> {
     exerciseLogs,
     logSets,
     cardioLogs,
+    cardioEntries,
   };
 
   return rowsToAppData(rows);
@@ -379,7 +446,8 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     // y al reinsertar con los mismos IDs saltaría un UNIQUE/PK constraint
     // (que aflora enmascarado como "NativeStatement.finalizeAsync() rejected").
     await txn.execAsync(
-      'DELETE FROM cardio_logs;' +
+      'DELETE FROM cardio_entries;' +
+        'DELETE FROM cardio_logs;' +
         'DELETE FROM log_sets;' +
         'DELETE FROM exercise_logs;' +
         'DELETE FROM workout_logs;' +
@@ -497,6 +565,22 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.notes,
       ]
     );
+    await bulkInsert(
+      txn,
+      'INSERT OR REPLACE INTO cardio_entries (id, cardio_logs_id, workout_logs_id, entry_order, discipline, label, minutes, speed, incline) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      rows.cardioEntries ?? [],
+      (row) => [
+        row.id,
+        row.cardio_logs_id,
+        row.workout_logs_id,
+        row.entry_order,
+        row.discipline,
+        row.label,
+        row.minutes,
+        row.speed,
+        row.incline,
+      ]
+    );
   });
 }
 
@@ -507,7 +591,8 @@ export async function clearAppDataInDb(): Promise<void> {
   await db.withExclusiveTransactionAsync(async (txn) => {
     // Borrado explícito: la cascada no aplica en esta conexión (ver saveAppDataToDb).
     await txn.execAsync(
-      'DELETE FROM cardio_logs;' +
+      'DELETE FROM cardio_entries;' +
+        'DELETE FROM cardio_logs;' +
         'DELETE FROM log_sets;' +
         'DELETE FROM exercise_logs;' +
         'DELETE FROM workout_logs;' +
@@ -660,6 +745,10 @@ export async function dbDeleteRoutine(routineId: string): Promise<void> {
       [routineId]
     );
     await txn.runAsync(
+      'DELETE FROM cardio_entries WHERE workout_logs_id IN (SELECT id FROM workout_logs WHERE routines_id = ?)',
+      [routineId]
+    );
+    await txn.runAsync(
       'DELETE FROM cardio_logs WHERE workout_logs_id IN (SELECT id FROM workout_logs WHERE routines_id = ?)',
       [routineId]
     );
@@ -710,6 +799,10 @@ export async function dbUpsertWorkoutLog(log: WorkoutLog): Promise<void> {
     await txn.runAsync('DELETE FROM exercise_logs WHERE workout_logs_id = ?', [
       log.id,
     ]);
+    await txn.runAsync(
+      'DELETE FROM cardio_entries WHERE workout_logs_id = ? OR cardio_logs_id = ?',
+      [log.id, log.cardio?.id ?? '']
+    );
     await txn.runAsync('DELETE FROM cardio_logs WHERE workout_logs_id = ?', [
       log.id,
     ]);
@@ -728,6 +821,9 @@ export async function dbUpsertWorkoutLog(log: WorkoutLog): Promise<void> {
 export async function dbDeleteWorkoutLog(logId: string): Promise<void> {
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async (txn) => {
+    await txn.runAsync('DELETE FROM cardio_entries WHERE workout_logs_id = ?', [
+      logId,
+    ]);
     await txn.runAsync('DELETE FROM workout_logs WHERE id = ?', [logId]);
     await enqueueOutbox(txn, 'workout_log', logId, 'delete', null);
   });
@@ -882,6 +978,25 @@ export async function dbEnqueueLogDeletes(logIds: string[]): Promise<void> {
   });
 }
 
+// Lo mismo para los entrenos que la reparación ha REESCRITO (la base de una
+// fusión): sin subirlos, la nube se quedaría con la versión de antes de fusionar
+// y perdería lo que traía el duplicado que se borró.
+export async function dbEnqueueLogUpserts(logs: WorkoutLog[]): Promise<void> {
+  if (!logs.length) return;
+  const db = await getDb();
+  await db.withExclusiveTransactionAsync(async (txn) => {
+    for (const log of logs) {
+      await enqueueOutbox(
+        txn,
+        'workout_log',
+        log.id,
+        'upsert',
+        JSON.stringify(log)
+      );
+    }
+  });
+}
+
 export async function deleteOutboxEntries(ids: string[]): Promise<void> {
   if (!ids.length) return;
   const db = await getDb();
@@ -936,6 +1051,7 @@ export interface RemoteChanges {
   exerciseLogs: RemoteTableChange;
   logSets: RemoteTableChange;
   cardioLogs: RemoteTableChange;
+  cardioEntries: RemoteTableChange;
   settings: { active: string | null; selected: string | null } | null;
 }
 
@@ -1050,6 +1166,22 @@ const REMOTE_TABLES: {
       'distance',
       'pace',
       'notes',
+      'updated_at',
+    ],
+  },
+  {
+    key: 'cardioEntries',
+    table: 'cardio_entries',
+    cols: [
+      'id',
+      'cardio_logs_id',
+      'workout_logs_id',
+      'entry_order',
+      'discipline',
+      'label',
+      'minutes',
+      'speed',
+      'incline',
       'updated_at',
     ],
   },

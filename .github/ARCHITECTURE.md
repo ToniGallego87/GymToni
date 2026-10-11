@@ -86,13 +86,16 @@ app/                    → Entry point (index.tsx, _layout.tsx, App.tsx, +nativ
 components/             → UI reutilizable (Button, Cards, Inputs, Glass system)
 features/workout/       → Pantallas y lógica de negocio
 hooks/                  → useWorkout (consumer del context), useCloudSync (sync de
-                          fondo) y useDeferredReady (difiere el contenido pesado)
+                          fondo), useDeferredReady (difiere el contenido pesado),
+                          useMyProfile (perfil público propio), useAccountLevel
+                          (retos y nivel; useRecordAccountLevel, solo en la raíz,
+                          los apunta) y useAvatarPicker (cambiar la foto)
 lib/                    → Lógica compartida
   ├── normalize.ts      → Fuente única: syncActiveRoutine, ensureParsedSets, normalizeAppData
   ├── storage.ts        → Persistencia (load/save/clear): SQLite en nativo, JSON en web
   ├── persistence.ts    → Mapea cada acción del reducer a su escritura granular (cola serie; debounce en web)
   ├── db/               → Capa SQLite: schema.ts (DDL+migraciones), mappers.ts (AppData↔filas + por entidad), index.ts (repositorio + escrituras granulares)
-  ├── cloud/            → Nube (opcional): auth.ts (sesión Supabase), backup.ts
+  ├── cloud/            → Nube (opcional): auth.ts (sesión Supabase, store único), backup.ts
   │                       (copia/restauración completa), sync.ts (motor push/pull
   │                       incremental sobre sync_outbox), social.ts (perfiles,
   │                       seguir, tablón de rutinas públicas, likes, comentarios
@@ -131,12 +134,18 @@ lib/                    → Lógica compartida
   │                       registro (lo lee la ventanita flotante en la raíz)
   ├── pipTimer.ts       → Ventana flotante del descanso (módulo nativo pip-timer,
   │                       Picture-in-Picture de Android; no-op en iOS/web)
+  ├── openWorkout.ts    → Entreno de hoy a medias que retos y logros aún no cuentan
+  │                       (logsForAwards)
+  ├── workoutReminder.ts→ Recordatorios de entreno (plan puro: planWorkoutReminders)
+  ├── userQuiet.ts      → ¿Está el usuario tocando? El arranque pone su trabajo de
+  │                       fondo en los huecos sin toques (runWhenQuiet)
   ├── layoutAnimation.ts→ animateLayout compartido (habilita LayoutAnimation en Android)
   ├── utils.ts          → Utilidades genéricas (generateId, findDayInRoutines,
   │                       formatRestTime, getImprovementColor) y la FUENTE ÚNICA
   │                       de fechas: dateKey/getToday/logDateKey (clave de día en
-  │                       el huso del móvil) y el pintado (formatDate,
-  │                       formatDateFromKey, shortDayMonth, longDate);
+  │                       el huso del móvil) y el pintado (weekdayDayMonth, la
+  │                       fecha de un entreno en toda la app; shortDayMonth,
+  │                       longDate);
   │                       el indicador de mejora se pinta con components/TrendDelta
   └── theme.ts          → Colores, degradados (gradients), tipografía, spacing
 lib/__tests__/          → Tests Jest de la lógica pura (npm test)
@@ -168,6 +177,8 @@ Subpantallas (setScreen; se renderizan opacas encima del pager)
     └─→ DetailScreen (ver log; recuerda origen home/calendar/cardio para volver)
   ProfileScreen (identidad pública + números + menú)
     ├─→ RoutineSelectorScreen · ExerciseProgressScreen
+    ├─→ BodyWeightScreen (peso corporal) · AchievementsScreen (logros y nivel)
+    ├─→ ActivityScreen (tu trayectoria: logros, retos y días, desde el móvil)
     ├─→ ProfileEditModal (popup: perfil público propio, foto, bio, público/privado)
     └─→ SettingsScreen (tema, idioma, descanso entre series, novedades)
           └─→ DataScreen ("Datos y nube": cuenta + sync, copias, importar/restaurar/borrar)
@@ -176,8 +187,8 @@ Subpantallas (setScreen; se renderizan opacas encima del pager)
     ├─→ UserProfileScreen (perfil ajeno + sus rutinas públicas) →  PublicRoutineScreen
     └─→ FollowingScreen (a quién sigo / quién me sigue)
 
-FloatingPrimaryNav = barra inferior fija (las 5 pestañas); cardio se oculta si no
-hay ningún cardio registrado. FloatingBackButton = volver en subpantallas.
+FloatingPrimaryNav = barra inferior fija (las 5 pestañas, siempre las cinco).
+FloatingBackButton = volver en subpantallas.
 ```
 
 ### Pager de pestañas (nativo)
@@ -282,7 +293,7 @@ parseCardioString('Cinta: 22.5mins, 11.5kmh')
 
 - **Nativo**: SQLite (`expo-sqlite`, BD `gymbro.db`) via `lib/db/`. Esquema relacional:
   - Plan: `routines` → `workout_days` → `exercises` (FK `NOT NULL` + `ON DELETE CASCADE`).
-  - Historial: `workout_logs` → `exercise_logs` → `log_sets`, más `cardio_logs` (1:1 con log). Referencias al plan débiles (`ON DELETE SET NULL`) para que el historial sobreviva a cambios de rutina; `exercise_name` es snapshot intencionado.
+  - Historial: `workout_logs` → `exercise_logs` → `log_sets`, más `cardio_logs` (1:1 con log) → `cardio_entries` (una fila por entrada, disciplina como id fijo; convive con `cardio_logs.raw_input`, que manda si no cuadran, hasta que todos los móviles lo entiendan). Referencias al plan débiles (`ON DELETE SET NULL`) para que el historial sobreviva a cambios de rutina; `exercise_name` es snapshot intencionado.
   - `settings` (clave/valor): `active_routine_id`, `selected_routine_id` y la marca `initialized`.
   - Convención FK: nombre de la tabla referenciada + `_id` (p. ej. `workout_days_id`). Ids GUID.
 - Migraciones por `PRAGMA user_version` (`lib/db/schema.ts`).

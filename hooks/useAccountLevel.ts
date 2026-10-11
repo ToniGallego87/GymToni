@@ -21,6 +21,7 @@ import { getStoredSeenBadges, setStoredSeenBadges } from '@lib/appSettings';
 import { useSession } from '@lib/cloud/auth';
 import { updateProfile } from '@lib/cloud/social';
 import { loadMyProfile, useMyProfile } from './useMyProfile';
+import { logsForAwards, useOpenWorkoutLog } from '@lib/openWorkout';
 
 // Caché de UNA entrada para los dos cálculos pesados. El hook está montado a
 // la vez en seis sitios (la barra superior de todas las pantallas, Inicio,
@@ -77,32 +78,23 @@ function sharedBadges(
   return badgesCache;
 }
 
-/**
- * Retos vigentes + nivel de la cuenta, a partir del estado de la app.
- *
- * Lo usan Perfil, Logros y las hero cards. Solo el que pasa `record` (la raíz
- * de la app) apunta los retos superados, avisa de lo nuevo (retos, logros y
- * nivel, vía `lib/awards`) y sube el nivel al perfil público: así se cuenta
- * una vez y no cada pantalla por su cuenta.
- */
-export function useAccountLevel(options: { record?: boolean } = {}): {
-  challenges: Challenge[];
-  /** El catálogo entero de insignias (Logros lo pinta; el resto usa `level`). */
-  badges: Badge[];
-  level: LevelSummary;
-} {
+function useLevelData() {
   const { state } = useWorkout();
   const weight = useBodyWeight();
   const wins = useChallengeWins();
+  // El entreno que se está registrando, o el de hoy a medias, no cuenta hasta
+  // terminarlo o acabar el día (ver `lib/openWorkout`): retos e insignias se
+  // calculan sin él.
+  const logs = logsForAwards(state.logs, useOpenWorkoutLog(), state.routines);
 
   const challenges = sharedChallenges(
-    state.logs,
+    logs,
     state.routines,
     state.activeRoutineId,
     weight
   );
   const { all: badges, unlocked: unlockedBadges } = sharedBadges(
-    state.logs,
+    logs,
     state.routines
   );
 
@@ -111,9 +103,50 @@ export function useAccountLevel(options: { record?: boolean } = {}): {
     [wins.length, unlockedBadges.length]
   );
 
+  return {
+    challenges,
+    badges,
+    unlockedBadges,
+    level,
+    logs,
+    wins,
+    routines: state.routines,
+  };
+}
+
+/**
+ * Retos vigentes + nivel de la cuenta, a partir del estado de la app.
+ *
+ * Lo usan Perfil, Logros, las hero cards y la barra superior de cada pantalla.
+ * Solo calcula: apuntar lo superado, avisar y subir a la nube es cosa de
+ * `useRecordAccountLevel`, que va una sola vez en la raíz. Por eso este no se
+ * suscribe a la sesión ni al perfil: con una docena de instancias montadas, cada
+ * cambio de sesión o de perfil repintaba todas las pantallas que lo llevan.
+ */
+export function useAccountLevel(): {
+  challenges: Challenge[];
+  /** El catálogo entero de insignias (Logros lo pinta; el resto usa `level`). */
+  badges: Badge[];
+  level: LevelSummary;
+} {
+  const { challenges, badges, level } = useLevelData();
+  return { challenges, badges, level };
+}
+
+/**
+ * La parte de la cuenta que debe correr UNA vez y no en cada pantalla: apunta
+ * los retos superados, avisa de lo nuevo (retos, logros y nivel, vía
+ * `lib/awards`), sube el nivel al perfil público y publica la Actividad. La
+ * monta la raíz de la app, y solo con los datos reales (`enabled`): con los de
+ * antes de hidratar, todo parecería "nuevo".
+ */
+export function useRecordAccountLevel(enabled: boolean): void {
+  const { challenges, badges, unlockedBadges, level, logs, wins, routines } =
+    useLevelData();
+
   // Apuntar los retos superados (permanente) y avisar de los nuevos.
   useEffect(() => {
-    if (!options.record) return;
+    if (!enabled) return;
     const fresh = recordChallengeWins(challenges);
     pushAwards(
       fresh.map<Award>((c) => ({
@@ -124,13 +157,13 @@ export function useAccountLevel(options: { record?: boolean } = {}): {
         xp: XP_PER_CHALLENGE,
       }))
     );
-  }, [options.record, challenges]);
+  }, [enabled, challenges]);
 
   // Avisar de los logros nuevos. Los ya avisados se recuerdan por id; la
   // primera vez (sin nada guardado) se siembran los ya desbloqueados en
   // silencio para no soltar un popup por cada logro viejo al actualizar.
   useEffect(() => {
-    if (!options.record) return;
+    if (!enabled) return;
     // La insignia "Récord personal" pasó a llamarse `improved-1` (mide semanas
     // mejoradas): a quien ya la tenía vista no se le vuelve a avisar.
     const seen = getStoredSeenBadges()?.map((id) =>
@@ -153,53 +186,61 @@ export function useAccountLevel(options: { record?: boolean } = {}): {
         xp: XP_PER_BADGE,
       }))
     );
-  }, [options.record, unlockedBadges]);
+  }, [enabled, unlockedBadges]);
 
   // Avisar de la subida de nivel (después de los premios que la provocan, que
   // van en los efectos de arriba). El primer render solo fija la referencia.
+  // Se guarda el MÁXIMO visto: al continuar el entreno de hoy, apartarlo (ver
+  // `lib/openWorkout`) puede bajar el nivel un momento, y al soltarlo no debe
+  // volver a anunciarse uno que ya se tenía.
   const lastLevel = useRef<number | null>(null);
   useEffect(() => {
-    if (!options.record) return;
+    if (!enabled) return;
     if (lastLevel.current !== null && level.level > lastLevel.current) {
       pushAwards([{ kind: 'level', level: level.level }]);
     }
-    lastLevel.current = level.level;
-  }, [options.record, level.level]);
+    lastLevel.current = Math.max(lastLevel.current ?? 0, level.level);
+  }, [enabled, level.level]);
 
   // Con sesión, subir el nivel a la nube cuando cambie. Si la nube tiene más
-  // puntos (otro dispositivo), no se pisa.
+  // puntos (otro dispositivo), no se pisa. Con los mismos puntos pero otro nivel
+  // (cambió la curva de niveles) también se sube, para corregir el público.
   const { user } = useSession();
   const { profile } = useMyProfile();
-  const pushedXp = useRef<number | null>(null);
+  const pushedXp = useRef<string | null>(null);
   useEffect(() => {
-    if (!options.record || !user) return;
+    if (!enabled || !user) return;
     const remoteXp = profile?.xp ?? 0;
-    if (level.xp <= remoteXp || pushedXp.current === level.xp) return;
-    pushedXp.current = level.xp;
+    const pushKey = `${level.xp}:${level.level}`;
+    const stale =
+      level.xp > remoteXp ||
+      (level.xp === remoteXp && profile?.level !== level.level);
+    if (!stale || pushedXp.current === pushKey) return;
+    pushedXp.current = pushKey;
     updateProfile(user.id, { level: level.level, xp: level.xp })
       .then(() => loadMyProfile(user.id, true))
       .catch(() => {
         // Sin red: se reintenta en el próximo cambio de nivel.
         pushedXp.current = null;
       });
-  }, [options.record, user, profile?.xp, level]);
+  }, [enabled, user, profile?.xp, level]);
 
   // Publicar la Actividad (insignias, retos y días entrenados) para que la vean
   // en tu perfil. Se hace aquí por lo mismo que el nivel: este es el único sitio
-  // que ya tiene el catálogo entero calculado y corre una sola vez (`record`).
+  // que ya tiene el catálogo entero calculado y corre una sola vez (la raíz).
   // Solo sube lo que falte (`publishActivity` es idempotente) y únicamente si el
   // interruptor está encendido; apagarlo borra lo subido desde Editar perfil.
   const publishing = useRef(false);
   useEffect(() => {
-    if (!options.record || !user) return;
+    if (!enabled || !user) return;
     // Hasta que el perfil no ha llegado no se sabe si lo comparte, y publicar
     // "por si acaso" sería publicar lo de quien lo tiene apagado.
     if (!profile || profile.share_activity === false) return;
     if (publishing.current) return;
     publishing.current = true;
     const items = buildLocalActivity({
-      logs: state.logs,
-      routines: state.routines,
+      logs,
+      routines,
       badges,
       challenges,
       wins,
@@ -215,13 +256,11 @@ export function useAccountLevel(options: { record?: boolean } = {}): {
     // hitos nuevos llegan con un reto ganado, una insignia o un entreno más.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    options.record,
+    enabled,
     user,
     profile?.share_activity,
     wins.length,
     unlockedBadges.length,
-    state.logs.length,
+    logs.length,
   ]);
-
-  return { challenges, badges, level };
 }

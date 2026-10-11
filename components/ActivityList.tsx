@@ -74,7 +74,7 @@ export function ActivityList({
               </Text>
               <Text style={styles.meta} numberOfLines={1}>
                 {shortDayMonth(item.happenedOn)}
-                {item.kind === 'badge' && ` · ${t('insignia')}`}
+                {item.kind === 'badge' && ` · ${t('logro')}`}
                 {item.kind === 'challenge' && ` · ${t('reto superado')}`}
                 {item.kind === 'day' && !!item.routineName && (
                   <Text style={linkable ? styles.routineLink : undefined}>

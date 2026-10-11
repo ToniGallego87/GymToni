@@ -105,6 +105,12 @@ interface GlassTopBarProps {
    * para editar la fecha directamente desde el subtítulo.
    */
   onSubtitlePress?: () => void;
+  /**
+   * Icono del subtítulo pulsable: 'calendar-edit' (cambiar la fecha, por
+   * defecto) o 'chevron-right' cuando lleva a otra pantalla (Inicio → ficha de
+   * la rutina).
+   */
+  subtitleIcon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   topInset: number;
   rightElement?: React.ReactNode;
   /**
@@ -146,6 +152,7 @@ export function GlassTopBar({
   titleElement,
   subtitle,
   onSubtitlePress,
+  subtitleIcon = 'calendar-edit',
   topInset,
   rightElement,
   showMenu = true,
@@ -261,7 +268,7 @@ export function GlassTopBar({
                       {subtitle}
                     </Text>
                     <MaterialCommunityIcons
-                      name="calendar-edit"
+                      name={subtitleIcon}
                       size={14}
                       color={theme.colors.primary}
                     />

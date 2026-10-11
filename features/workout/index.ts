@@ -4,6 +4,7 @@ export { HomeScreen } from './HomeScreen';
 export { CardioScreen } from './CardioScreen';
 export { BodyWeightScreen } from './BodyWeightScreen';
 export { AchievementsScreen } from './AchievementsScreen';
+export { ActivityScreen } from './ActivityScreen';
 export { WorkoutLogScreen } from './WorkoutLogScreen';
 export { DetailScreen } from './DetailScreen';
 export { ExerciseProgressScreen } from './ExerciseProgressScreen';

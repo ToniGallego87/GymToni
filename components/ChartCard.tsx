@@ -12,6 +12,7 @@ import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { antonCenterNudge } from '@lib/textStyles';
 import { GradientFill } from './GradientFill';
+import { TrendDelta } from './TrendDelta';
 
 interface ChartCardProps {
   /** Color del borde y del tinte del fondo. */
@@ -71,6 +72,8 @@ export function ChartCard({
         onPress={expandable ? onToggle : undefined}
         disabled={!expandable}
         activeOpacity={0.85}
+        accessibilityRole={expandable ? 'button' : undefined}
+        accessibilityState={expandable ? { expanded } : undefined}
       >
         <View style={styles.headerRow}>
           <View style={styles.titleRow}>
@@ -96,6 +99,44 @@ export function ChartCard({
       </TouchableOpacity>
 
       {expandable && expanded && <ChartArea>{children}</ChartArea>}
+    </View>
+  );
+}
+
+interface ChartCardStatProps {
+  /** Qué es la cifra ("este mes", "desde la semana 1"). */
+  caption: string;
+  /** Cifra en texto ("1.240 kcal"). */
+  text?: string;
+  /** O una tendencia (▲/▼ + %), pintada con `TrendDelta`. */
+  trend?: { value: number; color?: string };
+}
+
+/**
+ * El dato de la derecha de la cabecera (`right` de `ChartCard`): cifra arriba y
+ * rótulo debajo. Fuente ÚNICA para Inicio (% de progreso) y Cardio (kcal del
+ * mes): antes cada pantalla lo maquetaba con su tipografía y la cifra de kcal,
+ * más grande que la del %, hacía la tarjeta colapsada de Cardio más alta. Aquí
+ * la cifra tiene un alto fijo sea texto o tendencia, así que miden lo mismo.
+ */
+export function ChartCardStat({ caption, text, trend }: ChartCardStatProps) {
+  return (
+    <View style={styles.stat}>
+      <View style={styles.statValueRow}>
+        {trend ? (
+          <TrendDelta
+            value={trend.value}
+            color={trend.color}
+            iconSize={16}
+            textStyle={styles.statValue}
+          />
+        ) : (
+          <Text style={[styles.statValue, styles.statValueText]}>{text}</Text>
+        )}
+      </View>
+      <Text style={styles.statCaption} numberOfLines={1}>
+        {caption}
+      </Text>
     </View>
   );
 }
@@ -136,7 +177,10 @@ const makeStyles = () =>
       width: '100%',
       paddingHorizontal: 16,
     },
+    // Alto mínimo = el de `ChartCardStat` (cifra 18 + rótulo 14): con dato o
+    // sin él, la tarjeta colapsada mide lo mismo en Inicio y en Cardio.
     headerRow: {
+      minHeight: 32,
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
@@ -162,6 +206,28 @@ const makeStyles = () =>
     },
     area: {
       alignItems: 'center',
+    },
+    stat: {
+      alignItems: 'flex-end',
+      marginLeft: 12,
+    },
+    statValueRow: {
+      height: 18,
+      justifyContent: 'center',
+    },
+    statValue: {
+      fontSize: 15,
+      fontWeight: '800',
+      lineHeight: 18,
+    },
+    statValueText: {
+      color: theme.colors.white,
+    },
+    statCaption: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      lineHeight: 14,
     },
   });
 

@@ -16,6 +16,7 @@ export {
   POSTER_HEIGHT,
 } from './AchievementPoster';
 export { GradientFill } from './GradientFill';
+export { HistoryCard, HistoryCardRow } from './HistoryCard';
 export { Avatar } from './Avatar';
 // AnimatedCounter no se re-exporta: solo lo consume TrendDelta por ruta relativa.
 export { TrendDelta } from './TrendDelta';
@@ -80,9 +81,11 @@ export { RestTimerModal } from './RestTimerModal';
 export { ReportModal } from './ReportModal';
 export { TopBarActionButton } from './TopBarActionButton';
 export { DatePickerModal } from './DatePickerModal';
+// GLASS_TOP_BAR_BASE_HEIGHT no se re-exporta: es la estimación interna de la
+// barra antes de medirse, y sumar sobre ella fuera de GlassTopBar descoloca el
+// hueco en cuanto hay subtítulo (ver AGENTS.md).
 export {
   GlassTopBar,
-  GLASS_TOP_BAR_BASE_HEIGHT,
   GLASS_TOP_BAR_CONTENT_GAP,
   useGlassTopBarHeight,
 } from './GlassTopBar';
@@ -111,4 +114,4 @@ export {
   MENU_TILE_PADDING,
   MENU_TILES_PER_ROW,
 } from './menuTileTokens';
-export { ChartCard, ChartArea } from './ChartCard';
+export { ChartCard, ChartArea, ChartCardStat } from './ChartCard';

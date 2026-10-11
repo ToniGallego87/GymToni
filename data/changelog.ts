@@ -9,6 +9,34 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.0',
+    items: [
+      'Récords personales: cuando superas tu mejor marca en un ejercicio, la serie se pinta en dorado con un trofeo y te lo celebramos al momento.',
+      'Recordatorio de entreno: una hora antes de la hora a la que sueles entrenar te avisamos, y si pasan dos semanas sin ir, también. Lo puedes apagar en Configuración.',
+      '¿Se te olvidó apuntar un día? Desde el Calendario puedes tocar un día pasado y apuntar el entreno o el cardio con esa fecha. Los días que se pueden rellenar llevan un "+".',
+      'Al elegir la sesión ves cómo va tu semana y puedes empezar una semana nueva cuando quieras. Además, la semana se cierra sola a los 7 días, así que tras una pausa vuelves al Día 1.',
+      'Los retos y logros ya no saltan a mitad de entreno: cuentan cuando completas el día. Y al terminar ves qué retos has hecho avanzar con esa sesión.',
+      'Apuntar cardio es más rápido: se recuerdan los datos de la última vez, tus actividades propias se quedan como botón, ves las calorías mientras escribes y puedes corregir una entrada con solo tocarla.',
+      'La tarjeta de Cardio te dice lo que llevas hoy, y lo apuntado aparece debajo con su total.',
+      'Si borras una serie o un cardio sin querer, puedes deshacerlo al momento.',
+      'Durante el entreno, la pantalla baja sola al siguiente ejercicio, y las flechas del peso suben y bajan lo que sueles usar tú.',
+      'La nota de cada ejercicio se escribe directamente en su tarjeta, sin ventanas.',
+      'Nueva sección Actividad en tu Perfil: tus logros, retos superados y días entrenados en una línea de tiempo.',
+      'En Comunidad ya puedes buscar rutinas por su nombre, además de personas.',
+      'Desde Datos y nube puedes recuperar cualquiera de las copias de seguridad automáticas del móvil.',
+      'Subes de nivel al doble de ritmo que antes.',
+      'El detalle de un entreno vuelve a mostrar cuánto duró.',
+      'Las fechas se leen mejor ("Jue 9 oct") y cada pantalla muestra arriba un dato útil, como las sesiones de la semana o tu versión de la app.',
+      'En tu Perfil, cada casilla te dice lo que hay dentro y las cifras te llevan a su lista. Los entrenamientos ya no cuentan las sesiones de cardio.',
+      'Compartir una rutina es más claro: "Enviar a alguien" y un interruptor para hacerla pública o privada en la comunidad.',
+      'Retoques visuales: avisos más bonitos con su botón bien visible, el calendario con el mes siempre a la vista y un asa para mover el temporizador de descanso.',
+      'La pestaña de Cardio está siempre en la barra de abajo.',
+      'La app arranca más fluida y responde mejor a los toques en los primeros segundos.',
+      'Arreglos varios: tarjetas que se montaban unas sobre otras, el peso que cambiaba al deslizar sobre las flechas, avisos de descanso repetidos, textos que no cambiaban de idioma y cardio que se contaba dos veces.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.2',
     items: [
       'Tus sesiones de cardio están a salvo. Por un fallo de la versión anterior, algunas desaparecían de la pestaña Cardio; ya está arreglado y se han recuperado todas.',
