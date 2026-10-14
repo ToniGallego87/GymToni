@@ -74,8 +74,8 @@
   bailaría). Se apunta al añadir o copiar (`recordRoutineSave`) y en cada sync
   las que ya tenías (`recordOwnedRoutineSaves`, en `useCloudSync`), así
   cuentan también las de antes. Sin la tabla, la cifra no sale y nada falla.
-  **SQL pendiente en Supabase**: bloque `routine_saves` de
-  `supabase/social-schema.sql`.
+  SQL: bloque `routine_saves` de `supabase/social-schema.sql` (ya aplicado;
+  comprobado con curl el 2026-10-14).
 
 ### Cambios
 
@@ -183,8 +183,8 @@
 - **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.6;
   `versionCode` 32 → 33. Pendiente en Supabase (no bloquea: la app lo
   tolera): `ALTER TABLE public.exercise_logs ADD COLUMN IF NOT EXISTS
-  catalog_id text;` y el bloque `routine_saves` de
-  `supabase/social-schema.sql`.
+  catalog_id text;` (comprobado con curl el 2026-10-14; `routine_saves` ya
+  existe).
 
 ### Correcciones
 
