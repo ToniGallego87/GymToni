@@ -1086,6 +1086,10 @@ register({
   'Aún sin conseguir': 'Not unlocked yet',
   Conseguido: 'Unlocked',
   'Arrastra para reordenar': 'Drag to reorder',
+  'Arrastra para mover': 'Drag to move',
+  'Nombre del ejercicio': 'Exercise name',
+  'Menos series': 'Fewer sets',
+  'Más series': 'More sets',
   'Pliega todos los días para ordenarlos arrastrando':
     'Collapse every day to reorder them by dragging',
   'Series de la rutina': 'Routine sets',

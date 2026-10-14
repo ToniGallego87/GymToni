@@ -79,6 +79,31 @@
 
 ### Cambios
 
+- **Editar los ejercicios de un día ya no cambia la vista.** Al pulsar
+  "Editar" en la ficha de una rutina, los ejercicios siguen siendo las mismas
+  casillas con GIF y plan que en la consulta (antes pasaban a una lista
+  vertical de nombres). En edición cada casilla lleva una barrita arriba para
+  arrastrarla a cualquier hueco, en cualquier dirección, y lápiz (abre el
+  popup) y papelera (pide confirmación) abajo; tocar la casilla también abre
+  el popup. Al final, una casilla "+" para añadir. Nuevo
+  `components/SortableGrid.tsx` (el hermano en 2D de `SortableList`: destino
+  = hueco cuyo centro queda más cerca, remonta tras mover igual que la lista)
+  y prop `editing` en `ExerciseTileGrid` (con `exerciseTilesFromForms`).
+  Desaparece `ExerciseSummaryRow`; su confirmación de borrado pasa a la
+  cuadrícula. `SortableList` queda para ordenar días.
+- **"Nueva rutina" con las mismas casillas.** Mismo `ExerciseTileGrid` en
+  edición y mismo popup. Un día nuevo empieza vacío, solo con la casilla "+"
+  (antes traía una fila sin nombre), y puede quedarse sin ejercicios mientras
+  es un borrador: el aviso bajo el CTA dice lo que falta. Los días importados
+  sin ejercicios tampoco traen la fila vacía (`namedExercisesFromText`).
+- **Popup de ejercicio más claro.** El título ya no es "Ejercicio": es el
+  propio nombre, editable, con la miniatura del GIF al lado (la miniatura
+  reproduce el GIF o, sin ejercicio del catálogo, abre el buscador). Debajo,
+  una sola línea con el ejercicio del catálogo, "Cambiar" y ✕; sin él, las
+  propuestas mientras escribes y "Buscar en el catálogo". El plan va en una
+  tarjeta de dos filas: Series con su stepper y, en la otra, Reps/Segundos
+  como rótulo elegible con el número a la derecha. `AppModal` admite
+  `header` para sustituir el título de texto.
 - **Cambiar el nombre ya no suelta el GIF.** En el editor, teclear mantenía el
   nombre pero borraba el `catalogId`; ahora se conserva (el nombre nuevo pasa a
   ser otro nombre del mismo ejercicio) y solo se pierde al vaciar el nombre o

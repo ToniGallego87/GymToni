@@ -9,7 +9,8 @@ import {
   Button,
   ConfirmModal,
   ExerciseEditorModal,
-  ExerciseSummaryRow,
+  ExerciseTileGrid,
+  exerciseTilesFromForms,
   SortableList,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
@@ -71,6 +72,13 @@ function moveRow<T>(rows: T[], from: number, to: number): T[] {
   return next;
 }
 
+// Ejercicios de un día importado, sin la fila vacía que `buildExercisesFromText`
+// pone cuando no hay ninguno: aquí el sitio del siguiente ejercicio es la
+// casilla "+", no una fila sin nombre.
+function namedExercisesFromText(text: string): ExerciseForm[] {
+  return buildExercisesFromText(text).filter((ex) => ex.name.trim());
+}
+
 function effectiveDayIcon(day: NewRoutineDayForm): GymIconName | null {
   return day.icon ?? detectGymIcon(day.title);
 }
@@ -96,7 +104,7 @@ function buildDaysFromRoutineText(text: string): NewRoutineDayForm[] {
         id: generateId(),
         title,
         icon,
-        exercises: exercises.length ? exercises : [createEmptyExercise()],
+        exercises,
       };
     });
 }
@@ -119,9 +127,9 @@ export function NewRoutineScreen({
           id: generateId(),
           title: day.title,
           icon: day.icon,
-          exercises: buildExercisesFromText(day.exercisesText),
+          exercises: namedExercisesFromText(day.exercisesText),
         }))
-      : [{ id: generateId(), title: '', exercises: [createEmptyExercise()] }]
+      : [{ id: generateId(), title: '', exercises: [] }]
   );
   const [toast, setToast] = useState<{
     message: string;
@@ -189,7 +197,7 @@ export function NewRoutineScreen({
         id: generateId(),
         title: day.title,
         icon: day.icon,
-        exercises: buildExercisesFromText(day.exercisesText),
+        exercises: namedExercisesFromText(day.exercisesText),
       }))
     );
     setShowLinkImport(false);
@@ -276,15 +284,13 @@ export function NewRoutineScreen({
     }));
   };
 
+  // Aquí un día sí puede quedarse sin ejercicios: es un borrador, la casilla
+  // "+" sigue ahí y el CTA dice lo que falta antes de crear la rutina.
   const handleRemoveExercise = (dayId: string, exerciseId: string) => {
-    updateDay(dayId, (day) =>
-      day.exercises.length <= 1
-        ? day
-        : {
-            ...day,
-            exercises: day.exercises.filter((ex) => ex.id !== exerciseId),
-          }
-    );
+    updateDay(dayId, (day) => ({
+      ...day,
+      exercises: day.exercises.filter((ex) => ex.id !== exerciseId),
+    }));
   };
 
   const handleAddDay = () => {
@@ -295,7 +301,7 @@ export function NewRoutineScreen({
 
     setDays((previous) => [
       ...previous,
-      { id: generateId(), title: '', exercises: [createEmptyExercise()] },
+      { id: generateId(), title: '', exercises: [] },
     ]);
   };
 
@@ -469,24 +475,23 @@ export function NewRoutineScreen({
 
         <Text style={styles.label}>{t('Ejercicios')}</Text>
 
-        <SortableList
-          items={day.exercises}
-          keyOf={(exercise) => exercise.id}
-          onMove={(from, to) => handleMoveExerciseTo(day.id, from, to)}
-          renderItem={(exercise, handle) => (
-            <ExerciseSummaryRow
-              exercise={exercise}
-              canRemove={day.exercises.length > 1}
-              onEdit={() => setEditingExerciseId(exercise.id)}
-              onRemove={() => handleRemoveExercise(day.id, exercise.id)}
-              dragHandle={handle}
-            />
-          )}
+        {/* Las mismas casillas con GIF que la ficha de una rutina en
+            edición: barrita para arrastrar, lápiz, papelera y, al final,
+            la casilla "+" para añadir. */}
+        <ExerciseTileGrid
+          exercises={exerciseTilesFromForms(day.exercises)}
+          accent={accent}
+          editing={{
+            onEdit: setEditingExerciseId,
+            onRemove: (id) => handleRemoveExercise(day.id, id),
+            onMove: (from, to) => handleMoveExerciseTo(day.id, from, to),
+            onAdd: () => handleAddExercise(day.id),
+            canRemove: true,
+          }}
         />
 
-        {/* Popup de edición del ejercicio abierto (el lápiz de su fila),
-            el mismo que en la ficha de una rutina guardada. Cerrarlo sin
-            nombre descarta la fila si el día tiene otras. */}
+        {/* Popup de edición del ejercicio abierto, el mismo que en la ficha
+            de una rutina guardada. Cerrarlo sin nombre descarta la casilla. */}
         {(() => {
           const editing = day.exercises.find(
             (exercise) => exercise.id === editingExerciseId
@@ -509,22 +514,6 @@ export function NewRoutineScreen({
             />
           );
         })()}
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.addExerciseButton,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => handleAddExercise(day.id)}
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons
-            name="plus-circle-outline"
-            size={18}
-            color={theme.colors.primary}
-          />
-          <Text style={styles.addExerciseText}>{t('Añadir ejercicio')}</Text>
-        </Pressable>
 
         {/* Quitar el día: rotulado y al pie del bloque, lejos del asa, igual
             que en la ficha de una rutina guardada. Antes era una papelera
@@ -1000,24 +989,6 @@ const makeStyles = () =>
       color: theme.colors.text,
       fontSize: 15,
       lineHeight: 20,
-    },
-    addExerciseButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
-      borderRadius: theme.borderRadius.sm,
-      borderWidth: 1,
-      borderStyle: 'dashed',
-      borderColor: theme.colors.primaryLine,
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    addExerciseText: {
-      color: theme.colors.primary,
-      fontSize: 14,
-      fontWeight: '800',
-      lineHeight: 18,
     },
     buttonPressed: {
       opacity: 0.85,

@@ -53,13 +53,14 @@ GymToni/
 │   ├── StatsStrip.tsx        ← Fila de cifras (kg / kcal + 3 referencias) de las tarjetas de progreso de Inicio y Cardio
 │   ├── BarChart.tsx          ← Gráfica de barras (Inicio, Cardio y Progreso por ejercicio) + `getChartWidth` (ancho común de gráfica y filtro)
 │   ├── WeightTrendChart.tsx  ← Línea del peso corporal en el tiempo (pantalla Peso)
-│   ├── SortableList.tsx      ← Lista reordenable arrastrando por un asa (ejercicios de un día y días de una rutina)
+│   ├── SortableList.tsx      ← Lista reordenable arrastrando por un asa (días de una rutina)
+│   ├── SortableGrid.tsx      ← Cuadrícula reordenable en cualquier dirección por una barrita (ejercicios de un día en edición)
 │   ├── SegmentedFilter.tsx   ← Filtro de chips de las gráficas
 │   ├── OptionToggle.tsx / ValueStepper.tsx ← Ajustes en el sitio: segmentado de opciones y ‹ valor › a saltos
 │   ├── LoadMoreButton.tsx    ← Paginación de los historiales e "Cargar más (+10)" del catálogo de ejercicios
 │   ├── HistoryCard.tsx       ← Tarjeta de un día del historial (icono, título, fecha y dato a la derecha), compartida por Inicio y Cardio
 │   ├── ExerciseInputField.tsx← Registro serie a serie (60x8 → ➕)
-│   ├── ExerciseFormRow.tsx   ← Popup de edición de un ejercicio + fila resumen (crear rutina y editar día)
+│   ├── ExerciseFormRow.tsx   ← Popup de edición de un ejercicio (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
 │   ├── GymIcon.tsx / DayAccentIcon.tsx ← Iconos de grupo muscular por día
 │   ├── Avatar.tsx            ← Foto de perfil (fuente única de las pantallas sociales)

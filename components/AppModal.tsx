@@ -8,6 +8,11 @@ interface AppModalProps {
   visible: boolean;
   onRequestClose: () => void;
   title: string;
+  /**
+   * Cabecera propia en lugar del título de texto (el editor de ejercicio pone
+   * ahí el nombre editable con su GIF).
+   */
+  header?: ReactNode;
   /** Icono MaterialCommunityIcons junto al título. */
   icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   /** Texto explicativo bajo el título. */
@@ -48,6 +53,7 @@ export function AppModal({
   visible,
   onRequestClose,
   title,
+  header,
   icon,
   message,
   align = 'center',
@@ -80,18 +86,22 @@ export function AppModal({
           style={styles.card}
           {...(onOverlayPress ? { onPress: () => {} } : {})}
         >
-          <View style={[styles.titleRow, centered && styles.titleRowCentered]}>
-            {!!icon && (
-              <MaterialCommunityIcons
-                name={icon}
-                size={18}
-                color={theme.colors.text}
-              />
-            )}
-            <Text style={[styles.title, centered && styles.titleCentered]}>
-              {title}
-            </Text>
-          </View>
+          {header ?? (
+            <View
+              style={[styles.titleRow, centered && styles.titleRowCentered]}
+            >
+              {!!icon && (
+                <MaterialCommunityIcons
+                  name={icon}
+                  size={18}
+                  color={theme.colors.text}
+                />
+              )}
+              <Text style={[styles.title, centered && styles.titleCentered]}>
+                {title}
+              </Text>
+            </View>
+          )}
 
           {!!message && (
             <Text style={[styles.message, centered && styles.messageCentered]}>

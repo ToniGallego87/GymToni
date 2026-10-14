@@ -18,8 +18,8 @@ import {
   ConfirmModal,
   DayAccentIcon,
   ExerciseEditorModal,
-  ExerciseSummaryRow,
   ExerciseTileGrid,
+  exerciseTilesFromForms,
   SortableList,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
@@ -683,21 +683,19 @@ export function RoutineDetailScreen({
           // ejercicios") con su propio Cancelar/Guardar, y salir de
           // edición tiraba ese borrador sin avisar.
           <Animated.View entering={fadeIn} style={styles.exercisesEditor}>
-            {/* Arrastrando por el asa se coloca cada ejercicio donde
-                  se quiera. */}
-            <SortableList
-              items={rows}
-              keyOf={(exercise) => exercise.id}
-              onMove={(from, to) => moveExerciseTo(day, from, to)}
-              renderItem={(exercise, handle) => (
-                <ExerciseSummaryRow
-                  exercise={exercise}
-                  canRemove={rows.length > 1}
-                  onEdit={() => setEditingExerciseId(exercise.id)}
-                  onRemove={() => removeExercise(day, exercise.id)}
-                  dragHandle={handle}
-                />
-              )}
+            {/* Las mismas casillas que en lectura, con barrita para
+                  arrastrar (en cualquier dirección), lápiz y papelera; la
+                  última casilla, "+", añade. */}
+            <ExerciseTileGrid
+              exercises={exerciseTilesFromForms(rows)}
+              accent={accent}
+              editing={{
+                onEdit: setEditingExerciseId,
+                onRemove: (id) => removeExercise(day, id),
+                onMove: (from, to) => moveExerciseTo(day, from, to),
+                onAdd: () => addExercise(day),
+                canRemove: rows.length > 1,
+              }}
             />
 
             {/* El ejercicio abierto se edita en un popup (el lápiz de
@@ -732,23 +730,6 @@ export function RoutineDetailScreen({
                 />
               );
             })()}
-
-            <Pressable
-              style={({ pressed }) => [
-                styles.addExerciseButton,
-                pressed && styles.buttonPressed,
-              ]}
-              onPress={() => addExercise(day)}
-            >
-              <MaterialCommunityIcons
-                name="plus-circle-outline"
-                size={18}
-                color={theme.colors.onGold}
-              />
-              <Text style={styles.addExerciseText}>
-                {t('Añadir ejercicio')}
-              </Text>
-            </Pressable>
 
             {/* Borrar el día, con rótulo y apartado de las flechas: antes
                   era una papelera pegada a ellas, y borrar un día se lleva
@@ -1539,27 +1520,10 @@ const makeStyles = () =>
       color: theme.colors.text,
       backgroundColor: theme.colors.inputBg,
     },
-    // Editor de ejercicios inline dentro de la tarjeta del día.
+    // Ejercicios en edición: la misma cuadrícula que en lectura (sin margen
+    // extra, para que no salte al entrar) y "Quitar día" debajo.
     exercisesEditor: {
-      gap: 10,
-      marginTop: 4,
-    },
-    addExerciseButton: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 8,
-      paddingVertical: 12,
-      borderRadius: theme.borderRadius.sm,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryFillDark,
-      backgroundColor: theme.colors.primaryFill,
-    },
-    addExerciseText: {
-      color: theme.colors.onGold,
-      fontSize: 14,
-      fontWeight: '800',
-      lineHeight: 18,
+      gap: 12,
     },
     iconGrid: {
       marginBottom: theme.spacing.sm,

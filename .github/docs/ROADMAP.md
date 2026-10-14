@@ -14,20 +14,6 @@ Supabase (cuentas, sync y social) está entregado; plan en
 Última revisión completa: 2026-10-09.
 
 ## Mejoras visuales y de UX
-
-- [ ] **En edición, cada ejercicio enseña su plan** — en lectura, la ficha de
-      una rutina pinta cada ejercicio con su GIF y sus series × reps; al pulsar
-      "Editar" se convierte en una lista que solo dice el nombre, así que para
-      comprobar cuántas series tenía algo hay que abrir su popup, uno a uno. Lo
-      mismo en Nueva rutina, que usa la misma fila. Poner "3 × 8-10" bajo el
-      nombre de cada fila del editor.
-      **Por qué:** se entra a editar casi siempre para tocar series o reps; ver
-      el plan de todo el día mientras se edita evita abrir y cerrar popups solo
-      para leer.
-      **Archivos:** `components/ExerciseFormRow.tsx:394` (la fila: solo el
-      nombre), `components/ExerciseTileGrid.tsx:80` (el plan que sí sale en
-      lectura), `features/workout/NewRoutineScreen.tsx:477`.
-      **Esfuerzo:** bajo.
 - [ ] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
       una fila con el icono de cada día (verde hecho, aro dorado el que toca,
       anillo que se llena el de hoy) y Elige la sesión, un toque después, como
@@ -123,8 +109,8 @@ Candidatas (compatibles con las restricciones):
       **Por qué:** la ficha es donde se decide qué cambiar del plan, y para
       eso se mira cómo va cada ejercicio; hoy hay que salir a Perfil →
       Ejercicios y buscarlo.
-      **Archivos:** `features/workout/RoutineDetailScreen.tsx:779` (la
-      cuadrícula), `components/ExerciseTileGrid.tsx:44` (sin acción propia;
+      **Archivos:** `features/workout/RoutineDetailScreen.tsx:760` (la
+      cuadrícula), `components/ExerciseTileGrid.tsx:81` (sin acción propia;
       la comparte con la rutina pública), `features/workout/DetailScreen.tsx:533`
       (el acceso que ya existe), `app/App.tsx:201` (la pantalla
       `exercise-progress`, que hoy solo sabe volver al Detalle o a Perfil).

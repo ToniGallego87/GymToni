@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { ReactNode, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Image,
@@ -24,7 +24,6 @@ import { formatExerciseNames, otherExerciseNames } from '@lib/exerciseIdentity';
 import { useExerciseNames } from '@hooks/useExerciseKeyResolver';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
-import { ConfirmModal } from './ConfirmModal';
 import { ExercisePickerModal } from './ExercisePickerModal';
 import { GifViewerModal } from './GifViewerModal';
 
@@ -39,13 +38,17 @@ interface ExerciseEditorModalProps {
 }
 
 /**
- * Editor de un ejercicio en un popup: nombre (con buscador del catálogo y su
- * GIF), stepper de series y reps/segundos. Lo usan "Nueva rutina" y el editor
- * de ejercicios de un día ya guardado, para que crear y editar se hagan igual.
+ * Editor de un ejercicio en un popup. Lo usan "Nueva rutina" y la ficha de
+ * una rutina guardada (lápiz de cada casilla), para que crear y editar se
+ * hagan igual.
  *
- * Antes se editaba desplegado en la propia fila, encajonado entre las demás:
- * cinco dianas pequeñas y campos que competían con la lista. El popup da al
- * formulario el ancho de la pantalla y deja la lista limpia detrás.
+ * Tres bloques, de arriba abajo, en el orden en que se piensa:
+ * 1. Qué ejercicio es: la miniatura del GIF y el nombre, que ES el título
+ *    (antes el título decía "Ejercicio" y el nombre era un campo más debajo).
+ * 2. De qué ejercicio del catálogo es: una sola línea con "Cambiar" y ✕, o el
+ *    botón para buscarlo y las propuestas mientras se escribe.
+ * 3. El plan: series y repeticiones (o segundos), una fila cada uno con el
+ *    rótulo a la izquierda y el control a la derecha.
  */
 export function ExerciseEditorModal({
   visible,
@@ -86,170 +89,209 @@ export function ExerciseEditorModal({
 
   const unit = exercise?.unit ?? 'reps';
 
+  // Cabecera: miniatura + nombre editable a tamaño de título. La miniatura
+  // reproduce el GIF si hay ejercicio del catálogo; si no, abre el buscador.
+  const header = (
+    <View style={styles.header}>
+      <Pressable
+        style={({ pressed }) => [styles.headerThumb, pressed && styles.pressed]}
+        onPress={() => (linked ? setShowGif(true) : setShowPicker(true))}
+        accessibilityRole="button"
+        accessibilityLabel={linked ? t('Ver GIF') : t('Buscar en el catálogo')}
+      >
+        {linked ? (
+          <>
+            <Image
+              source={{ uri: thumbUrl(linked) }}
+              style={styles.headerThumbImage}
+              resizeMode="contain"
+            />
+            <View style={styles.headerThumbBadge}>
+              <MaterialCommunityIcons
+                name="play"
+                size={12}
+                color={theme.colors.onGold}
+              />
+            </View>
+          </>
+        ) : (
+          <MaterialCommunityIcons
+            name="image-search-outline"
+            size={24}
+            color={theme.colors.textSecondary}
+          />
+        )}
+      </Pressable>
+      <View style={styles.headerNameWrap}>
+        <TextInput
+          style={styles.headerName}
+          placeholder={t('Nombre del ejercicio')}
+          placeholderTextColor={theme.colors.textSecondary}
+          value={typedName}
+          autoFocus={!typedName}
+          multiline
+          // Multilínea para que un nombre largo se lea entero, pero sin saltos
+          // de línea: Intro cierra el teclado.
+          blurOnSubmit
+          returnKeyType="done"
+          maxLength={80}
+          // El nombre es solo la etiqueta: cambiarlo NO rompe el vínculo con
+          // el catálogo (llamarlo "Banca" sigue siendo el press de banca, con
+          // su GIF y su historial). Vaciarlo sí: es empezar otro ejercicio.
+          // Para decir "no es este", la ✕ de la línea del catálogo.
+          onChangeText={(raw) => {
+            const value = raw.replace(/\n/g, ' ');
+            onChange(
+              value.trim()
+                ? { name: value }
+                : { name: value, catalogId: undefined }
+            );
+          }}
+          accessibilityLabel={t('Nombre')}
+        />
+      </View>
+    </View>
+  );
+
   return (
     <>
       <AppModal
         visible={visible}
         onRequestClose={onDone}
         onOverlayPress={onDone}
-        icon="pencil-outline"
-        title={t('Ejercicio')}
+        title={typedName || t('Ejercicio')}
+        header={header}
         align="left"
         footer={<Button title={t('Listo')} onPress={onDone} />}
       >
         <View style={styles.editor}>
-          <View style={styles.controlBlock}>
-            <Text style={styles.controlLabel}>{t('Nombre')}</Text>
-            <View style={styles.exerciseNameRow}>
-              <TextInput
-                style={styles.exerciseNameInput}
-                placeholder={t('Ej: Press banca')}
-                placeholderTextColor={theme.colors.textSecondary}
-                value={exercise?.name ?? ''}
-                autoFocus={!exercise?.name}
-                // El nombre es solo la etiqueta: cambiarlo NO rompe el vínculo
-                // con el catálogo (llamarlo "Banca" sigue siendo el press de
-                // banca, con su GIF y su historial). Vaciarlo sí: es empezar
-                // otro ejercicio. Para decir "no es este", la ✕ de abajo.
-                onChangeText={(value) =>
-                  onChange(
-                    value.trim()
-                      ? { name: value }
-                      : { name: value, catalogId: undefined }
-                  )
-                }
+          {linked ? (
+            // Qué ejercicio ES, con los otros nombres con los que lo llamas:
+            // un ejercicio, varios nombres. Lo que junta su historial es el
+            // ejercicio, no lo escrito.
+            <View style={styles.catalogRow}>
+              <MaterialCommunityIcons
+                name="book-open-variant"
+                size={16}
+                color={theme.colors.primary}
               />
+              <View style={styles.catalogText}>
+                <Text style={styles.catalogName} numberOfLines={2}>
+                  {exerciseName(linked)}
+                </Text>
+                {otherNames.length > 0 && (
+                  <Text style={styles.catalogAliases} numberOfLines={2}>
+                    {t('También lo llamas: {names}', {
+                      names: formatExerciseNames(otherNames),
+                    })}
+                  </Text>
+                )}
+              </View>
               <Pressable
                 style={({ pressed }) => [
-                  styles.iconButton,
-                  pressed && styles.buttonPressed,
+                  styles.textButton,
+                  pressed && styles.pressed,
                 ]}
                 onPress={() => setShowPicker(true)}
                 hitSlop={8}
-                accessibilityLabel={t('Buscar en el catálogo')}
+                accessibilityRole="button"
+              >
+                <Text style={styles.textButtonLabel}>{t('Cambiar')}</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => onChange({ catalogId: undefined })}
+                hitSlop={10}
+                accessibilityRole="button"
+                accessibilityLabel={t('No es este ejercicio')}
+              >
+                <MaterialCommunityIcons
+                  name="close-circle"
+                  size={18}
+                  color={theme.colors.textMuted}
+                />
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.catalogSearch}>
+              {/* Sin ejercicio del catálogo, la app propone mientras
+                  escribes: un toque y lo escrito pasa a ser ESE ejercicio
+                  (con su GIF; el nombre luego se puede cambiar). */}
+              {suggestions.length > 0 && (
+                <View style={styles.suggestions}>
+                  <Text style={styles.sectionLabel}>
+                    {t('¿Es alguno de estos?')}
+                  </Text>
+                  {suggestions.map((suggestion) => (
+                    <Pressable
+                      key={suggestion.id}
+                      style={({ pressed }) => [
+                        styles.suggestionRow,
+                        pressed && styles.pressed,
+                      ]}
+                      onPress={() =>
+                        onChange({
+                          name: exerciseName(suggestion),
+                          catalogId: suggestion.id,
+                        })
+                      }
+                    >
+                      <Image
+                        source={{ uri: thumbUrl(suggestion) }}
+                        style={styles.suggestionThumb}
+                        resizeMode="cover"
+                      />
+                      <View style={styles.suggestionText}>
+                        <Text style={styles.suggestionName} numberOfLines={2}>
+                          {exerciseName(suggestion)}
+                        </Text>
+                        <Text style={styles.suggestionMeta} numberOfLines={1}>
+                          {targetLabel(suggestion.target)} ·{' '}
+                          {equipmentLabel(suggestion.equipment)}
+                        </Text>
+                      </View>
+                      <MaterialCommunityIcons
+                        name="plus-circle-outline"
+                        size={20}
+                        color={theme.colors.primary}
+                      />
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.searchButton,
+                  pressed && styles.pressed,
+                ]}
+                onPress={() => setShowPicker(true)}
+                accessibilityRole="button"
               >
                 <MaterialCommunityIcons
                   name="magnify"
                   size={18}
                   color={theme.colors.primary}
                 />
-              </Pressable>
-              {!!exercise?.catalogId && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.iconButton,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={() => setShowGif(true)}
-                  hitSlop={8}
-                  accessibilityLabel={t('Ver GIF')}
-                >
-                  <MaterialCommunityIcons
-                    name="play-box-outline"
-                    size={18}
-                    color={theme.colors.primary}
-                  />
-                </Pressable>
-              )}
-            </View>
-
-            {/* Qué ejercicio ES, con los otros nombres con los que lo llamas:
-                un ejercicio, varios nombres. Lo que junta su historial es el
-                ejercicio, no lo escrito. La ✕ dice "no es este" y lo deja
-                como ejercicio propio. */}
-            {!!linked && (
-              <View style={styles.linkRow}>
-                <MaterialCommunityIcons
-                  name="dumbbell"
-                  size={16}
-                  color={theme.colors.primary}
-                />
-                <View style={styles.linkTextWrap}>
-                  <Text style={styles.linkText} numberOfLines={2}>
-                    {t('Ejercicio: {name}', { name: exerciseName(linked) })}
-                  </Text>
-                  {otherNames.length > 0 && (
-                    <Text style={styles.linkAliases} numberOfLines={2}>
-                      {t('También lo llamas: {names}', {
-                        names: formatExerciseNames(otherNames),
-                      })}
-                    </Text>
-                  )}
-                </View>
-                <Pressable
-                  onPress={() => onChange({ catalogId: undefined })}
-                  hitSlop={10}
-                  accessibilityLabel={t('No es este ejercicio')}
-                >
-                  <MaterialCommunityIcons
-                    name="close-circle"
-                    size={18}
-                    color={theme.colors.textMuted}
-                  />
-                </Pressable>
-              </View>
-            )}
-
-            {/* Sin ejercicio del catálogo, la app propone mientras escribes:
-                un toque y lo que escribes pasa a ser ESE ejercicio (con su
-                nombre, que luego se puede cambiar sin perderlo). */}
-            {suggestions.length > 0 && (
-              <View style={styles.suggestions}>
-                <Text style={styles.suggestionsLabel}>
-                  {t('¿Es alguno de estos?')}
+                <Text style={styles.searchButtonText}>
+                  {t('Buscar en el catálogo')}
                 </Text>
-                {suggestions.map((suggestion) => (
-                  <Pressable
-                    key={suggestion.id}
-                    style={({ pressed }) => [
-                      styles.suggestionRow,
-                      pressed && styles.buttonPressed,
-                    ]}
-                    onPress={() =>
-                      onChange({
-                        name: exerciseName(suggestion),
-                        catalogId: suggestion.id,
-                      })
-                    }
-                  >
-                    <Image
-                      source={{ uri: thumbUrl(suggestion) }}
-                      style={styles.suggestionThumb}
-                      resizeMode="cover"
-                    />
-                    <View style={styles.suggestionText}>
-                      <Text style={styles.suggestionName} numberOfLines={2}>
-                        {exerciseName(suggestion)}
-                      </Text>
-                      <Text style={styles.suggestionMeta} numberOfLines={1}>
-                        {targetLabel(suggestion.target)} ·{' '}
-                        {equipmentLabel(suggestion.equipment)}
-                      </Text>
-                    </View>
-                    <MaterialCommunityIcons
-                      name="link-plus"
-                      size={18}
-                      color={theme.colors.primary}
-                    />
-                  </Pressable>
-                ))}
-              </View>
-            )}
-          </View>
+              </Pressable>
+            </View>
+          )}
 
-          <View style={styles.exerciseControlsRow}>
-            <View style={styles.controlBlock}>
-              <Text style={styles.controlLabel}>{t('Series')}</Text>
+          <View style={styles.plan}>
+            <View style={styles.planRow}>
+              <Text style={styles.planLabel}>{t('Series')}</Text>
               <View style={styles.stepper}>
                 <Pressable
                   style={({ pressed }) => [
                     styles.stepperButton,
-                    sets <= MIN_SETS && styles.controlDisabled,
-                    pressed && styles.buttonPressed,
+                    sets <= MIN_SETS && styles.disabled,
+                    pressed && styles.pressed,
                   ]}
                   onPress={() => adjustSets(-1)}
                   disabled={sets <= MIN_SETS}
                   hitSlop={6}
+                  accessibilityLabel={t('Menos series')}
                 >
                   <MaterialCommunityIcons
                     name="minus"
@@ -261,12 +303,13 @@ export function ExerciseEditorModal({
                 <Pressable
                   style={({ pressed }) => [
                     styles.stepperButton,
-                    sets >= MAX_SETS && styles.controlDisabled,
-                    pressed && styles.buttonPressed,
+                    sets >= MAX_SETS && styles.disabled,
+                    pressed && styles.pressed,
                   ]}
                   onPress={() => adjustSets(1)}
                   disabled={sets >= MAX_SETS}
                   hitSlop={6}
+                  accessibilityLabel={t('Más series')}
                 >
                   <MaterialCommunityIcons
                     name="plus"
@@ -277,51 +320,52 @@ export function ExerciseEditorModal({
               </View>
             </View>
 
-            <View style={[styles.controlBlock, styles.controlBlockGrow]}>
-              <Text style={styles.controlLabel}>
-                {unit === 'seg' ? t('Segundos') : t('Repeticiones')}
-              </Text>
-              <View style={styles.repsRow}>
-                <TextInput
-                  style={styles.repsInput}
-                  placeholder={unit === 'seg' ? t('Ej: 30-45') : t('Ej: 10-12')}
-                  placeholderTextColor={theme.colors.textSecondary}
-                  value={exercise?.reps ?? ''}
-                  onChangeText={(value) => onChange({ reps: value })}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={10}
-                />
-                <View style={styles.unitToggle}>
-                  {(['reps', 'seg'] as RepUnit[]).map((option) => {
-                    const active = unit === option;
-                    return (
-                      <Pressable
-                        key={option}
+            <View style={styles.planDivider} />
+
+            {/* Qué se cuenta en cada serie (repeticiones o segundos) a la
+                izquierda, como rótulo que se elige; cuántas, a la derecha. */}
+            <View style={styles.planRow}>
+              <View style={styles.unitToggle}>
+                {(['reps', 'seg'] as RepUnit[]).map((option) => {
+                  const active = unit === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      style={[
+                        styles.unitOption,
+                        active && [
+                          styles.unitOptionActive,
+                          { borderColor: accent },
+                        ],
+                      ]}
+                      onPress={() => onChange({ unit: option })}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: active }}
+                    >
+                      <Text
                         style={[
-                          styles.unitOption,
-                          active && [
-                            styles.unitOptionActive,
-                            { borderColor: accent },
-                          ],
+                          styles.unitOptionText,
+                          active && styles.unitOptionTextActive,
                         ]}
-                        onPress={() => onChange({ unit: option })}
                       >
-                        <Text
-                          style={[
-                            styles.unitOptionText,
-                            active && [
-                              styles.unitOptionTextActive,
-                              { color: accent },
-                            ],
-                          ]}
-                        >
-                          {option === 'reps' ? t('reps') : t('seg')}
-                        </Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
+                        {option === 'reps' ? t('Reps') : t('Segundos')}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
+              <TextInput
+                style={styles.repsInput}
+                placeholder={unit === 'seg' ? '30-45' : '10-12'}
+                placeholderTextColor={theme.colors.textSecondary}
+                value={exercise?.reps ?? ''}
+                onChangeText={(value) => onChange({ reps: value })}
+                keyboardType="numbers-and-punctuation"
+                maxLength={10}
+                accessibilityLabel={
+                  unit === 'seg' ? t('Segundos') : t('Repeticiones')
+                }
+              />
             </View>
           </View>
         </View>
@@ -345,153 +389,118 @@ export function ExerciseEditorModal({
   );
 }
 
-interface ExerciseSummaryRowProps {
-  exercise: ExerciseForm;
-  canRemove: boolean;
-  onEdit: () => void;
-  onRemove: () => void;
-  /** Asa de arrastre (la pone `SortableList`); va a la izquierda del nombre. */
-  dragHandle?: ReactNode;
-}
-
-/**
- * Fila de un ejercicio en el editor del día: nombre, lápiz y papelera. Nada
- * más: el plan y el GIF se tocan en el popup del lápiz; el orden, con el asa.
- *
- * La papelera pide confirmación: quitar un ejercicio de una rutina guardada
- * se lleva por delante su historial, y antes era una X de un solo toque.
- */
-export function ExerciseSummaryRow({
-  exercise,
-  canRemove,
-  onEdit,
-  onRemove,
-  dragHandle,
-}: ExerciseSummaryRowProps) {
-  const [confirmRemove, setConfirmRemove] = useState(false);
-  const name = exercise.name.trim();
-
-  return (
-    <>
-      <View
-        style={[
-          styles.summaryCard,
-          !!dragHandle && styles.summaryCardWithHandle,
-        ]}
-      >
-        {dragHandle}
-        <Pressable
-          style={({ pressed }) => [
-            styles.summaryNameRow,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={onEdit}
-          accessibilityRole="button"
-          accessibilityLabel={t('Editar {name}', {
-            name: name || t('Sin nombre'),
-          })}
-        >
-          <Text
-            style={[styles.summaryName, !name && styles.summaryNameEmpty]}
-            numberOfLines={2}
-          >
-            {name || t('Sin nombre')}
-          </Text>
-          <MaterialCommunityIcons
-            name="pencil"
-            size={18}
-            color={theme.colors.textSecondary}
-          />
-        </Pressable>
-        <Pressable
-          style={({ pressed }) => [
-            styles.summaryAction,
-            !canRemove && styles.controlDisabled,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => setConfirmRemove(true)}
-          disabled={!canRemove}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={t('Quitar ejercicio')}
-        >
-          <MaterialCommunityIcons
-            name="trash-can-outline"
-            size={20}
-            color={canRemove ? theme.colors.error : theme.colors.textSecondary}
-          />
-        </Pressable>
-      </View>
-
-      <ConfirmModal
-        visible={confirmRemove}
-        icon="trash-can-outline"
-        title={t('¿Quitar el ejercicio?')}
-        message={
-          name
-            ? t('"{name}" desaparecerá de este día de la rutina.', { name })
-            : t('El ejercicio desaparecerá de este día de la rutina.')
-        }
-        confirmLabel={t('Quitar')}
-        onConfirm={() => {
-          setConfirmRemove(false);
-          onRemove();
-        }}
-        onCancel={() => setConfirmRemove(false)}
-      />
-    </>
-  );
-}
+const THUMB_SIZE = 64;
 
 const makeStyles = () =>
   StyleSheet.create({
-    editor: {
-      gap: 14,
-    },
-    exerciseNameRow: {
+    header: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 12,
+      marginBottom: 14,
     },
-    exerciseNameInput: {
-      flex: 1,
-      minWidth: 0,
-      backgroundColor: theme.colors.inputBg,
+    headerThumb: {
+      width: THUMB_SIZE,
+      height: THUMB_SIZE,
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      color: theme.colors.text,
-      fontSize: 15,
-      lineHeight: 20,
+      backgroundColor: theme.colors.surfaceAlt,
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden',
     },
-    linkRow: {
+    headerThumbImage: {
+      width: '100%',
+      height: '100%',
+    },
+    headerThumbBadge: {
+      position: 'absolute',
+      right: 4,
+      bottom: 4,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: theme.colors.primaryLine,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    headerNameWrap: {
+      flex: 1,
+      minWidth: 0,
+      borderBottomWidth: 1.5,
+      borderBottomColor: theme.colors.primaryLine,
+    },
+    // El nombre a tamaño de título (el mismo que el de `AppModal`): es lo
+    // que encabeza el popup. La raya dorada de debajo dice que se escribe.
+    headerName: {
+      fontSize: 18,
+      fontWeight: '800',
+      lineHeight: 23,
+      color: theme.colors.text,
+      paddingVertical: 4,
+      paddingHorizontal: 0,
+      maxHeight: 23 * 3 + 8,
+    },
+    editor: {
+      gap: 16,
+    },
+    catalogRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 6,
-      marginTop: 2,
+      gap: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 10,
+      borderRadius: theme.borderRadius.sm,
+      backgroundColor: theme.colors.primaryMuted,
     },
-    linkTextWrap: {
+    catalogText: {
       flex: 1,
       minWidth: 0,
       gap: 1,
     },
-    linkText: {
+    catalogName: {
       fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.text,
+    },
+    catalogAliases: {
+      fontSize: 12,
       color: theme.colors.textSecondary,
     },
-    linkAliases: {
+    textButton: {
+      paddingHorizontal: 2,
+    },
+    textButtonLabel: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.primary,
+    },
+    catalogSearch: {
+      gap: 10,
+    },
+    searchButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      height: 40,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+    },
+    searchButtonText: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.colors.primary,
+    },
+    sectionLabel: {
       fontSize: 12,
-      color: theme.colors.textMuted,
+      fontWeight: '700',
+      color: theme.colors.textSecondary,
     },
     suggestions: {
       gap: 6,
-      marginTop: 2,
-    },
-    suggestionsLabel: {
-      fontSize: 12,
-      color: theme.colors.textSecondary,
     },
     suggestionRow: {
       flexDirection: 'row',
@@ -522,78 +531,30 @@ const makeStyles = () =>
       fontSize: 12,
       color: theme.colors.textSecondary,
     },
-    iconButton: {
-      width: 38,
-      height: 44,
-      borderRadius: theme.borderRadius.sm,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surface,
-    },
-    // Fila de la lista: nombre + plan + lápiz a la izquierda (todo abre el
-    // editor) y la papelera a la derecha, a tamaño de dedo.
-    summaryCard: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 4,
-      backgroundColor: theme.colors.surfaceAlt,
+    // El plan en una tarjeta: dos filas iguales, rótulo a la izquierda y
+    // control a la derecha.
+    plan: {
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      paddingLeft: 12,
-      paddingRight: 4,
-      paddingVertical: 4,
+      backgroundColor: theme.colors.surfaceAlt,
+      paddingHorizontal: 12,
     },
-    summaryCardWithHandle: {
-      paddingLeft: 0,
-    },
-    summaryNameRow: {
-      flex: 1,
-      minWidth: 0,
+    planRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
-      minHeight: 44,
+      justifyContent: 'space-between',
+      gap: 10,
+      minHeight: 60,
     },
-    summaryName: {
-      flex: 1,
-      minWidth: 0,
+    planDivider: {
+      height: 1,
+      backgroundColor: theme.colors.border,
+    },
+    planLabel: {
+      fontSize: 15,
+      fontWeight: '700',
       color: theme.colors.text,
-      fontSize: 16,
-      fontWeight: '700',
-      lineHeight: 21,
-    },
-    summaryNameEmpty: {
-      color: theme.colors.textSecondary,
-      fontStyle: 'italic',
-      fontWeight: '500',
-    },
-    summaryAction: {
-      width: 44,
-      height: 44,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    exerciseControlsRow: {
-      flexDirection: 'row',
-      gap: 12,
-      alignItems: 'flex-start',
-    },
-    controlBlock: {
-      gap: 6,
-    },
-    controlBlockGrow: {
-      flex: 1,
-      minWidth: 0,
-    },
-    controlLabel: {
-      fontSize: 12,
-      fontWeight: '700',
-      color: theme.colors.textSecondary,
-      textTransform: 'uppercase',
-      letterSpacing: 0.3,
     },
     stepper: {
       flexDirection: 'row',
@@ -604,8 +565,8 @@ const makeStyles = () =>
       borderColor: theme.colors.border,
     },
     stepperButton: {
-      width: 36,
-      height: 44,
+      width: 40,
+      height: 42,
       alignItems: 'center',
       justifyContent: 'center',
     },
@@ -615,24 +576,19 @@ const makeStyles = () =>
       fontSize: 18,
       fontWeight: '800',
       color: theme.colors.text,
-    },
-    repsRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 8,
+      fontVariant: ['tabular-nums'],
     },
     repsInput: {
-      flex: 1,
-      minWidth: 0,
+      width: 108,
       backgroundColor: theme.colors.inputBg,
       borderRadius: theme.borderRadius.sm,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      paddingHorizontal: 12,
+      paddingHorizontal: 10,
       height: 44,
       color: theme.colors.text,
-      fontSize: 16,
-      fontWeight: '600',
+      fontSize: 18,
+      fontWeight: '800',
       textAlign: 'center',
     },
     unitToggle: {
@@ -644,8 +600,8 @@ const makeStyles = () =>
       overflow: 'hidden',
     },
     unitOption: {
-      paddingHorizontal: 12,
-      height: 42,
+      paddingHorizontal: 10,
+      height: 40,
       alignItems: 'center',
       justifyContent: 'center',
       borderBottomWidth: 2,
@@ -660,12 +616,12 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
     },
     unitOptionTextActive: {
-      color: theme.colors.primary,
+      color: theme.colors.text,
     },
-    buttonPressed: {
+    pressed: {
       opacity: 0.85,
     },
-    controlDisabled: {
+    disabled: {
       opacity: 0.4,
     },
   });

@@ -37,7 +37,7 @@ export { GradientCtaButton } from './GradientCtaButton';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
 export type { InvalidAddReason } from './ExerciseInputField';
-export { ExerciseEditorModal, ExerciseSummaryRow } from './ExerciseFormRow';
+export { ExerciseEditorModal } from './ExerciseFormRow';
 export { SortableList } from './SortableList';
 export { WeightTrendChart } from './WeightTrendChart';
 // ExercisePickerModal / GifViewerModal no se re-exportan: son piezas internas
@@ -47,7 +47,8 @@ export { WeightTrendChart } from './WeightTrendChart';
 export { ExerciseGifButton } from './ExerciseGifButton';
 // El tipo `ExerciseTile` no se re-exporta: la cuadrícula recibe directamente
 // los ejercicios del día y nadie de fuera construye la lista a mano.
-export { ExerciseTileGrid } from './ExerciseTileGrid';
+export { ExerciseTileGrid, exerciseTilesFromForms } from './ExerciseTileGrid';
+export { SortableGrid } from './SortableGrid';
 export { LevelPill } from './LevelPill';
 export { CardioInputField } from './CardioInputField';
 export { Toast } from './Toast';
