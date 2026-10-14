@@ -1,6 +1,6 @@
 # UPDATES
 
-## Sin publicar
+## Version 0.8.6 - 2026-10-14
 
 ### Arquitectura
 
@@ -79,6 +79,28 @@
 
 ### Cambios
 
+- **Registro en casillas (prueba).** Los ejercicios del entreno van en la
+  cuadrícula de la ficha de la rutina, compacta (`ExerciseTileGrid` con
+  `selection`: cuatro por fila, nombre a dos líneas, miniatura pequeña).
+  Siempre hay uno elegido con borde de oro grueso (arranca en el primero sin
+  hacer) y su panel de series (`ExerciseInputField` con `pinnedOpen`: sin
+  pliegue y con el mismo borde de oro) va debajo. Para que quepa todo con
+  menos scroll, el panel es más bajo: casillas de peso/reps de 52 (antes 66)
+  con flechas a juego, GIF de cabecera de 42 (antes 52) y huecos más cortos.
+  El aviso "Serie borrada · Deshacer" dura 4,5 s (antes 6). La cabecera del
+  panel mide siempre dos líneas de nombre (encoge si no cabe) y el GIF iguala
+  ese alto: cambiar de ejercicio no mueve la tarjeta. Al cambiar, el panel
+  entra con una sola transición corta (se desliza desde el lado de la casilla
+  elegida mientras se aclara); `LayoutAnimationConfig skipEntering` anula los
+  fundidos internos, que al remontar hacían parpadear la tarjeta. Las
+  casillas con nota llevan una insignia dorada abajo a la derecha de la
+  miniatura, y las series saltadas no cuentan como
+  hechas (un ejercicio saltado entero queda `0/3`, en verde). Tocar otra
+  casilla cambia de ejercicio; al
+  completar el elegido se pasa al primero de la lista sin hacer. Las casillas
+  dicen las series hechas (`2/3`) y, completadas, check verde y la mejora.
+  Con el día terminado el panel desaparece y queda "Entreno completado";
+  tocar una casilla lo reabre para corregir.
 - **Editar los ejercicios de un día ya no cambia la vista.** Al pulsar
   "Editar" en la ficha de una rutina, los ejercicios siguen siendo las mismas
   casillas con GIF y plan que en la consulta (antes pasaban a una lista
@@ -158,6 +180,11 @@
   (solo si la sesión movió alguno) con su lista. Fuera el CTA "Terminar":
   hacía lo mismo que "Volver" (el registro se autoguarda); desaparecen
   `handleSaveWorkout` y la prop `onSave` de `WorkoutLogScreen`.
+- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.6;
+  `versionCode` 32 → 33. Pendiente en Supabase (no bloquea: la app lo
+  tolera): `ALTER TABLE public.exercise_logs ADD COLUMN IF NOT EXISTS
+  catalog_id text;` y el bloque `routine_saves` de
+  `supabase/social-schema.sql`.
 
 ### Correcciones
 

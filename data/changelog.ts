@@ -9,6 +9,26 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.6',
+    items: [
+      'Entrenar es más cómodo: tus ejercicios aparecen como casillas con su imagen. Toca una y apunta sus series justo debajo; cada casilla te dice cuántas series llevas y se marca en verde al terminarla.',
+      'Tu progreso ya no se parte si escribes el mismo ejercicio de dos formas ("Press banca" y "Press de banca"): se cuenta como uno solo. Y si tienes dos ejercicios que son el mismo, en Progreso puedes unirlos con "Es el mismo que…".',
+      'Editar una rutina o crear una nueva es más visual: los ejercicios son casillas con imagen que puedes arrastrar para cambiar el orden, y una casilla "+" para añadir más.',
+      'La ventana de cada ejercicio es más clara: el nombre arriba con su imagen, y las series y repeticiones en una tarjeta sencilla. Cambiar el nombre ya no le quita la imagen.',
+      'Encontrar ejercicios es más fácil: filtra por zona, músculo y material en Progreso y en el buscador, que además te enseña primero lo que más se parece a lo que escribes. Al escribir un ejercicio nuevo te proponemos los del catálogo.',
+      'Hemos repasado el catálogo de ejercicios: nombres corregidos, sin repetidos y con los nombres que se usan en el gimnasio.',
+      'En Comunidad ves cuántas personas se han llevado cada rutina.',
+      'Abrir el entreno, un día pasado o una rutina es instantáneo, y la barra de abajo responde mejor al toque.',
+      'Mientras entrenas ves cuánto llevas, y los entrenos de más de una hora se muestran en horas. Apuntar un ejercicio horas después ya no estropea la duración.',
+      'Los récords se celebran con confeti.',
+      'Reto nuevo: hacer 200 kcal de cardio 3 días a la semana, en lugar del reto de un solo día.',
+      'El botón "Volver" te lleva a la pantalla desde la que entraste, y tocar tu nivel en el Perfil te lleva a tus Logros.',
+      'Retoques visuales: avisos con efecto cristal y un final de entreno más limpio.',
+      'Arreglos varios: la gráfica filtrada por día ya no marca 0% en un día que aún no toca y los títulos de Datos y nube se ven bien.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.5',
     items: [
       'Récords personales: cuando superas tu mejor marca en un ejercicio, la serie se pinta en dorado con un trofeo y te lo celebramos al momento.',

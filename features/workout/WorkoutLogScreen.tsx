@@ -13,7 +13,11 @@ import {
   Platform,
   useWindowDimensions,
 } from 'react-native';
-import Animated from 'react-native-reanimated';
+import Animated, {
+  Easing,
+  LayoutAnimationConfig,
+  withTiming,
+} from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -30,6 +34,7 @@ import {
   DatePickerModal,
   DayAccentIcon,
   ExerciseInputField,
+  ExerciseTileGrid,
   InvalidAddReason,
   CardioInputField,
   FloatingBackButton,
@@ -144,11 +149,41 @@ const TIMER_DRAG_TOP_GAP = 10;
 // Desplazamiento mínimo para que un arrastre sea un arrastre y no un toque en
 // el "+30s" o en la ×.
 const TIMER_DRAG_SLOP = 6;
-// Espera antes de bajar al ejercicio siguiente: el tiempo de que la tarjeta
-// completada se pliegue y las de debajo informen de su nueva posición.
+// Espera antes de bajar al panel o al remate: el tiempo de que el panel nuevo
+// se pinte e informe de su posición.
 const SCROLL_SETTLE_MS = 120;
-// Clave de la tarjeta "Entreno completado" entre las posiciones de tarjetas.
+// Claves del panel del ejercicio elegido y de la tarjeta "Entreno completado"
+// entre las posiciones de tarjetas.
+const PANEL_KEY = '__panel__';
 const COMPLETED_CARD_KEY = '__completed__';
+// El panel se da por visto si su borde superior cae entre la barra de título y
+// esta fracción de la pantalla; si no, la lista baja hasta él.
+const PANEL_VISIBLE_RATIO = 0.5;
+// Transición del panel al cambiar de ejercicio: entra desde el lado de la
+// casilla elegida (derecha si va después, izquierda si va antes) mientras se
+// aclara. Corta y sin pasar por transparente del todo, para que no parpadee.
+const PANEL_SWAP_MS = 200;
+const PANEL_SWAP_SHIFT = 24;
+const PANEL_SWAP_START_OPACITY = 0.3;
+const makePanelEntering = (dir: 1 | -1) => () => {
+  'worklet';
+  const config = {
+    duration: PANEL_SWAP_MS,
+    easing: Easing.out(Easing.cubic),
+  };
+  return {
+    initialValues: {
+      opacity: PANEL_SWAP_START_OPACITY,
+      transform: [{ translateX: dir * PANEL_SWAP_SHIFT }],
+    },
+    animations: {
+      opacity: withTiming(1, config),
+      transform: [{ translateX: withTiming(0, config) }],
+    },
+  };
+};
+// Lo que dura el aviso "Serie borrada · Deshacer".
+const UNDO_TOAST_MS = 4500;
 
 export function WorkoutLogScreen({
   day,
@@ -633,6 +668,20 @@ export function WorkoutLogScreen({
       return (sets[ex.id]?.length || 0) < target;
     }).length;
 
+  // ¿Ejercicio hecho? Solo con objetivo y alcanzado: sin objetivo nunca lo está.
+  const isExerciseDone = (
+    exercise: WorkoutDay['exercises'][number],
+    sets: Record<string, ParsedSet[]>
+  ): boolean => {
+    const target = effectiveTargetSets(exercise.targetSets);
+    return target > 0 && (sets[exercise.id]?.length || 0) >= target;
+  };
+
+  // El primero del día sin hacer: con él se arranca y a él se pasa al
+  // completar el elegido. Null si ya no queda ninguno.
+  const firstIncomplete = (sets: Record<string, ParsedSet[]>): string | null =>
+    selectedDay.exercises.find((ex) => !isExerciseDone(ex, sets))?.id ?? null;
+
   // Momento de esta sesión, para que los récords se midan solo contra lo
   // anterior (al rellenar un día pasado no cuenta lo que vino después).
   const sessionTimestamp = existingLog
@@ -668,18 +717,30 @@ export function WorkoutLogScreen({
     resolveExerciseKey,
   ]);
 
-  // ── Bajar solo al ejercicio siguiente ─────────────────────────────────────
+  // ── Ejercicio elegido y subir hasta su panel ──────────────────────────────
   //
-  // Al completar el ejercicio en curso su tarjeta se pliega y se abre la
-  // siguiente, que solía quedar abajo o detrás del bloque de descanso. La lista
-  // baja hasta dejarla bajo la barra (o hasta "Entreno completado" si era el
-  // último). Solo en ese cambio: desplegar otra tarjeta a mano no mueve nada.
+  // Los ejercicios van en casillas y SIEMPRE hay uno elegido (borde de oro),
+  // cuyo panel de series va DEBAJO de la cuadrícula, con el mismo borde de
+  // oro. Arranca en el primero sin hacer; tocar otra casilla lo cambia, y al
+  // completar el elegido se pasa al primero de la lista que quede sin hacer.
+  // Con el día terminado no queda ninguno y el panel desaparece (tocar una
+  // casilla lo vuelve a abrir para corregir).
+  // `pickedExerciseId` es lo elegido a mano o por avance; null = el primero
+  // sin hacer (ver `selectedExerciseId`, más abajo).
+  const [pickedExerciseId, setPickedExerciseId] = useState<string | null>(null);
+  // Al cambiar de ejercicio la lista baja hasta el panel si no está a la vista
+  // (o hasta "Entreno completado" al terminar el día).
   const listRef = useRef<Animated.ScrollView>(null);
-  // Posición de cada tarjeta dentro de la lista (onLayout), por id.
+  const panelRef = useRef<View>(null);
+  // Posición del panel y del remate dentro de la lista (onLayout).
   const cardTopRef = useRef<Record<string, number>>({});
   const [scrollRequest, setScrollRequest] = useState(0);
   const noteCardTop = (key: string) => (e: LayoutChangeEvent) => {
     cardTopRef.current[key] = e.nativeEvent.layout.y;
+  };
+  const selectExercise = (exerciseId: string | null) => {
+    setPickedExerciseId(exerciseId);
+    setScrollRequest((n) => n + 1);
   };
 
   const recordSetsOf = (exerciseId: string, sets: ParsedSet[]) =>
@@ -699,11 +760,11 @@ export function WorkoutLogScreen({
     setExerciseSets(updated);
     autoSaveWorkout(updated);
     if (
-      exerciseId === currentExerciseId &&
+      exerciseId === selectedExerciseId &&
       targetSets > 0 &&
       updated[exerciseId].length === targetSets
     ) {
-      setScrollRequest((n) => n + 1);
+      selectExercise(firstIncomplete(updated));
     }
 
     if (
@@ -785,9 +846,16 @@ export function WorkoutLogScreen({
     });
   };
 
-  // Aviso "… · Deshacer" de un borrado.
+  // Aviso "… · Deshacer" de un borrado. Algo más corto que el de por defecto
+  // de un aviso con acción: entre series se lee de un vistazo y estorba.
   const showUndo = (message: string, undo: () => void) =>
-    setToast({ message, type: 'success', undo, key: Date.now() });
+    setToast({
+      message,
+      type: 'success',
+      undo,
+      duration: UNDO_TOAST_MS,
+      key: Date.now(),
+    });
   // Todas las ejecuciones anteriores de un ejercicio (ordenadas de más reciente
   // a más antigua), respetando el tope temporal al editar un log existente.
   // Salta las semanas de descarga: un deload nunca es la referencia "anterior"
@@ -915,7 +983,9 @@ export function WorkoutLogScreen({
         const finalSets = { ...exerciseSets, [exerciseId]: filledSets };
         setExerciseSets(finalSets);
         autoSaveWorkout(finalSets);
-        if (exerciseId === currentExerciseId) setScrollRequest((n) => n + 1);
+        if (exerciseId === selectedExerciseId) {
+          selectExercise(firstIncomplete(finalSets));
+        }
       }
 
       // Saltar NO es descansar: el ejercicio se cierra porque no se va a hacer
@@ -1047,7 +1117,11 @@ export function WorkoutLogScreen({
           {} as Record<string, ParsedSet[]>
         )
       : exerciseSets;
-    if (clearData) setExerciseSets(sets);
+    if (clearData) {
+      setExerciseSets(sets);
+      // Sin datos se vuelve a empezar por el primero.
+      setPickedExerciseId(null);
+    }
     setIsDeloadSession(next);
     // Persistir solo si ya existe un log (creado por el autoguardado o editado):
     // en una sesión nueva y vacía basta con el estado, se guardará al añadir.
@@ -1177,10 +1251,6 @@ export function WorkoutLogScreen({
   const liveCatalogId = (exerciseId: string): string | undefined =>
     liveDay?.exercises.find((ex) => ex.id === exerciseId)?.catalogId;
 
-  // Ejercicio "en curso": el primero del día que aún no ha alcanzado su objetivo
-  // de series. Es el que la tarjeta abre sola (los demás quedan colapsados como
-  // resumen) para no obligar a desplegar cada ejercicio antes de registrar. Al
-  // completarse uno, el siguiente incompleto pasa a ser el en curso y se abre.
   // ¿Está todo el día hecho? Solo cuenta si se ha metido algo: un día cuyos
   // ejercicios no tienen objetivo daría cero incompletos sin haber empezado.
   const allExercisesDone =
@@ -1287,24 +1357,61 @@ export function WorkoutLogScreen({
       </Pressable>
     ) : null;
 
-  const currentExerciseId = selectedDay.exercises.find((ex) => {
-    const target = effectiveTargetSets(ex.targetSets);
-    const sets = exerciseSets[ex.id] || [];
-    return !(target > 0 && sets.length >= target);
-  })?.id;
+  // Ejercicio cuyo panel se pinta bajo la cuadrícula: el elegido (a mano o al
+  // completar el anterior) o, si no hay, el primero sin hacer. Con el día
+  // terminado y nada elegido no hay ninguno: el panel desaparece.
+  const selectedExerciseId =
+    pickedExerciseId &&
+    selectedDay.exercises.some((ex) => ex.id === pickedExerciseId)
+      ? pickedExerciseId
+      : allExercisesDone
+      ? null
+      : firstIncomplete(exerciseSets);
+  const selectedExercise = selectedDay.exercises.find(
+    (ex) => ex.id === selectedExerciseId
+  );
 
-  // Atiende la petición de bajar (ver `listRef`): con la tarjeta anterior ya
-  // plegada, espera a que la nueva se recoloque y la deja bajo la barra.
+  // Sentido de la transición del panel, decidido en el MISMO render en que
+  // cambia el ejercicio (antes de montar el nuevo). Al abrir la pantalla no
+  // hay transición: el panel ya está.
+  const [panelSwap, setPanelSwap] = useState<{
+    id: string | null;
+    dir: 1 | -1;
+    animate: boolean;
+  }>({ id: selectedExerciseId, dir: 1, animate: false });
+  if (panelSwap.id !== selectedExerciseId) {
+    const indexOf = (id: string | null) =>
+      selectedDay.exercises.findIndex((ex) => ex.id === id);
+    setPanelSwap({
+      id: selectedExerciseId,
+      dir: indexOf(selectedExerciseId) >= indexOf(panelSwap.id) ? 1 : -1,
+      animate: panelSwap.id !== null,
+    });
+  }
+
+  // Atiende la petición de desplazar (ver `listRef`): espera a que el panel
+  // nuevo se pinte y, si no se ve (o se ve muy abajo), lo deja bajo la barra.
+  // Con el día terminado va hasta "Entreno completado".
   useEffect(() => {
     if (!scrollRequest) return;
-    const key = allExercisesDone ? COMPLETED_CARD_KEY : currentExerciseId;
-    if (!key) return;
-    const timer = setTimeout(() => {
+    const scrollToCard = (key: string) => {
       const top = cardTopRef.current[key];
       if (top == null) return;
       listRef.current?.scrollTo({
         y: Math.max(0, top - topBarHeight - GLASS_TOP_BAR_CONTENT_GAP),
         animated: true,
+      });
+    };
+    const timer = setTimeout(() => {
+      if (!selectedExerciseId) {
+        if (allExercisesDone) scrollToCard(COMPLETED_CARD_KEY);
+        return;
+      }
+      panelRef.current?.measureInWindow((_x, y) => {
+        if (y >= topBarHeight && y <= windowHeight * PANEL_VISIBLE_RATIO) {
+          return;
+        }
+        scrollToCard(PANEL_KEY);
       });
     }, SCROLL_SETTLE_MS);
     return () => clearTimeout(timer);
@@ -1427,65 +1534,184 @@ export function WorkoutLogScreen({
           />
         ) : (
           <>
-            {selectedDay.exercises.map((exercise) => {
-              const previousLog = getPreviousExerciseLog(exercise.id);
-              const currentSets = exerciseSets[exercise.id] || [];
-              const improvement = buildExerciseImprovement(
-                currentSets,
-                previousLog
-              );
-              // En descarga el peso sugerido se calcula sobre la última semana con
-              // carga real: si la anterior no tiene peso en este ejercicio, se
-              // retrocede hasta la que sí lo tuvo. (En descarga la comparación
-              // "Anterior" no se muestra, así que reusar este log como previousLog
-              // solo afecta al peso propuesto.)
-              const previousLogForField =
-                isDeloadSession && !hasUsableWeight(previousLog)
-                  ? getPreviousWeightLog(exercise.id)
-                  : previousLog;
-              return (
-                <ExerciseInputField
-                  key={exercise.id}
-                  exerciseName={exercise.name}
-                  catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
-                  onAssignGif={(catalogId) =>
-                    handleAssignGif(exercise.id, catalogId)
-                  }
-                  target={{
-                    sets: effectiveTargetSets(exercise.targetSets),
-                    reps: exercise.targetReps,
-                  }}
-                  deload={isDeloadSession}
-                  addedSets={currentSets}
-                  recordSetIndexes={recordSetsOf(exercise.id, currentSets)}
-                  weightStep={weightStepFromHistory(
-                    [
-                      ...(previousSetsByExercise[exercise.id] ?? []),
-                      ...currentSets,
-                    ].map((s) => s.weight)
-                  )}
-                  onAddSet={(set: ParsedSet) => handleAddSet(exercise.id, set)}
-                  onInvalidAdd={(reason) =>
-                    setToast({
-                      message: getInvalidAddMessage(reason),
-                      type: 'error',
-                      duration: 2000,
-                    })
-                  }
-                  onRemoveSet={(index) => handleRemoveSet(exercise.id, index)}
-                  onFinishExercise={() => handleFinishExercise(exercise.id)}
-                  onNotesChange={(text) =>
-                    handleExerciseNoteChange(exercise.id, text)
-                  }
-                  notes={exerciseNotes[exercise.id]}
-                  previousLog={previousLogForField}
-                  improvement={isDeloadSession ? null : improvement}
+            {/* Los ejercicios en casillas (el mismo dibujo que la ficha de la
+            rutina, más compactas): se elige uno con un toque y su panel sale
+            debajo, enlazado por el mismo borde de oro. */}
+            {selectedDay.exercises.length > 0 && (
+              <View style={styles.exerciseGrid}>
+                <ExerciseTileGrid
+                  exercises={selectedDay.exercises.map((exercise) => ({
+                    id: exercise.id,
+                    name: exercise.name,
+                    catalogId: liveCatalogId(exercise.id) ?? exercise.catalogId,
+                    targetSets: effectiveTargetSets(exercise.targetSets),
+                    targetReps: exercise.targetReps,
+                  }))}
                   accent={dayAccent}
-                  isCurrent={exercise.id === currentExerciseId}
-                  onLayout={noteCardTop(exercise.id)}
+                  selection={{
+                    selectedId: selectedExerciseId,
+                    // Día terminado: la casilla abre el panel para corregir y
+                    // otro toque en la misma lo vuelve a cerrar.
+                    onSelect: (id) =>
+                      selectExercise(
+                        allExercisesDone && id === selectedExerciseId
+                          ? null
+                          : id
+                      ),
+                    progressOf: (id) => {
+                      const exercise = selectedDay.exercises.find(
+                        (ex) => ex.id === id
+                      );
+                      const sets = exerciseSets[id] || [];
+                      const completed =
+                        !!exercise && isExerciseDone(exercise, exerciseSets);
+                      return {
+                        // Las saltadas (—) no cuentan como hechas.
+                        done: sets.filter(
+                          (s) => s.weight !== -1 && s.reps !== -1
+                        ).length,
+                        hasNote: !!exerciseNotes[id]?.trim(),
+                        target: effectiveTargetSets(exercise?.targetSets),
+                        completed,
+                        trend:
+                          completed && !isDeloadSession
+                            ? buildExerciseImprovement(
+                                sets,
+                                getPreviousExerciseLog(id)
+                              )
+                            : null,
+                      };
+                    },
+                  }}
                 />
-              );
-            })}
+              </View>
+            )}
+
+            {/* Panel del ejercicio elegido: el mismo campo de siempre, fijo
+            abierto. `key` por ejercicio: lo tecleado y el cronómetro son de
+            ESE ejercicio y no pasan al siguiente. */}
+            {selectedExercise &&
+              (() => {
+                const exercise = selectedExercise;
+                const previousLog = getPreviousExerciseLog(exercise.id);
+                const currentSets = exerciseSets[exercise.id] || [];
+                const improvement = buildExerciseImprovement(
+                  currentSets,
+                  previousLog
+                );
+                // En descarga el peso sugerido se calcula sobre la última
+                // semana con carga real: si la anterior no tiene peso en este
+                // ejercicio, se retrocede hasta la que sí lo tuvo. (En descarga
+                // la comparación "Anterior" no se muestra, así que reusar este
+                // log como previousLog solo afecta al peso propuesto.)
+                const previousLogForField =
+                  isDeloadSession && !hasUsableWeight(previousLog)
+                    ? getPreviousWeightLog(exercise.id)
+                    : previousLog;
+                return (
+                  <View
+                    ref={panelRef}
+                    collapsable={false}
+                    onLayout={noteCardTop(PANEL_KEY)}
+                  >
+                    {/* Una sola transición para toda la tarjeta: sin
+                    `skipEntering`, cada bloque de dentro hacía su propio
+                    fundido al montarse y el cambio parpadeaba. */}
+                    <Animated.View
+                      key={exercise.id}
+                      entering={
+                        panelSwap.animate
+                          ? makePanelEntering(panelSwap.dir)
+                          : undefined
+                      }
+                    >
+                      <LayoutAnimationConfig skipEntering>
+                        <ExerciseInputField
+                          pinnedOpen
+                          exerciseName={exercise.name}
+                          catalogId={
+                            liveCatalogId(exercise.id) ?? exercise.catalogId
+                          }
+                          onAssignGif={(catalogId) =>
+                            handleAssignGif(exercise.id, catalogId)
+                          }
+                          target={{
+                            sets: effectiveTargetSets(exercise.targetSets),
+                            reps: exercise.targetReps,
+                          }}
+                          deload={isDeloadSession}
+                          addedSets={currentSets}
+                          recordSetIndexes={recordSetsOf(
+                            exercise.id,
+                            currentSets
+                          )}
+                          weightStep={weightStepFromHistory(
+                            [
+                              ...(previousSetsByExercise[exercise.id] ?? []),
+                              ...currentSets,
+                            ].map((s) => s.weight)
+                          )}
+                          onAddSet={(set: ParsedSet) =>
+                            handleAddSet(exercise.id, set)
+                          }
+                          onInvalidAdd={(reason) =>
+                            setToast({
+                              message: getInvalidAddMessage(reason),
+                              type: 'error',
+                              duration: 2000,
+                            })
+                          }
+                          onRemoveSet={(index) =>
+                            handleRemoveSet(exercise.id, index)
+                          }
+                          onFinishExercise={() =>
+                            handleFinishExercise(exercise.id)
+                          }
+                          onNotesChange={(text) =>
+                            handleExerciseNoteChange(exercise.id, text)
+                          }
+                          notes={exerciseNotes[exercise.id]}
+                          previousLog={previousLogForField}
+                          improvement={isDeloadSession ? null : improvement}
+                          accent={dayAccent}
+                        />
+                      </LayoutAnimationConfig>
+                    </Animated.View>
+                  </View>
+                );
+              })()}
+
+            {/* Fuerza: al completar el último ejercicio, un remate que diga que
+            está hecho, en el sitio del panel (que desaparece). Sin CTA de
+            cierre: el registro se autoguarda y "Volver" ya sale (el antiguo
+            "Terminar" hacía exactamente lo mismo). */}
+            {allExercisesDone && (
+              <View
+                style={styles.completedCard}
+                onLayout={noteCardTop(COMPLETED_CARD_KEY)}
+              >
+                <GradientFill accent={theme.colors.success} />
+                <View style={styles.completedRow}>
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={20}
+                    color={theme.colors.success}
+                  />
+                  <Text style={styles.completedText}>
+                    {t('Entreno completado')}
+                  </Text>
+                </View>
+                {/* Lo que ha movido esta sesión en los retos de la semana: el
+                momento de más motivación, y el progreso parcial no se veía en
+                ningún sitio hasta volver a Inicio. */}
+                {!!sessionChallenges?.advanced.length && (
+                  <Text style={styles.sessionChallengesTitle}>
+                    {t('Retos que has avanzado')}
+                  </Text>
+                )}
+                {renderSessionChallenges()}
+              </View>
+            )}
 
             {/* El cardio solo se mete desde la pestaña de Cardio: aquí se registra
             fuerza. Antes este campo estaba también al pie de un día de fuerza,
@@ -1573,36 +1799,6 @@ export function WorkoutLogScreen({
             ya cierra sin perder nada. El "Hecho" del cardio no hacía más que
             validar que hubiera algo antes de salir, y para eso basta con no
             haber insertado nada. */}
-            {/* Fuerza: al completar el último ejercicio, un remate que diga que
-            está hecho. Sin CTA de cierre: el registro se autoguarda y "Volver"
-            ya sale (el antiguo "Terminar" hacía exactamente lo mismo). */}
-            {allExercisesDone && (
-              <View
-                style={styles.completedCard}
-                onLayout={noteCardTop(COMPLETED_CARD_KEY)}
-              >
-                <GradientFill accent={theme.colors.success} />
-                <View style={styles.completedRow}>
-                  <MaterialCommunityIcons
-                    name="check-circle"
-                    size={20}
-                    color={theme.colors.success}
-                  />
-                  <Text style={styles.completedText}>
-                    {t('Entreno completado')}
-                  </Text>
-                </View>
-                {/* Lo que ha movido esta sesión en los retos de la semana: el
-                momento de más motivación, y el progreso parcial no se veía en
-                ningún sitio hasta volver a Inicio. */}
-                {!!sessionChallenges?.advanced.length && (
-                  <Text style={styles.sessionChallengesTitle}>
-                    {t('Retos que has avanzado')}
-                  </Text>
-                )}
-                {renderSessionChallenges()}
-              </View>
-            )}
           </>
         )}
       </StretchScrollView>
@@ -1846,6 +2042,10 @@ const makeStyles = () =>
     // Spinner del frame en que la vista ya está y sus tarjetas aún no.
     contentLoading: {
       marginTop: 40,
+    },
+    // Casillas arriba; el panel o el remate, debajo.
+    exerciseGrid: {
+      marginBottom: 4,
     },
     // Remate del día completado: tarjeta verde con el CTA de cierre.
     completedCard: {

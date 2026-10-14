@@ -9,12 +9,18 @@ import { buildTargetReps, ExerciseForm } from '@lib/exerciseForm';
 import { ConfirmModal } from './ConfirmModal';
 import { ExerciseGifButton } from './ExerciseGifButton';
 import { SortableGrid } from './SortableGrid';
+import { TrendDelta } from './TrendDelta';
 
 // Misma retícula que el menú del perfil (ProfileScreen): tres casillas por
 // fila con el mismo hueco entre ellas. Ya no son cuadradas (ver `tile`): el
 // GIF entero pide más alto que ancho.
 const COLUMNS = 3;
 const GAP = 12;
+// Registro (`selection`): casillas más pequeñas, cuatro por fila, para que el
+// panel de series y todos los ejercicios quepan sin tanto scroll.
+const COMPACT_COLUMNS = 4;
+const COMPACT_GAP = 8;
+const COMPACT_NAME_LINES = 2;
 // Líneas que reserva el nombre (centrado en ese hueco si ocupa menos).
 const NAME_LINES = 3;
 const NAME_LINE_HEIGHT = 13;
@@ -54,12 +60,34 @@ export interface ExerciseTileEditing {
   canRemove: boolean;
 }
 
+/** Cómo va un ejercicio en el registro (pie de su casilla). */
+export interface ExerciseTileProgress {
+  /** Series hechas de verdad (las saltadas no cuentan). */
+  done: number;
+  /** Objetivo de series (0: sin objetivo). */
+  target: number;
+  completed: boolean;
+  /** Lleva nota escrita: marca en la miniatura. */
+  hasNote?: boolean;
+  /** Mejora frente a la vez anterior, si ya hay con qué comparar. */
+  trend?: { percent: number; isImproved: boolean } | null;
+}
+
+/** El registro: una casilla elegida (borde de oro) cuyo panel va debajo. */
+export interface ExerciseTileSelection {
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+  progressOf: (id: string) => ExerciseTileProgress;
+}
+
 interface ExerciseTileGridProps {
   exercises: ExerciseTile[];
   /** Color del día: el punto que ocupa el sitio del GIF cuando no lo hay. */
   accent: string;
   /** Si llega, la cuadrícula está en edición (ver `ExerciseTileEditing`). */
   editing?: ExerciseTileEditing;
+  /** Si llega, cada casilla se elige con un toque (ver `ExerciseTileSelection`). */
+  selection?: ExerciseTileSelection;
 }
 
 /**
@@ -77,11 +105,16 @@ interface ExerciseTileGridProps {
  *
  * El GIF no se recorta (`fitMode="contain"`): se ve el movimiento entero, y
  * la casilla crece en alto lo que haga falta.
+ *
+ * En el registro (`selection`) cada casilla se elige con un toque: la elegida
+ * lleva borde de oro y el pie dice las series hechas de su objetivo. El panel
+ * para meterlas lo pinta el registro bajo la cuadrícula.
  */
 export function ExerciseTileGrid({
   exercises,
   accent,
   editing,
+  selection,
 }: ExerciseTileGridProps) {
   const [toRemove, setToRemove] = useState<ExerciseTile | null>(null);
 
@@ -129,38 +162,56 @@ export function ExerciseTileGrid({
     );
   }
 
+  const columns = selection ? COMPACT_COLUMNS : COLUMNS;
   const rows: ExerciseTile[][] = [];
-  for (let i = 0; i < exercises.length; i += COLUMNS) {
-    rows.push(exercises.slice(i, i + COLUMNS));
+  for (let i = 0; i < exercises.length; i += columns) {
+    rows.push(exercises.slice(i, i + columns));
   }
 
   return (
-    <View style={styles.grid}>
+    <View style={[styles.grid, selection && styles.gridCompact]}>
       {rows.map((row, rowIndex) => (
-        <View key={rowIndex} style={styles.row}>
-          {row.map((exercise) => (
-            <View key={exercise.id} style={[styles.tile, styles.tileFlex]}>
-              <TileName name={exercise.name} />
-              {exercise.catalogId ? (
-                <View style={styles.gifWrap}>
-                  <ExerciseGifButton
-                    name={exercise.name}
-                    catalogId={exercise.catalogId}
-                    fitMode="contain"
-                    style={styles.gif}
-                  />
-                </View>
-              ) : (
-                <GifPlaceholder accent={accent} />
-              )}
-              <TileSets exercise={exercise} />
-            </View>
-          ))}
+        <View
+          key={rowIndex}
+          style={[styles.row, selection && styles.gridCompact]}
+        >
+          {row.map((exercise) =>
+            selection ? (
+              <SelectableTile
+                key={exercise.id}
+                exercise={exercise}
+                accent={accent}
+                selected={exercise.id === selection.selectedId}
+                progress={selection.progressOf(exercise.id)}
+                onPress={() => selection.onSelect(exercise.id)}
+              />
+            ) : (
+              <View key={exercise.id} style={[styles.tile, styles.tileFlex]}>
+                <TileName name={exercise.name} />
+                {exercise.catalogId ? (
+                  <View style={styles.gifWrap}>
+                    <ExerciseGifButton
+                      name={exercise.name}
+                      catalogId={exercise.catalogId}
+                      fitMode="contain"
+                      style={styles.gif}
+                    />
+                  </View>
+                ) : (
+                  <GifPlaceholder accent={accent} />
+                )}
+                <TileSets exercise={exercise} />
+              </View>
+            )
+          )}
           {/* Huecos vacíos en la última fila para que las casillas que sí hay
               no se estiren y midan lo mismo que las demás. */}
-          {row.length < COLUMNS &&
-            Array.from({ length: COLUMNS - row.length }).map((_, i) => (
-              <View key={`spacer-${i}`} style={styles.spacer} />
+          {row.length < columns &&
+            Array.from({ length: columns - row.length }).map((_, i) => (
+              <View
+                key={`spacer-${i}`}
+                style={[styles.spacer, selection && styles.spacerCompact]}
+              />
             ))}
         </View>
       ))}
@@ -168,15 +219,22 @@ export function ExerciseTileGrid({
   );
 }
 
-// Hueco fijo de tres líneas con el nombre centrado en vertical: así todos los
-// GIF de una fila quedan a la misma altura tenga el nombre una línea o tres.
-function TileName({ name }: { name: string }) {
+// Hueco fijo de tres líneas (dos en compacto) con el nombre centrado en
+// vertical: así todos los GIF de una fila quedan a la misma altura tenga el
+// nombre una línea o tres.
+function TileName({
+  name,
+  lines = NAME_LINES,
+}: {
+  name: string;
+  lines?: number;
+}) {
   const trimmed = name.trim();
   return (
-    <View style={styles.nameBox}>
+    <View style={[styles.nameBox, { height: lines * NAME_LINE_HEIGHT }]}>
       <Text
         style={[styles.name, !trimmed && styles.nameEmpty]}
-        numberOfLines={NAME_LINES}
+        numberOfLines={lines}
       >
         {trimmed || t('Sin nombre')}
       </Text>
@@ -194,11 +252,144 @@ function TileSets({ exercise }: { exercise: ExerciseTile }) {
 
 // Sin GIF asignado: el punto de color del día ocupa el mismo hueco para que
 // los nombres queden a la misma altura.
-function GifPlaceholder({ accent }: { accent: string }) {
+function GifPlaceholder({
+  accent,
+  compact,
+  badge,
+}: {
+  accent: string;
+  compact?: boolean;
+  badge?: ReactNode;
+}) {
   return (
-    <View style={styles.gifPlaceholder}>
+    <View style={[styles.gifPlaceholder, compact && styles.thumbCompact]}>
+      {badge}
       <View style={[styles.dot, { backgroundColor: accent }]} />
     </View>
+  );
+}
+
+// Miniatura quieta del catálogo (o el punto del día): en edición y en el
+// registro la casilla se pulsa para otra cosa, no para ver el GIF.
+function TileThumb({
+  catalogId,
+  accent,
+  compact,
+  badge,
+}: {
+  catalogId?: string;
+  accent: string;
+  compact?: boolean;
+  /** Marca en la esquina de la miniatura (la nota del registro). */
+  badge?: ReactNode;
+}) {
+  const catalogExercise = getCatalogExercise(catalogId);
+  if (!catalogExercise) {
+    return <GifPlaceholder accent={accent} compact={compact} badge={badge} />;
+  }
+  return (
+    <View style={[styles.gifWrap, compact && styles.thumbCompact]}>
+      <Image
+        source={{ uri: thumbUrl(catalogExercise) }}
+        style={styles.thumb}
+        resizeMode="contain"
+      />
+      {badge}
+    </View>
+  );
+}
+
+interface SelectableTileProps {
+  exercise: ExerciseTile;
+  accent: string;
+  selected: boolean;
+  progress: ExerciseTileProgress;
+  onPress: () => void;
+}
+
+// Casilla del registro: un toque la elige y su panel de series sale bajo la
+// cuadrícula. La elegida lleva borde de oro; una completada, borde verde con
+// su check y la mejora frente a la vez anterior (o las series hechas, si
+// alguna se saltó). Con nota, un icono en la esquina de la miniatura.
+function SelectableTile({
+  exercise,
+  accent,
+  selected,
+  progress,
+  onPress,
+}: SelectableTileProps) {
+  const name = exercise.name.trim() || t('Sin nombre');
+  const { done, target, completed, hasNote, trend } = progress;
+  // Completado con alguna serie saltada: se dice cuántas se hicieron (2/3),
+  // no la mejora.
+  const showTrend = completed && !!trend && done >= target;
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.tile,
+        styles.tileFlex,
+        styles.tileCompact,
+        completed && styles.tileCompleted,
+        selected && styles.tileSelected,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      accessibilityLabel={
+        target > 0
+          ? `${name}. ${t('{a} de {b} series hechas', { a: done, b: target })}`
+          : name
+      }
+    >
+      <TileName name={exercise.name} lines={COMPACT_NAME_LINES} />
+      <TileThumb
+        catalogId={exercise.catalogId}
+        accent={accent}
+        compact
+        badge={
+          hasNote ? (
+            <View
+              style={styles.noteBadge}
+              accessible
+              accessibilityLabel={t('Nota del ejercicio')}
+            >
+              <MaterialCommunityIcons
+                name="note-text"
+                size={11}
+                color={theme.colors.onGold}
+              />
+            </View>
+          ) : null
+        }
+      />
+      <View style={styles.progressRow}>
+        {completed && (
+          <MaterialCommunityIcons
+            name="check-circle"
+            size={13}
+            color={theme.colors.success}
+          />
+        )}
+        {showTrend && trend ? (
+          <TrendDelta
+            value={trend.percent}
+            improved={trend.isImproved}
+            iconSize={11}
+            textStyle={styles.progressTrend}
+          />
+        ) : (
+          <Text
+            style={[styles.sets, completed && styles.setsCompleted]}
+            numberOfLines={1}
+          >
+            {target > 0
+              ? `${done}/${target}`
+              : `${exercise.targetSets || '-'}x${exercise.targetReps || '-'}`}
+          </Text>
+        )}
+      </View>
+    </Pressable>
   );
 }
 
@@ -219,7 +410,6 @@ function EditableTile({
   onEdit,
   onRemove,
 }: EditableTileProps) {
-  const catalogExercise = getCatalogExercise(exercise.catalogId);
   const name = exercise.name.trim() || t('Sin nombre');
 
   return (
@@ -234,17 +424,7 @@ function EditableTile({
         accessibilityLabel={t('Editar {name}', { name })}
       >
         <TileName name={exercise.name} />
-        {catalogExercise ? (
-          <View style={styles.gifWrap}>
-            <Image
-              source={{ uri: thumbUrl(catalogExercise) }}
-              style={styles.thumb}
-              resizeMode="contain"
-            />
-          </View>
-        ) : (
-          <GifPlaceholder accent={accent} />
-        )}
+        <TileThumb catalogId={exercise.catalogId} accent={accent} />
         <TileSets exercise={exercise} />
       </Pressable>
       <View style={styles.actions}>
@@ -348,6 +528,57 @@ const makeStyles = () =>
     },
     tileFlex: {
       flex: 1,
+    },
+    // Registro: la casilla elegida, con borde de oro más grueso (el padding
+    // cede lo que gana el borde para que la casilla no crezca).
+    tileCompact: {
+      padding: 6,
+      gap: 3,
+    },
+    tileSelected: {
+      borderWidth: 3,
+      padding: 4,
+      borderColor: theme.colors.primaryLine,
+    },
+    gridCompact: {
+      gap: COMPACT_GAP,
+    },
+    spacerCompact: {
+      padding: 6,
+    },
+    // Miniatura del registro: algo más estrecha que la casilla, centrada.
+    thumbCompact: {
+      width: '72%',
+    },
+    tileCompleted: {
+      borderColor: theme.colors.success,
+    },
+    progressRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      height: 13,
+    },
+    setsCompleted: {
+      color: theme.colors.success,
+    },
+    // Nota del ejercicio: insignia dorada (oro de superficie con su tinta)
+    // abajo a la derecha de la miniatura; destaca sobre el fondo claro de los
+    // GIF del catálogo en día y en noche.
+    noteBadge: {
+      position: 'absolute',
+      bottom: 2,
+      right: 2,
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+    },
+    progressTrend: {
+      fontSize: 11,
+      lineHeight: 13,
     },
     // En edición el asa y las acciones van a ras de los bordes de la casilla.
     tileEditing: {

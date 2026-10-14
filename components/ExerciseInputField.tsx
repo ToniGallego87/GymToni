@@ -48,6 +48,10 @@ const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
 // × de borrado de una serie: diámetro del aspa en la esquina de la burbuja.
 const SERIE_REMOVE_SIZE = 16;
 
+// Interlineado del nombre del ejercicio: con él se mide la cabecera fija del
+// panel del registro (dos líneas) y su GIF.
+const EXERCISE_NAME_LINE_HEIGHT = 27;
+
 // Motivo por el que "Añadir serie" no se pudo completar, para que el padre
 // muestre el aviso correcto en vez de un "rellena los datos" genérico.
 export type InvalidAddReason = 'empty' | 'format' | 'negative' | 'too-large';
@@ -94,6 +98,10 @@ interface ExerciseInputFieldProps {
   // día): esa tarjeta nace desplegada y se abre sola al pasar a serlo, para no
   // obligar a desplegar cada ejercicio antes de poder registrar una serie.
   isCurrent?: boolean;
+  // Panel del ejercicio elegido en la cuadrícula del registro: siempre
+  // desplegado y sin barra de pliegue (cambiar de ejercicio es elegir otra
+  // casilla, no plegar esta). Completado sigue abierto para borrar series.
+  pinnedOpen?: boolean;
   // Semana de descarga: sin porcentaje ni comparación con la anterior, y el peso
   // por defecto en la casilla baja al ~75% del de la semana previa.
   deload?: boolean;
@@ -121,6 +129,7 @@ export function ExerciseInputField({
   improvement,
   accent = theme.colors.primary,
   isCurrent,
+  pinnedOpen = false,
   deload = false,
   onLayout,
   weightStep = 1,
@@ -199,7 +208,8 @@ export function ExerciseInputField({
   // tarjetas de debajo se quedaban en la posición vieja, solapadas con la
   // abierta. Sin ella, cada tarjeta salta a su sitio final, que siempre es el
   // bueno. Medir la altura a mano (onLayout) para animarla fallaba en release.
-  const [expanded, setExpanded] = useState(!!isCurrent);
+  const [expandedState, setExpanded] = useState(!!isCurrent);
+  const expanded = pinnedOpen || expandedState;
 
   const toggleExpanded = () => setExpanded((prev) => !prev);
 
@@ -578,7 +588,13 @@ export function ExerciseInputField({
 
   return (
     <View
-      style={[styles.container, { borderColor: cardAccent }]}
+      style={[
+        styles.container,
+        { borderColor: cardAccent },
+        // Panel del registro: el mismo borde de oro que su casilla elegida,
+        // para que se lea que van juntos.
+        pinnedOpen && styles.containerPinned,
+      ]}
       onLayout={onLayout}
     >
       <GradientFill accent={cardAccent} />
@@ -601,21 +617,27 @@ export function ExerciseInputField({
           catalogId={catalogId}
           onAssign={onAssignGif}
           size={26}
-          style={styles.headerGif}
+          style={[styles.headerGif, pinnedOpen && styles.headerGifPinned]}
         />
         {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta a
             dos líneas; al desplegar se ve entero (sin límite de líneas), así el
             mismo gesto hace siempre lo mismo y el nombre largo sigue accesible. */}
+        {/* En el panel del registro el nombre cabe SIEMPRE en dos líneas (si
+            no, encoge) y la cabecera mide eso aunque ocupe una: cambiar a un
+            ejercicio de nombre más largo no mueve la tarjeta. */}
         <Pressable
-          style={styles.nameWrap}
-          onPress={toggleExpanded}
-          accessibilityRole="button"
+          style={[styles.nameWrap, pinnedOpen && styles.nameWrapPinned]}
+          onPress={pinnedOpen ? undefined : toggleExpanded}
+          disabled={pinnedOpen}
+          accessibilityRole={pinnedOpen ? 'header' : 'button'}
           accessibilityLabel={exerciseName}
-          accessibilityState={{ expanded }}
+          accessibilityState={pinnedOpen ? undefined : { expanded }}
         >
           <Text
             style={styles.exerciseName}
-            numberOfLines={expanded ? undefined : 2}
+            numberOfLines={pinnedOpen || !expanded ? 2 : undefined}
+            adjustsFontSizeToFit={pinnedOpen}
+            minimumFontScale={0.7}
           >
             {exerciseName}
           </Text>
@@ -981,7 +1003,9 @@ export function ExerciseInputField({
               />
               <Text style={styles.completedText}>
                 {t('Completado · {a}/{b} series', {
-                  a: addedSets.length,
+                  // Las saltadas (—) no cuentan como hechas.
+                  a: addedSets.filter((s) => s.weight !== -1 && s.reps !== -1)
+                    .length,
                   b: target?.sets ?? addedSets.length,
                 })}
               </Text>
@@ -995,35 +1019,37 @@ export function ExerciseInputField({
           38 en la cabecera, que le comía el ancho al nombre del ejercicio (los
           títulos largos caían a tres líneas). Va la última, incluso bajo el
           descanso, porque es el borde inferior de la tarjeta. */}
-      <Pressable
-        style={({ pressed }) => [
-          styles.collapseBar,
-          pressed && styles.collapseBarPressed,
-        ]}
-        onPress={toggleExpanded}
-        // 26 de alto: el hitSlop sube la zona de toque hacia dentro de la
-        // tarjeta (abajo es el borde).
-        hitSlop={{ top: 14 }}
-        accessibilityRole="button"
-        accessibilityLabel={
-          expanded ? t('Plegar ejercicio') : t('Desplegar ejercicio')
-        }
-        accessibilityState={{ expanded }}
-      >
-        <LinearGradient
-          colors={theme.gradients.heroStep}
-          locations={STEP_SHADE_STOPS}
-          start={{ x: 0, y: 1 }}
-          end={{ x: 0, y: 0 }}
-          style={StyleSheet.absoluteFill}
-          pointerEvents="none"
-        />
-        <MaterialCommunityIcons
-          name={expanded ? 'chevron-up' : 'chevron-down'}
-          size={24}
-          color={cardAccent}
-        />
-      </Pressable>
+      {!pinnedOpen && (
+        <Pressable
+          style={({ pressed }) => [
+            styles.collapseBar,
+            pressed && styles.collapseBarPressed,
+          ]}
+          onPress={toggleExpanded}
+          // 26 de alto: el hitSlop sube la zona de toque hacia dentro de la
+          // tarjeta (abajo es el borde).
+          hitSlop={{ top: 14 }}
+          accessibilityRole="button"
+          accessibilityLabel={
+            expanded ? t('Plegar ejercicio') : t('Desplegar ejercicio')
+          }
+          accessibilityState={{ expanded }}
+        >
+          <LinearGradient
+            colors={theme.gradients.heroStep}
+            locations={STEP_SHADE_STOPS}
+            start={{ x: 0, y: 1 }}
+            end={{ x: 0, y: 0 }}
+            style={StyleSheet.absoluteFill}
+            pointerEvents="none"
+          />
+          <MaterialCommunityIcons
+            name={expanded ? 'chevron-up' : 'chevron-down'}
+            size={24}
+            color={cardAccent}
+          />
+        </Pressable>
+      )}
 
       {/* Acciones raras del ejercicio (nota, cronómetro, saltar): menú
           desplegable anclado al ⋯ de la cabecera, con el mismo dibujo que el
@@ -1108,7 +1134,7 @@ function StepButton({
         pressed && styles.stepBtnPressed,
       ]}
     >
-      <MaterialCommunityIcons name={icon} size={22} color={accent} />
+      <MaterialCommunityIcons name={icon} size={20} color={accent} />
     </Pressable>
   );
 }
@@ -1125,6 +1151,12 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
+    containerPinned: {
+      borderWidth: 3,
+      borderLeftWidth: 3,
+      borderColor: theme.colors.primaryLine,
+      padding: 13,
+    },
     topSection: {
       gap: 10,
     },
@@ -1135,7 +1167,7 @@ const makeStyles = () =>
       justifyContent: 'space-between',
       alignItems: 'center',
       gap: 12,
-      marginBottom: 16,
+      marginBottom: 12,
     },
     headerCollapsedEmpty: {
       marginBottom: 0,
@@ -1143,9 +1175,9 @@ const makeStyles = () =>
     // El GIF hereda el hueco del número de orden, pero más grande: a 34 px la
     // figura no se distinguía, y aquí es la señal principal de la cabecera.
     headerGif: {
-      width: 52,
-      height: 52,
-      borderRadius: 14,
+      width: 42,
+      height: 42,
+      borderRadius: 12,
     },
     // ⋯ de acciones del ejercicio. Mismo tamaño que la lupa del GIF, con la
     // que comparte fila.
@@ -1168,11 +1200,21 @@ const makeStyles = () =>
     nameWrap: {
       flex: 1,
     },
+    nameWrapPinned: {
+      height: EXERCISE_NAME_LINE_HEIGHT * 2,
+      justifyContent: 'center',
+    },
+    // Panel del registro: el GIF mide lo que dos líneas del nombre.
+    headerGifPinned: {
+      width: EXERCISE_NAME_LINE_HEIGHT * 2,
+      height: EXERCISE_NAME_LINE_HEIGHT * 2,
+    },
     exerciseName: {
       fontSize: 20,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
+      // = EXERCISE_NAME_LINE_HEIGHT (literal: lo lee el test de Anton).
       lineHeight: 27,
     },
 
@@ -1323,8 +1365,8 @@ const makeStyles = () =>
     // Bloque de inputs. Encabeza siempre la mitad inferior de la tarjeta (las
     // series van ahora debajo), así que se separa él mismo del contexto.
     inputBlock: {
-      gap: 16,
-      marginTop: 16,
+      gap: 12,
+      marginTop: 12,
     },
     // Acciones bajo las series (deshacer, cronómetro).
     afterSeriesBlock: {
@@ -1364,22 +1406,24 @@ const makeStyles = () =>
       borderWidth: 1.5,
       borderColor: theme.colors.border,
       borderRadius: theme.borderRadius.md,
-      minHeight: 66,
+      // Bajo para que el panel del registro quepa entero con las casillas.
+      minHeight: 52,
+      paddingVertical: 4,
       // Menos padding lateral para devolverle al número el ancho que se llevan
       // las flechas: siguen cabiendo los mismos dígitos que antes.
       paddingHorizontal: 8,
-      fontSize: 30,
+      fontSize: 26,
       textAlign: 'center',
       textAlignVertical: 'center',
       color: theme.colors.text,
       fontWeight: '800',
     },
-    // Flechas +/-: 44 de ancho (objetivo táctil recomendado) y separación corta
+    // Flechas +/-: 40 de ancho (casi el objetivo táctil recomendado) y separación corta
     // entre ellas, así cada una queda alta y fácil de acertar con el pulgar sin
     // mirar.
     stepperCol: {
-      width: 44,
-      gap: 4,
+      width: 40,
+      gap: 3,
     },
     stepBtn: {
       flex: 1,
@@ -1402,7 +1446,7 @@ const makeStyles = () =>
 
     // Botón principal añadir
     addButton: {
-      minHeight: 58,
+      minHeight: 52,
       borderRadius: theme.borderRadius.md,
       flexDirection: 'row',
       alignItems: 'center',
