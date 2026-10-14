@@ -13,10 +13,12 @@ export function exerciseCountText(count: number): string {
 
 /**
  * Devuelve el día con el GIF del catálogo fijado en uno de sus ejercicios. El
- * `catalogId` se guarda en la RUTINA (no en el log), para que el play quede
- * directo la próxima vez y viaje al compartir. Fuente única del cálculo que el
- * registro y el detalle de una sesión hacían por su cuenta antes de despachar
- * `UPDATE_DAY`.
+ * `catalogId` se fija en la RUTINA, para que el play quede directo la próxima
+ * vez y viaje al compartir; cada log lo copia al registrarse (identidad del
+ * ejercicio en el historial, ver lib/exerciseIdentity.ts). Los logs ya
+ * guardados no se tocan: se unen por el nombre, que ahora sí lleva vínculo.
+ * Fuente única del cálculo que el registro y el detalle de una sesión hacían
+ * por su cuenta antes de despachar `UPDATE_DAY`.
  */
 export function withExerciseCatalogId(
   day: WorkoutDay,

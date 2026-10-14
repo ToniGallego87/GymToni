@@ -69,7 +69,7 @@ GymToni/
 │   ├── AnchorMenu.tsx        ← Menú desplegable anclado a un botón ⋯ (acciones de la tarjeta de ejercicio)
 │   ├── ThemeRevealOverlay.tsx ← Cambio de tema: disco con pantallazo de la piel de destino (react-native-view-shot)
 │   ├── WhatsNewModal.tsx     ← Popup de novedades tras actualizar
-│   └── Toast.tsx, GradientFill.tsx, AnimatedCounter.tsx, StretchScrollView.tsx…
+│   └── Toast.tsx, ConfettiBurst.tsx, GradientFill.tsx, AnimatedCounter.tsx, StretchScrollView.tsx…
 ├── features/workout/         ← Pantallas + estado global
 │   ├── WorkoutContext.tsx    ← Provider + reducer + persistencia granular
 │   ├── HomeScreen.tsx        ← Inicio: héroe, progreso semanal e historial

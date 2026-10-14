@@ -3,6 +3,7 @@ import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -12,33 +13,48 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
+import { useExerciseNames } from '@hooks/useExerciseKeyResolver';
 import {
   buildExerciseSessions,
   ExerciseRecords,
   ExerciseSession,
   ExerciseSort,
   ExerciseSummary,
-  exerciseKey,
   getExerciseRecords,
   listExercises,
   sortExercises,
 } from '@lib/exerciseProgress';
+import {
+  formatExerciseNames,
+  otherExerciseNames,
+  slugExerciseName,
+} from '@lib/exerciseIdentity';
+import {
+  getCatalogExercise,
+  matchesExercise,
+  matchesTagFilter,
+  TagFilter,
+} from '@data/exerciseCatalog';
+import { planExerciseMerge } from '@lib/exerciseMerge';
 import { animateLayout } from '@lib/layoutAnimation';
 import { theme } from '@lib/theme';
 import { fmtNum, t } from '@lib/i18n';
 import { longDate, shortDayMonth } from '@lib/utils';
 import { WorkoutRoutine } from '../../types';
 import {
+  AppModal,
   BarChart,
   ChartArea,
   BarChartPoint,
   getChartWidth,
   Button,
+  ConfirmModal,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_CONTENT_GAP,
   useGlassTopBarHeight,
+  CatalogTagFilters,
   ExerciseGifButton,
   GradientFill,
   LoadMoreButton,
@@ -82,6 +98,10 @@ const PAGE_SIZE = 10;
 // vistazo y el buscador cuando ya no cabe en una pantalla.
 const MIN_EXERCISES_FOR_SORT = 5;
 const MIN_EXERCISES_FOR_SEARCH = 10;
+
+// Candidatos que enseña "Es el mismo que…" a la vez: el buscador acota
+// el resto (pintar cientos de filas en un modal se nota).
+const MERGE_MAX_OPTIONS = 30;
 
 // Sin icono, a diferencia del filtro de métrica: los cuatro criterios con
 // icono + texto no caben de ancho, y "ordenar por sesiones" no tiene un dibujo
@@ -251,13 +271,18 @@ export function ExerciseProgressScreen({
   emptyAction,
 }: ExerciseProgressScreenProps) {
   const insets = useSafeAreaInsets();
-  const { state } = useWorkout();
+  const { state, dispatch } = useWorkout();
+  const { resolve: resolveExerciseKey, namesByKey } = useExerciseNames();
   const { width: windowWidth } = useWindowDimensions();
 
   const [metricId, setMetricId] = useState(CHART_METRICS[0].id);
   const [sort, setSort] = useState<ExerciseSort>('recent');
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [query, setQuery] = useState('');
+  const [tagFilter, setTagFilter] = useState<TagFilter>({});
+  // "Son el mismo ejercicio": elegir con cuál se une el abierto y confirmarlo.
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeTarget, setMergeTarget] = useState<ExerciseSummary | null>(null);
 
   // Las semanas de descarga quedan fuera de la evolución y los récords: se
   // entrenan con menos series y peso a propósito, así que no reflejan progreso ni
@@ -267,36 +292,21 @@ export function ExerciseProgressScreen({
     [state.logs]
   );
 
+  // Agrupados por su identidad (lib/exerciseIdentity.ts): el ejercicio del
+  // catálogo, o el nombre si es propio. Cada fila trae ya su GIF (`catalogId`).
   const exercises = useMemo(
-    () => listExercises(evolutionLogs),
-    [evolutionLogs]
+    () => listExercises(evolutionLogs, resolveExerciseKey),
+    [evolutionLogs, resolveExerciseKey]
   );
 
-  // GIF asignado a cada ejercicio. La lista agrupa por NOMBRE (el mismo press de
-  // banca tiene otro id en cada rutina), así que el `catalogId` se busca igual:
-  // por nombre, en los ejercicios de todas las rutinas. El primero que lo tenga
-  // manda — es el mismo movimiento, así que el dibujo es el mismo.
-  const catalogIdByKey = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const routine of state.routines) {
-      for (const day of routine.days) {
-        for (const exercise of day.exercises) {
-          if (!exercise.catalogId) continue;
-          const key = exerciseKey(exercise.name);
-          if (!map.has(key)) map.set(key, exercise.catalogId);
-        }
-      }
-    }
-    return map;
-  }, [state.routines]);
   // Rutinas que tienen el ejercicio abierto (y en qué día): la activa primero,
-  // que es la que se está entrenando. Mismo criterio que el GIF: por nombre.
+  // que es la que se está entrenando. Misma identidad que la lista.
   const routineHits = useMemo(() => {
     if (!selectedKey) return [];
     const hits: { routine: WorkoutRoutine; dayId: string }[] = [];
     for (const routine of state.routines) {
       const day = routine.days.find((d) =>
-        d.exercises.some((e) => exerciseKey(e.name) === selectedKey)
+        d.exercises.some((e) => resolveExerciseKey(e) === selectedKey)
       );
       if (day) hits.push({ routine, dayId: day.id });
     }
@@ -305,33 +315,89 @@ export function ExerciseProgressScreen({
         Number(b.routine.id === state.activeRoutineId) -
         Number(a.routine.id === state.activeRoutineId)
     );
-  }, [selectedKey, state.routines, state.activeRoutineId]);
+  }, [selectedKey, state.routines, state.activeRoutineId, resolveExerciseKey]);
   const sorted = useMemo(
     () => sortExercises(exercises, sort),
     [exercises, sort]
   );
-  // Filtro por nombre. Con una rutina de 5 días son 30-40 ejercicios y la
-  // pregunta real es "¿cómo voy en press banca?": buscarlo a mano era recorrer
-  // la lista de 20 en 20. Mismo criterio que el buscador del catálogo: sin
-  // acentos ni mayúsculas y por trozo de palabra.
+  // Ejercicio del catálogo de cada fila: sus etiquetas (zona, músculo, equipo)
+  // para filtrar. undefined en los propios ("Sin clasificar").
+  const catalogEntries = useMemo(
+    () =>
+      new Map(
+        exercises.map((exercise) => [
+          exercise.key,
+          getCatalogExercise(exercise.catalogId),
+        ])
+      ),
+    [exercises]
+  );
+  const tagItems = useMemo(
+    () => exercises.map((exercise) => catalogEntries.get(exercise.key)),
+    [exercises, catalogEntries]
+  );
+  // Filtro por nombre y por etiqueta. Con una rutina de 5 días son 30-40
+  // ejercicios y la pregunta real es "¿cómo voy en press banca?" o "¿y en
+  // pecho?": buscarlo a mano era recorrer la lista de 20 en 20. El texto busca
+  // en TODOS los nombres del ejercicio (también los "también lo llamas") y en
+  // su ficha del catálogo (nombre, sinónimos y etiquetas: "bíceps" encuentra
+  // tus curls aunque los llames "Curl"). Sin acentos ni mayúsculas.
   const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) return sorted;
-    return sorted.filter((exercise) =>
-      exercise.name.toLowerCase().includes(needle)
-    );
-  }, [sorted, query]);
+    const needle = slugExerciseName(query);
+    return sorted.filter((exercise) => {
+      const entry = catalogEntries.get(exercise.key);
+      if (!matchesTagFilter(entry, tagFilter)) return false;
+      if (!needle) return true;
+      const names = namesByKey.get(exercise.key) ?? [exercise.name];
+      return (
+        names.some((name) => slugExerciseName(name).includes(needle)) ||
+        (!!entry && matchesExercise(entry, query))
+      );
+    });
+  }, [sorted, query, tagFilter, catalogEntries, namesByKey]);
+  const filtering = !!query.trim() || !!tagFilter.category;
   const visible = useMemo(
     () => filtered.slice(0, visibleCount),
     [filtered, visibleCount]
   );
   const selected = exercises.find((exercise) => exercise.key === selectedKey);
+  const selectedOtherNames = selected
+    ? otherExerciseNames(namesByKey.get(selected.key), selected.name)
+    : [];
 
   const sessions = useMemo(
     () =>
-      selectedKey ? buildExerciseSessions(evolutionLogs, selectedKey) : [],
-    [selectedKey, evolutionLogs]
+      selectedKey
+        ? buildExerciseSessions(evolutionLogs, selectedKey, resolveExerciseKey)
+        : [],
+    [selectedKey, evolutionLogs, resolveExerciseKey]
   );
+
+  // "Es el mismo que…": el abierto y `mergeTarget` pasan a ser UN ejercicio con
+  // los nombres de los dos (ver lib/exerciseMerge.ts), y queda abierta su ficha. Sobre TODO el historial, también
+  // las semanas de descarga: son apuntes del mismo ejercicio.
+  const confirmMerge = () => {
+    if (!selected || !mergeTarget) return;
+    const plan = planExerciseMerge(
+      state.routines,
+      state.logs,
+      resolveExerciseKey,
+      selected,
+      mergeTarget
+    );
+    for (const { routineId, day } of plan.days) {
+      dispatch({
+        type: 'UPDATE_DAY',
+        payload: { routineId, dayId: day.id, day },
+      });
+    }
+    for (const log of plan.logs) {
+      dispatch({ type: 'UPDATE_WORKOUT_LOG', payload: log });
+    }
+    setMergeTarget(null);
+    animateLayout();
+    onSelectExercise(plan.key);
+  };
   const records = useMemo(() => getExerciseRecords(sessions), [sessions]);
 
   const metric =
@@ -429,6 +495,20 @@ export function ExerciseProgressScreen({
           </View>
         )}
 
+        {/* Por etiquetas del catálogo: zona, y al elegirla músculo y equipo.
+            Mismo filtro que el buscador de ejercicios de las rutinas. */}
+        {!selected && exercises.length >= MIN_EXERCISES_FOR_SEARCH && (
+          <CatalogTagFilters
+            items={tagItems}
+            value={tagFilter}
+            onChange={(next) => {
+              animateLayout();
+              setTagFilter(next);
+              setVisibleCount(PAGE_SIZE);
+            }}
+          />
+        )}
+
         {!selected && exercises.length >= MIN_EXERCISES_FOR_SORT && (
           <SegmentedFilter
             // Sin margen: encabeza la lista, no cuelga de ninguna gráfica.
@@ -444,7 +524,7 @@ export function ExerciseProgressScreen({
           />
         )}
 
-        {!selected && !!query.trim() && filtered.length === 0 && (
+        {!selected && filtering && filtered.length === 0 && (
           <Text style={styles.emptyText}>{t('Sin resultados')}</Text>
         )}
 
@@ -453,7 +533,7 @@ export function ExerciseProgressScreen({
             <ExerciseRow
               key={exercise.key}
               exercise={exercise}
-              catalogId={catalogIdByKey.get(exercise.key)}
+              catalogId={exercise.catalogId}
               onPress={() => {
                 animateLayout();
                 onSelectExercise(exercise.key);
@@ -485,7 +565,7 @@ export function ExerciseProgressScreen({
                     el mismo para todos y no decía cuál estabas mirando. */}
                 <ExerciseGifButton
                   name={selected.name}
-                  catalogId={catalogIdByKey.get(selected.key)}
+                  catalogId={selected.catalogId}
                   size={20}
                   style={styles.cardTitleGif}
                 />
@@ -499,6 +579,15 @@ export function ExerciseProgressScreen({
                   date: shortDayMonth(selected.lastDate),
                 })}
               </Text>
+              {/* Un ejercicio, varios nombres: los otros con los que aparece
+                  en tus rutinas y tu historial. */}
+              {selectedOtherNames.length > 0 && (
+                <Text style={styles.cardHint} numberOfLines={2}>
+                  {t('También lo llamas: {names}', {
+                    names: formatExerciseNames(selectedOtherNames),
+                  })}
+                </Text>
+              )}
 
               {/* La gráfica y su filtro, centrados con la misma pieza que
                   Inicio y Cardio (`ChartArea`). La TARJETA sí es distinta: aquí
@@ -555,16 +644,31 @@ export function ExerciseProgressScreen({
         onLayout={onTopBarLayout}
         // Salto a la rutina desde la ficha. Con el ejercicio en varias rutinas,
         // una opción por rutina (con su nombre) en vez de un selector aparte.
+        // Y "Es el mismo que…", para cuando el mismo ejercicio salió dos veces
+        // (escrito distinto): pasa a ser uno con los dos nombres.
         menuItems={
-          selected && onOpenRoutine && routineHits.length
-            ? routineHits.map(({ routine, dayId }) => ({
-                icon: 'book-open-variant' as const,
-                label:
-                  routineHits.length === 1
-                    ? t('Ver en la rutina')
-                    : t('Ver en {routine}', { routine: routine.name }),
-                onPress: () => onOpenRoutine(routine, dayId),
-              }))
+          selected
+            ? [
+                ...(onOpenRoutine
+                  ? routineHits.map(({ routine, dayId }) => ({
+                      icon: 'book-open-variant' as const,
+                      label:
+                        routineHits.length === 1
+                          ? t('Ver en la rutina')
+                          : t('Ver en {routine}', { routine: routine.name }),
+                      onPress: () => onOpenRoutine(routine, dayId),
+                    }))
+                  : []),
+                ...(exercises.length > 1
+                  ? [
+                      {
+                        icon: 'call-merge' as const,
+                        label: t('Es el mismo que…'),
+                        onPress: () => setMergeOpen(true),
+                      },
+                    ]
+                  : []),
+              ]
             : undefined
         }
       />
@@ -576,7 +680,140 @@ export function ExerciseProgressScreen({
           backGoesToList ? `← ${t('Todos los ejercicios')}` : `← ${t('Volver')}`
         }
       />
+
+      {!!selected && (
+        <MergeExerciseModal
+          visible={mergeOpen}
+          current={selected}
+          exercises={exercises}
+          onClose={() => setMergeOpen(false)}
+          onPick={(target) => {
+            setMergeOpen(false);
+            setMergeTarget(target);
+          }}
+        />
+      )}
+      <ConfirmModal
+        visible={!!selected && !!mergeTarget}
+        icon="call-merge"
+        title={t('¿Son el mismo ejercicio?')}
+        // Dice lo que va a pasar de verdad (ver lib/exerciseMerge.ts): con un
+        // ejercicio del catálogo de por medio, uno con dos nombres; si los dos
+        // son propios, el nombre ES lo que los identifica y uno se renombra.
+        message={
+          selected?.catalogId || mergeTarget?.catalogId
+            ? t(
+                '«{a}» y «{b}» serán el mismo ejercicio con dos nombres: su historial y sus récords se juntan. Tus series no cambian.',
+                { a: selected?.name ?? '', b: mergeTarget?.name ?? '' }
+              )
+            : t(
+                '«{a}» pasará a llamarse «{b}» y su historial y sus récords se juntan. Tus series no cambian.',
+                { a: selected?.name ?? '', b: mergeTarget?.name ?? '' }
+              )
+        }
+        confirmLabel={t('Sí, es el mismo')}
+        confirmVariant="primary"
+        onConfirm={confirmMerge}
+        onCancel={() => setMergeTarget(null)}
+      />
     </View>
+  );
+}
+
+/**
+ * Elegir qué ejercicio es el abierto con otro nombre: la misma lista de
+ * Progreso (sin él), con buscador, porque el duplicado suele llamarse parecido.
+ */
+function MergeExerciseModal({
+  visible,
+  current,
+  exercises,
+  onClose,
+  onPick,
+}: {
+  visible: boolean;
+  current: ExerciseSummary;
+  exercises: ExerciseSummary[];
+  onClose: () => void;
+  onPick: (target: ExerciseSummary) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const options = useMemo(() => {
+    const needle = slugExerciseName(query);
+    return exercises
+      .filter((exercise) => exercise.key !== current.key)
+      .filter(
+        (exercise) =>
+          !needle || slugExerciseName(exercise.name).includes(needle)
+      )
+      .slice(0, MERGE_MAX_OPTIONS);
+  }, [exercises, current.key, query]);
+
+  const close = () => {
+    setQuery('');
+    onClose();
+  };
+
+  return (
+    <AppModal
+      visible={visible}
+      onRequestClose={close}
+      onOverlayPress={close}
+      icon="call-merge"
+      title={t('Es el mismo que…')}
+      message={t('Elige el ejercicio que es «{name}» con otro nombre.', {
+        name: current.name,
+      })}
+      align="left"
+      footer={
+        <Button title={t('Cancelar')} variant="secondary" onPress={close} />
+      }
+    >
+      <View style={styles.searchBox}>
+        <MaterialCommunityIcons
+          name="magnify"
+          size={20}
+          color={theme.colors.textMuted}
+        />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={t('Buscar ejercicio…')}
+          placeholderTextColor={theme.colors.textMuted}
+          value={query}
+          onChangeText={setQuery}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      </View>
+      <ScrollView style={styles.mergeList} keyboardShouldPersistTaps="handled">
+        {options.length === 0 && (
+          <Text style={styles.emptyText}>{t('Sin resultados')}</Text>
+        )}
+        {options.map((exercise) => (
+          <Pressable
+            key={exercise.key}
+            style={({ pressed }) => [
+              styles.mergeRow,
+              pressed && styles.pressed,
+            ]}
+            onPress={() => {
+              setQuery('');
+              onPick(exercise);
+            }}
+          >
+            <Text style={styles.exerciseName} numberOfLines={2}>
+              {exercise.name}
+            </Text>
+            <Text style={styles.exerciseHint} numberOfLines={1}>
+              {t('{n} sesiones · {date}', {
+                n: exercise.sessionCount,
+                date: shortDayMonth(exercise.lastDate),
+              })}
+            </Text>
+          </Pressable>
+        ))}
+      </ScrollView>
+    </AppModal>
   );
 }
 
@@ -721,6 +958,16 @@ const makeStyles = () =>
     },
     // Buscador de la lista de ejercicios, con la misma caja que el resto de
     // buscadores de la app (catálogo y Comunidad).
+    mergeList: {
+      maxHeight: 320,
+      marginTop: 10,
+    },
+    mergeRow: {
+      paddingVertical: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
+      gap: 2,
+    },
     searchBox: {
       flexDirection: 'row',
       alignItems: 'center',

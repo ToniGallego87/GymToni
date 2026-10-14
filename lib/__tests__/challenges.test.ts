@@ -208,16 +208,18 @@ describe('computeChallenges', () => {
     expect(later['full-days']).toBeUndefined();
   });
 
-  it('kcal de hoy y de la semana natural, y días con cardio', () => {
+  it('kcal y días de la semana natural, y días con cardio', () => {
     const logs = [
       cardio('x', '2026-09-13', 'Correr: 60min, 10kmh'), // domingo anterior: fuera
       cardio('y', '2026-09-15', 'Correr: 30min, 10kmh'),
       cardio('z', TODAY, 'Correr: 30min, 10kmh'),
+      cardio('w', '2026-09-16', 'Andar: 10min, 4kmh'), // poco: no llega a 200
     ];
     const c = byId(logs, [makeRoutine(1)]);
-    expect(c['kcal-day-100'].current).toBe(100);
-    expect(c['kcal-day-100'].done).toBe(true);
-    expect(c['two-cardio'].current).toBe(2);
+    expect(c['kcal-3-days-200'].current).toBe(2);
+    expect(c['kcal-3-days-200'].done).toBe(false);
+    expect(c['kcal-3-days-200'].periodKey).toBe('2026-W38');
+    expect(c['two-cardio'].current).toBe(2); // recortado al objetivo
     expect(c['two-cardio'].done).toBe(true);
     expect(c['kcal-week-1000'].current).toBeLessThan(1000);
     expect(c['kcal-week-1000'].periodKey).toBe('2026-W38');
@@ -227,9 +229,13 @@ describe('computeChallenges', () => {
     const logs = [
       cardio('a', TODAY, 'Correr: 90min, 12kmh'),
       cardio('b', '2026-09-14', 'Correr: 90min, 12kmh'),
+      cardio('c', '2026-09-15', 'Correr: 90min, 12kmh'),
+      cardio('d', '2026-09-16', 'Correr: 90min, 12kmh'),
     ];
     const c = byId(logs, [makeRoutine(1)]);
-    expect(c['kcal-day-100'].current).toBe(100);
+    expect(c['kcal-3-days-200'].current).toBe(3);
+    expect(c['kcal-3-days-200'].done).toBe(true);
+    expect(c['kcal-week-1000'].current).toBe(1000);
   });
 });
 

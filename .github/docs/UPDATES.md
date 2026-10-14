@@ -1,5 +1,178 @@
 # UPDATES
 
+## Sin publicar
+
+### Arquitectura
+
+- **Identidad de ejercicios: manda el catálogo, el nombre es la etiqueta.**
+  Nuevo `lib/exerciseIdentity.ts`. Progreso, récords, "la vez anterior" del
+  registro y la comparación entre sesiones agrupaban por el nombre escrito
+  (`trim().toLowerCase()`, ni siquiera sin tildes): "Press banca" y "Press de
+  banca" eran dos ejercicios y corregir una falta partía el historial. Ahora la
+  clave es `cat:<id>` si hay ejercicio del catálogo (las copias del catálogo
+  cuentan como su principal) o `name:<nombre normalizado>` si es propio. Un
+  apunte sin `catalogId` hereda el del MISMO nombre en tus rutinas o tu
+  historial si es único (así el historial anterior se une con el nuevo sin
+  reescribir nada); nunca se vincula por parecido con el catálogo.
+  `useExerciseKeyResolver` lo construye una vez por estado. `exerciseKey(name)`
+  desaparece; `listExercises`/`buildExerciseSessions` reciben el resolutor y
+  cada fila de Progreso trae su `catalogId` (GIF).
+- **`exercise_logs.catalog_id`** (SQLite v10, `ExerciseLog.catalogId`): cada
+  apunte guarda el ejercicio del catálogo con el que se entrenó (copia del de
+  la rutina al registrar). Nullable; lo anterior se queda a NULL.
+- **Sync tolerante a la columna nueva.** `lib/cloud/optionalColumns.ts`: si la
+  nube responde PGRST204 por una columna declarada opcional, el upsert se
+  reintenta sin ella (sync y copia en la nube) en vez de parar la
+  sincronización. La bajada no pisa con NULL el valor local (`keepLocal` en
+  `REMOTE_TABLES`, `COALESCE`). **SQL pendiente en Supabase** (comprobado con
+  curl: la columna no existe):
+  `ALTER TABLE public.exercise_logs ADD COLUMN IF NOT EXISTS catalog_id text;`
+- **Catálogo limpio y reproducible.** `scripts/clean-exercise-catalog.js`
+  (idempotente) reescribe `data/exerciseCatalog.json` y genera
+  `data/exerciseVariants.ts`: 49 copias del mismo ejercicio colgadas de su
+  principal (`variantOf`; 7 de cámara/modelo ocultas, el resto visibles como
+  "(variante N)"), 182 nombres en español corregidos (traducciones que perdían
+  media frase y chocaban con otro ejercicio, "en polea … en polea", "con barra
+  Z con barra", concordancia "Dominada asistido"), codificación rota y erratas
+  del inglés, y 65 ejercicios con sinónimos de gimnasio (`aliases`). Ningún
+  nombre visible se repite: lo vigila `lib/__tests__/exerciseCatalog.test.ts`.
+  Jest resuelve ya los alias `@lib/` y `@data/`.
+
+### Nuevas funcionalidades
+
+- **Un ejercicio, varios nombres.** Lo que se presenta es el modelo "un
+  ejercicio con varios nombres", no "vincular": el editor enseña "Ejercicio:
+  <catálogo> · También lo llamas: Banca, Press banca" (✕ = "no es este
+  ejercicio") y la ficha de Progreso, "También lo llamas: …". Los nombres salen
+  de rutinas e historial por su identidad (`collectExerciseNames`), el más
+  reciente primero; no se guarda nada nuevo.
+- **"Es el mismo que…" en Progreso** (menú ⋯ de la ficha).
+  `lib/exerciseMerge.ts`: si uno es del catálogo, el otro recibe su
+  `catalogId` en apuntes y rutinas (series, fechas y nombres intactos) y
+  quedan como un ejercicio con los dos nombres; si los dos son propios, su
+  nombre es su identidad y el que se une toma el del otro (la confirmación lo
+  dice así). No toca rutinas enlazadas de la comunidad. Viaja por la sync y las
+  copias como cualquier edición.
+- **Filtrar por etiquetas del catálogo en Progreso y en el buscador de
+  ejercicios** (rutinas). Nuevo `CatalogTagFilters`: zona y, al elegirla,
+  músculo y equipo, cada fila solo con lo que hay dentro de lo elegido
+  (`tagFilterOptions`); en Progreso, los ejercicios propios van a "Sin
+  clasificar" (`matchesTagFilter` con `UNCLASSIFIED`). El texto busca también
+  por etiqueta en los dos idiomas ("bíceps mancuerna"), por detrás de lo que
+  coincide por nombre (puntuación 30). En Progreso el buscador mira además
+  todos los nombres del ejercicio y su ficha del catálogo. Las propuestas al
+  escribir siguen siendo solo por nombre. `searchCatalog(query, filter)`
+  recibe un `TagFilter` en vez de la zona.
+- **Propuestas del catálogo al escribir un ejercicio.** En el editor, si aún
+  no es ningún ejercicio del catálogo, salen hasta tres
+  (`suggestCatalogExercises`) con su miniatura; un toque lo elige.
+- **Cuántas personas se han llevado una rutina.** El marcador de "añadir" del
+  tablón, del perfil del autor y de la ficha pública lleva la cifra al lado
+  (`SaveRoutineButton` prop `count`), como el "me gusta". Tabla nueva
+  `routine_saves` (una fila por rutina y persona, recuento ACUMULADO: quitarla
+  no lo baja, porque las enlazadas no viajan entre dispositivos y la cifra
+  bailaría). Se apunta al añadir o copiar (`recordRoutineSave`) y en cada sync
+  las que ya tenías (`recordOwnedRoutineSaves`, en `useCloudSync`), así
+  cuentan también las de antes. Sin la tabla, la cifra no sale y nada falla.
+  **SQL pendiente en Supabase**: bloque `routine_saves` de
+  `supabase/social-schema.sql`.
+
+### Cambios
+
+- **Cambiar el nombre ya no suelta el GIF.** En el editor, teclear mantenía el
+  nombre pero borraba el `catalogId`; ahora se conserva (el nombre nuevo pasa a
+  ser otro nombre del mismo ejercicio) y solo se pierde al vaciar el nombre o
+  con la ✕.
+- **Buscador del catálogo por relevancia.** `searchCatalog`: exacto (nombre o
+  sinónimo, sin contar "de/con/en…") > empieza así > contiene; a igualdad, el
+  principal, el habitual y el más corto. "press banca" da la banca con barra
+  primero. Sin las copias ocultas.
+- **"Volver" lleva a la vista desde la que se abrió.** Logros, Peso corporal y
+  Actividad volvían siempre a Perfil, aunque Logros se abre desde la píldora de
+  nivel de cualquier pantalla y Peso corporal también desde Cardio. Sus
+  `Screen` (`app/App.tsx`) llevan ahora `back?: Screen` (sin él, a Perfil):
+  la píldora guarda la pantalla en la que se pulsó, Cardio se pasa a sí misma y
+  la ficha de rutina abierta desde Actividad guarda la Actividad entera. Botón
+  en pantalla y atrás físico comparten `backFromProfileChild`. `goBackTo`
+  refresca además un registro guardado en `back` con el log vivo (o, en un día
+  olvidado, el de ese día y esa fecha): volver al entreno a medias tras mirar
+  Logros no enseña las series de antes ni abre una sesión nueva encima.
+- **Avisos al pie con cristal, como el descanso.** `Toast` (el cartel de
+  "Serie borrada · Deshacer", "Cardio borrado" y el resto de avisos al pie)
+  pasa de tarjeta opaca `surfaceAlt` a cristal oscuro: `GlassBlur` con
+  `GLASS_REST_TIMER_BG`, capa `GLASS_BACK_BUTTON_OVERLAY`, borde y tinta de
+  "Volver" (clara en ambos temas). La píldora centrada no cambia.
+- **Duración del entreno también en el registro, y en horas desde los 60
+  min.** El día de hoy abre el registro, no el Detalle, y su barra solo
+  llevaba la fecha: ahora el subtítulo es "Lun 13 oct · 52 min" (calculado en
+  vivo con `sessionDurationMinutes`, la misma medida que
+  `workoutDurationMinutes` del Detalle). Nuevo `formatWorkoutDuration` en
+  `lib/utils.ts`: por debajo de la hora "52 min", desde ella "1:25 h"; lo usan
+  el subtítulo del registro y las celdas de minutos del Detalle (fuerza y
+  cardio).
+- **Sin retos de un solo día: "100 kcal hoy" pasa a "200 kcal, 3 días".** El
+  reto `kcal-day-100` se sustituye por `kcal-3-days-200`: días de la semana
+  natural con 200 kcal de cardio o más (todo el cardio del día sumado), con
+  objetivo 3 (`KCAL_DAY_TARGET` = 200, `KCAL_DAYS_TARGET` = 3). Desaparece el
+  periodo `'today'` de `ChallengePeriod` (y su rótulo "Hoy" en
+  `ChallengesModal`). Las victorias ya apuntadas del reto viejo siguen
+  contando para el nivel: son claves guardadas.
+- **"Retos que has movido" → "Retos que has avanzado"** en el registro de
+  cardio.
+- **Récord con confeti y más tiempo.** La píldora centrada "Récord" dura 2,2 s
+  (antes 1,2) y lanza una ráfaga de confeti detrás (`ConfettiBurst`, nuevo:
+  `Animated` con driver nativo, sin librería; `Toast` prop `celebrate`). La
+  `key` del aviso reinicia píldora y ráfaga si llegan dos récords seguidos.
+- **Burbuja de serie récord en blanco, no en dorado.** El dorado marca lo
+  pulsable y la burbuja no lo es: fondo `theme.colors.white` (invertido en
+  tema claro) con trofeo, dato y × en `theme.colors.background`.
+- **Nivel del perfil pulsable.** La píldora "Nivel N" de la tarjeta de Perfil
+  lleva a Logros, como la de la barra superior.
+- **Remate "Entreno completado" más corto.** Sin el número de ejercicios ni
+  "Ya está guardado en tu historial": el rótulo es "Retos que has avanzado"
+  (solo si la sesión movió alguno) con su lista. Fuera el CTA "Terminar":
+  hacía lo mismo que "Volver" (el registro se autoguarda); desaparecen
+  `handleSaveWorkout` y la prop `onSave` de `WorkoutLogScreen`.
+
+### Correcciones
+
+- **Abrir el registro, un día pasado o un día de una rutina ya es
+  inmediato.** Cada `ExerciseGifButton` montaba de entrada su visor y su
+  buscador del catálogo, y el buscador cerrado buscaba igualmente el nombre
+  del ejercicio entre los 1300 (`searchCatalog` al montar): con ocho
+  ejercicios, ocho búsquedas antes de pintar nada. Ahora `ExercisePickerModal`
+  no calcula cerrado y el botón monta sus modales al abrirlos por primera vez
+  (con spinner sobre la miniatura mientras llega). Además el registro y el
+  Detalle pintan barra y fondo al instante y sus tarjetas un frame después
+  (`useAfterFirstPaint`, nuevo en `hooks/useDeferredReady.ts`), y el
+  resolutor de ejercicios se comparte entre vistas en vez de rehacerse al
+  abrir cada una (`useExerciseKeyResolver`).
+- **La barra de navegación responde al toque.** Las cinco pestañas se creaban
+  en línea en el render de `AppContent`: cada `setScreen` las repintaba todas
+  antes de cambiar. Ahora van memoizadas (`homeTab`…`profileTab`, con tema e
+  idioma en sus dependencias), la orden al pager sale en `useLayoutEffect`
+  (en raíz legacy el `useEffect` se aplazaba a otra tanda) y el fondo de la
+  pestaña activa entra en 140 ms en vez de con un muelle de medio segundo.
+- **Un ejercicio apuntado horas después ya no borra la duración del
+  entreno.** La duración iba del inicio a la última hora de cualquier
+  ejercicio: un entreno de 10:09 a 11:59 con su último ejercicio metido a las
+  19:15 medía 9 h, pasaba el tope de 4 h y no se enseñaba. Ahora
+  `sessionDurationMinutes` recorre las horas en orden y corta la sesión en el
+  primer hueco de más de 60 min (`MAX_WORKOUT_GAP_MINUTES`): ese entreno da
+  "1:50 h".
+- **Títulos de las tarjetas de Datos y nube sin hueco de más.** Android medía
+  "Copia automática" a dos líneas aunque lo pintara en una, y su tarjeta
+  quedaba con una línea de hueco repartida arriba y abajo del título. Los
+  títulos (`actionTitle`) llevan ahora `numberOfLines={1}` con
+  `adjustsFontSizeToFit` (los largos encogen en vez de cortarse), y el estilo
+  pasa de `flex: 1` a `flexGrow: 1` + `flexShrink: 1`.
+- **La gráfica filtrada por día ya no marca "= 0.0%" en un día que aún no
+  toca.** El % de la cabecera de "Progreso / semana" salía de la última
+  semana, y con el filtro por día una semana que aún no ha entrenado ese día
+  no tiene dato (`isMissing`, mejora 0). Ahora sale de la última semana en que
+  se entrenó ese día; solo si no hay ninguna queda en 0%. La herencia del % en
+  semana de descarga se salta también las semanas sin dato.
+
 ## Version 0.8.5 - 2026-10-11
 
 ### Arquitectura

@@ -21,6 +21,11 @@ interface SaveRoutineButtonProps {
   style?: ViewStyle;
   /** Con rótulo junto al icono (para donde sobra ancho, p. ej. la consulta). */
   withLabel?: boolean;
+  /**
+   * Cuántas personas la han añadido a sus rutinas, junto al marcador (como el
+   * recuento del "me gusta"). Sin dato (cargando, sin red) no se pinta.
+   */
+  count?: number;
 }
 
 /**
@@ -38,6 +43,7 @@ export function SaveRoutineButton({
   onUnsave,
   style,
   withLabel = false,
+  count,
 }: SaveRoutineButtonProps) {
   const canUnsave = saved && !!onUnsave;
   const label = canUnsave
@@ -64,13 +70,26 @@ export function SaveRoutineButton({
         selected: saved,
         disabled: busy || (saved && !canUnsave),
       }}
-      accessibilityLabel={label}
+      accessibilityLabel={
+        count === undefined
+          ? label
+          : `${label}. ${
+              count === 1
+                ? t('Añadida por 1 persona')
+                : t('Añadida por {n} personas', { n: count })
+            }`
+      }
     >
       <MaterialCommunityIcons
         name={saved ? 'bookmark' : 'bookmark-plus-outline'}
         size={20}
         color={saved ? theme.colors.primary : theme.colors.textSecondary}
       />
+      {count !== undefined && (
+        <Text style={[styles.likeCount, saved && styles.labelSaved]}>
+          {count}
+        </Text>
+      )}
       {withLabel && (
         <Text style={[styles.label, saved && styles.labelSaved]}>{label}</Text>
       )}

@@ -1,4 +1,9 @@
-import { ParsedSet, WorkoutLog } from '../types';
+import { ExerciseLog, ParsedSet, WorkoutLog } from '../types';
+import {
+  catalogIdOfKey,
+  ExerciseKeyResolver,
+  exerciseKeyOf,
+} from './exerciseIdentity';
 import { getEstimatedOneRepMax, isValidSet } from './progress';
 import { getLogTimestamp } from './utils';
 
@@ -7,15 +12,26 @@ import { getLogTimestamp } from './utils';
  * mes?"). El resto de la app mira el rendimiento por sesión o por semana; aquí
  * el eje es el ejercicio, atravesando todas las rutinas y todas las semanas.
  *
- * Los ejercicios se agrupan por NOMBRE, no por `exerciseId`: el mismo press de
- * banca tiene un id distinto en cada rutina (y en cada día), así que agrupar por
- * id partiría el histórico justo al cambiar de rutina, que es cuando más
- * interesa comparar.
+ * Los ejercicios se agrupan por su IDENTIDAD (lib/exerciseIdentity.ts): el
+ * ejercicio del catálogo si lo tienen, y si no el nombre normalizado. Nunca por
+ * `exerciseId`: el mismo press de banca tiene un id distinto en cada rutina (y
+ * en cada día), así que agrupar por id partiría el histórico justo al cambiar de
+ * rutina, que es cuando más interesa comparar.
+ *
+ * Las funciones reciben el resolutor de claves (`buildExerciseKeyResolver`, con
+ * las rutinas y el historial de la persona). Sin él agrupan sin contexto
+ * (`exerciseKeyOf`): catálogo si lo hay, nombre si no.
  */
 
-/** Clave de agrupado: el nombre normalizado (sin mayúsculas ni espacios de más). */
-export function exerciseKey(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+/** Clave de un apunte del historial. */
+export function exerciseLogKey(
+  exerciseLog: ExerciseLog,
+  resolve: ExerciseKeyResolver = exerciseKeyOf
+): string {
+  return resolve({
+    name: exerciseLog.exerciseName,
+    catalogId: exerciseLog.catalogId,
+  });
 }
 
 export interface ExerciseSession {
@@ -44,6 +60,11 @@ export interface ExerciseSummary {
   key: string;
   /** Nombre tal y como se escribió la última vez que se entrenó. */
   name: string;
+  /**
+   * GIF del ejercicio: el del catálogo con el que se entrenó la última vez (o,
+   * si ningún apunte lo guardaba, el que da su clave). undefined si es propio.
+   */
+  catalogId?: string;
   sessionCount: number;
   lastTimestamp: number;
   lastDate: string;
@@ -64,9 +85,13 @@ export interface ExerciseRecords {
 }
 
 /** Todas las series de un ejercicio dentro de un log (puede repetirse por id). */
-function setsForKeyInLog(log: WorkoutLog, key: string): ParsedSet[] {
+function setsForKeyInLog(
+  log: WorkoutLog,
+  key: string,
+  resolve: ExerciseKeyResolver
+): ParsedSet[] {
   return log.exercises
-    .filter((exerciseLog) => exerciseKey(exerciseLog.exerciseName) === key)
+    .filter((exerciseLog) => exerciseLogKey(exerciseLog, resolve) === key)
     .flatMap((exerciseLog) => exerciseLog.parsedSets || [])
     .filter(isValidSet);
 }
@@ -95,10 +120,11 @@ function buildSession(log: WorkoutLog, sets: ParsedSet[]): ExerciseSession {
  */
 export function buildExerciseSessions(
   logs: WorkoutLog[],
-  key: string
+  key: string,
+  resolve: ExerciseKeyResolver = exerciseKeyOf
 ): ExerciseSession[] {
   return logs
-    .map((log) => ({ log, sets: setsForKeyInLog(log, key) }))
+    .map((log) => ({ log, sets: setsForKeyInLog(log, key, resolve) }))
     .filter(({ sets }) => sets.length > 0)
     .map(({ log, sets }) => buildSession(log, sets))
     .sort((a, b) => a.timestamp - b.timestamp);
@@ -108,7 +134,10 @@ export function buildExerciseSessions(
  * Ejercicios con historial, del entrenado más recientemente al más antiguo (el
  * que se busca casi siempre es el de la última sesión).
  */
-export function listExercises(logs: WorkoutLog[]): ExerciseSummary[] {
+export function listExercises(
+  logs: WorkoutLog[],
+  resolve: ExerciseKeyResolver = exerciseKeyOf
+): ExerciseSummary[] {
   const byKey = new Map<string, ExerciseSummary>();
 
   for (const log of logs) {
@@ -118,7 +147,7 @@ export function listExercises(logs: WorkoutLog[]): ExerciseSummary[] {
       const sets = (exerciseLog.parsedSets || []).filter(isValidSet);
       if (sets.length === 0) continue;
 
-      const key = exerciseKey(exerciseLog.exerciseName);
+      const key = exerciseLogKey(exerciseLog, resolve);
       const bestOneRepMax = sets.reduce(
         (best, s) => Math.max(best, getEstimatedOneRepMax(s.weight, s.reps)),
         0
@@ -130,6 +159,7 @@ export function listExercises(logs: WorkoutLog[]): ExerciseSummary[] {
         byKey.set(key, {
           key,
           name: exerciseLog.exerciseName.trim(),
+          catalogId: exerciseLog.catalogId ?? catalogIdOfKey(key),
           sessionCount: 1,
           lastTimestamp: timestamp,
           lastDate: log.date,
@@ -139,7 +169,7 @@ export function listExercises(logs: WorkoutLog[]): ExerciseSummary[] {
         continue;
       }
 
-      // Un mismo log puede traer el ejercicio repetido (dos ids, mismo nombre):
+      // Un mismo log puede traer el ejercicio repetido (dos ids, misma clave):
       // es UNA sesión, no dos.
       const isSameSession = current.lastTimestamp === timestamp;
       const isNewer = timestamp > current.lastTimestamp;
@@ -148,6 +178,11 @@ export function listExercises(logs: WorkoutLog[]): ExerciseSummary[] {
         ...current,
         // El nombre que se muestra es el de la última vez que se escribió.
         name: isNewer ? exerciseLog.exerciseName.trim() : current.name,
+        // Y el GIF, el de la última vez que se entrenó con uno.
+        catalogId:
+          isNewer && exerciseLog.catalogId
+            ? exerciseLog.catalogId
+            : current.catalogId,
         sessionCount: isSameSession
           ? current.sessionCount
           : current.sessionCount + 1,

@@ -103,6 +103,7 @@ export { StretchScrollView } from './StretchScrollView';
 export { LoadMoreButton } from './LoadMoreButton';
 export { Collapsible } from './Collapsible';
 export { SegmentedFilter, SEGMENTED_FILTER_CHART_GAP } from './SegmentedFilter';
+export { CatalogTagFilters } from './CatalogTagFilters';
 export type { SegmentedOption } from './SegmentedFilter';
 export { OptionToggle } from './OptionToggle';
 export type { OptionToggleOption } from './OptionToggle';

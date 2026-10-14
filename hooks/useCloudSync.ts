@@ -2,7 +2,10 @@ import { Dispatch, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import type { WorkoutAction, WorkoutRoutine } from '../types';
 import { useSession } from '@lib/cloud/auth';
-import { refreshLinkedRoutines } from '@lib/cloud/social';
+import {
+  recordOwnedRoutineSaves,
+  refreshLinkedRoutines,
+} from '@lib/cloud/social';
 import { registerSyncUser, syncNow } from '@lib/cloud/sync';
 import { loadAppData } from '@lib/storage';
 
@@ -64,6 +67,9 @@ export function useCloudSync(
         for (const routine of changed) {
           dispatch({ type: 'UPDATE_ROUTINE', payload: routine });
         }
+        // Recuento de "la han añadido N personas": apunta las de la comunidad
+        // que tienes (también las añadidas antes de existir el recuento).
+        await recordOwnedRoutineSaves(current, userId);
       } catch {
         // Sin red o error puntual: se reintenta en el próximo disparo.
       } finally {

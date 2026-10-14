@@ -109,8 +109,14 @@ lib/                    → Lógica compartida
   │                       rachas (computeStreak) y serie de progreso (buildWeekProgress)
   ├── exerciseForm.ts   → Modelo de edición de ejercicios (fila ↔ WorkoutExercise,
   │                       parseo de texto importado). Conserva ids: el historial los referencia
-  ├── exerciseProgress.ts → Historial y récords de UN ejercicio (agrupa por NOMBRE:
-  │                       el mismo ejercicio tiene otro id en cada rutina)
+  ├── exerciseIdentity.ts → Qué es "el mismo ejercicio": el del catálogo
+  │                       (`catalogId`) si lo hay, si no el nombre normalizado;
+  │                       un nombre hereda el vínculo que ya tenga en tus datos
+  ├── exerciseProgress.ts → Historial y récords de UN ejercicio (agrupa por su
+  │                       identidad, nunca por id: cambia en cada rutina)
+  ├── exerciseMerge.ts  → "Es el mismo que…" de Progreso: dos ejercicios pasan a
+  │                       ser uno con los nombres de los dos (re-vincula apuntes
+  │                       y rutinas; sin tabla de equivalencias)
   ├── routines.ts       → Vida de una rutina fuera del reducer: duplicar (ids nuevos
   │                       en rutina/días/ejercicios), adoptar una pública por
   │                       referencia (linkPublicRoutine), intensidad por series

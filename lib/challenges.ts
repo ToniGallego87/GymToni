@@ -27,8 +27,10 @@ import {
  * - Los retos de FUERZA viven en la "semana de la rutina" (el bloque en curso
  *   de la rutina activa, el mismo que pinta Inicio): completar todos los días,
  *   mejorar la semana anterior, batir un récord.
- * - Los de CARDIO viven en la semana natural (lunes-domingo) y en el día de
- *   hoy, que es como los cuenta la pestaña de Cardio.
+ * - Los de CARDIO viven en la semana natural (lunes-domingo), que es como
+ *   los cuenta la pestaña de Cardio. No hay retos de un solo día: el de
+ *   "100 kcal hoy" pasó a "200 kcal, 3 días" de la semana (sus victorias ya
+ *   apuntadas siguen contando para el nivel, como las de "Tres días").
  *
  * (Hubo un cuarto reto de fuerza, "Tres días", que ninguna pantalla pintaba:
  * se quitó del catálogo. Sus victorias ya apuntadas siguen contando para el
@@ -44,14 +46,14 @@ export type ChallengeId =
   | 'personal-record'
   | 'full-days'
   | 'first-marks'
-  | 'kcal-day-100'
+  | 'kcal-3-days-200'
   | 'kcal-week-1000'
   | 'two-cardio';
 
 export type ChallengeCategory = 'strength' | 'cardio';
 
 /** En qué ventana se cuenta el reto (la pantalla lo dice junto al progreso). */
-export type ChallengePeriod = 'routine-week' | 'calendar-week' | 'today';
+export type ChallengePeriod = 'routine-week' | 'calendar-week';
 
 export interface Challenge {
   id: ChallengeId;
@@ -86,7 +88,9 @@ export const IMPROVE_TARGET_PERCENT = 3;
 function halfOrMore(total: number): number {
   return Math.max(1, Math.ceil(total / 2));
 }
-export const KCAL_DAY_TARGET = 100;
+/** "200 kcal, 3 días": kcal mínimas de un día y días que las tienen que llegar. */
+export const KCAL_DAY_TARGET = 200;
+export const KCAL_DAYS_TARGET = 3;
 export const KCAL_WEEK_TARGET = 1000;
 export const TWO_CARDIO_TARGET = 2;
 
@@ -257,7 +261,7 @@ function firstWeekChallenges(
   ];
 }
 
-/** Los retos de cardio de hoy y de la semana natural en curso. */
+/** Los retos de cardio de la semana natural en curso. */
 function cardioChallenges(
   logs: WorkoutLog[],
   weight: number | WeightSegment[] | undefined,
@@ -266,8 +270,14 @@ function cardioChallenges(
   const weekKey = isoWeekKey(today);
   const { start, end } = isoWeekRange(today);
 
-  const days = buildCardioDays(logs, weight);
-  const todayKcal = days.find((d) => d.date === today)?.totalKcal ?? 0;
+  // Días de esta semana que llegan a KCAL_DAY_TARGET (sumando todo el cardio
+  // del día, como la pestaña de Cardio).
+  const strongKcalDays = buildCardioDays(logs, weight).filter(
+    (d) =>
+      d.date >= start &&
+      d.date <= end &&
+      Math.round(d.totalKcal) >= KCAL_DAY_TARGET
+  ).length;
 
   const week = buildCardioWeeks(logs, weight).find(
     (w) => w.weekKey === weekKey
@@ -287,16 +297,16 @@ function cardioChallenges(
 
   return [
     challenge({
-      id: 'kcal-day-100',
+      id: 'kcal-3-days-200',
       category: 'cardio',
       icon: 'fire',
-      name: t('100 kcal hoy'),
-      description: t('Quema 100 kcal de cardio en el día.'),
-      period: 'today',
-      current: Math.round(todayKcal),
-      target: KCAL_DAY_TARGET,
-      unit: 'kcal',
-      periodKey: today,
+      name: t('200 kcal, 3 días'),
+      description: t('Quema 200 kcal de cardio o más en 3 días esta semana.'),
+      period: 'calendar-week',
+      current: strongKcalDays,
+      target: KCAL_DAYS_TARGET,
+      unit: t('días'),
+      periodKey: weekKey,
     }),
     challenge({
       id: 'kcal-week-1000',

@@ -38,6 +38,8 @@ import {
   getRoutineSetTotals,
   getCommentCounts,
   getLikeInfo,
+  getSaveCounts,
+  recordRoutineSave,
   likeRoutine,
   unlikeRoutine,
   isFollowing,
@@ -264,17 +266,19 @@ export function UserProfileScreen({
       if (routs.length) {
         setLoadingMeta(true);
         const ids = routs.map((r) => r.id);
-        const [totals, commentCounts, likes] = await Promise.all([
+        const [totals, commentCounts, likes, saveCounts] = await Promise.all([
           getRoutineSetTotals(ids).catch(() => new Map<string, number>()),
           getCommentCounts(ids).catch(() => new Map<string, number>()),
           getLikeInfo(ids, user?.id ?? null).catch(
             () => new Map<string, { likes: number; liked: boolean }>()
           ),
+          getSaveCounts(ids).catch(() => new Map<string, number>()),
         ]);
         const withMeta = routs.map((r) => ({
           ...r,
           total_sets: totals.get(r.id),
           comments: commentCounts.get(r.id),
+          saves: saveCounts.get(r.id),
           likes: likes.get(r.id)?.likes ?? 0,
           liked_by_me: !!likes.get(r.id)?.liked,
         }));
@@ -461,6 +465,15 @@ export function UserProfileScreen({
       }
       dispatch({ type: 'ADD_ROUTINE', payload: linked });
       notify(t('Añadida a tus rutinas'), 'success');
+      // Una persona más en su recuento (ver CommunityScreen `handleSave`).
+      setRoutines((prev) =>
+        prev.map((r) =>
+          r.id === routineId && r.saves !== undefined
+            ? { ...r, saves: r.saves + 1 }
+            : r
+        )
+      );
+      recordRoutineSave(routineId, user.id).catch(() => {});
     } catch (e) {
       notify((e as Error).message, 'error');
     } finally {
@@ -567,7 +580,11 @@ export function UserProfileScreen({
                 label: t('Rutinas'),
                 icon: 'clipboard-text-outline',
               },
-              { id: 'activity', label: t('Actividad'), icon: 'timeline-text-outline' },
+              {
+                id: 'activity',
+                label: t('Actividad'),
+                icon: 'timeline-text-outline',
+              },
             ]}
             value={section}
             onChange={(id) => {

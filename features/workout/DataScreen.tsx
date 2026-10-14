@@ -442,7 +442,11 @@ export function DataScreen({
               size={18}
               color={theme.colors.text}
             />
-            <Text style={styles.actionTitle}>
+            <Text
+              style={styles.actionTitle}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
               {session && user ? t('Sincronización') : t('Cuenta')}
             </Text>
           </View>
@@ -586,7 +590,13 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.text}
               />
-              <Text style={styles.actionTitle}>{t('Copia automática')}</Text>
+              <Text
+                style={styles.actionTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {t('Copia automática')}
+              </Text>
             </View>
             <Text style={styles.actionSubtitle}>
               {t(
@@ -645,7 +655,13 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.text}
               />
-              <Text style={styles.actionTitle}>{t('Exportar datos')}</Text>
+              <Text
+                style={styles.actionTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {t('Exportar datos')}
+              </Text>
             </View>
             <Text style={styles.actionSubtitle}>
               {t('Descarga un fichero con todas las rutinas y entrenamientos.')}
@@ -670,7 +686,13 @@ export function DataScreen({
               size={18}
               color={theme.colors.text}
             />
-            <Text style={styles.actionTitle}>{t('Importar datos')}</Text>
+            <Text
+              style={styles.actionTitle}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+            >
+              {t('Importar datos')}
+            </Text>
           </View>
           <Text style={styles.actionSubtitle}>
             {t('Carga un fichero exportado con rutinas y entrenamientos.')}
@@ -694,7 +716,11 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.text}
               />
-              <Text style={styles.actionTitle}>
+              <Text
+                style={styles.actionTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
                 {t('Restaurar una copia del móvil')}
               </Text>
             </View>
@@ -733,7 +759,13 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.text}
               />
-              <Text style={styles.actionTitle}>{t('Restaurar')}</Text>
+              <Text
+                style={styles.actionTitle}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
+                {t('Restaurar')}
+              </Text>
             </View>
             <Text style={styles.actionSubtitle}>
               {t(
@@ -763,7 +795,11 @@ export function DataScreen({
                 size={18}
                 color={theme.colors.error}
               />
-              <Text style={[styles.actionTitle, styles.dangerTitle]}>
+              <Text
+                style={[styles.actionTitle, styles.dangerTitle]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+              >
                 {t('Borrar datos')}
               </Text>
             </View>
@@ -907,10 +943,16 @@ const makeStyles = () =>
       ...theme.shadow.soft,
     },
     actionTitle: {
-      // Ocupa el ancho que queda a la derecha del icono. Sin esto, Android
+      // Ocupa el ancho que queda a la derecha del icono. Sin crecer, Android
       // medía la caja del título al ancho de su palabra más larga y "Copia
       // automática" se partía en dos líneas con media tarjeta vacía al lado.
-      flex: 1,
+      // Aun así Android seguía MIDIENDO ese título a dos líneas (pintándolo
+      // en una): la caja salía una línea más alta, con hueco arriba y abajo.
+      // Por eso cada título lleva `numberOfLines={1}` (con
+      // `adjustsFontSizeToFit` para los largos): la caja no puede medir más
+      // de una línea.
+      flexGrow: 1,
+      flexShrink: 1,
       fontSize: 21,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.4,

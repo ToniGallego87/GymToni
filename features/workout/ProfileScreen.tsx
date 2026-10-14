@@ -319,7 +319,8 @@ export function ProfileScreen({
                   ? t('Sin perfil')
                   : t('Sin cuenta')}
               </Text>
-              <LevelPill level={level.level} />
+              {/* Pulsable como la de la barra: el nivel lleva a Logros. */}
+              <LevelPill level={level.level} onPress={onOpenAchievements} />
               {!profileUnknown && (
                 <Text style={styles.identityBio} numberOfLines={3}>
                   {isProfileFilled

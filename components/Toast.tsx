@@ -1,9 +1,24 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect } from 'react';
-import { Text, StyleSheet, Animated, Easing, Pressable } from 'react-native';
+import {
+  Text,
+  StyleSheet,
+  Animated,
+  Easing,
+  Pressable,
+  View,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { theme } from '@lib/theme';
+import { GlassBlur } from './GlassBlur';
+import { ConfettiBurst } from './ConfettiBurst';
+import {
+  GLASS_BACK_BUTTON_BORDER,
+  GLASS_BACK_BUTTON_OVERLAY,
+  GLASS_BACK_BUTTON_TEXT,
+  GLASS_REST_TIMER_BG,
+} from './glassTokens';
 
 interface ToastProps {
   message: string;
@@ -25,6 +40,8 @@ interface ToastProps {
    * descanso flotante ni con "Volver". Ignora `bottom` y la acción.
    */
   centered?: boolean;
+  /** Solo con `centered`: ráfaga de confeti detrás de la píldora (récord). */
+  celebrate?: boolean;
 }
 
 // Con acción el aviso dura más: hay que leerlo Y decidir tocarlo.
@@ -39,6 +56,7 @@ export function Toast({
   actionLabel,
   onAction,
   centered = false,
+  celebrate = false,
 }: ToastProps) {
   const insets = useSafeAreaInsets();
   const opacity = React.useRef(new Animated.Value(1)).current;
@@ -75,9 +93,11 @@ export function Toast({
       ? theme.colors.error
       : theme.colors.surfaceAlt;
 
-  // El cartel al pie es una tarjeta de la app (superficie + borde), no un bloque
-  // de color: el estado lo dice el icono. Un verde a toda la anchura con la
-  // acción en contorno blanco parecía otra app y la acción no leía como botón.
+  // El cartel al pie es cristal oscuro (el del descanso flotante, que vive en
+  // el mismo rincón del registro), no un bloque de color: el estado lo dice el
+  // icono. Un verde a toda la anchura con la acción en contorno blanco parecía
+  // otra app y la acción no leía como botón; y una tarjeta opaca tapaba la
+  // serie que "Deshacer" está a punto de devolver.
   const accentColor =
     type === 'success'
       ? theme.colors.success
@@ -101,6 +121,7 @@ export function Toast({
         pointerEvents="none"
         style={[styles.centerLayer, { opacity }]}
       >
+        {celebrate && <ConfettiBurst />}
         <Animated.View style={[styles.centerPill, { backgroundColor }]}>
           <Text style={styles.text}>{message}</Text>
         </Animated.View>
@@ -113,6 +134,8 @@ export function Toast({
       pointerEvents={actionable ? 'auto' : 'none'}
       style={[styles.container, { opacity, bottom: resolvedBottom }]}
     >
+      <GlassBlur tint={GLASS_REST_TIMER_BG} style={styles.blur} />
+      <View style={styles.glassOverlay} pointerEvents="none" />
       <MaterialCommunityIcons name={statusIcon} size={22} color={accentColor} />
       <Text style={styles.message} numberOfLines={2}>
         {message}
@@ -151,10 +174,19 @@ const makeStyles = () =>
       paddingRight: 10,
       borderRadius: theme.borderRadius.md,
       borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surfaceAlt,
+      borderColor: GLASS_BACK_BUTTON_BORDER,
+      // Fondo de respaldo con el mismo tinte (si no hay desenfoque nativo).
+      backgroundColor: GLASS_REST_TIMER_BG,
+      overflow: 'hidden',
       ...theme.shadow.card,
       elevation: 24,
+    },
+    blur: {
+      ...StyleSheet.absoluteFillObject,
+    },
+    glassOverlay: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: GLASS_BACK_BUTTON_OVERLAY,
     },
     centerLayer: {
       ...StyleSheet.absoluteFillObject,
@@ -178,9 +210,10 @@ const makeStyles = () =>
       textAlign: 'center',
       lineHeight: 20,
     },
+    // Tinta clara en ambos temas: el cristal es oscuro también de día.
     message: {
       flex: 1,
-      color: theme.colors.text,
+      color: GLASS_BACK_BUTTON_TEXT,
       fontSize: 15,
       fontWeight: '700',
       lineHeight: 20,

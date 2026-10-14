@@ -1,5 +1,6 @@
 import type { WorkoutAppData } from '../../types';
 import { supabase } from '../supabase';
+import { upsertTolerant } from './optionalColumns';
 import { clearOutbox } from '../db';
 import {
   appDataToRows,
@@ -33,9 +34,11 @@ async function upsertAll(
   rows: Record<string, unknown>[]
 ): Promise<void> {
   for (let i = 0; i < rows.length; i += CHUNK) {
-    const { error } = await supabase
-      .from(table)
-      .upsert(rows.slice(i, i + CHUNK));
+    const error = await upsertTolerant(
+      table,
+      rows.slice(i, i + CHUNK),
+      (chunk) => supabase.from(table).upsert(chunk)
+    );
     if (error) throw new Error(`${table}: ${error.message}`);
   }
 }
@@ -124,7 +127,10 @@ export async function backupToCloud(
     await upsertAll('cardio_entries', entryRows);
     await tombstoneMissing('cardio_entries', entryRows, userId, now);
   } catch (error) {
-    console.warn('cardio_entries:', error instanceof Error ? error.message : error);
+    console.warn(
+      'cardio_entries:',
+      error instanceof Error ? error.message : error
+    );
   }
 
   const active =

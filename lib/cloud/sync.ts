@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { supabase } from '../supabase';
+import { upsertTolerant } from './optionalColumns';
 import {
   applyRemoteChanges,
   deleteOutboxEntries,
@@ -107,9 +108,11 @@ function cloudRoutineRow(row: RoutineRow, userId: string, now: number): Row {
 
 async function cloudUpsert(table: string, rows: Row[]): Promise<void> {
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
-    const { error } = await supabase
-      .from(table)
-      .upsert(rows.slice(i, i + UPSERT_CHUNK));
+    const error = await upsertTolerant(
+      table,
+      rows.slice(i, i + UPSERT_CHUNK),
+      (chunk) => supabase.from(table).upsert(chunk)
+    );
     if (error) throw new Error(`${table} upsert: ${error.message}`);
   }
 }
@@ -273,8 +276,13 @@ async function pushLogUpsert(
   userId: string,
   now: number
 ): Promise<void> {
-  const { log: logRow, exerciseLogs, logSets, cardio, cardioEntries } =
-    logToRows(log);
+  const {
+    log: logRow,
+    exerciseLogs,
+    logSets,
+    cardio,
+    cardioEntries,
+  } = logToRows(log);
   await cloudUpsert('workout_logs', [own(logRow, userId, now)]);
 
   const exLogIds = exerciseLogs.map((e) => e.id);
@@ -340,7 +348,9 @@ async function pushLogUpsert(
  * de `cardio_logs` sigue llevando el dato. Sin red sí se propaga (aborta el
  * push y se reintenta).
  */
-async function tolerateCardioEntries(work: () => Promise<unknown>): Promise<void> {
+async function tolerateCardioEntries(
+  work: () => Promise<unknown>
+): Promise<void> {
   try {
     await work();
   } catch (e) {

@@ -1,7 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useEffect, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { View, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -38,19 +38,21 @@ import {
   topDisciplineIconName,
   WeightSegment,
 } from '@lib/cardio';
-import { exerciseKey } from '@lib/exerciseProgress';
 import { withExerciseCatalogId } from '@lib/routines';
 import { TrendDelta } from '@components/TrendDelta';
 import { getCardioWeightHistory } from '@lib/storage';
 import {
   combineDateWithTime,
   findDayInRoutines,
+  formatWorkoutDuration,
   getLogTimestamp,
   logDateKey,
   weekdayDayMonth,
 } from '@lib/utils';
 import { WorkoutLog, WorkoutDay, ExerciseLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
+import { useExerciseKeyResolver } from '@hooks/useExerciseKeyResolver';
+import { useAfterFirstPaint } from '@hooks/useDeferredReady';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
 import { t, fmtNum } from '@lib/i18n';
 import {
@@ -87,6 +89,10 @@ export function DetailScreen({
 }: DetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
+  const resolveExerciseKey = useExerciseKeyResolver();
+  // Las tarjetas entran un frame después de la vista: abrir un día pasado
+  // responde al instante en vez de esperar a pintarlas todas.
+  const contentReady = useAfterFirstPaint();
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   // Fecha pendiente de confirmar porque parte una semana ('split') o deja el
@@ -339,18 +345,21 @@ export function DetailScreen({
       });
     }
     if (workoutMinutes > 0) {
+      // A partir de la hora, en horas ("1:25 h"), no "85 min".
+      const duration = formatWorkoutDuration(workoutMinutes);
       summaryItems.push({
         key: 'minutes',
-        value: String(workoutMinutes),
-        label: 'min',
+        value: duration.value,
+        label: duration.unit,
       });
     }
   } else if (cardioSession) {
     // Solo cardio: la tira ES el total del día.
+    const cardioDuration = formatWorkoutDuration(cardioSession.totalMinutes);
     summaryItems.push({
       key: 'cardio-minutes',
-      value: String(Math.round(cardioSession.totalMinutes)),
-      label: 'min',
+      value: cardioDuration.value,
+      label: cardioDuration.unit,
     });
     if (cardioSession.totalKcal > 0) {
       summaryItems.push({
@@ -412,233 +421,262 @@ export function DetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {log.isDeload && (
-          // Este día pertenece a una semana de descarga: se avisa para que se lea
-          // en contexto (menos series y peso a propósito, al margen del progreso).
-          <View style={styles.deloadBanner}>
-            <MaterialCommunityIcons
-              name="sleep"
-              size={16}
-              color={theme.colors.emoji_blue}
-            />
-            <Text style={styles.deloadBannerText}>
-              {t('Semana de descarga')}
-            </Text>
-          </View>
-        )}
+        {/* La vista entra YA y el contenido un frame después (`contentReady`). */}
+        {!contentReady ? (
+          <ActivityIndicator
+            style={styles.contentLoading}
+            color={theme.colors.primary}
+          />
+        ) : (
+          <>
+            {log.isDeload && (
+              // Este día pertenece a una semana de descarga: se avisa para que se lea
+              // en contexto (menos series y peso a propósito, al margen del progreso).
+              <View style={styles.deloadBanner}>
+                <MaterialCommunityIcons
+                  name="sleep"
+                  size={16}
+                  color={theme.colors.emoji_blue}
+                />
+                <Text style={styles.deloadBannerText}>
+                  {t('Semana de descarga')}
+                </Text>
+              </View>
+            )}
 
-        {/* En un día de cardio la tira ES el total del día y debajo vienen las
+            {/* En un día de cardio la tira ES el total del día y debajo vienen las
             disciplinas con el mismo tipo de cifras: va con relleno sólido y
             números mayores (relleno = el total; contorno = cada parte) para que
             no se confunda con una disciplina más. */}
-        {summaryItems.length > 0 && (
-          <View
-            style={[
-              styles.summaryCard,
-              isCardioTotal && styles.summaryCardTotal,
-            ]}
-          >
-            {!isCardioTotal && <GradientFill accent={dayAccent} />}
-            {summaryItems.map((item) => (
-              <View key={item.key} style={styles.summaryItem}>
-                {item.improvement ? (
-                  <TrendDelta
-                    value={item.improvement.percent}
-                    improved={item.improvement.isImproved}
-                    iconSize={20}
-                    textStyle={styles.summaryValue}
-                    shrinkToFit
-                  />
-                ) : (
-                  <Text
-                    style={[
-                      styles.summaryValue,
-                      isCardioTotal && styles.summaryValueTotal,
-                    ]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                  >
-                    {item.value}
-                  </Text>
-                )}
-                <Text
-                  style={styles.summaryLabel}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                >
-                  {item.label}
-                </Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        {/* Nota de la sesión: el contexto del día, justo bajo el resumen. Va
-            ARRIBA porque es lo que explica los números que vienen debajo (por
-            qué ese día bajó el peso, por qué falta un ejercicio). */}
-        {!!log.notes?.trim() && (
-          <View style={styles.sessionNote}>
-            <MaterialCommunityIcons
-              name="note-text-outline"
-              size={16}
-              color={dayAccent}
-            />
-            <Text style={styles.sessionNoteText}>{log.notes.trim()}</Text>
-          </View>
-        )}
-
-        {day.exercises.map((exercise, exerciseIndex) => {
-          const currentExercise = getExerciseFromLog(
-            log,
-            exercise.id,
-            exercise.name,
-            exercise.order
-          );
-
-          // Si no encuentra el ejercicio por ID/nombre/order, intenta por índice
-          const fallbackExercise =
-            !currentExercise && log.exercises && log.exercises[exerciseIndex]
-              ? log.exercises[exerciseIndex]
-              : currentExercise;
-
-          const prevExercise = getExerciseFromLog(
-            previousLog,
-            exercise.id,
-            exercise.name,
-            exercise.order
-          );
-          // Sin series válidas en alguno de los dos lados no hay comparación:
-          // un ejercicio que no se hizo salía como −100%, no como "sin dato".
-          const exerciseImprovement =
-            hasScoringSets(fallbackExercise || currentExercise) &&
-            hasScoringSets(prevExercise)
-              ? buildImprovementFromStrengthScores(
-                  getExerciseStrengthScore(fallbackExercise || currentExercise),
-                  getExerciseStrengthScore(prevExercise)
-                )
-              : null;
-
-          const selectedExercise = fallbackExercise || currentExercise;
-
-          return (
-            <ExerciseResultDisplay
-              key={exercise.id}
-              exerciseName={exercise.name}
-              catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
-              onAssignGif={(catalogId) =>
-                handleAssignGif(exercise.id, catalogId)
-              }
-              onOpenProgress={
-                onOpenExerciseProgress
-                  ? () => onOpenExerciseProgress(exerciseKey(exercise.name))
-                  : undefined
-              }
-              targetSets={exercise.targetSets}
-              targetReps={exercise.targetReps as string | number | undefined}
-              rawInput={selectedExercise?.rawInput || '-'}
-              parsedSets={selectedExercise?.parsedSets || []}
-              notes={selectedExercise?.notes}
-              previousSets={prevExercise?.parsedSets}
-              improvement={exerciseImprovement}
-              isDetail={true}
-              accent={dayAccent}
-            />
-          );
-        })}
-
-        {!!cardioSession && !!log.cardio && (
-          <>
-            {/* En un día de solo cardio (sin ejercicios) el título "Cardio"
-                sobra: toda la vista es cardio. */}
-            {day.exercises.length > 0 && (
-              <Text
+            {summaryItems.length > 0 && (
+              <View
                 style={[
-                  styles.sectionTitle,
-                  { marginTop: theme.spacing.xl, color: theme.colors.white },
+                  styles.summaryCard,
+                  isCardioTotal && styles.summaryCardTotal,
                 ]}
               >
-                {t('Cardio')}
-              </Text>
+                {!isCardioTotal && <GradientFill accent={dayAccent} />}
+                {summaryItems.map((item) => (
+                  <View key={item.key} style={styles.summaryItem}>
+                    {item.improvement ? (
+                      <TrendDelta
+                        value={item.improvement.percent}
+                        improved={item.improvement.isImproved}
+                        iconSize={20}
+                        textStyle={styles.summaryValue}
+                        shrinkToFit
+                      />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.summaryValue,
+                          isCardioTotal && styles.summaryValueTotal,
+                        ]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                      >
+                        {item.value}
+                      </Text>
+                    )}
+                    <Text
+                      style={styles.summaryLabel}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                    >
+                      {item.label}
+                    </Text>
+                  </View>
+                ))}
+              </View>
             )}
-            {/* Una caja por DISCIPLINA, no por tramo: el día se piensa como
+
+            {/* Nota de la sesión: el contexto del día, justo bajo el resumen. Va
+            ARRIBA porque es lo que explica los números que vienen debajo (por
+            qué ese día bajó el peso, por qué falta un ejercicio). */}
+            {!!log.notes?.trim() && (
+              <View style={styles.sessionNote}>
+                <MaterialCommunityIcons
+                  name="note-text-outline"
+                  size={16}
+                  color={dayAccent}
+                />
+                <Text style={styles.sessionNoteText}>{log.notes.trim()}</Text>
+              </View>
+            )}
+
+            {day.exercises.map((exercise, exerciseIndex) => {
+              const currentExercise = getExerciseFromLog(
+                log,
+                exercise.id,
+                exercise.name,
+                exercise.order
+              );
+
+              // Si no encuentra el ejercicio por ID/nombre/order, intenta por índice
+              const fallbackExercise =
+                !currentExercise &&
+                log.exercises &&
+                log.exercises[exerciseIndex]
+                  ? log.exercises[exerciseIndex]
+                  : currentExercise;
+
+              const prevExercise = getExerciseFromLog(
+                previousLog,
+                exercise.id,
+                exercise.name,
+                exercise.order
+              );
+              // Sin series válidas en alguno de los dos lados no hay comparación:
+              // un ejercicio que no se hizo salía como −100%, no como "sin dato".
+              const exerciseImprovement =
+                hasScoringSets(fallbackExercise || currentExercise) &&
+                hasScoringSets(prevExercise)
+                  ? buildImprovementFromStrengthScores(
+                      getExerciseStrengthScore(
+                        fallbackExercise || currentExercise
+                      ),
+                      getExerciseStrengthScore(prevExercise)
+                    )
+                  : null;
+
+              const selectedExercise = fallbackExercise || currentExercise;
+
+              return (
+                <ExerciseResultDisplay
+                  key={exercise.id}
+                  exerciseName={exercise.name}
+                  catalogId={liveCatalogId(exercise.id) ?? exercise.catalogId}
+                  onAssignGif={(catalogId) =>
+                    handleAssignGif(exercise.id, catalogId)
+                  }
+                  onOpenProgress={
+                    onOpenExerciseProgress
+                      ? () =>
+                          onOpenExerciseProgress(
+                            resolveExerciseKey({
+                              name: exercise.name,
+                              catalogId:
+                                liveCatalogId(exercise.id) ??
+                                exercise.catalogId,
+                            })
+                          )
+                      : undefined
+                  }
+                  targetSets={exercise.targetSets}
+                  targetReps={
+                    exercise.targetReps as string | number | undefined
+                  }
+                  rawInput={selectedExercise?.rawInput || '-'}
+                  parsedSets={selectedExercise?.parsedSets || []}
+                  notes={selectedExercise?.notes}
+                  previousSets={prevExercise?.parsedSets}
+                  improvement={exerciseImprovement}
+                  isDetail={true}
+                  accent={dayAccent}
+                />
+              );
+            })}
+
+            {!!cardioSession && !!log.cardio && (
+              <>
+                {/* En un día de solo cardio (sin ejercicios) el título "Cardio"
+                sobra: toda la vista es cardio. */}
+                {day.exercises.length > 0 && (
+                  <Text
+                    style={[
+                      styles.sectionTitle,
+                      {
+                        marginTop: theme.spacing.xl,
+                        color: theme.colors.white,
+                      },
+                    ]}
+                  >
+                    {t('Cardio')}
+                  </Text>
+                )}
+                {/* Una caja por DISCIPLINA, no por tramo: el día se piensa como
                 "anduve 69 min y corrí 8", y así se lee igual que en la lista de
                 Cardio (que ya agrupa). Los tramos se suman y la velocidad y la
                 pendiente pasan a rango (mín-máx). Cada tramo tal como se tecleó
                 sigue a la vista en "Editar". */}
-            {cardioSession.disciplines.map((discipline, index) => {
-              const incline = hasIncline(discipline.maxPendiente);
-              return (
-                <View
-                  key={`${discipline.type}-${incline}-${index}`}
-                  style={styles.cardioBox}
-                >
-                  <GradientFill accent={dayAccent} />
-                  <View style={styles.cardioBody}>
-                    <MaterialCommunityIcons
-                      name={
-                        disciplineIconName(
-                          discipline.type,
-                          incline
-                        ) as React.ComponentProps<
-                          typeof MaterialCommunityIcons
-                        >['name']
-                      }
-                      size={44}
-                      color={theme.colors.primary}
-                    />
-                    <View style={styles.cardioContent}>
-                      <Text style={styles.cardioLabel}>
-                        {discipline.type.toUpperCase()}
-                      </Text>
-                      <View style={styles.cardioStatsRow}>
-                        {discipline.totalMinutes > 0 && (
-                          <View style={styles.cardioStat}>
-                            <Text style={styles.cardioStatValue}>
-                              {fmtNum(discipline.totalMinutes)}
-                            </Text>
-                            <Text style={styles.cardioStatUnit}>min</Text>
+                {cardioSession.disciplines.map((discipline, index) => {
+                  const incline = hasIncline(discipline.maxPendiente);
+                  return (
+                    <View
+                      key={`${discipline.type}-${incline}-${index}`}
+                      style={styles.cardioBox}
+                    >
+                      <GradientFill accent={dayAccent} />
+                      <View style={styles.cardioBody}>
+                        <MaterialCommunityIcons
+                          name={
+                            disciplineIconName(
+                              discipline.type,
+                              incline
+                            ) as React.ComponentProps<
+                              typeof MaterialCommunityIcons
+                            >['name']
+                          }
+                          size={44}
+                          color={theme.colors.primary}
+                        />
+                        <View style={styles.cardioContent}>
+                          <Text style={styles.cardioLabel}>
+                            {discipline.type.toUpperCase()}
+                          </Text>
+                          <View style={styles.cardioStatsRow}>
+                            {discipline.totalMinutes > 0 && (
+                              <View style={styles.cardioStat}>
+                                <Text style={styles.cardioStatValue}>
+                                  {fmtNum(discipline.totalMinutes)}
+                                </Text>
+                                <Text style={styles.cardioStatUnit}>min</Text>
+                              </View>
+                            )}
+                            {discipline.minSpeed != null &&
+                              discipline.maxSpeed != null && (
+                                <View style={styles.cardioStat}>
+                                  <Text style={styles.cardioStatValue}>
+                                    {rangeStr(
+                                      discipline.minSpeed,
+                                      discipline.maxSpeed
+                                    )}
+                                  </Text>
+                                  <Text style={styles.cardioStatUnit}>
+                                    km/h
+                                  </Text>
+                                </View>
+                              )}
+                            {discipline.minPendiente != null &&
+                              discipline.maxPendiente != null && (
+                                <View style={styles.cardioStat}>
+                                  <Text style={styles.cardioStatValue}>
+                                    {rangeStr(
+                                      discipline.minPendiente,
+                                      discipline.maxPendiente
+                                    )}
+                                  </Text>
+                                  <Text style={styles.cardioStatUnit}>
+                                    {t('Pendiente %')}
+                                  </Text>
+                                </View>
+                              )}
+                            {discipline.kcal > 0 && (
+                              <View style={styles.cardioStat}>
+                                <Text style={styles.cardioStatValue}>
+                                  {Math.round(discipline.kcal)}
+                                </Text>
+                                <Text style={styles.cardioStatUnit}>kcal</Text>
+                              </View>
+                            )}
                           </View>
-                        )}
-                        {discipline.minSpeed != null &&
-                          discipline.maxSpeed != null && (
-                            <View style={styles.cardioStat}>
-                              <Text style={styles.cardioStatValue}>
-                                {rangeStr(
-                                  discipline.minSpeed,
-                                  discipline.maxSpeed
-                                )}
-                              </Text>
-                              <Text style={styles.cardioStatUnit}>km/h</Text>
-                            </View>
-                          )}
-                        {discipline.minPendiente != null &&
-                          discipline.maxPendiente != null && (
-                            <View style={styles.cardioStat}>
-                              <Text style={styles.cardioStatValue}>
-                                {rangeStr(
-                                  discipline.minPendiente,
-                                  discipline.maxPendiente
-                                )}
-                              </Text>
-                              <Text style={styles.cardioStatUnit}>
-                                {t('Pendiente %')}
-                              </Text>
-                            </View>
-                          )}
-                        {discipline.kcal > 0 && (
-                          <View style={styles.cardioStat}>
-                            <Text style={styles.cardioStatValue}>
-                              {Math.round(discipline.kcal)}
-                            </Text>
-                            <Text style={styles.cardioStatUnit}>kcal</Text>
-                          </View>
-                        )}
+                        </View>
                       </View>
                     </View>
-                  </View>
-                </View>
-              );
-            })}
+                  );
+                })}
+              </>
+            )}
           </>
         )}
       </StretchScrollView>
@@ -791,6 +829,10 @@ const makeStyles = () =>
     scrollContent: {
       paddingHorizontal: 16,
       paddingVertical: 16,
+    },
+    // Spinner del frame en que la vista ya está y su contenido aún no.
+    contentLoading: {
+      marginTop: 40,
     },
     // Aviso de semana de descarga: mismo azul que el resto de la app (listado de
     // semanas y calendario) para señalar el deload de un vistazo.

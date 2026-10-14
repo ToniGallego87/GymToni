@@ -631,14 +631,20 @@ export function HomeScreen({
   const canOpenProgressChart =
     filteredWeeklyProgress.length > 1 && progressChart.bars.length > 0;
 
-  const latestPoint = filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
+  // La última semana CON dato. Con la gráfica filtrada por día, la semana en
+  // curso puede no haber entrenado aún ese día (`isMissing`, mejora 0): tomarla
+  // pintaba "= 0.0%" como si se hubiera estancado. Se usa la última en que sí
+  // se entrenó; sin ninguna, la última semana (y entonces sí, 0%).
+  const latestPoint =
+    [...filteredWeeklyProgress].reverse().find((point) => !point.isMissing) ??
+    filteredWeeklyProgress[filteredWeeklyProgress.length - 1];
   // Si la última semana es de descarga, el indicador colapsado hereda el % de la
   // última semana de carga (no baja a 0) y se pinta en azul.
   const latestIsDeload = !!latestPoint?.isDeload;
   const lastLoadImprovement = (() => {
     for (let i = filteredWeeklyProgress.length - 1; i >= 0; i--) {
-      if (!filteredWeeklyProgress[i].isDeload)
-        return filteredWeeklyProgress[i].improvement;
+      const point = filteredWeeklyProgress[i];
+      if (!point.isDeload && !point.isMissing) return point.improvement;
     }
     return 0;
   })();

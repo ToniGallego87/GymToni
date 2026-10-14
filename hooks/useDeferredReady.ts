@@ -14,3 +14,19 @@ export function useDeferredReady(): boolean {
   }, []);
   return ready;
 }
+
+// Como `useDeferredReady`, pero garantizando que el primer frame (la barra y el
+// fondo de la vista) LLEGA a la pantalla antes de montar lo pesado. Para las
+// subpantallas que se abren con un toque (registro, detalle de un día):
+// `runAfterInteractions` se resuelve en la misma tanda de JS que el toque, así
+// que el contenido entero se pintaba antes de que la vista apareciese y el
+// toque parecía no responder. `requestAnimationFrame` cae en el frame siguiente,
+// con la vista ya en pantalla.
+export function useAfterFirstPaint(): boolean {
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  return ready;
+}

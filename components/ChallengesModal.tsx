@@ -36,11 +36,10 @@ export function ChallengesModal({
 }: ChallengesModalProps) {
   const daysLeft = daysLeftInWeek();
 
-  // Ventana de cada reto, en una palabra: solo los de cardio la tienen (hoy o
-  // lo que queda hasta el domingo). Los de fuerza van con la semana de la
+  // Ventana de cada reto, en una palabra: solo los de cardio la tienen (lo
+  // que queda hasta el domingo). Los de fuerza van con la semana de la
   // rutina, sin fecha de cierre, así que no se dice nada.
   const periodLabel = (c: Challenge): string | null => {
-    if (c.period === 'today') return t('Hoy');
     if (c.period === 'calendar-week') {
       return daysLeft === 1 ? t('Último día') : t('{n} días', { n: daysLeft });
     }

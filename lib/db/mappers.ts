@@ -76,6 +76,8 @@ export interface ExerciseLogRow {
   workout_logs_id: string;
   exercises_id: string | null;
   exercise_name: string;
+  // Opcional en el tipo: las filas de una nube sin la columna no la traen.
+  catalog_id?: string | null;
   exercise_order: number;
   raw_input: string;
   notes: string | null;
@@ -218,6 +220,7 @@ export function logToRows(
       workout_logs_id: log.id,
       exercises_id: exerciseLog.exerciseId || null,
       exercise_name: exerciseLog.exerciseName,
+      catalog_id: exerciseLog.catalogId ?? null,
       exercise_order: exerciseLog.order,
       raw_input: exerciseLog.rawInput ?? '',
       notes: exerciseLog.notes ?? null,
@@ -446,6 +449,7 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       id: row.id,
       exerciseId: row.exercises_id ?? '',
       exerciseName: row.exercise_name,
+      catalogId: row.catalog_id ?? undefined,
       order: row.exercise_order,
       rawInput: row.raw_input,
       parsedSets: (setsByExerciseLog.get(row.id) ?? []).map((set) => ({

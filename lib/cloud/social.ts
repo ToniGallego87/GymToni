@@ -305,6 +305,7 @@ export interface PublicRoutineSummary {
   // segunda ronda de consultas, así que son opcionales.
   total_sets?: number;
   comments?: number;
+  saves?: number;
   likes?: number;
   liked_by_me?: boolean;
 }
@@ -486,6 +487,86 @@ export async function unlikeRoutine(
     .eq('routine_id', routineId)
     .eq('user_id', userId);
   if (error) throw new Error(`routine_likes: ${error.message}`);
+}
+
+// ─────────────────────── Quién se ha llevado una rutina ───────────────────────
+//
+// `routine_saves` apunta cada persona que ha añadido una rutina pública a las
+// suyas (enlazada o copiada). Es un recuento ACUMULADO, como "descargas": quitarla
+// después no lo baja. Las rutinas enlazadas no se suben a la nube, así que otro
+// dispositivo de la misma persona puede no tenerla, y descontar al quitarla
+// haría bailar la cifra. Requiere supabase/social-schema.sql (tabla
+// routine_saves); sin ella todo esto falla en silencio y la cifra no se pinta.
+
+/** Cuántas personas ha añadido cada rutina, en UNA consulta por lote. */
+export async function getSaveCounts(
+  routineIds: string[]
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  const ids = Array.from(new Set(routineIds)).filter(Boolean);
+  if (!ids.length) return counts;
+  const { data, error } = await supabase
+    .from('routine_saves')
+    .select('routine_id')
+    .in('routine_id', ids);
+  if (error) throw new Error(`routine_saves: ${error.message}`);
+  for (const id of ids) counts.set(id, 0);
+  for (const row of data ?? []) {
+    const id = (row as { routine_id: string }).routine_id;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Apunta que `userId` ha añadido esta rutina pública. Idempotente (una fila por
+ * persona y rutina): repetirlo no suma.
+ */
+export async function recordRoutineSave(
+  routineId: string,
+  userId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('routine_saves')
+    .upsert(
+      { routine_id: routineId, user_id: userId, created_at: Date.now() },
+      { onConflict: 'routine_id,user_id', ignoreDuplicates: true }
+    );
+  if (error) throw new Error(`routine_saves: ${error.message}`);
+}
+
+// Ya apuntadas en esta sesión: el sync corre en cada vuelta a primer plano y no
+// hace falta repetirlas.
+const recordedSaves = new Set<string>();
+
+/**
+ * Apunta las rutinas de la comunidad que tienes (enlazadas o copiadas de una
+ * ajena), por el id de la rutina PÚBLICA. Lo llama el sync: así cuentan también
+ * las que se añadieron antes de existir el recuento. Una a una a propósito: la
+ * RLS rechaza la de una rutina que ya no es pública, y en lote tumbaría todas.
+ */
+export async function recordOwnedRoutineSaves(
+  routines: WorkoutRoutine[],
+  userId: string
+): Promise<void> {
+  const ids = new Set<string>();
+  for (const r of routines) {
+    const owner = r.linkedOwnerId ?? r.sourceOwnerId;
+    // Las enlazadas antiguas pueden no llevar `sourceRoutineId`: su id ES el
+    // de la pública.
+    const source = r.sourceRoutineId ?? (r.linkedOwnerId ? r.id : undefined);
+    if (source && owner && owner !== userId) ids.add(source);
+  }
+  for (const id of ids) {
+    const key = `${userId}:${id}`;
+    if (recordedSaves.has(key)) continue;
+    try {
+      await recordRoutineSave(id, userId);
+      recordedSaves.add(key);
+    } catch {
+      // Despublicada, sin red o sin la tabla todavía: el próximo sync.
+    }
+  }
 }
 
 // ─────────────────────── Adoptar una rutina pública ───────────────────────

@@ -131,6 +131,25 @@ export function formatRestTime(seconds: number): string {
 }
 
 /**
+ * Duración de un entreno para enseñarla: en minutos hasta la hora ("52" min) y
+ * en horas a partir de ahí ("1:25" h), para no tener que pasar "85 min" a
+ * horas de cabeza. Separa cifra y unidad porque la tira del Detalle las pinta
+ * en dos líneas; el subtítulo del registro las junta.
+ */
+export function formatWorkoutDuration(totalMinutes: number): {
+  value: string;
+  unit: string;
+} {
+  const minutes = Math.round(totalMinutes);
+  if (minutes < 60) return { value: String(minutes), unit: 'min' };
+  const rest = minutes % 60;
+  return {
+    value: `${Math.floor(minutes / 60)}:${rest.toString().padStart(2, '0')}`,
+    unit: 'h',
+  };
+}
+
+/**
  * Combina una fecha (YYYY-MM-DD) con la hora de un timestamp de referencia.
  * Se usa al reasignar un entreno a otro día: cambia el día pero conserva la
  * hora, para que `createdAt` (con el que se ordenan y agrupan las semanas)

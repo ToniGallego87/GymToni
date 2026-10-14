@@ -1,4 +1,5 @@
 import { ExerciseLog, ParsedSet, WorkoutLog } from '../types';
+import { canonicalCatalogId, slugExerciseName } from './exerciseIdentity';
 
 export interface ImprovementResult {
   isImproved: boolean;
@@ -91,9 +92,9 @@ export function getExerciseStrengthScore(
   return getTotalSetsStrengthScore(exerciseLog.parsedSets || []);
 }
 
-/** Nombre normalizado, para emparejar el mismo ejercicio entre dos sesiones. */
-function normalizedExerciseName(name?: string): string {
-  return (name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+/** Ejercicio del catálogo de un apunte (una copia del catálogo → su principal). */
+function catalogKey(exerciseLog: ExerciseLog): string {
+  return exerciseLog.catalogId ? canonicalCatalogId(exerciseLog.catalogId) : '';
 }
 
 /**
@@ -109,8 +110,9 @@ export function hasScoringSets(exerciseLog: ExerciseLog | null): boolean {
  * AMBAS. Un ejercicio que hoy no se hizo NO vale cero (salía un −100% que además
  * hundía el % de la sesión y el de la semana), y uno que se estrena tampoco
  * cuenta como mejora infinita: los dos casos quedan fuera de los dos lados.
- * El emparejado es por `exerciseId` y, si no cuadra, por nombre normalizado
- * (el mismo ejercicio cambia de id entre rutinas).
+ * El emparejado es por `exerciseId`; si no cuadra, por el ejercicio del
+ * catálogo (el mismo ejercicio cambia de id entre rutinas, y de nombre si se
+ * reescribe); y si tampoco, por nombre normalizado (apuntes sin catálogo).
  */
 export function getComparableWorkoutScores(
   currentLog: WorkoutLog | null,
@@ -119,17 +121,25 @@ export function getComparableWorkoutScores(
   if (!currentLog || !previousLog) return { current: 0, previous: 0 };
 
   const previousById = new Map<string, ExerciseLog>();
+  const previousByCatalog = new Map<string, ExerciseLog>();
   const previousByName = new Map<string, ExerciseLog>();
+  const remember = (
+    map: Map<string, ExerciseLog>,
+    key: string,
+    log: ExerciseLog
+  ) => {
+    if (key && !map.has(key)) map.set(key, log);
+  };
   (previousLog.exercises || [])
     .filter(hasScoringSets)
     .forEach((exerciseLog) => {
-      if (exerciseLog.exerciseId && !previousById.has(exerciseLog.exerciseId)) {
-        previousById.set(exerciseLog.exerciseId, exerciseLog);
-      }
-      const nameKey = normalizedExerciseName(exerciseLog.exerciseName);
-      if (nameKey && !previousByName.has(nameKey)) {
-        previousByName.set(nameKey, exerciseLog);
-      }
+      remember(previousById, exerciseLog.exerciseId, exerciseLog);
+      remember(previousByCatalog, catalogKey(exerciseLog), exerciseLog);
+      remember(
+        previousByName,
+        slugExerciseName(exerciseLog.exerciseName),
+        exerciseLog
+      );
     });
 
   const matched = new Set<ExerciseLog>();
@@ -137,11 +147,13 @@ export function getComparableWorkoutScores(
   let previous = 0;
 
   (currentLog.exercises || []).filter(hasScoringSets).forEach((exerciseLog) => {
+    const catalog = catalogKey(exerciseLog);
     const match =
       (exerciseLog.exerciseId
         ? previousById.get(exerciseLog.exerciseId)
         : undefined) ||
-      previousByName.get(normalizedExerciseName(exerciseLog.exerciseName));
+      (catalog ? previousByCatalog.get(catalog) : undefined) ||
+      previousByName.get(slugExerciseName(exerciseLog.exerciseName));
     if (!match || matched.has(match)) return;
 
     matched.add(match);
@@ -190,20 +202,51 @@ export function buildImprovementFromStrengthScores(
 
 /** Tope de duración creíble: por encima, el dato no es un entreno seguido. */
 export const MAX_WORKOUT_MINUTES = 240;
+/**
+ * Hueco máximo entre un ejercicio y el siguiente dentro de una sesión. Uno
+ * apuntado más tarde es una corrección o un olvido metido después, no parte
+ * del entreno.
+ */
+export const MAX_WORKOUT_GAP_MINUTES = 60;
 
 /**
  * Duración de un entreno en minutos: del inicio de la sesión (`createdAt`, la
  * primera serie) a la última serie apuntada (el mayor `timestamp` de sus
  * ejercicios). Mide cuándo se registró, no el tiempo real bajo la barra: si
- * todo se mete al acabar sale 0. Fuera de 1..MAX_WORKOUT_MINUTES devuelve 0
- * (no se enseña): una fecha cambiada o un entreno corregido días después
- * darían horas que no son de entreno.
+ * todo se mete al acabar sale 0.
+ *
+ * Las horas se recorren en orden y la sesión se corta en el primer hueco de
+ * más de MAX_WORKOUT_GAP_MINUTES: un ejercicio apuntado horas después (el
+ * último que se olvidó y se metió por la tarde) ya no tira toda la duración.
+ * Antes la estiraba hasta pasar el tope y no se enseñaba nada. Fuera de
+ * 1..MAX_WORKOUT_MINUTES devuelve 0 (no se enseña).
  */
 export function workoutDurationMinutes(log: WorkoutLog): number {
-  const stamps = (log.exercises ?? [])
-    .map((e) => e.timestamp)
-    .filter((ts): ts is number => typeof ts === 'number' && ts > 0);
-  if (!stamps.length || typeof log.createdAt !== 'number') return 0;
-  const minutes = Math.round((Math.max(...stamps) - log.createdAt) / 60000);
+  return sessionDurationMinutes(
+    log.createdAt,
+    (log.exercises ?? []).map((e) => e.timestamp)
+  );
+}
+
+/**
+ * La misma medida que `workoutDurationMinutes`, a partir del inicio y de las
+ * horas de cada ejercicio sueltas: el registro la calcula en vivo, antes de
+ * que exista el log guardado.
+ */
+export function sessionDurationMinutes(
+  createdAt: number | undefined,
+  timestamps: (number | undefined)[]
+): number {
+  if (typeof createdAt !== 'number') return 0;
+  const stamps = timestamps
+    .filter((ts): ts is number => typeof ts === 'number' && ts > 0)
+    .sort((a, b) => a - b);
+  const maxGap = MAX_WORKOUT_GAP_MINUTES * 60000;
+  let end = createdAt;
+  for (const ts of stamps) {
+    if (ts - end > maxGap) break;
+    end = Math.max(end, ts);
+  }
+  const minutes = Math.round((end - createdAt) / 60000);
   return minutes >= 1 && minutes <= MAX_WORKOUT_MINUTES ? minutes : 0;
 }

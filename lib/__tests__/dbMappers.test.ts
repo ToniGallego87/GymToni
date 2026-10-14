@@ -239,6 +239,29 @@ describe('rowsToAppData', () => {
   });
 });
 
+describe('ejercicio del catálogo en el historial (exercise_logs.catalog_id)', () => {
+  it('ida y vuelta: el apunte conserva su ejercicio del catálogo', () => {
+    const data = buildAppData();
+    data.logs[0].exercises[0].catalogId = '0025';
+
+    const rows = appDataToRows(data, stubId);
+    expect(rows.exerciseLogs[0].catalog_id).toBe('0025');
+    expect(rowsToAppData(rows).logs[0].exercises[0].catalogId).toBe('0025');
+  });
+
+  it('sin vínculo se guarda NULL y vuelve sin la propiedad', () => {
+    const rows = appDataToRows(buildAppData(), stubId);
+    expect(rows.exerciseLogs[0].catalog_id).toBeNull();
+    expect(rowsToAppData(rows).logs[0].exercises[0].catalogId).toBeUndefined();
+  });
+
+  it('una fila de una nube sin la columna se lee igual', () => {
+    const rows = appDataToRows(buildAppData(), stubId);
+    delete rows.exerciseLogs[0].catalog_id;
+    expect(rowsToAppData(rows).logs[0].exercises[0].catalogId).toBeUndefined();
+  });
+});
+
 describe('entradas de cardio (cardio_entries)', () => {
   const withCardio = (rawInput: string): WorkoutAppData => {
     const data = buildAppData();
@@ -278,7 +301,10 @@ describe('entradas de cardio (cardio_entries)', () => {
   });
 
   it('reconoce el rótulo en inglés y lo guarda con el mismo id', () => {
-    const rows = appDataToRows(withCardio('Treadmill walk: 30min, 6kmh'), stubId);
+    const rows = appDataToRows(
+      withCardio('Treadmill walk: 30min, 6kmh'),
+      stubId
+    );
     expect(rows.cardioEntries?.[0]).toMatchObject({
       discipline: 'treadmill-walk',
       label: 'Andar en cinta',

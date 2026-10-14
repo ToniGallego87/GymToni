@@ -17,16 +17,15 @@ import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import {
   CatalogExercise,
-  CATEGORY_LABELS,
-  getExerciseCatalog,
-  categoryLabel,
   equipmentLabel,
   exerciseName,
-  matchesExercise,
+  getExerciseCatalog,
+  searchCatalog,
+  TagFilter,
   targetLabel,
   thumbUrl,
 } from '@data/exerciseCatalog';
-import { SegmentedFilter, SegmentedOption } from './SegmentedFilter';
+import { CatalogTagFilters } from './CatalogTagFilters';
 import { GifViewerModal } from './GifViewerModal';
 
 interface ExercisePickerModalProps {
@@ -52,12 +51,10 @@ interface ExercisePickerModalProps {
   onAssign?: (catalogId: string) => void;
 }
 
-// Orden fijo de las zonas para el filtro (claves inglesas del catálogo).
-const CATEGORY_KEYS = Object.keys(CATEGORY_LABELS);
-
 /**
  * Catálogo de ejercicios buscable para elegir sin teclear a mano. Busca por
- * nombre (ES/EN, sin tildes), filtra por zona corporal y deja previsualizar el
+ * nombre (ES/EN, sin tildes) y etiqueta, filtra por zona → músculo → equipo
+ * (`CatalogTagFilters`) y deja previsualizar el
  * GIF antes de elegir. Al seleccionar, devuelve el ejercicio del catálogo.
  */
 export function ExercisePickerModal({
@@ -70,7 +67,7 @@ export function ExercisePickerModal({
 }: ExercisePickerModalProps) {
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState(initialQuery);
-  const [category, setCategory] = useState<string | undefined>(undefined);
+  const [tagFilter, setTagFilter] = useState<TagFilter>({});
   const [previewId, setPreviewId] = useState<string | null>(null);
 
   // Al reabrir, arrancar por la búsqueda inicial (el ejercicio consultado).
@@ -83,21 +80,24 @@ export function ExercisePickerModal({
     else onSelect?.(item);
   };
 
-  const categoryOptions = useMemo<SegmentedOption<string | undefined>[]>(
-    () => [
-      { id: undefined, label: t('Todos') },
-      ...CATEGORY_KEYS.map((key) => ({ id: key, label: categoryLabel(key) })),
-    ],
-    []
+  // Cerrado no calcula NADA: el modal queda montado en cada tarjeta que lo
+  // ofrece (registro, detalle, rutina), y buscar en los 1300 ejercicios por
+  // cada una al montar era lo que hacía tardar segundos en abrir esas vistas.
+  //
+  // Lo que se puede elegir (sin las copias ocultas): de aquí salen las
+  // etiquetas que ofrece el filtro.
+  const pickable = useMemo(
+    () => (visible ? getExerciseCatalog().filter((e) => !e.hidden) : []),
+    [visible]
   );
 
-  const results = useMemo(() => {
-    const q = query.trim();
-    return getExerciseCatalog().filter((ex) => {
-      if (category && ex.category !== category) return false;
-      return matchesExercise(ex, q);
-    });
-  }, [query, category]);
+  // De más a menos relevante, con los sinónimos de gimnasio ("press banca",
+  // "jalón al pecho"), las etiquetas ("bíceps", "mancuerna") y el filtro de
+  // zona → músculo → equipo.
+  const results = useMemo(
+    () => (visible ? searchCatalog(query, tagFilter) : []),
+    [visible, query, tagFilter]
+  );
 
   const renderItem = ({ item }: { item: CatalogExercise }) => (
     <View style={styles.row}>
@@ -192,10 +192,10 @@ export function ExercisePickerModal({
           )}
         </View>
 
-        <SegmentedFilter
-          options={categoryOptions}
-          value={category}
-          onChange={setCategory}
+        <CatalogTagFilters
+          items={pickable}
+          value={tagFilter}
+          onChange={setTagFilter}
           style={styles.filter}
         />
 

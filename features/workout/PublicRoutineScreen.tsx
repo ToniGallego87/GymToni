@@ -66,7 +66,9 @@ import {
   getProfile,
   getProfilesByIds,
   getRoutineComments,
+  getSaveCounts,
   likeRoutine,
+  recordRoutineSave,
   reportContent,
   unlikeRoutine,
   ProfileLite,
@@ -232,6 +234,28 @@ export function PublicRoutineScreen({
     };
   }, [routineId, user?.id]);
 
+  // Personas que la han añadido (junto al marcador). Igual de silencioso: sin
+  // dato, el botón va sin cifra.
+  const [saveCount, setSaveCount] = useState<number | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    getSaveCounts([routineId])
+      .then((counts) => {
+        if (alive) setSaveCount(counts.get(routineId));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [routineId]);
+  // Una persona más (optimista) y apuntada en la nube. Con cuenta también al
+  // copiar: copiarla es otra forma de llevársela.
+  const noteSaved = () => {
+    if (!user) return;
+    setSaveCount((n) => (n === undefined ? n : n + 1));
+    recordRoutineSave(routineId, user.id).catch(() => {});
+  };
+
   const handleToggleLike = async () => {
     if (!user) {
       setToast({
@@ -293,6 +317,7 @@ export function PublicRoutineScreen({
       state.routines.map((r) => r.name)
     );
     dispatch({ type: 'ADD_ROUTINE', payload: copy });
+    noteSaved();
     setToast({
       message: t('Copiada como "{name}"', { name: copy.name }),
       type: 'success',
@@ -314,6 +339,7 @@ export function PublicRoutineScreen({
     try {
       const linked = linkPublicRoutine(routine, ownerId, displayAuthor);
       dispatch({ type: 'ADD_ROUTINE', payload: linked });
+      noteSaved();
       setToast({ message: t('Añadida a tus rutinas'), type: 'success' });
     } catch (e) {
       setToast({ message: (e as Error).message, type: 'error' });
@@ -566,6 +592,7 @@ export function PublicRoutineScreen({
                     busy={saving}
                     onPress={handleSave}
                     onUnsave={canUnsave ? handleUnsave : undefined}
+                    count={saveCount}
                   />
                   <LikeButton
                     likes={likeInfo.likes}

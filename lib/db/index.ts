@@ -232,6 +232,14 @@ function getDb(): Promise<SQLiteDatabase> {
         // v9: el cardio pasa a una fila por entrada (cardio_entries, creada por
         // SCHEMA_SQL). Se rellena una vez con el histórico, troceando su texto.
         await backfillCardioEntries(db);
+        // v10: ejercicio del catálogo en cada apunte del historial (identidad
+        // del ejercicio, ver lib/exerciseIdentity.ts). Nullable: lo anterior
+        // se queda a NULL y se resuelve por el nombre.
+        try {
+          await db.execAsync(
+            'ALTER TABLE exercise_logs ADD COLUMN catalog_id TEXT'
+          );
+        } catch {}
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -287,12 +295,13 @@ function insertExerciseLog(
   row: ExerciseLogRow
 ): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, exercise_order, raw_input, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, catalog_id, exercise_order, raw_input, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.workout_logs_id,
       row.exercises_id,
       row.exercise_name,
+      row.catalog_id ?? null,
       row.exercise_order,
       row.raw_input,
       row.notes,
@@ -525,13 +534,14 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     );
     await bulkInsert(
       txn,
-      'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, exercise_order, raw_input, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO exercise_logs (id, workout_logs_id, exercises_id, exercise_name, catalog_id, exercise_order, raw_input, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       rows.exerciseLogs,
       (row) => [
         row.id,
         row.workout_logs_id,
         row.exercises_id,
         row.exercise_name,
+        row.catalog_id ?? null,
         row.exercise_order,
         row.raw_input,
         row.notes,
@@ -1055,11 +1065,22 @@ export interface RemoteChanges {
   settings: { active: string | null; selected: string | null } | null;
 }
 
-function buildUpsertSql(table: string, cols: string[]): string {
+// `keepLocal`: columnas que una fila de la nube SIN valor no borra. Son las
+// nuevas que la nube puede no tener aún (o que un móvil sin actualizar sube a
+// null): bajarlas no debe vaciar el dato que este móvil ya tenía.
+function buildUpsertSql(
+  table: string,
+  cols: string[],
+  keepLocal: string[] = []
+): string {
   const placeholders = cols.map(() => '?').join(', ');
   const setClause = cols
     .filter((col) => col !== 'id')
-    .map((col) => `${col} = excluded.${col}`)
+    .map((col) =>
+      keepLocal.includes(col)
+        ? `${col} = COALESCE(excluded.${col}, ${table}.${col})`
+        : `${col} = excluded.${col}`
+    )
     .join(', ');
   return `INSERT INTO ${table} (${cols.join(', ')}) VALUES (${placeholders})
      ON CONFLICT(id) DO UPDATE SET ${setClause}`;
@@ -1071,6 +1092,7 @@ const REMOTE_TABLES: {
   key: keyof Omit<RemoteChanges, 'settings'>;
   table: string;
   cols: string[];
+  keepLocal?: string[];
 }[] = [
   {
     key: 'routines',
@@ -1135,12 +1157,15 @@ const REMOTE_TABLES: {
       'workout_logs_id',
       'exercises_id',
       'exercise_name',
+      'catalog_id',
       'exercise_order',
       'raw_input',
       'notes',
       'created_at',
       'updated_at',
     ],
+    // La nube puede no tener aún la columna (migración SQL manual).
+    keepLocal: ['catalog_id'],
   },
   {
     key: 'logSets',
@@ -1194,7 +1219,7 @@ export async function applyRemoteChanges(
 ): Promise<void> {
   const db = await getDb();
   await db.withExclusiveTransactionAsync(async (txn) => {
-    for (const { key, table, cols } of REMOTE_TABLES) {
+    for (const { key, table, cols, keepLocal } of REMOTE_TABLES) {
       const change = changes[key];
       if (change.deletes.length) {
         const ids = change.deletes.map((row) => String(row.id));
@@ -1210,7 +1235,7 @@ export async function applyRemoteChanges(
       if (change.upserts.length) {
         await bulkInsert(
           txn,
-          buildUpsertSql(table, cols),
+          buildUpsertSql(table, cols, keepLocal),
           change.upserts,
           (row) => cols.map((col) => row[col] ?? null) as SQLiteBindParams
         );

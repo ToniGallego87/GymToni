@@ -50,6 +50,8 @@ import {
   linkablePublicRoutine,
   getRoutineSetTotals,
   getCommentCounts,
+  getSaveCounts,
+  recordRoutineSave,
   getFollowingCount,
   getPublicRoutineIds,
   FeedRoutine,
@@ -95,6 +97,9 @@ interface RoutineItem {
   // Comentarios del hilo de la rutina. Llega con el mismo lote que las series y
   // es solo informativo: el hilo vive en la ficha de la rutina.
   comments?: number;
+  // Personas que la han añadido a sus rutinas: va junto al marcador de añadir.
+  // Mismo lote que los comentarios.
+  saves?: number;
 }
 
 // Caché en memoria del último tablón/feed (por pestaña), para pintar al instante
@@ -251,6 +256,7 @@ export function CommunityScreen({
                     ...r,
                     total_sets: r.total_sets ?? old.total_sets,
                     comments: r.comments ?? old.comments,
+                    saves: r.saves ?? old.saves,
                   }
                 : r;
             })
@@ -268,14 +274,16 @@ export function CommunityScreen({
         // queda sin esos dos datos pero entero.
         try {
           const ids = rows.map((r) => r.id);
-          const [totals, commentCounts] = await Promise.all([
+          const [totals, commentCounts, saveCounts] = await Promise.all([
             getRoutineSetTotals(ids),
             getCommentCounts(ids).catch(() => new Map<string, number>()),
+            getSaveCounts(ids).catch(() => new Map<string, number>()),
           ]);
           const withMeta = rows.map((r) => ({
             ...r,
             total_sets: totals.get(r.id),
             comments: commentCounts.get(r.id),
+            saves: saveCounts.get(r.id),
           }));
           setItems(withMeta);
           storeBoard(tab, { items: withMeta, avatars: avs });
@@ -534,6 +542,16 @@ export function CommunityScreen({
       }
       dispatch({ type: 'ADD_ROUTINE', payload: linked });
       notify(t('Añadida a tus rutinas'), 'success');
+      // Una persona más en su recuento (si ya se la había llevado antes, la
+      // nube no suma: el recuento lo trae bien el próximo refresco).
+      setItems((prev) =>
+        prev.map((r) =>
+          r.id === item.id && r.saves !== undefined
+            ? { ...r, saves: r.saves + 1 }
+            : r
+        )
+      );
+      recordRoutineSave(item.id, user.id).catch(() => {});
     } catch (e) {
       notify((e as Error).message, 'error');
     } finally {

@@ -113,8 +113,10 @@ export function FloatingPrimaryNav({
               <Animated.View
                 // Aparece creciendo desde muy pequeño hasta su tamaño: la barra es
                 // una sola (vive en app/App.tsx), y al cambiar de pestaña el fondo
-                // activo se monta en la nueva y reproduce esta entrada.
-                entering={ZoomIn.springify().damping(14).stiffness(180)}
+                // activo se monta en la nueva y reproduce esta entrada. Corta (no
+                // un muelle): el muelle tardaba medio segundo en asentarse y el
+                // cambio de pestaña se leía como lento.
+                entering={ZoomIn.duration(140)}
                 style={styles.itemActiveBg}
                 pointerEvents="none"
               />

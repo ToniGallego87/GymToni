@@ -283,3 +283,37 @@ create policy "read visible activity" on public.activity
         )
     )
   );
+
+-- ─────────────────────────── routine_saves ───────────────────────────
+-- Quién se ha llevado cada rutina pública a las suyas (enlazada o copiada): una
+-- fila por (rutina, usuario). Alimenta el número junto al marcador de "añadir"
+-- en el tablón, el perfil del autor y la ficha. Recuento ACUMULADO: quitarla
+-- de tus rutinas no borra la fila (ver lib/cloud/social.ts, `getSaveCounts`).
+create table if not exists public.routine_saves (
+  routine_id text not null references public.routines(id) on delete cascade,
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  created_at bigint not null default 0,
+  primary key (routine_id, user_id)
+);
+create index if not exists idx_saves_routine on public.routine_saves(routine_id);
+
+alter table public.routine_saves enable row level security;
+
+-- Solo se apunta uno mismo, y solo en rutinas públicas de OTRA persona.
+drop policy if exists "insert own saves" on public.routine_saves;
+create policy "insert own saves" on public.routine_saves
+  for insert with check (
+    user_id = auth.uid() and routine_id in (
+      select id from public.routines
+      where is_public = true and deleted = false and user_id <> auth.uid()
+    )
+  );
+
+-- Lectura de las de rutinas públicas (para contar) o de las propias.
+drop policy if exists "read public saves" on public.routine_saves;
+create policy "read public saves" on public.routine_saves
+  for select using (
+    user_id = auth.uid() or routine_id in (
+      select id from public.routines where is_public = true and deleted = false
+    )
+  );

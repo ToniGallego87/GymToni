@@ -158,7 +158,9 @@ No duplicar estos tríos: consumir siempre `theme.gradients.*`.
   rotulada en la barra (`rightElement`): "Editar" en el Detalle y en la ficha de
   rutina. Lo raro va al ⋮.
 - **`GradientFill`** — relleno sutil de acento en tarjetas con borde.
-- **`Toast`** — feedback flotante global (éxito/error) sobre la barra inferior.
+- **`Toast`** — feedback flotante global (éxito/error) sobre la barra inferior. Centrado + `celebrate`: píldora con ráfaga de `ConfettiBurst` (récord).
+  Cristal oscuro del descanso flotante (`GlassBlur` + `GLASS_REST_TIMER_BG`),
+  con tinta clara en ambos temas; la variante centrada es una píldora de color.
 - **`WhatsNewModal`** — novedades tras actualizar (contenido en `data/changelog.ts`).
 
 ## Iconografía

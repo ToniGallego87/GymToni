@@ -278,12 +278,9 @@ register({
   '1 ejercicio': '1 exercise',
 
   // Registro de entrenamiento
-  Terminar: 'Finish',
-  'Entreno completado · {n} ejercicios': 'Workout complete · {n} exercises',
-  'Ya está guardado en tu historial.': 'It is already saved in your history.',
+  'Entreno completado': 'Workout complete',
   'Buscar GIF': 'Search GIF',
   'Cronometrar el ejercicio': 'Time this exercise',
-  'Error al guardar.': 'Could not save.',
   'Rellena primero los datos': 'Fill in the data first',
   'El peso y las repeticiones no pueden ser negativos':
     'Weight and reps cannot be negative',
@@ -745,6 +742,8 @@ register({
   'Qué significa la intensidad': 'What intensity means',
 
   // Comentarios de una rutina pública
+  'Añadida por 1 persona': 'Added by 1 person',
+  'Añadida por {n} personas': 'Added by {n} people',
   '1 comentario': '1 comment',
   '{n} comentarios': '{n} comments',
   'Todavía no hay comentarios. Rompe el hielo.':
@@ -904,7 +903,7 @@ register({
   'Buscar personas o rutinas': 'Search people or routines',
   'Borrar búsqueda': 'Clear search',
   'Ver los retos de la semana': 'See weekly challenges',
-  'Retos que has movido': 'Challenges you moved',
+  'Retos que has avanzado': 'Challenges you advanced',
   'Ya tiene un entreno': 'Already has a workout',
   'Mes anterior': 'Previous month',
   'Mes siguiente': 'Next month',
@@ -1119,8 +1118,9 @@ register({
   'Primeras marcas': 'First marks',
   'Registra una serie en cada ejercicio de tu rutina.':
     'Log a set in every exercise of your routine.',
-  '100 kcal hoy': '100 kcal today',
-  'Quema 100 kcal de cardio en el día.': 'Burn 100 kcal of cardio today.',
+  '200 kcal, 3 días': '200 kcal, 3 days',
+  'Quema 200 kcal de cardio o más en 3 días esta semana.':
+    'Burn 200 kcal of cardio or more on 3 days this week.',
   '1000 kcal esta semana': '1000 kcal this week',
   'Quema 1000 kcal de cardio de lunes a domingo.':
     'Burn 1000 kcal of cardio from Monday to Sunday.',
@@ -1164,4 +1164,30 @@ register({
   '+{n} puntos': '+{n} points',
   'Cada reto y logro te acerca al siguiente':
     'Every challenge and achievement brings you closer to the next one',
+});
+
+// Identidad de ejercicios: un ejercicio con varios nombres (editor y ficha de
+// Progreso), propuestas del catálogo al escribir y "Es el mismo que…".
+register({
+  'Ejercicio: {name}': 'Exercise: {name}',
+  'También lo llamas: {names}': 'You also call it: {names}',
+  'No es este ejercicio': 'Not this exercise',
+  '¿Es alguno de estos?': 'Is it one of these?',
+  'Es el mismo que…': 'Same as…',
+  'Elige el ejercicio que es «{name}» con otro nombre.':
+    'Pick the exercise that is "{name}" under another name.',
+  '¿Son el mismo ejercicio?': 'Are they the same exercise?',
+  '«{a}» y «{b}» serán el mismo ejercicio con dos nombres: su historial y sus récords se juntan. Tus series no cambian.':
+    '"{a}" and "{b}" will be the same exercise with two names: their history and records come together. Your sets stay the same.',
+  '«{a}» pasará a llamarse «{b}» y su historial y sus récords se juntan. Tus series no cambian.':
+    '"{a}" will be renamed "{b}" and their history and records come together. Your sets stay the same.',
+  'Sí, es el mismo': 'Yes, same exercise',
+});
+
+// Filtro por etiquetas del catálogo (buscador de ejercicios y Progreso).
+register({
+  'Cualquier zona': 'Any area',
+  'Cualquier músculo': 'Any muscle',
+  'Cualquier equipo': 'Any equipment',
+  'Sin clasificar': 'Unclassified',
 });

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
@@ -74,6 +74,9 @@ CREATE TABLE IF NOT EXISTS exercise_logs (
   workout_logs_id TEXT NOT NULL REFERENCES workout_logs(id) ON DELETE CASCADE,
   exercises_id    TEXT,
   exercise_name   TEXT NOT NULL,
+  -- Ejercicio del catálogo con el que se entrenó: identifica el ejercicio en el
+  -- historial (el nombre es la etiqueta). NULL en los apuntes anteriores a v10.
+  catalog_id      TEXT,
   exercise_order  INTEGER NOT NULL,
   raw_input       TEXT NOT NULL DEFAULT '',
   notes           TEXT,

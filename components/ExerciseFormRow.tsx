@@ -1,11 +1,27 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode, useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { exerciseName } from '@data/exerciseCatalog';
+import {
+  equipmentLabel,
+  exerciseName,
+  getCatalogExercise,
+  suggestCatalogExercises,
+  targetLabel,
+  thumbUrl,
+} from '@data/exerciseCatalog';
 import { ExerciseForm, MAX_SETS, MIN_SETS, RepUnit } from '@lib/exerciseForm';
+import { formatExerciseNames, otherExerciseNames } from '@lib/exerciseIdentity';
+import { useExerciseNames } from '@hooks/useExerciseKeyResolver';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
 import { ConfirmModal } from './ConfirmModal';
@@ -41,6 +57,27 @@ export function ExerciseEditorModal({
   const [showPicker, setShowPicker] = useState(false);
   const [showGif, setShowGif] = useState(false);
 
+  const linked = getCatalogExercise(exercise?.catalogId);
+  const typedName = exercise?.name ?? '';
+  // Los otros nombres con los que ya aparece este ejercicio en tus rutinas y tu
+  // historial (sin el escrito aquí ni el del catálogo, que ya se ven).
+  const { resolve, namesByKey } = useExerciseNames();
+  const otherNames = linked
+    ? otherExerciseNames(
+        namesByKey.get(resolve({ name: typedName, catalogId: linked.id })),
+        typedName,
+        linked.es,
+        linked.en
+      )
+    : [];
+  // Propuestas del catálogo para lo que se escribe, solo si aún no es ningún
+  // ejercicio del catálogo (ver `suggestCatalogExercises`: nunca elige sola).
+  const suggestions = useMemo(
+    () =>
+      visible && !exercise?.catalogId ? suggestCatalogExercises(typedName) : [],
+    [visible, exercise?.catalogId, typedName]
+  );
+
   const sets = exercise?.sets ?? MIN_SETS;
   const adjustSets = (delta: number) => {
     const next = Math.min(MAX_SETS, Math.max(MIN_SETS, sets + delta));
@@ -70,10 +107,16 @@ export function ExerciseEditorModal({
                 placeholderTextColor={theme.colors.textSecondary}
                 value={exercise?.name ?? ''}
                 autoFocus={!exercise?.name}
-                // Escribir a mano rompe el vínculo con el catálogo (ya no es
-                // ese GIF).
+                // El nombre es solo la etiqueta: cambiarlo NO rompe el vínculo
+                // con el catálogo (llamarlo "Banca" sigue siendo el press de
+                // banca, con su GIF y su historial). Vaciarlo sí: es empezar
+                // otro ejercicio. Para decir "no es este", la ✕ de abajo.
                 onChangeText={(value) =>
-                  onChange({ name: value, catalogId: undefined })
+                  onChange(
+                    value.trim()
+                      ? { name: value }
+                      : { name: value, catalogId: undefined }
+                  )
                 }
               />
               <Pressable
@@ -109,6 +152,89 @@ export function ExerciseEditorModal({
                 </Pressable>
               )}
             </View>
+
+            {/* Qué ejercicio ES, con los otros nombres con los que lo llamas:
+                un ejercicio, varios nombres. Lo que junta su historial es el
+                ejercicio, no lo escrito. La ✕ dice "no es este" y lo deja
+                como ejercicio propio. */}
+            {!!linked && (
+              <View style={styles.linkRow}>
+                <MaterialCommunityIcons
+                  name="dumbbell"
+                  size={16}
+                  color={theme.colors.primary}
+                />
+                <View style={styles.linkTextWrap}>
+                  <Text style={styles.linkText} numberOfLines={2}>
+                    {t('Ejercicio: {name}', { name: exerciseName(linked) })}
+                  </Text>
+                  {otherNames.length > 0 && (
+                    <Text style={styles.linkAliases} numberOfLines={2}>
+                      {t('También lo llamas: {names}', {
+                        names: formatExerciseNames(otherNames),
+                      })}
+                    </Text>
+                  )}
+                </View>
+                <Pressable
+                  onPress={() => onChange({ catalogId: undefined })}
+                  hitSlop={10}
+                  accessibilityLabel={t('No es este ejercicio')}
+                >
+                  <MaterialCommunityIcons
+                    name="close-circle"
+                    size={18}
+                    color={theme.colors.textMuted}
+                  />
+                </Pressable>
+              </View>
+            )}
+
+            {/* Sin ejercicio del catálogo, la app propone mientras escribes:
+                un toque y lo que escribes pasa a ser ESE ejercicio (con su
+                nombre, que luego se puede cambiar sin perderlo). */}
+            {suggestions.length > 0 && (
+              <View style={styles.suggestions}>
+                <Text style={styles.suggestionsLabel}>
+                  {t('¿Es alguno de estos?')}
+                </Text>
+                {suggestions.map((suggestion) => (
+                  <Pressable
+                    key={suggestion.id}
+                    style={({ pressed }) => [
+                      styles.suggestionRow,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={() =>
+                      onChange({
+                        name: exerciseName(suggestion),
+                        catalogId: suggestion.id,
+                      })
+                    }
+                  >
+                    <Image
+                      source={{ uri: thumbUrl(suggestion) }}
+                      style={styles.suggestionThumb}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.suggestionText}>
+                      <Text style={styles.suggestionName} numberOfLines={2}>
+                        {exerciseName(suggestion)}
+                      </Text>
+                      <Text style={styles.suggestionMeta} numberOfLines={1}>
+                        {targetLabel(suggestion.target)} ·{' '}
+                        {equipmentLabel(suggestion.equipment)}
+                      </Text>
+                    </View>
+                    <MaterialCommunityIcons
+                      name="link-plus"
+                      size={18}
+                      color={theme.colors.primary}
+                    />
+                  </Pressable>
+                ))}
+              </View>
+            )}
           </View>
 
           <View style={styles.exerciseControlsRow}>
@@ -339,6 +465,62 @@ const makeStyles = () =>
       color: theme.colors.text,
       fontSize: 15,
       lineHeight: 20,
+    },
+    linkRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginTop: 2,
+    },
+    linkTextWrap: {
+      flex: 1,
+      minWidth: 0,
+      gap: 1,
+    },
+    linkText: {
+      fontSize: 13,
+      color: theme.colors.textSecondary,
+    },
+    linkAliases: {
+      fontSize: 12,
+      color: theme.colors.textMuted,
+    },
+    suggestions: {
+      gap: 6,
+      marginTop: 2,
+    },
+    suggestionsLabel: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+    },
+    suggestionRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      borderRadius: theme.borderRadius.sm,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    suggestionThumb: {
+      width: 36,
+      height: 36,
+      borderRadius: 6,
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    suggestionText: {
+      flex: 1,
+      minWidth: 0,
+    },
+    suggestionName: {
+      fontSize: 14,
+      color: theme.colors.text,
+    },
+    suggestionMeta: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
     },
     iconButton: {
       width: 38,

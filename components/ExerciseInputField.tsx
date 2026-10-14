@@ -484,9 +484,11 @@ export function ExerciseInputField({
                   styles.serieTag,
                   isRecord && styles.serieTagRecord,
                   expanded && styles.serieTagEditable,
+                  // Récord en blanco (tinta invertida), no en dorado: el
+                  // dorado de la app marca lo pulsable y la burbuja no lo es.
                   {
                     backgroundColor: isRecord
-                      ? theme.colors.primaryFill
+                      ? theme.colors.white
                       : cardAccent + '2E',
                   },
                 ]}
@@ -503,13 +505,13 @@ export function ExerciseInputField({
                   <MaterialCommunityIcons
                     name="trophy"
                     size={13}
-                    color={theme.colors.onGold}
+                    color={theme.colors.background}
                   />
                 )}
                 <Text
                   style={[
                     styles.serieTagText,
-                    { color: isRecord ? theme.colors.onGold : cardAccent },
+                    { color: isRecord ? theme.colors.background : cardAccent },
                   ]}
                 >
                   {set.weight === -1 || set.reps === -1
@@ -539,7 +541,9 @@ export function ExerciseInputField({
                   <MaterialCommunityIcons
                     name="close-circle"
                     size={SERIE_REMOVE_SIZE}
-                    color={theme.colors.white}
+                    color={
+                      isRecord ? theme.colors.background : theme.colors.white
+                    }
                   />
                 </Pressable>
               )}

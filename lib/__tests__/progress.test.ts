@@ -5,8 +5,10 @@ import {
   buildImprovementFromStrengthScores,
   BODYWEIGHT_VIRTUAL_LOAD,
   FIRST_TIME_IMPROVEMENT_PERCENT,
+  sessionDurationMinutes,
   workoutDurationMinutes,
 } from '../progress';
+import { formatWorkoutDuration } from '../utils';
 import { ParsedSet, WorkoutLog } from '../../types';
 
 describe('getEstimatedOneRepMax (Epley)', () => {
@@ -203,5 +205,47 @@ describe('workoutDurationMinutes', () => {
     expect(
       workoutDurationMinutes(logWith([start + 3 * 24 * 3600 * 1000]))
     ).toBe(0);
+  });
+
+  it('en vivo (registro) mide igual, ignorando ejercicios sin hora', () => {
+    expect(
+      sessionDurationMinutes(start, [
+        undefined,
+        start + 72 * 60000,
+        start + 40 * 60000,
+      ])
+    ).toBe(72);
+    expect(sessionDurationMinutes(undefined, [start + 60000])).toBe(0);
+  });
+
+  it('un ejercicio apuntado horas después no tira la duración', () => {
+    // Caso real: sesión de 10:09 a 11:59 y el último ejercicio metido a las
+    // 19:15. Antes daba 9 h → por encima del tope → no se enseñaba nada.
+    const min = (m: number) => start + m * 60000;
+    expect(
+      sessionDurationMinutes(start, [
+        min(17),
+        min(31),
+        min(49),
+        min(58),
+        min(73),
+        min(85),
+        min(110),
+        min(546),
+      ])
+    ).toBe(110);
+  });
+});
+
+describe('formatWorkoutDuration', () => {
+  it('en minutos por debajo de la hora', () => {
+    expect(formatWorkoutDuration(52)).toEqual({ value: '52', unit: 'min' });
+    expect(formatWorkoutDuration(59.6)).toEqual({ value: '1:00', unit: 'h' });
+  });
+
+  it('en horas a partir de 60 min, con los minutos a dos cifras', () => {
+    expect(formatWorkoutDuration(60)).toEqual({ value: '1:00', unit: 'h' });
+    expect(formatWorkoutDuration(85)).toEqual({ value: '1:25', unit: 'h' });
+    expect(formatWorkoutDuration(125)).toEqual({ value: '2:05', unit: 'h' });
   });
 });

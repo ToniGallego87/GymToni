@@ -53,6 +53,11 @@ export interface ExerciseLog {
   id: string;
   exerciseId: string;
   exerciseName: string;
+  // Ejercicio del catálogo con el que se entrenó (copia del de la rutina al
+  // registrar). Es lo que identifica el ejercicio en el historial: el nombre es
+  // solo la etiqueta (ver lib/exerciseIdentity.ts). Los registros anteriores a
+  // 0.9 no lo tienen y se resuelven por el nombre.
+  catalogId?: string;
   order: number;
   rawInput: string;
   parsedSets: ParsedSet[];

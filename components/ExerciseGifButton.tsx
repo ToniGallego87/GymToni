@@ -1,6 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useState } from 'react';
 import {
+  ActivityIndicator,
   Image,
   Pressable,
   StyleProp,
@@ -64,6 +65,15 @@ export function ExerciseGifButton({
   // La miniatura (JPG fijo) se descarga del CDN igual que el visor. Si falla
   // (sin conexión), el botón cae al icono de play y sigue funcionando.
   const [thumbFailed, setThumbFailed] = useState(false);
+  // Miniatura ya pintada. Hasta entonces, un spinner en su sitio: el cuadro
+  // vacío parecía roto. Por URL, para que al asignar otro GIF vuelva a salir.
+  const [loadedThumb, setLoadedThumb] = useState<string | null>(null);
+  // Los modales se montan la PRIMERA vez que se abren y luego se quedan (así
+  // cierran con su animación). Montados de entrada en cada tarjeta, abrir el
+  // registro, el detalle o un día de una rutina pagaba un visor y un buscador
+  // por ejercicio que casi nunca se usan.
+  const [gifMounted, setGifMounted] = useState(false);
+  const [pickerMounted, setPickerMounted] = useState(false);
   const exercise = getCatalogExercise(catalogId);
 
   // Con GIF asignado el botón reproduce (play); sin él abre el buscador para
@@ -72,10 +82,16 @@ export function ExerciseGifButton({
   // es predecible en vez de significar dos cosas con el mismo icono.
   const hasGif = !!catalogId;
   const showThumb = !!exercise && !thumbFailed;
+  const thumb = exercise ? thumbUrl(exercise) : null;
 
   const handlePress = () => {
-    if (hasGif) setShowGif(true);
-    else setShowPicker(true);
+    if (hasGif) {
+      setGifMounted(true);
+      setShowGif(true);
+    } else {
+      setPickerMounted(true);
+      setShowPicker(true);
+    }
   };
 
   return (
@@ -91,13 +107,26 @@ export function ExerciseGifButton({
         accessibilityRole="button"
         accessibilityLabel={hasGif ? t('Ver GIF') : t('Buscar GIF')}
       >
-        {showThumb ? (
-          <Image
-            source={{ uri: thumbUrl(exercise) }}
-            style={[styles.thumb, fitMode === 'contain' && styles.thumbContain]}
-            resizeMode={fitMode}
-            onError={() => setThumbFailed(true)}
-          />
+        {showThumb && thumb ? (
+          <>
+            <Image
+              source={{ uri: thumb }}
+              style={[
+                styles.thumb,
+                fitMode === 'contain' && styles.thumbContain,
+              ]}
+              resizeMode={fitMode}
+              onLoad={() => setLoadedThumb(thumb)}
+              onError={() => setThumbFailed(true)}
+            />
+            {loadedThumb !== thumb && (
+              <ActivityIndicator
+                size="small"
+                color={theme.colors.primary}
+                style={styles.thumbSpinner}
+              />
+            )}
+          </>
         ) : (
           <MaterialCommunityIcons
             name={hasGif ? 'play-box-outline' : 'movie-search-outline'}
@@ -107,19 +136,23 @@ export function ExerciseGifButton({
         )}
       </Pressable>
 
-      <GifViewerModal
-        visible={showGif}
-        onRequestClose={() => setShowGif(false)}
-        catalogId={catalogId}
-        fallbackName={name}
-      />
-      <ExercisePickerModal
-        visible={showPicker}
-        onRequestClose={() => setShowPicker(false)}
-        reference
-        initialQuery={name}
-        onAssign={onAssign}
-      />
+      {gifMounted && (
+        <GifViewerModal
+          visible={showGif}
+          onRequestClose={() => setShowGif(false)}
+          catalogId={catalogId}
+          fallbackName={name}
+        />
+      )}
+      {pickerMounted && (
+        <ExercisePickerModal
+          visible={showPicker}
+          onRequestClose={() => setShowPicker(false)}
+          reference
+          initialQuery={name}
+          onAssign={onAssign}
+        />
+      )}
     </>
   );
 }
@@ -156,6 +189,9 @@ const makeStyles = () =>
     // que compensa el aire del catálogo.
     thumbContain: {
       transform: [{ scale: 1 }],
+    },
+    thumbSpinner: {
+      position: 'absolute',
     },
     pressed: {
       opacity: 0.8,

@@ -1,6 +1,5 @@
 import {
   buildExerciseSessions,
-  exerciseKey,
   ExerciseSummary,
   getExerciseRecords,
   getRecordSetIndexes,
@@ -8,6 +7,10 @@ import {
   sortExercises,
   weightStepFromHistory,
 } from '../exerciseProgress';
+import { exerciseKeyOf } from '../exerciseIdentity';
+
+// Clave de un ejercicio propio (sin catálogo): su nombre normalizado.
+const exerciseKey = (name: string) => exerciseKeyOf({ name });
 import { ParsedSet, WorkoutLog } from '../../types';
 
 interface ExerciseSeed {
@@ -43,7 +46,7 @@ function makeLog(
 
 describe('exerciseKey', () => {
   it('agrupa el mismo ejercicio escrito distinto', () => {
-    expect(exerciseKey('  Press   Banca ')).toBe('press banca');
+    expect(exerciseKey('  Press   Banca ')).toBe('name:press banca');
     expect(exerciseKey('press banca')).toBe(exerciseKey('Press Banca'));
   });
 });
@@ -59,7 +62,7 @@ describe('buildExerciseSessions', () => {
       ]),
     ];
 
-    const sessions = buildExerciseSessions(logs, 'press banca');
+    const sessions = buildExerciseSessions(logs, exerciseKey('press banca'));
 
     expect(sessions.map((s) => s.logId)).toEqual(['l1', 'l2']);
   });
@@ -77,7 +80,7 @@ describe('buildExerciseSessions', () => {
       ]),
     ];
 
-    const [session] = buildExerciseSessions(logs, 'press banca');
+    const [session] = buildExerciseSessions(logs, exerciseKey('press banca'));
 
     // Epley: 70 × (1 + 5/30) = 81,67 gana a 60 × (1 + 8/30) = 76.
     expect(session.bestOneRepMax).toBeCloseTo(81.67, 1);
@@ -105,7 +108,9 @@ describe('buildExerciseSessions', () => {
       ]),
     ];
 
-    expect(buildExerciseSessions(logs, 'press banca')).toHaveLength(2);
+    expect(
+      buildExerciseSessions(logs, exerciseKey('press banca'))
+    ).toHaveLength(2);
   });
 
   it('junta en una sesión el ejercicio repetido dentro del mismo log', () => {
@@ -116,7 +121,7 @@ describe('buildExerciseSessions', () => {
       ]),
     ];
 
-    const sessions = buildExerciseSessions(logs, 'press banca');
+    const sessions = buildExerciseSessions(logs, exerciseKey('press banca'));
 
     expect(sessions).toHaveLength(1);
     expect(sessions[0].sets).toHaveLength(2);
@@ -134,7 +139,7 @@ describe('buildExerciseSessions', () => {
       ]),
     ];
 
-    expect(buildExerciseSessions(logs, 'press banca')).toEqual([]);
+    expect(buildExerciseSessions(logs, exerciseKey('press banca'))).toEqual([]);
   });
 });
 
@@ -167,7 +172,7 @@ describe('listExercises', () => {
 
     const [exercise] = listExercises(logs);
 
-    expect(exercise.key).toBe('press banca');
+    expect(exercise.key).toBe(exerciseKey('press banca'));
     // El nombre mostrado es el de la última vez que se escribió.
     expect(exercise.name).toBe('press BANCA');
     expect(exercise.sessionCount).toBe(2);
@@ -285,7 +290,7 @@ describe('getExerciseRecords', () => {
   ];
 
   it('saca cada récord con la fecha en la que se logró', () => {
-    const sessions = buildExerciseSessions(logs, 'press banca');
+    const sessions = buildExerciseSessions(logs, exerciseKey('press banca'));
     const records = getExerciseRecords(sessions);
 
     // 80 × (1 + 3/30) = 88 es el mejor 1RM estimado.
@@ -307,7 +312,10 @@ describe('getExerciseRecords', () => {
         { name: 'Press banca', sets: [{ weight: 60, reps: 8 }] },
       ]),
     ];
-    const sessions = buildExerciseSessions(repeated, 'press banca');
+    const sessions = buildExerciseSessions(
+      repeated,
+      exerciseKey('press banca')
+    );
 
     expect(getExerciseRecords(sessions).maxWeight?.date).toBe(sessions[0].date);
   });
@@ -319,7 +327,7 @@ describe('getExerciseRecords', () => {
       ]),
     ];
     const records = getExerciseRecords(
-      buildExerciseSessions(bodyweight, 'dominadas')
+      buildExerciseSessions(bodyweight, exerciseKey('dominadas'))
     );
 
     expect(records.maxWeight).toBeNull();

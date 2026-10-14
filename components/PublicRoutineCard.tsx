@@ -1,6 +1,13 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
-import { Pressable, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
+import {
+  Pressable,
+  StyleProp,
+  StyleSheet,
+  Text,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { routineIntensity } from '@lib/routines';
@@ -27,6 +34,8 @@ export interface PublicRoutineCardItem {
   /** Series planificadas en toda la rutina: de aquí sale la intensidad. */
   total_sets?: number;
   comments?: number;
+  /** Personas que la han añadido a sus rutinas (ver `getSaveCounts`). */
+  saves?: number;
   likes?: number;
   liked_by_me?: boolean;
 }
@@ -73,11 +82,16 @@ export function PublicRoutineCard({
   author,
   style,
 }: PublicRoutineCardProps) {
-  const level = item.total_sets != null ? routineIntensity(item.total_sets) : null;
+  const level =
+    item.total_sets != null ? routineIntensity(item.total_sets) : null;
 
   return (
     <Pressable
-      style={({ pressed }) => [styles.card, pressed && styles.cardPressed, style]}
+      style={({ pressed }) => [
+        styles.card,
+        pressed && styles.cardPressed,
+        style,
+      ]}
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole="button"
@@ -94,7 +108,9 @@ export function PublicRoutineCard({
             disabled={!author.onPress}
             hitSlop={8}
             accessibilityRole="button"
-            accessibilityLabel={t('Ver perfil de {name}', { name: author.name })}
+            accessibilityLabel={t('Ver perfil de {name}', {
+              name: author.name,
+            })}
           >
             <Avatar uri={author.avatarUrl ?? null} size={28} />
           </Pressable>
@@ -144,7 +160,12 @@ export function PublicRoutineCard({
           />
         )}
         <View style={styles.footerSpacer} />
-        <SaveRoutineButton saved={saved} busy={savingBusy} onPress={onSave} />
+        <SaveRoutineButton
+          saved={saved}
+          busy={savingBusy}
+          onPress={onSave}
+          count={item.saves}
+        />
         {item.likes !== undefined && !!onToggleLike && (
           <LikeButton
             likes={item.likes}
