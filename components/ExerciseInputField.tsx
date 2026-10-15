@@ -14,6 +14,7 @@ import Animated, {
   Easing,
   FadeIn,
   FadeOut,
+  LayoutAnimationConfig,
   LinearTransition,
 } from 'react-native-reanimated';
 import { ParsedSet, ExerciseLog } from '../types';
@@ -47,10 +48,6 @@ const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
 
 // × de borrado de una serie: diámetro del aspa en la esquina de la burbuja.
 const SERIE_REMOVE_SIZE = 16;
-
-// Interlineado del nombre del ejercicio: con él se mide la cabecera fija del
-// panel del registro (dos líneas) y su GIF.
-const EXERCISE_NAME_LINE_HEIGHT = 27;
 
 // Motivo por el que "Añadir serie" no se pudo completar, para que el padre
 // muestre el aviso correcto en vez de un "rellena los datos" genérico.
@@ -101,7 +98,16 @@ interface ExerciseInputFieldProps {
   // Panel del ejercicio elegido en la cuadrícula del registro: siempre
   // desplegado y sin barra de pliegue (cambiar de ejercicio es elegir otra
   // casilla, no plegar esta). Completado sigue abierto para borrar series.
+  // Sin GIF ni nombre: los lleva la casilla elegida (`exerciseName`,
+  // `catalogId` y `onAssignGif` solo los usa la tarjeta suelta).
   pinnedOpen?: boolean;
+  // Entrada del CONTENIDO (no del marco) al montarse: el registro la usa al
+  // cambiar de ejercicio. El marco (borde y fondo) no se anima: aparece en el
+  // mismo frame en que se va el anterior y se lee como la misma tarjeta.
+  contentEntering?: React.ComponentProps<typeof Animated.View>['entering'];
+  // Ejercicio ADICIONAL (lib/extraExercises): anillo azul bajo el borde de oro,
+  // como su casilla.
+  extra?: boolean;
   // Semana de descarga: sin porcentaje ni comparación con la anterior, y el peso
   // por defecto en la casilla baja al ~75% del de la semana previa.
   deload?: boolean;
@@ -130,6 +136,8 @@ export function ExerciseInputField({
   accent = theme.colors.primary,
   isCurrent,
   pinnedOpen = false,
+  contentEntering,
+  extra = false,
   deload = false,
   onLayout,
   weightStep = 1,
@@ -586,6 +594,93 @@ export function ExerciseInputField({
     );
   };
 
+  // Acciones del ejercicio (saltar, nota, cronómetro). En la cabecera y no
+  // bajo el CTA: son raras, y aquí siguen accesibles incluso con la tarjeta
+  // plegada (antes había que desplegarla para tocar la nota).
+  const actionsButton = (
+    <Pressable
+      ref={actionsButtonRef}
+      style={({ pressed }) => [
+        styles.headerAction,
+        { borderColor: cardAccent + '40' },
+        pressed && styles.buttonPressed,
+      ]}
+      onPress={() => setShowActions(true)}
+      hitSlop={6}
+      accessibilityRole="button"
+      accessibilityLabel={t('Más acciones')}
+    >
+      <MaterialCommunityIcons
+        name="dots-horizontal"
+        size={20}
+        color={cardAccent}
+      />
+    </Pressable>
+  );
+
+  // Bloque de contexto: la vez anterior (o el aviso de descarga). El objetivo
+  // ya no va aquí: las series las dicen el botón y los puntos, y el rango de
+  // repeticiones va en el rótulo de su casilla. En el panel del registro sale
+  // SIEMPRE (sin vez anterior dice "Sin datos"): sin él la cabecera se quedaba
+  // en un ⋯ suelto.
+  const contextBlock = expanded &&
+    (deload || hasPreviousContext || pinnedOpen) && (
+      <Animated.View
+        entering={fadeIn}
+        exiting={fadeOut}
+        layout={layoutTransition}
+        style={styles.contextBlock}
+      >
+        {/* En descarga se sustituye el "Anterior" (comparación) por el aviso
+            de que el peso propuesto es una bajada respecto a la semana previa. */}
+        {deload ? (
+          <View style={styles.contextItem}>
+            <MaterialCommunityIcons
+              name="sleep"
+              size={13}
+              color={theme.colors.emoji_blue}
+            />
+            <Text style={[styles.contextLabel, styles.contextLabelDeload]}>
+              {t('Descarga')}
+            </Text>
+            <Text style={styles.contextValue} numberOfLines={1}>
+              {t('Peso sugerido más ligero')}
+            </Text>
+          </View>
+        ) : previousLog && getPreviousSetsSummary() ? (
+          <View style={styles.contextItem}>
+            <MaterialCommunityIcons
+              name="history"
+              size={13}
+              color={theme.colors.textSecondary}
+            />
+            <Text style={styles.contextLabel}>{t('Anterior')}</Text>
+            <Text style={styles.contextValue} numberOfLines={1}>
+              {getPreviousSetsSummary()}
+            </Text>
+          </View>
+        ) : pinnedOpen ? (
+          <View style={styles.contextItem}>
+            <MaterialCommunityIcons
+              name="history"
+              size={13}
+              color={theme.colors.textSecondary}
+            />
+            <Text style={styles.contextLabel}>{t('Anterior')}</Text>
+            <Text
+              style={[styles.contextValue, styles.contextValueEmpty]}
+              numberOfLines={1}
+            >
+              {t('Sin datos')}
+            </Text>
+          </View>
+        ) : null}
+        {!deload && previousLog?.notes ? (
+          <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
+        ) : null}
+      </Animated.View>
+    );
+
   return (
     <View
       style={[
@@ -599,339 +694,289 @@ export function ExerciseInputField({
     >
       <GradientFill accent={cardAccent} />
 
-      {/* Cabecera: GIF + título + ⋯. El GIF ocupa el sitio que tenía el número
-          de orden, y grande: la miniatura en movimiento dice QUÉ ejercicio es,
-          que es lo que se busca al mirar la tarjeta; el "3" solo decía cuántas
-          van. Cada control es su propio Pressable (nada anidado) y el plegado
-          vive en la barra del pie (styles.collapseBar). */}
-      <View
-        style={[
-          styles.header,
-          // Colapsada: sin margen inferior (el bloque de resultados aporta su
-          // propia separación; evita doble hueco bajo la cabecera).
-          !expanded && styles.headerCollapsedEmpty,
-        ]}
-      >
-        <ExerciseGifButton
-          name={exerciseName}
-          catalogId={catalogId}
-          onAssign={onAssignGif}
-          size={26}
-          style={[styles.headerGif, pinnedOpen && styles.headerGifPinned]}
-        />
-        {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta a
-            dos líneas; al desplegar se ve entero (sin límite de líneas), así el
-            mismo gesto hace siempre lo mismo y el nombre largo sigue accesible. */}
-        {/* En el panel del registro el nombre cabe SIEMPRE en dos líneas (si
-            no, encoge) y la cabecera mide eso aunque ocupe una: cambiar a un
-            ejercicio de nombre más largo no mueve la tarjeta. */}
-        <Pressable
-          style={[styles.nameWrap, pinnedOpen && styles.nameWrapPinned]}
-          onPress={pinnedOpen ? undefined : toggleExpanded}
-          disabled={pinnedOpen}
-          accessibilityRole={pinnedOpen ? 'header' : 'button'}
-          accessibilityLabel={exerciseName}
-          accessibilityState={pinnedOpen ? undefined : { expanded }}
-        >
-          <Text
-            style={styles.exerciseName}
-            numberOfLines={pinnedOpen || !expanded ? 2 : undefined}
-            adjustsFontSizeToFit={pinnedOpen}
-            minimumFontScale={0.7}
-          >
-            {exerciseName}
-          </Text>
-        </Pressable>
-        {/* Marca de nota: plegada la tarjeta el bloque de la nota no se pinta,
-            así que un ejercicio ya completado escondía por completo lo que
-            hubieras apuntado. El icono va pegado al título para que se vea que
-            hay algo escrito, y pulsarlo despliega la tarjeta con el campo de la
-            nota listo para escribir. */}
-        {!expanded && hasNote && (
-          <Pressable
-            style={({ pressed }) => [
-              styles.headerNote,
-              pressed && styles.buttonPressed,
-            ]}
-            onPress={openNote}
-            hitSlop={6}
-            accessibilityRole="button"
-            accessibilityLabel={t('Ver la nota del ejercicio')}
-          >
-            <MaterialCommunityIcons
-              name="note-text"
-              size={18}
-              color={cardAccent}
-            />
-          </Pressable>
-        )}
-        {/* Acciones del ejercicio (saltar, nota, cronómetro). En la cabecera y
-            no bajo el CTA: son raras, y aquí siguen accesibles incluso con la
-            tarjeta plegada (antes había que desplegarla para tocar la nota). */}
-        <Pressable
-          ref={actionsButtonRef}
-          style={({ pressed }) => [
-            styles.headerAction,
-            { borderColor: cardAccent + '40' },
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => setShowActions(true)}
-          hitSlop={6}
-          accessibilityRole="button"
-          accessibilityLabel={t('Más acciones')}
-        >
-          <MaterialCommunityIcons
-            name="dots-horizontal"
-            size={20}
-            color={cardAccent}
-          />
-        </Pressable>
-      </View>
+      {/* Todo el contenido en una pieza, para animar su entrada de una vez
+          (`contentEntering`); sus bloques no hacen su propio fundido al
+          montarse (`skipEntering`), solo al aparecer después. */}
+      <Animated.View entering={contentEntering}>
+        <LayoutAnimationConfig skipEntering>
+          {/* Panel del registro: ni GIF ni título. Los dice ya su casilla elegida
+          (justo encima, con el mismo borde de oro), que es además donde se
+          reproduce el GIF. La cabecera se queda en la vez anterior y el ⋯. */}
+          {pinnedOpen ? (
+            <View style={[styles.header, styles.headerPinned]}>
+              <View style={styles.headerContext}>{contextBlock}</View>
+              {actionsButton}
+            </View>
+          ) : (
+            /* Cabecera: GIF + título + ⋯. El GIF ocupa el sitio que tenía el
+          número de orden, y grande: la miniatura en movimiento dice QUÉ
+          ejercicio es, que es lo que se busca al mirar la tarjeta; el "3" solo
+          decía cuántas van. Cada control es su propio Pressable (nada anidado)
+          y el plegado vive en la barra del pie (styles.collapseBar). */
+            <View
+              style={[
+                styles.header,
+                // Colapsada: sin margen inferior (el bloque de resultados aporta su
+                // propia separación; evita doble hueco bajo la cabecera).
+                !expanded && styles.headerCollapsedEmpty,
+              ]}
+            >
+              <ExerciseGifButton
+                name={exerciseName}
+                catalogId={catalogId}
+                onAssign={onAssignGif}
+                size={26}
+                style={styles.headerGif}
+              />
+              {/* Nombre pulsable: despliega/colapsa la tarjeta. Colapsado se corta
+            a dos líneas; al desplegar se ve entero (sin límite de líneas), así
+            el mismo gesto hace siempre lo mismo y el nombre largo sigue
+            accesible. */}
+              <Pressable
+                style={styles.nameWrap}
+                onPress={toggleExpanded}
+                accessibilityRole="button"
+                accessibilityLabel={exerciseName}
+                accessibilityState={{ expanded }}
+              >
+                <Text
+                  style={styles.exerciseName}
+                  numberOfLines={!expanded ? 2 : undefined}
+                >
+                  {exerciseName}
+                </Text>
+              </Pressable>
+              {/* Marca de nota: plegada la tarjeta el bloque de la nota no se pinta,
+              así que un ejercicio ya completado escondía por completo lo que
+              hubieras apuntado. El icono va pegado al título para que se vea que
+              hay algo escrito, y pulsarlo despliega la tarjeta con el campo de la
+              nota listo para escribir. */}
+              {!expanded && hasNote && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.headerNote,
+                    pressed && styles.buttonPressed,
+                  ]}
+                  onPress={openNote}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Ver la nota del ejercicio')}
+                >
+                  <MaterialCommunityIcons
+                    name="note-text"
+                    size={18}
+                    color={cardAccent}
+                  />
+                </Pressable>
+              )}
+              {actionsButton}
+            </View>
+          )}
 
-      {/* Sección superior desplegable: contexto + nota. El wrapper se mantiene
+          {/* Sección superior desplegable: contexto + nota. El wrapper se mantiene
           montado siempre (solo se alterna el contenido) para que `exiting` se
-          reproduzca al colapsar con un padre estable. */}
-      <View style={styles.topSection}>
-        {/* Bloque de contexto: la vez anterior (o el aviso de descarga). El
-            objetivo ya no va aquí: las series las dicen el botón y los puntos,
-            y el rango de repeticiones va en el rótulo de su casilla. */}
-        {expanded && (deload || hasPreviousContext) && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={styles.contextBlock}
-          >
-            {/* En descarga se sustituye el "Anterior" (comparación) por el aviso
-                de que el peso propuesto es una bajada respecto a la semana previa. */}
-            {deload ? (
-              <View style={styles.contextItem}>
-                <MaterialCommunityIcons
-                  name="sleep"
-                  size={13}
-                  color={theme.colors.emoji_blue}
-                />
-                <Text style={[styles.contextLabel, styles.contextLabelDeload]}>
-                  {t('Descarga')}
-                </Text>
-                <Text style={styles.contextValue} numberOfLines={1}>
-                  {t('Peso sugerido más ligero')}
-                </Text>
-              </View>
-            ) : previousLog && getPreviousSetsSummary() ? (
-              <View style={styles.contextItem}>
-                <MaterialCommunityIcons
-                  name="history"
-                  size={13}
-                  color={theme.colors.textSecondary}
-                />
-                <Text style={styles.contextLabel}>{t('Anterior')}</Text>
-                <Text style={styles.contextValue} numberOfLines={1}>
-                  {getPreviousSetsSummary()}
-                </Text>
-              </View>
-            ) : null}
-            {!deload && previousLog?.notes ? (
-              <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
-            ) : null}
-          </Animated.View>
-        )}
+          reproduzca al colapsar con un padre estable. En el registro el
+          contexto sube a la cabecera (ver arriba). */}
+          <View style={styles.topSection}>
+            {!pinnedOpen && contextBlock}
 
-        {/* Nota del ejercicio: se escribe aquí mismo y se autoguarda, como la
+            {/* Nota del ejercicio: se escribe aquí mismo y se autoguarda, como la
             de la sesión (antes abría un popup con Cancelar/Borrar/Guardar).
             Borrarla es vaciarla: vacía y sin foco, el campo se recoge. */}
-        {showNoteField && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={styles.noteOwnBlock}
-          >
-            <MaterialCommunityIcons
-              name="note-text-outline"
-              size={15}
-              color={cardAccent}
-              style={styles.noteOwnIcon}
-            />
-            <TextInput
-              ref={noteInputRef}
-              style={[styles.noteOwnInput, { color: cardAccent }]}
-              value={notes ?? ''}
-              onChangeText={onNotesChange}
-              onBlur={() => {
-                if (!notes?.trim()) setNoteOpen(false);
-              }}
-              placeholder={t(
-                'Añade una nota (ej: muy cansado, fallo en última serie)'
-              )}
-              placeholderTextColor={theme.colors.textSecondary}
-              accessibilityLabel={t('Nota del ejercicio')}
-              multiline
-              textAlignVertical="top"
-              maxLength={280}
-            />
-          </Animated.View>
-        )}
-      </View>
+            {showNoteField && (
+              <Animated.View
+                entering={fadeIn}
+                exiting={fadeOut}
+                layout={layoutTransition}
+                style={styles.noteOwnBlock}
+              >
+                <MaterialCommunityIcons
+                  name="note-text-outline"
+                  size={15}
+                  color={cardAccent}
+                  style={styles.noteOwnIcon}
+                />
+                <TextInput
+                  ref={noteInputRef}
+                  style={[styles.noteOwnInput, { color: cardAccent }]}
+                  value={notes ?? ''}
+                  onChangeText={onNotesChange}
+                  onBlur={() => {
+                    if (!notes?.trim()) setNoteOpen(false);
+                  }}
+                  placeholder={t(
+                    'Añade una nota (ej: muy cansado, fallo en última serie)'
+                  )}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  accessibilityLabel={t('Nota del ejercicio')}
+                  multiline
+                  textAlignVertical="top"
+                  maxLength={280}
+                />
+              </Animated.View>
+            )}
+          </View>
 
-      {/* Sección inferior desplegable: inputs, series insertadas y estado.
+          {/* Sección inferior desplegable: inputs, series insertadas y estado.
           Wrapper persistente (igual que la superior) para que `exiting` se
           reproduzca al colapsar. */}
-      <View>
-        {/* Estado: en progreso — las cajas de peso × reps */}
-        {expanded && !isMaxSetsReached && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={styles.inputBlock}
-          >
-            {/* Inputs peso / reps: dos campos grandes con flechas +/- al lado */}
-            <View style={styles.inputRow}>
-              <View style={styles.inputField}>
-                <Text style={styles.inputLabel}>{t('Peso · kg')}</Text>
-                <View style={styles.inputWithStepper}>
-                  <TextInput
-                    style={styles.bigInput}
-                    placeholder={localizeDecimals(getWeightPlaceholder())}
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={weightValue}
-                    onChangeText={(txt) =>
-                      setWeightValue(sanitizeWeightInput(txt))
-                    }
-                    keyboardType="decimal-pad"
-                    maxLength={6}
-                  />
-                  <View style={styles.stepperCol}>
-                    <StepButton
-                      icon="chevron-up"
-                      label={t('Subir peso')}
-                      accent={accent}
-                      onStep={() => stepWeight(1)}
-                      onHoldStart={startHold}
-                      onHoldStop={stopHold}
-                    />
-                    <StepButton
-                      icon="chevron-down"
-                      label={t('Bajar peso')}
-                      accent={accent}
-                      onStep={() => stepWeight(-1)}
-                      onHoldStart={startHold}
-                      onHoldStop={stopHold}
-                    />
+          <View>
+            {/* Estado: en progreso — las cajas de peso × reps */}
+            {expanded && !isMaxSetsReached && (
+              <Animated.View
+                entering={fadeIn}
+                exiting={fadeOut}
+                layout={layoutTransition}
+                style={styles.inputBlock}
+              >
+                {/* Inputs peso / reps: dos campos grandes con flechas +/- al lado */}
+                <View style={styles.inputRow}>
+                  <View style={styles.inputField}>
+                    <Text style={styles.inputLabel}>{t('Peso · kg')}</Text>
+                    <View style={styles.inputWithStepper}>
+                      <TextInput
+                        style={styles.bigInput}
+                        placeholder={localizeDecimals(getWeightPlaceholder())}
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={weightValue}
+                        onChangeText={(txt) =>
+                          setWeightValue(sanitizeWeightInput(txt))
+                        }
+                        keyboardType="decimal-pad"
+                        maxLength={6}
+                      />
+                      <View style={styles.stepperCol}>
+                        <StepButton
+                          icon="chevron-up"
+                          label={t('Subir peso')}
+                          accent={accent}
+                          onStep={() => stepWeight(1)}
+                          onHoldStart={startHold}
+                          onHoldStop={stopHold}
+                        />
+                        <StepButton
+                          icon="chevron-down"
+                          label={t('Bajar peso')}
+                          accent={accent}
+                          onStep={() => stepWeight(-1)}
+                          onHoldStart={startHold}
+                          onHoldStop={stopHold}
+                        />
+                      </View>
+                    </View>
                   </View>
-                </View>
-              </View>
 
-              <Text style={styles.timesGlyph}>×</Text>
+                  <Text style={styles.timesGlyph}>×</Text>
 
-              <View style={styles.inputField}>
-                {/* El rango objetivo, junto al número que se teclea (antes iba
+                  <View style={styles.inputField}>
+                    {/* El rango objetivo, junto al número que se teclea (antes iba
                     en una fila "Objetivo" aparte). Si no cabe, encoge. */}
-                <Text
-                  style={styles.inputLabel}
-                  numberOfLines={1}
-                  adjustsFontSizeToFit
-                  minimumFontScale={0.7}
-                >
-                  {isTimeBased ? t('Segundos') : t('Repeticiones')}
-                  {targetReps ? ` · ${targetReps}` : ''}
-                </Text>
-                <View style={styles.inputWithStepper}>
-                  <TextInput
-                    style={styles.bigInput}
-                    placeholder={localizeDecimals(getRepPlaceholder())}
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={repsValue}
-                    onChangeText={(txt) => setRepsValue(sanitizeIntInput(txt))}
-                    keyboardType="number-pad"
-                    maxLength={4}
-                  />
-                  <View style={styles.stepperCol}>
-                    <StepButton
-                      icon="chevron-up"
-                      label={
-                        isTimeBased
-                          ? t('Subir segundos')
-                          : t('Subir repeticiones')
-                      }
-                      accent={accent}
-                      onStep={() => stepReps(1)}
-                      onHoldStart={startHold}
-                      onHoldStop={stopHold}
-                    />
-                    <StepButton
-                      icon="chevron-down"
-                      label={
-                        isTimeBased
-                          ? t('Bajar segundos')
-                          : t('Bajar repeticiones')
-                      }
-                      accent={accent}
-                      onStep={() => stepReps(-1)}
-                      onHoldStart={startHold}
-                      onHoldStop={stopHold}
-                    />
+                    <Text
+                      style={styles.inputLabel}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.7}
+                    >
+                      {isTimeBased ? t('Segundos') : t('Repeticiones')}
+                      {targetReps ? ` · ${targetReps}` : ''}
+                    </Text>
+                    <View style={styles.inputWithStepper}>
+                      <TextInput
+                        style={styles.bigInput}
+                        placeholder={localizeDecimals(getRepPlaceholder())}
+                        placeholderTextColor={theme.colors.textMuted}
+                        value={repsValue}
+                        onChangeText={(txt) =>
+                          setRepsValue(sanitizeIntInput(txt))
+                        }
+                        keyboardType="number-pad"
+                        maxLength={4}
+                      />
+                      <View style={styles.stepperCol}>
+                        <StepButton
+                          icon="chevron-up"
+                          label={
+                            isTimeBased
+                              ? t('Subir segundos')
+                              : t('Subir repeticiones')
+                          }
+                          accent={accent}
+                          onStep={() => stepReps(1)}
+                          onHoldStart={startHold}
+                          onHoldStop={stopHold}
+                        />
+                        <StepButton
+                          icon="chevron-down"
+                          label={
+                            isTimeBased
+                              ? t('Bajar segundos')
+                              : t('Bajar repeticiones')
+                          }
+                          accent={accent}
+                          onStep={() => stepReps(-1)}
+                          onHoldStart={startHold}
+                          onHoldStop={stopHold}
+                        />
+                      </View>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </View>
 
-            {/* Botón principal: añadir serie. Ancho, fijo bajo las casillas y el
+                {/* Botón principal: añadir serie. Ancho, fijo bajo las casillas y el
                 MISMO en todas las series: es la acción más repetida de la app y
                 se pulsa sin mirar, con una mano. Antes, tras la primera serie se
                 encogía a un "+" pegado a la última burbuja, que cambiaba de sitio
                 con cada serie y quedaba junto a la × que borra la de al lado. Las
                 burbujas van DEBAJO, así que crecer no lo mueve. Lleva la serie que
                 se va a añadir ("Añadir 3.ª serie"). */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.addButton,
-                { backgroundColor: theme.colors.primaryFill },
-                pressed && styles.addButtonPressed,
-              ]}
-              onPress={handleAddSet}
-              accessibilityRole="button"
-              accessibilityLabel={addSetLabel}
-            >
-              <MaterialCommunityIcons
-                name="plus-circle"
-                size={22}
-                color={theme.colors.onGold}
-              />
-              <Text style={styles.addButtonText}>{addSetLabel}</Text>
-            </Pressable>
-          </Animated.View>
-        )}
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.addButton,
+                    { backgroundColor: theme.colors.primaryFill },
+                    pressed && styles.addButtonPressed,
+                  ]}
+                  onPress={handleAddSet}
+                  accessibilityRole="button"
+                  accessibilityLabel={addSetLabel}
+                >
+                  <MaterialCommunityIcons
+                    name="plus-circle"
+                    size={22}
+                    color={theme.colors.onGold}
+                  />
+                  <Text style={styles.addButtonText}>{addSetLabel}</Text>
+                </Pressable>
+              </Animated.View>
+            )}
 
-        {/* Series insertadas (peso × reps), justo BAJO las cajas: lo que acabas
+            {/* Series insertadas (peso × reps), justo BAJO las cajas: lo que acabas
             de meter aparece donde ya estás mirando al teclear. Se pinta también
             con la tarjeta plegada o completada, que es cuando resume el
             ejercicio entero; con `layout` se desliza al desplegar y colapsar. */}
-        {hasAddedSets && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={[
-              styles.resultsBlock,
-              !expanded && styles.resultsBlockCollapsed,
-            ]}
-          >
-            {renderSeriesRow()}
-          </Animated.View>
-        )}
+            {hasAddedSets && (
+              <Animated.View
+                entering={fadeIn}
+                exiting={fadeOut}
+                layout={layoutTransition}
+                style={[
+                  styles.resultsBlock,
+                  !expanded && styles.resultsBlockCollapsed,
+                ]}
+              >
+                {renderSeriesRow()}
+              </Animated.View>
+            )}
 
-        {/* Cronómetro del ejercicio, bajo las series. Borrar ya no vive aquí:
+            {/* Cronómetro del ejercicio, bajo las series. Borrar ya no vive aquí:
             cada burbuja lleva su × y esta fila desaparece si no hay cronómetro. */}
-        {expanded && !isMaxSetsReached && stopwatchVisible && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={styles.afterSeriesBlock}
-          >
-            {/* Sin caja ni rótulo: DÍGITOS sueltos bajo las casillas, con un
+            {expanded && !isMaxSetsReached && stopwatchVisible && (
+              <Animated.View
+                entering={fadeIn}
+                exiting={fadeOut}
+                layout={layoutTransition}
+                style={styles.afterSeriesBlock}
+              >
+                {/* Sin caja ni rótulo: DÍGITOS sueltos bajo las casillas, con un
                 botón redondo de arrancar/parar. El descanso entre series es un BLOQUE
                 que se rellena de izquierda a derecha, flotando al pie; este es
                 texto liso dentro de la tarjeta, y cuenta hacia arriba. Antes
@@ -939,157 +984,161 @@ export function ExerciseInputField({
                 ("Cronómetro del ejercicio") cuyo único trabajo era decir que
                 este no era el otro: se distinguían LEYENDO, que es lo que no se
                 puede hacer entre serie y serie. */}
-            <View style={styles.stopwatchRow}>
-              <Pressable
-                style={({ pressed }) => [
-                  styles.stopwatchToggle,
-                  timerRunning
-                    ? styles.stopwatchToggleStop
-                    : styles.stopwatchToggleStart,
-                  pressed && styles.buttonPressed,
-                ]}
-                onPress={timerRunning ? stopTimer : startTimer}
-                hitSlop={8}
-                accessibilityRole="button"
-                accessibilityLabel={
-                  timerRunning ? t('Parar') : t('Cronometrar el ejercicio')
-                }
-              >
-                <MaterialCommunityIcons
-                  name={timerRunning ? 'stop' : 'play'}
-                  size={18}
-                  color={theme.colors.onDanger}
-                />
-              </Pressable>
-              <Text style={styles.stopwatchDisplay}>
-                {formatTimerDisplay(timerSeconds)}
-              </Text>
-              {timerSeconds > 0 && !timerRunning && (
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.stopwatchUse,
-                    pressed && styles.buttonPressed,
-                  ]}
-                  onPress={useTimerAsReps}
-                  accessibilityRole="button"
-                >
-                  <MaterialCommunityIcons
-                    name="check"
-                    size={16}
-                    color={theme.colors.onGold}
-                  />
-                  <Text style={styles.stopwatchUseText}>
-                    {t('Usar {n}s', { n: timerSeconds })}
+                <View style={styles.stopwatchRow}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.stopwatchToggle,
+                      timerRunning
+                        ? styles.stopwatchToggleStop
+                        : styles.stopwatchToggleStart,
+                      pressed && styles.buttonPressed,
+                    ]}
+                    onPress={timerRunning ? stopTimer : startTimer}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      timerRunning ? t('Parar') : t('Cronometrar el ejercicio')
+                    }
+                  >
+                    <MaterialCommunityIcons
+                      name={timerRunning ? 'stop' : 'play'}
+                      size={18}
+                      color={theme.colors.onDanger}
+                    />
+                  </Pressable>
+                  <Text style={styles.stopwatchDisplay}>
+                    {formatTimerDisplay(timerSeconds)}
                   </Text>
-                </Pressable>
-              )}
-            </View>
-          </Animated.View>
-        )}
+                  {timerSeconds > 0 && !timerRunning && (
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.stopwatchUse,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      onPress={useTimerAsReps}
+                      accessibilityRole="button"
+                    >
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={16}
+                        color={theme.colors.onGold}
+                      />
+                      <Text style={styles.stopwatchUseText}>
+                        {t('Usar {n}s', { n: timerSeconds })}
+                      </Text>
+                    </Pressable>
+                  )}
+                </View>
+              </Animated.View>
+            )}
 
-        {/* Estado: completado */}
-        {expanded && isMaxSetsReached && (
-          <Animated.View
-            entering={fadeIn}
-            exiting={fadeOut}
-            layout={layoutTransition}
-            style={styles.completedBlock}
-          >
-            <View style={styles.completedRow}>
-              <MaterialCommunityIcons
-                name="check-circle"
-                size={16}
-                color={theme.colors.success}
-              />
-              <Text style={styles.completedText}>
-                {t('Completado · {a}/{b} series', {
-                  // Las saltadas (—) no cuentan como hechas.
-                  a: addedSets.filter((s) => s.weight !== -1 && s.reps !== -1)
-                    .length,
-                  b: target?.sets ?? addedSets.length,
-                })}
-              </Text>
-            </View>
-          </Animated.View>
-        )}
-      </View>
+            {/* Estado: completado */}
+            {expanded && isMaxSetsReached && (
+              <Animated.View
+                entering={fadeIn}
+                exiting={fadeOut}
+                layout={layoutTransition}
+                style={styles.completedBlock}
+              >
+                <View style={styles.completedRow}>
+                  <MaterialCommunityIcons
+                    name="check-circle"
+                    size={16}
+                    color={theme.colors.success}
+                  />
+                  <Text style={styles.completedText}>
+                    {t('Completado · {a}/{b} series', {
+                      // Las saltadas (—) no cuentan como hechas.
+                      a: addedSets.filter(
+                        (s) => s.weight !== -1 && s.reps !== -1
+                      ).length,
+                      b: target?.sets ?? addedSets.length,
+                    })}
+                  </Text>
+                </View>
+              </Animated.View>
+            )}
+          </View>
 
-      {/* Pliegue de la tarjeta: barra ancha y baja al pie, con el mismo peldaño
+          {/* Pliegue de la tarjeta: barra ancha y baja al pie, con el mismo peldaño
           sombreado que las flechas laterales de la hero card. Antes era un aro de
           38 en la cabecera, que le comía el ancho al nombre del ejercicio (los
           títulos largos caían a tres líneas). Va la última, incluso bajo el
           descanso, porque es el borde inferior de la tarjeta. */}
-      {!pinnedOpen && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.collapseBar,
-            pressed && styles.collapseBarPressed,
-          ]}
-          onPress={toggleExpanded}
-          // 26 de alto: el hitSlop sube la zona de toque hacia dentro de la
-          // tarjeta (abajo es el borde).
-          hitSlop={{ top: 14 }}
-          accessibilityRole="button"
-          accessibilityLabel={
-            expanded ? t('Plegar ejercicio') : t('Desplegar ejercicio')
-          }
-          accessibilityState={{ expanded }}
-        >
-          <LinearGradient
-            colors={theme.gradients.heroStep}
-            locations={STEP_SHADE_STOPS}
-            start={{ x: 0, y: 1 }}
-            end={{ x: 0, y: 0 }}
-            style={StyleSheet.absoluteFill}
-            pointerEvents="none"
-          />
-          <MaterialCommunityIcons
-            name={expanded ? 'chevron-up' : 'chevron-down'}
-            size={24}
-            color={cardAccent}
-          />
-        </Pressable>
-      )}
+          {!pinnedOpen && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.collapseBar,
+                pressed && styles.collapseBarPressed,
+              ]}
+              onPress={toggleExpanded}
+              // 26 de alto: el hitSlop sube la zona de toque hacia dentro de la
+              // tarjeta (abajo es el borde).
+              hitSlop={{ top: 14 }}
+              accessibilityRole="button"
+              accessibilityLabel={
+                expanded ? t('Plegar ejercicio') : t('Desplegar ejercicio')
+              }
+              accessibilityState={{ expanded }}
+            >
+              <LinearGradient
+                colors={theme.gradients.heroStep}
+                locations={STEP_SHADE_STOPS}
+                start={{ x: 0, y: 1 }}
+                end={{ x: 0, y: 0 }}
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              />
+              <MaterialCommunityIcons
+                name={expanded ? 'chevron-up' : 'chevron-down'}
+                size={24}
+                color={cardAccent}
+              />
+            </Pressable>
+          )}
 
-      {/* Acciones raras del ejercicio (nota, cronómetro, saltar): menú
+          {/* Acciones raras del ejercicio (nota, cronómetro, saltar): menú
           desplegable anclado al ⋯ de la cabecera, con el mismo dibujo que el
           de la barra superior. Antes era un popup centrado con pie 'Volver',
           que tapaba la tarjeta desde la que se abría y pedía un toque más
           para no hacer nada; el menú deja ver el ejercicio y se cierra solo. */}
-      <AnchorMenu
-        visible={showActions}
-        onClose={() => setShowActions(false)}
-        anchorRef={actionsButtonRef}
-        items={[
-          {
-            icon: 'note-text-outline',
-            label: hasNote ? t('Editar nota') : t('Añadir nota'),
-            onPress: openNote,
-          },
-          // Cronómetro SIEMPRE: es una acción del ⋯, no estorba a nadie, y
-          // antes solo existía si el objetivo llevaba escrita una unidad de
-          // tiempo — justo en los isométricos donde más falta hace.
-          {
-            icon: 'timer-outline',
-            label: t('Cronometrar el ejercicio'),
-            onPress: () => setShowStopwatch(true),
-          } as AnchorMenuItem,
-          // Cierra el ejercicio rellenando con guiones (series omitidas) las
-          // que falten hasta el objetivo. Ya completado no hay nada que
-          // saltar, así que no se ofrece.
-          ...(!isMaxSetsReached
-            ? [
-                {
-                  icon: 'skip-forward',
-                  label: hasAddedSets
-                    ? t('Saltar resto')
-                    : t('Saltar ejercicio'),
-                  onPress: onFinishExercise,
-                } as AnchorMenuItem,
-              ]
-            : []),
-        ]}
-      />
+          <AnchorMenu
+            visible={showActions}
+            onClose={() => setShowActions(false)}
+            anchorRef={actionsButtonRef}
+            items={[
+              {
+                icon: 'note-text-outline',
+                label: hasNote ? t('Editar nota') : t('Añadir nota'),
+                onPress: openNote,
+              },
+              // Cronómetro SIEMPRE: es una acción del ⋯, no estorba a nadie, y
+              // antes solo existía si el objetivo llevaba escrita una unidad de
+              // tiempo — justo en los isométricos donde más falta hace.
+              {
+                icon: 'timer-outline',
+                label: t('Cronometrar el ejercicio'),
+                onPress: () => setShowStopwatch(true),
+              } as AnchorMenuItem,
+              // Cierra el ejercicio rellenando con guiones (series omitidas) las
+              // que falten hasta el objetivo. Ya completado no hay nada que
+              // saltar, así que no se ofrece.
+              ...(!isMaxSetsReached
+                ? [
+                    {
+                      icon: 'skip-forward',
+                      label: hasAddedSets
+                        ? t('Saltar resto')
+                        : t('Saltar ejercicio'),
+                      onPress: onFinishExercise,
+                    } as AnchorMenuItem,
+                  ]
+                : []),
+            ]}
+          />
+        </LayoutAnimationConfig>
+      </Animated.View>
+      {extra && <View pointerEvents="none" style={styles.extraRing} />}
     </View>
   );
 }
@@ -1151,6 +1200,17 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
+    // Anillo azul del adicional, por dentro del borde de oro.
+    extraRing: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      borderWidth: 3,
+      borderColor: theme.colors.emoji_blue,
+      borderRadius: theme.borderRadius.md - 3,
+    },
     containerPinned: {
       borderWidth: 3,
       borderLeftWidth: 3,
@@ -1200,21 +1260,20 @@ const makeStyles = () =>
     nameWrap: {
       flex: 1,
     },
-    nameWrapPinned: {
-      height: EXERCISE_NAME_LINE_HEIGHT * 2,
-      justifyContent: 'center',
+    // Panel del registro: la vez anterior a la izquierda y el ⋯ a la derecha,
+    // arriba los dos (la nota anterior puede alargar el contexto).
+    headerPinned: {
+      alignItems: 'flex-start',
     },
-    // Panel del registro: el GIF mide lo que dos líneas del nombre.
-    headerGifPinned: {
-      width: EXERCISE_NAME_LINE_HEIGHT * 2,
-      height: EXERCISE_NAME_LINE_HEIGHT * 2,
+    headerContext: {
+      flex: 1,
+      minWidth: 0,
     },
     exerciseName: {
       fontSize: 20,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
-      // = EXERCISE_NAME_LINE_HEIGHT (literal: lo lee el test de Anton).
       lineHeight: 27,
     },
 
@@ -1321,6 +1380,10 @@ const makeStyles = () =>
       textTransform: 'uppercase',
       letterSpacing: 0.5,
       width: 68,
+    },
+    contextValueEmpty: {
+      color: theme.colors.textMuted,
+      fontStyle: 'italic',
     },
     contextLabelDeload: {
       color: theme.colors.emoji_blue,

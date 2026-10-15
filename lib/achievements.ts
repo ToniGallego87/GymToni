@@ -6,6 +6,7 @@ import {
 import { improvementAgainstHistory } from './weeks';
 import { getLogTimestamp } from './utils';
 import { fmtInt, localizeDecimals, t } from './i18n';
+import type { WeekExtras } from './weekExtras';
 
 /** Ejercicio con mayor mejora respecto a la misma semana anterior. */
 export interface TopImprovement {
@@ -78,6 +79,12 @@ export interface WeekAchievements {
   slots: AchievementSlot[];
   /** Mejora por semana hasta esta (para pintar la gráfica). */
   progressSeries: WeekProgressDatum[];
+  /**
+   * Retos superados y logros conseguidos en la semana, y el nivel con que se
+   * cerró (lib/weekExtras). Lo añade quien abre el póster, que es quien tiene
+   * los retos y los logros.
+   */
+  extras?: WeekExtras;
 }
 
 interface ExerciseAggregate {

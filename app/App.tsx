@@ -64,6 +64,7 @@ import {
   getFloatingBackButtonMetrics,
   PipRestTimer,
   RestTimerBar,
+  SplashFade,
   getFloatingPrimaryNavMetrics,
 } from '@components';
 import type { WeekAchievements } from '@lib/achievements';
@@ -89,6 +90,7 @@ import {
 } from '@lib/storage';
 import { useMyProfile } from '@hooks/useMyProfile';
 import { useRecordAccountLevel } from '@hooks/useAccountLevel';
+import { TabFocusContext } from '@hooks/useTabFocus';
 import { shiftAward, useAwards } from '@lib/awards';
 import { requestLevelPulse } from '@lib/levelPulse';
 import { setAchievementsOpener } from '@lib/achievementsLink';
@@ -305,7 +307,7 @@ const BOOT_MAX_WAIT_MS = 8000;
  * navegación monta su pestaña igualmente, y `BOOT_MAX_WAIT_MS` pone el tope.
  */
 
-function AppContent() {
+function AppContent({ onReady }: { onReady: () => void }) {
   const { dispatch, state } = useWorkout();
   // Logs vivos para las vueltas atrás (ver `goBackTo`): el atrás físico se
   // registra al cambiar de pantalla y su cierre no ve los logs posteriores.
@@ -375,6 +377,10 @@ function AppContent() {
   // calentamiento llegara a ella se desmontaba al salir y volver costaba lo
   // mismo que la primera vez).
   if (isTab) mountedTabsRef.current.add(screen.type as TabType);
+  // La última pestaña elegida en la barra. Una subpantalla encima no la cambia:
+  // es la pestaña de la que se viene y a la que se vuelve (ver useTabFocus).
+  const focusedTabRef = React.useRef<TabType>('home');
+  if (isTab) focusedTabRef.current = screen.type as TabType;
   // Pager NATIVO (react-native-pager-view / ViewPager2): gestiona el arrastre
   // horizontal y el asentamiento de forma nativa, sin pasar por el hilo JS ni por
   // react-native-gesture-handler (el enfoque casero se colgaba por un bug de
@@ -607,7 +613,8 @@ function AppContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [background, isFirstInstall]);
 
-  // Oculta el splash nativo una vez los datos reales ya están en pantalla, pero
+  // Retira el splash (`SplashFade`, en la raíz) una vez los datos reales ya
+  // están en pantalla, pero
   // NO en el mismo tick que se marca `hydrated`: se esperan dos frames para que
   // el primer render con la UI real (incluida la fuente Anton) se pinte y MIDA
   // antes de revelarlo. Si no, en algunos arranques en frío el splash se retiraba
@@ -616,9 +623,7 @@ function AppContent() {
   useEffect(() => {
     if (!hydrated) return;
     const outer = requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        SplashScreen.hideAsync().catch(() => {});
-      });
+      requestAnimationFrame(onReady);
     });
     return () => cancelAnimationFrame(outer);
   }, [hydrated]);
@@ -1399,7 +1404,9 @@ function AppContent() {
     return (
       <View key={type} style={styles.pagerPage} collapsable={false}>
         {active || mounted ? (
-          <TabStateBoundary active={active}>{node}</TabStateBoundary>
+          <TabFocusContext.Provider value={focusedTabRef.current === type}>
+            <TabStateBoundary active={active}>{node}</TabStateBoundary>
+          </TabFocusContext.Provider>
         ) : null}
       </View>
     );
@@ -1906,33 +1913,51 @@ export default function App() {
   // cerrándola desde la propia ventana.
   const [inPip, setInPip] = useState(false);
   useEffect(() => subscribePipMode(setInPip), []);
+  // La app ya está pintada con sus datos: el splash puede desvanecerse.
+  const [appReady, setAppReady] = useState(false);
+  // La copia del splash (SplashFade) ya pintó su logo. Hasta entonces no se
+  // dibuja nada opaco: la raíz es transparente y se ve el splash de la ventana,
+  // idéntico. Antes la raíz y el fondo negro de la copia salían antes que su
+  // logo (la imagen carga asíncrona) y había unos fotogramas en negro.
+  const [splashLogoShown, setSplashLogoShown] = useState(false);
 
   // El splash nativo se mantiene (preventAutoHide) hasta que AppContent termina
-  // de hidratar los datos; allí se llama a SplashScreen.hideAsync(). Así no se
+  // de hidratar los datos; entonces `SplashFade` lo retira y se desvanece. Así no se
   // oculta solo con las fuentes cargadas, evitando el parpadeo de datos semilla.
   if (!fontsLoaded) {
     return null;
   }
 
   return (
-    <GestureHandlerRootView style={styles.container}>
-      <WorkoutProvider>
-        <StatusBar
-          barStyle={
-            theme.statusBarStyle === 'light' ? 'light-content' : 'dark-content'
-          }
-          backgroundColor="transparent"
-          translucent
-        />
-        <View style={styles.container}>
-          <AppContent />
-          {/* Ventanita flotante del descanso: el sistema encoge la app entera a
+    <GestureHandlerRootView
+      style={[styles.container, !splashLogoShown && styles.transparent]}
+    >
+      {splashLogoShown && (
+        <WorkoutProvider>
+          <StatusBar
+            barStyle={
+              theme.statusBarStyle === 'light'
+                ? 'light-content'
+                : 'dark-content'
+            }
+            backgroundColor="transparent"
+            translucent
+          />
+          <View style={styles.container}>
+            <AppContent onReady={() => setAppReady(true)} />
+            {/* Ventanita flotante del descanso: el sistema encoge la app entera a
               un recuadro movible (Picture-in-Picture), donde la pantalla de
               registro no se lee. Se tapa con la cuenta atrás a tamaño grande y
               se destapa al volver, con el árbol intacto por debajo. */}
-          {inPip && <PipRestTimer />}
-        </View>
-      </WorkoutProvider>
+            {inPip && <PipRestTimer />}
+          </View>
+        </WorkoutProvider>
+      )}
+      {/* Copia del splash nativo que se desvanece sobre la app. */}
+      <SplashFade
+        ready={appReady}
+        onLogoShown={() => setSplashLogoShown(true)}
+      />
     </GestureHandlerRootView>
   );
 }
@@ -1942,6 +1967,9 @@ const makeStyles = () =>
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
+    },
+    transparent: {
+      backgroundColor: 'transparent',
     },
     // Cada página del PagerView ocupa toda la vista.
     pagerPage: {

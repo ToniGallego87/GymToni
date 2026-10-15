@@ -9,6 +9,12 @@
     <item name="android:statusBarColor">@android:color/transparent</item>
     <item name="android:windowTranslucentStatus">false</item>
     <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="o_mr1">shortEdges</item>
+    <!-- Fondo de la ventana = el MISMO dibujo del splash (negro + titular). El
+         de AppCompat Light es blanco y asomaba como un fogonazo entre el
+         splash y la app; negro liso, sin el titular, se leía como un parpadeo.
+         Así, en cualquier hueco entre capas se sigue viendo el splash. La app
+         lo tapa entero (su raíz tiene fondo propio). -->
+    <item name="android:windowBackground">@drawable/splashscreen</item>
   </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
     <item name="android:padding">0dp</item>

@@ -1,3 +1,9 @@
 <resources>
   <string name="app_name">GymBro</string>
+  <!-- expo-splash-screen: su capa pinta el MISMO dibujo que el splash de la
+       ventana (drawable/splashscreen: negro + titular a tamaño nativo) y a
+       pantalla completa, para que el logo no salte ni desaparezca al pasar de
+       uno a otra. Su copia en JS (components/SplashFade) lo desvanece. -->
+  <string name="expo_splash_screen_resize_mode" translatable="false">native</string>
+  <string name="expo_splash_screen_status_bar_translucent" translatable="false">true</string>
 </resources>

@@ -1,12 +1,11 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
   SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Polyline } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -33,8 +32,6 @@ interface HeroWeightCardProps {
   history: number[];
   /** Abre la edición del peso. */
   onPress: () => void;
-  /** Dirección de entrada del contenido en un carrusel (el frame no se mueve). */
-  enterFrom?: 'left' | 'right';
   /** Escala de pulsación del carrusel: si viene, escala él el conjunto. */
   pressScale?: SharedValue<number>;
   /**
@@ -123,7 +120,6 @@ export function HeroWeightCard({
   weight,
   history,
   onPress,
-  enterFrom,
   pressScale,
   compact = false,
   footer,
@@ -134,19 +130,6 @@ export function HeroWeightCard({
   // Suelta, la tarjeta se escala a sí misma; en un carrusel escala el conjunto.
   const pressStyle = useAnimatedStyle(() => ({
     transform: [{ scale: pressScale ? 1 : localScale.value }],
-  }));
-
-  // Animación de solo el contenido (el frame/gradiente queda fijo en el carrusel).
-  const enterDir = enterFrom === 'left' ? -1 : enterFrom === 'right' ? 1 : 0;
-  const contentTx = useSharedValue(22 * enterDir);
-  const contentOpacity = useSharedValue(0);
-  useEffect(() => {
-    contentTx.value = withTiming(0, { duration: 260 });
-    contentOpacity.value = withTiming(1, { duration: 260 });
-  }, []);
-  const contentStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: contentTx.value }],
-    opacity: contentOpacity.value,
   }));
 
   const points = history.slice(-MAX_POINTS);
@@ -190,7 +173,7 @@ export function HeroWeightCard({
           pointerEvents="none"
         />
 
-        <Animated.View style={contentStyle}>
+        <View>
           <Text style={styles.kicker}>{t('Tu peso')}</Text>
           <View style={styles.mainRow}>
             <MaterialCommunityIcons
@@ -236,7 +219,7 @@ export function HeroWeightCard({
               </Text>
             </View>
           )}
-        </Animated.View>
+        </View>
       </LinearGradient>
     </AnimatedPressable>
   );

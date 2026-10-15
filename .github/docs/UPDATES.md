@@ -1,5 +1,133 @@
 # UPDATES
 
+## Version 0.8.7 - 2026-10-15
+
+### Nuevas funcionalidades
+
+- **Póster de semana completada renovado.** Arriba, en una fila centrada,
+  quién: la foto, el nombre y, pegado a él, el nivel que tenía al cerrar la
+  semana (estrella + número). Cada pieza va en su posición calculada con el
+  ancho real del nombre, que mide la pantalla con un texto de la app
+  (`nameWidth`): encadenadas en un solo texto SVG, el nombre en Anton se medía
+  mal y el nivel quedaba muy separado. Después "SEMANA N ¡COMPLETADA!" con los días
+  entrenados (sin el nombre de la rutina), los cuatro anillos de siempre y un
+  panel con los retos superados y los logros conseguidos en esa semana, solo
+  con lo que haya (sin nada, no sale y los anillos se reparten el sitio); la
+  marca pasa al pie. `lib/weekExtras.ts`
+  reconstruye el nivel de entonces: retos cuyo periodo ya había acabado
+  (`rutina:bloque` → fecha del último entreno del bloque; semana ISO) y logros
+  con `unlockedAt` hasta ese día. `challengeMeta` da nombre e icono de un reto
+  por su id.
+
+- **Dos logros de cardio más:** "Pulmones de acero" (200 sesiones) e
+  "Incansable" (500), en `lib/badges.ts`.
+
+- **Ejercicios adicionales en el registro.** Un "+" punteado al final de la
+  ruleta (siempre fuera del marco) abre el mismo popup de añadir ejercicio de
+  la rutina (`ExerciseEditorModal`); el ejercicio entra en la ruleta con borde
+  azul y se registra como uno más, y se pueden añadir varios. No tocan la
+  rutina ni el esquema: se reconocen por su `exerciseId`
+  (`extra|<series>|<reps>|<id>`, `lib/extraExercises.ts`), que lleva su
+  objetivo y viaja tal cual por SQLite, la nube y las copias (`appDataToRows`
+  ya no lo anula por no estar en ninguna rutina). Quedan fuera de toda
+  comparación: mejora de sesión y semana (`getComparableWorkoutScores`), "la
+  vez anterior" y récords del registro, y Progreso por ejercicio. El Detalle
+  los muestra al final, con borde azul y la marca "Ejercicio adicional · no es
+  de este día" (`ExerciseResultDisplay` `extra`). En el registro, el adicional
+  elegido lleva anillo azul bajo el oro (en el marco y en el panel), su pie en
+  azul, y su "Anterior" es la última vez que se hizo ese ejercicio en
+  cualquier rutina (sin % de mejora).
+
+### Cambios
+
+- **Una sola medalla de logro** (`BadgeMedal`): la de la lista de Logros, la
+  de su popup de detalle y la del popup de premio son ahora la misma.
+- **Ejercicio nuevo de una rutina, oculto hasta "Listo".** Al añadirlo (crear
+  rutina o editar una guardada) ya no aparece su casilla vacía bajo el popup;
+  sale al cerrarlo con nombre.
+- **Logros como muro de medallas.** Una tarjeta neutra por tipo, con su
+  recuento (estilo retos de Inicio) y barra. Conseguido: medalla con el
+  degradado de oro y la fecha; por recuento: medalla apagada con su anillo y
+  "186/200"; de sí/no: apagada con candado. Antes las conseguidas eran casillas
+  rellenas de oro y la pantalla era un bloque amarillo.
+- **Ficha de la rutina sin nombre repetido ni oro.** El nombre ya es el
+  título de la barra (sale en la ficha solo en edición, que es lo que se
+  cambia); la tarjeta es neutra, con la descripción y una fila de datos:
+  ejercicios, series/semana e intensidad.
+- **Inicio y Cardio vuelven arriba y se pliegan** al cambiar a otra pestaña
+  de la barra (`useOnTabLeave`, `hooks/useTabFocus.ts`). Abrir un detalle
+  encima no cuenta: al volver siguen donde estaban.
+- **Lupa en todas las casillas del registro** (`GifCornerBadge`); solo la del
+  marco amplía el GIF.
+- **Registro: ruleta de ejercicios.** En vez de la retícula de cuatro por
+  fila, una ruleta horizontal bajo un marco de oro FIJO en el centro
+  (`ExerciseWheel` en `ExerciseTileGrid`, Reanimated): el ejercicio que encaja
+  en el marco es el elegido. Al soltar se encaja solo el que tenga más de la
+  mitad dentro (`snapToInterval`); las casillas se maquetan a tamaño completo
+  y se escalan (textos incluidos) al acercarse o alejarse del marco,
+  siguiendo al dedo (`WheelSlot`). Casillas de 146/100 px con GIF y textos
+  mayores. La del marco enseña el GIF EN MOVIMIENTO (solo ella) con una lupa
+  que lo amplía. El pie de series copia el recuento de retos de Inicio: las
+  hechas grandes en oro (azul si es adicional, verde si está completo) y
+  "/objetivo" pequeño en blanco. El panel enseña siempre "Anterior" ("Sin
+  datos" si no hay vez anterior). Tocar una casilla la
+  lleva al marco y, al completar un ejercicio, la ruleta gira sola al
+  siguiente. El panel queda siempre abierto: con el día terminado se queda en
+  el último y "Entreno completado" sale debajo.
+- **Panel de series sin GIF ni título** (`ExerciseInputField` con
+  `pinnedOpen`): arriba solo "Anterior" y el ⋯. El GIF se reproduce desde la
+  casilla del marco, con un play amarillo pequeño abajo a la derecha
+  (`ExerciseGifButton` `playOverlay`; la marca de nota sube arriba a la
+  derecha); sin GIF, la lupa para asignar uno (`selection.onAssignGif`).
+- **Cardio: disciplinas en la cabecera de semana.** "N sesiones" pasa a ser
+  iconos redondos de cada disciplina con "×N" por días hechos
+  (`weekDisciplineCounts` en `lib/cardio.ts`); caben los que deje el título y,
+  si sobran, un "+N".
+- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.7;
+  `versionCode` 33 → 34; entrada nueva en `data/changelog.ts` para el popup
+  de novedades.
+
+### Correcciones
+
+- **Cambio de panel sin parpadeo.** Al cambiar de ejercicio se animaba la
+  tarjeta entera (medio transparente, o cruzándose con la vieja) y se leía como
+  un parpadeo. Ahora el marco no se anima —el nuevo aparece en el mismo frame
+  en que se va el viejo— y solo su contenido entra, rápido, deslizándose desde
+  el lado hacia el que giró la ruleta (`ExerciseInputField` `contentEntering`).
+  El panel viejo se va entero y al instante (`LayoutAnimationConfig
+  skipExiting` con la `key`): sus bloques hacían su propio fundido de salida
+  encima del nuevo y se veían textos dobles.
+- **Casilla elegida sin parpadeo.** Al elegirla, su miniatura se cambiaba por
+  la del botón de GIF, que la recargaba (un instante en blanco). Ahora la
+  miniatura fija está siempre y la elegida gana encima una capa
+  (`ExerciseGifButton` `layer`) con el GIF animado, que aparece cuando carga, y
+  la lupa.
+- **Splash sin fogonazo blanco y con salida suave.** El fondo de ventana de
+  `AppTheme` era el blanco de AppCompat y asomaba entre el splash y la app:
+  ahora es el MISMO dibujo del splash (negro + titular; negro liso se veía
+  como un parpadeo). La capa de expo-splash-screen pinta el mismo
+  dibujo que la ventana (`expo_splash_screen_resize_mode` = `native`, a
+  pantalla completa), y `SplashFade` (copia en JS del splash) se desvanece
+  sobre la app al retirarse el nativo, con curva suave al empezar (con una
+  rápida, el primer fotograma ya descubría media app). La copia es
+  transparente hasta que su logo está pintado y la app no se monta debajo
+  hasta entonces: su fondo negro salía antes que el logo (la imagen carga
+  asíncrona) y daba tres fotogramas negros, medidos en una grabación.
+- **Gráfica de Progreso por ejercicio legible.** Las fechas ("14 sept") se
+  pisaban: `BarChart` gana `scrollable`, con ancho mínimo por barra y
+  desplazamiento horizontal que arranca en las últimas sesiones (hasta 12). El
+  margen del eje Y se calcula con la marca más larga y la escala de letra del
+  sistema: "101,7" ya no pierde el primer dígito.
+- **Popup de reto en una línea.** "Dos cardios" se partía en dos: Android mide
+  corto Anton con `letterSpacing`; el nombre de `AwardModal` ocupa ahora todo
+  el ancho.
+- **Hero de Inicio con el texto casi invisible.** El contenido de `HeroCard`
+  (y de `HeroWeightCard`) nacía a opacidad 0 y se fundía a 1 con
+  `withTiming`; si la animación no llegaba a correr al montar, la tarjeta se
+  quedaba dorada con icono y texto casi transparentes (lo vio un usuario).
+  Fuera el fundido: el contenido sale opaco desde el primer frame. De paso se
+  retira `enterFrom` de `HeroWeightCard`, resto del carrusel que ya nadie pasaba.
+
 ## Version 0.8.6 - 2026-10-14
 
 ### Arquitectura

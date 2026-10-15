@@ -34,6 +34,8 @@ export type BadgeId =
   | 'cardio-10'
   | 'cardio-50'
   | 'cardio-100'
+  | 'cardio-200'
+  | 'cardio-500'
   | 'full-week'
   | 'streak-4'
   | 'streak-8'
@@ -312,6 +314,24 @@ export function computeBadges(
       t('Completa 100 sesiones de cardio.'),
       dates.cardioSessions,
       100
+    ),
+    badge(
+      'cardio-200',
+      'cardio',
+      'lungs',
+      t('Pulmones de acero'),
+      t('Completa 200 sesiones de cardio.'),
+      dates.cardioSessions,
+      200
+    ),
+    badge(
+      'cardio-500',
+      'cardio',
+      'infinity',
+      t('Incansable'),
+      t('Completa 500 sesiones de cardio.'),
+      dates.cardioSessions,
+      500
     ),
     // --- Semanas ---
     badge(

@@ -1,6 +1,6 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { PixelRatio, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { theme } from '@lib/theme';
 
 export interface BarChartPoint {
@@ -30,6 +30,13 @@ interface BarChartProps {
    * dominio (métricas de cardio, siempre positivas).
    */
   signed?: boolean;
+  /**
+   * Si las etiquetas del eje X no caben (fechas como "14 sept"), las barras se
+   * deslizan en horizontal con un ancho mínimo por barra en vez de apretarse
+   * hasta pisarse. Arranca mostrando las últimas. Solo fuera del pager de
+   * pestañas (Progreso por ejercicio): dentro, el gesto se lo disputaría.
+   */
+  scrollable?: boolean;
 }
 
 // Ancho de la gráfica en las tres pantallas que la usan (Inicio, Cardio y
@@ -43,6 +50,15 @@ export const getChartWidth = (windowWidth: number): number =>
 
 const HEIGHT = 170;
 const PADDING = { top: 18, right: 12, bottom: 28, left: 42 };
+// Ancho aproximado de un carácter de las marcas del eje Y (11 px) y aire entre
+// la marca y la rejilla. El margen izquierdo crece con la marca más larga
+// ("101,7"): con uno fijo, el primer dígito se cortaba.
+const Y_CHAR_WIDTH = 6.8;
+const Y_LABEL_GAP = 12;
+// Ancho mínimo por barra en modo deslizable: lo que pide "28 sept" a 12 px.
+const MIN_SLOT_WIDTH = 56;
+const LABEL_MIN_WIDTH = 44;
+const VALUE_LABEL_WIDTH = 44;
 
 /**
  * Gráfica de barras de la app (progreso semanal en Inicio y métricas mensuales
@@ -58,14 +74,46 @@ export function BarChart({
   domain,
   formatYTick,
   signed = false,
+  scrollable = false,
 }: BarChartProps) {
-  const plotWidth = width - PADDING.left - PADDING.right;
+  // El texto escala con el tamaño de letra del sistema: las medidas que
+  // dependen de él, también.
+  const fontScale = PixelRatio.getFontScale();
+  const yTicks = [domain.max, (domain.max + domain.min) / 2, domain.min];
+  const yTickLabels = yTicks.map(formatYTick);
+  const longestYTick = Math.max(...yTickLabels.map((label) => label.length));
+  const paddingLeft = Math.max(
+    PADDING.left,
+    Math.ceil(longestYTick * Y_CHAR_WIDTH * fontScale + Y_LABEL_GAP)
+  );
+
+  const plotWidth = width - paddingLeft - PADDING.right;
   const plotHeight = HEIGHT - PADDING.top - PADDING.bottom;
 
-  const slotWidth = points.length > 0 ? plotWidth / points.length : plotWidth;
+  // Deslizable solo si hace falta. Entonces caben N barras y media: la cortada
+  // del borde izquierdo dice que hay más.
+  const minSlotWidth = MIN_SLOT_WIDTH * fontScale;
+  const scrolls =
+    scrollable && points.length > 0 && plotWidth / points.length < minSlotWidth;
+  const slotWidth = scrolls
+    ? plotWidth /
+      (Math.max(1, Math.floor(plotWidth / minSlotWidth - 0.5)) + 0.5)
+    : points.length > 0
+    ? plotWidth / points.length
+    : plotWidth;
+  const contentWidth = scrolls ? slotWidth * points.length : plotWidth;
   const barWidth = Math.max(18, Math.min(slotWidth * 0.55, 34));
+  const labelWidth = Math.max(LABEL_MIN_WIDTH, slotWidth - 4);
+  // X dentro de la capa de barras (que ya empieza en el margen izquierdo).
   const getX = (index: number) =>
-    PADDING.left + index * slotWidth + (slotWidth - barWidth) / 2;
+    index * slotWidth + (slotWidth - barWidth) / 2;
+
+  // Al cambiar los datos (otro ejercicio, otra medida), a las más recientes.
+  const scrollRef = useRef<ScrollView>(null);
+  const pointsKey = points.map((point) => point.key).join('|');
+  useEffect(() => {
+    if (scrolls) scrollRef.current?.scrollToEnd({ animated: false });
+  }, [pointsKey, scrolls]);
 
   const getY = (value: number) => {
     if (domain.max === domain.min) return PADDING.top + plotHeight / 2;
@@ -78,7 +126,31 @@ export function BarChart({
   // Con signo las barras salen del cero; si no, del suelo del dominio.
   const baselineValue = signed ? 0 : domain.min;
   const baselineY = getY(baselineValue);
-  const yTicks = [domain.max, (domain.max + domain.min) / 2, domain.min];
+
+  // Capa de las barras y sus etiquetas, a la derecha del eje Y. Deslizable o
+  // fija; la rejilla y las marcas del eje van fuera y no se mueven.
+  const renderPlotLayer = (children: React.ReactNode) =>
+    scrolls ? (
+      <ScrollView
+        ref={scrollRef}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.plotLayer, { left: paddingLeft, width: plotWidth }]}
+        contentContainerStyle={{ width: contentWidth, height: HEIGHT }}
+        onContentSizeChange={() =>
+          scrollRef.current?.scrollToEnd({ animated: false })
+        }
+      >
+        {children}
+      </ScrollView>
+    ) : (
+      <View
+        style={[styles.plotLayer, { left: paddingLeft, width: plotWidth }]}
+        pointerEvents="none"
+      >
+        {children}
+      </View>
+    );
 
   return (
     <View style={styles.wrapper}>
@@ -88,7 +160,7 @@ export function BarChart({
             key={`grid-${index}`}
             style={[
               styles.gridLine,
-              { top: getY(tick), left: PADDING.left, width: plotWidth },
+              { top: getY(tick), left: paddingLeft, width: plotWidth },
             ]}
           />
         ))}
@@ -97,66 +169,75 @@ export function BarChart({
           <View
             style={[
               styles.axisLine,
-              { top: baselineY, left: PADDING.left, width: plotWidth },
+              { top: baselineY, left: paddingLeft, width: plotWidth },
             ]}
           />
         )}
 
-        {points.map((point, index) => {
-          const x = getX(index);
-          const y = getY(point.value);
-          const isPositive = point.value >= baselineValue;
-          const barTop = isPositive ? y : baselineY;
-          const barHeight = Math.max(Math.abs(baselineY - y), 4);
+        {renderPlotLayer(
+          points.map((point, index) => {
+            const x = getX(index);
+            const y = getY(point.value);
+            const isPositive = point.value >= baselineValue;
+            const barTop = isPositive ? y : baselineY;
+            const barHeight = Math.max(Math.abs(baselineY - y), 4);
 
-          return (
-            <React.Fragment key={point.key}>
-              <View
-                style={[
-                  styles.bar,
-                  {
-                    left: x,
-                    top: barTop,
-                    height: barHeight,
-                    width: barWidth,
-                    backgroundColor: point.color,
-                  },
-                ]}
-              />
-              <Text
-                style={[
-                  styles.valueLabel,
-                  {
-                    color: point.valueColor ?? point.color,
-                    left: x + barWidth / 2 - 22,
-                    top: isPositive ? barTop - 16 : barTop + barHeight + 2,
-                  },
-                ]}
-                numberOfLines={1}
-              >
-                {point.valueLabel}
-              </Text>
-              <Text
-                style={[
-                  styles.xLabel,
-                  point.highlighted && styles.xLabelHighlighted,
-                  { left: x + barWidth / 2 - 22, top: HEIGHT - 20 },
-                ]}
-                numberOfLines={1}
-              >
-                {point.label}
-              </Text>
-            </React.Fragment>
-          );
-        })}
+            return (
+              <React.Fragment key={point.key}>
+                <View
+                  style={[
+                    styles.bar,
+                    {
+                      left: x,
+                      top: barTop,
+                      height: barHeight,
+                      width: barWidth,
+                      backgroundColor: point.color,
+                    },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.valueLabel,
+                    {
+                      color: point.valueColor ?? point.color,
+                      left: x + barWidth / 2 - VALUE_LABEL_WIDTH / 2,
+                      top: isPositive ? barTop - 16 : barTop + barHeight + 2,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {point.valueLabel}
+                </Text>
+                <Text
+                  style={[
+                    styles.xLabel,
+                    point.highlighted && styles.xLabelHighlighted,
+                    {
+                      left: x + barWidth / 2 - labelWidth / 2,
+                      width: labelWidth,
+                      top: HEIGHT - 20,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {point.label}
+                </Text>
+              </React.Fragment>
+            );
+          })
+        )}
 
         {yTicks.map((tick, index) => (
           <Text
             key={`y-${index}`}
-            style={[styles.yLabel, { top: getY(tick) - 8 }]}
+            style={[
+              styles.yLabel,
+              { top: getY(tick) - 8, width: paddingLeft - 4 },
+            ]}
             numberOfLines={1}
           >
-            {formatYTick(tick)}
+            {yTickLabels[index]}
           </Text>
         ))}
       </View>
@@ -190,13 +271,18 @@ const makeStyles = () =>
       backgroundColor: theme.colors.veryLightGray,
       opacity: 0.65,
     },
+    plotLayer: {
+      position: 'absolute',
+      top: 0,
+      height: HEIGHT,
+    },
     bar: {
       position: 'absolute',
       borderRadius: 6,
     },
     valueLabel: {
       position: 'absolute',
-      width: 44,
+      width: VALUE_LABEL_WIDTH,
       textAlign: 'center',
       fontSize: 11,
       fontWeight: '700',
@@ -204,7 +290,6 @@ const makeStyles = () =>
     },
     xLabel: {
       position: 'absolute',
-      width: 44,
       textAlign: 'center',
       fontSize: 12,
       fontWeight: '700',
@@ -218,7 +303,6 @@ const makeStyles = () =>
     yLabel: {
       position: 'absolute',
       left: 0,
-      width: 38,
       textAlign: 'right',
       fontSize: 11,
       color: theme.colors.textSecondary,

@@ -7,6 +7,7 @@ import { t } from '@lib/i18n';
 import { Award } from '@lib/awards';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
+import { BadgeMedal } from './BadgeMedal';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
@@ -45,13 +46,8 @@ export function AwardModal({ award, onClose }: AwardModalProps) {
       footer={<Button title={t('¡Genial!')} onPress={onClose} />}
     >
       <View style={styles.body}>
-        <View style={styles.iconWrap}>
-          <MaterialCommunityIcons
-            name={icon}
-            size={44}
-            color={theme.colors.primary}
-          />
-        </View>
+        {/* La misma medalla de oro que en Logros. */}
+        <BadgeMedal icon={icon} unlocked size={76} />
         <Text style={styles.name}>{name}</Text>
         {award.kind !== 'level' && (
           <Text style={styles.description}>{award.description}</Text>
@@ -69,18 +65,11 @@ export function AwardModal({ award, onClose }: AwardModalProps) {
 const makeStyles = () =>
   StyleSheet.create({
     body: { alignItems: 'center', gap: 6 },
-    iconWrap: {
-      width: 76,
-      height: 76,
-      borderRadius: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.primaryMuted,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-      marginBottom: 6,
-    },
+    // A todo el ancho y no a la medida del texto: Android mide corto Anton con
+    // `letterSpacing` y, ajustada a esa medida, la última palabra saltaba a
+    // otra línea ("Dos / cardios").
     name: {
+      alignSelf: 'stretch',
       fontSize: 22,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.4,

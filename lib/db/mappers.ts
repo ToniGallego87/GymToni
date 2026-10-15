@@ -8,6 +8,7 @@ import {
   WorkoutRoutine,
 } from '../../types';
 import { generateId } from '../utils';
+import { isExtraExerciseId } from '../extraExercises';
 import { cardioEntriesFromRaw, entriesMatchRaw } from '../cardio';
 
 // Marca que distingue "datos guardados (aunque vacíos)" de "BD virgen".
@@ -356,10 +357,14 @@ export function appDataToRows(
       log.workout_days_id = null;
     }
   }
+  // Los ejercicios ADICIONALES (lib/extraExercises) no están en ninguna rutina
+  // a propósito: su id ES la marca de adicional y no se toca (exercises_id no
+  // tiene FK).
   for (const exerciseLog of rows.exerciseLogs) {
     if (
       exerciseLog.exercises_id &&
-      !exerciseIds.has(exerciseLog.exercises_id)
+      !exerciseIds.has(exerciseLog.exercises_id) &&
+      !isExtraExerciseId(exerciseLog.exercises_id)
     ) {
       exerciseLog.exercises_id = null;
     }

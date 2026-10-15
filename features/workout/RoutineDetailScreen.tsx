@@ -137,6 +137,11 @@ export function RoutineDetailScreen({
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
+  // Ejercicio recién añadido cuyo popup aún no se ha cerrado: no sale en la
+  // cuadrícula hasta "Listo" (antes aparecía debajo, vacío, mientras se
+  // rellenaba). Cerrarlo sin nombre lo descarta.
+  const [draftExerciseId, setDraftExerciseId] = useState<string | null>(null);
+
   // Días desplegados. La ficha nace PLEGADA entera: de un vistazo se ve qué días
   // tiene la rutina y cuántos ejercicios cada uno, en vez de un rollo de 30
   // ejercicios que obliga a hacer scroll para saber si hay un cuarto día. Salvo
@@ -194,7 +199,14 @@ export function RoutineDetailScreen({
     () => countRoutineSets(currentRoutine),
     [currentRoutine]
   );
+  const totalExercises = currentRoutine.days.reduce(
+    (sum, day) => sum + day.exercises.length,
+    0
+  );
+  // El nombre de la ficha solo sale cuando es lo que se edita (fuera de
+  // edición ya es el título de la barra).
   const canEdit = !isLinked;
+  const showsEditableName = isEditing && canEdit && !isClosed;
   // Se borra con la regla de la lista de Rutinas: solo sin entrenamientos.
   const canDelete = !state.logs.some(
     (log) => log.routineId === currentRoutine.id
@@ -493,6 +505,7 @@ export function RoutineDetailScreen({
     const exercise = createEmptyExercise();
     // Sin nombre todavía: se queda en el borrador y se guarda al plegarla.
     updateDayRows(day, (rows) => [...rows, exercise], false);
+    setDraftExerciseId(exercise.id);
     setEditingExerciseId(exercise.id);
   };
 
@@ -687,7 +700,9 @@ export function RoutineDetailScreen({
                   arrastrar (en cualquier dirección), lápiz y papelera; la
                   última casilla, "+", añade. */}
             <ExerciseTileGrid
-              exercises={exerciseTilesFromForms(rows)}
+              exercises={exerciseTilesFromForms(
+                rows.filter((row) => row.id !== draftExerciseId)
+              )}
               accent={accent}
               editing={{
                 onEdit: setEditingExerciseId,
@@ -725,6 +740,7 @@ export function RoutineDetailScreen({
                     } else {
                       commitDay(day.id, dayRows(day));
                     }
+                    setDraftExerciseId(null);
                     setEditingExerciseId(null);
                   }}
                 />
@@ -810,22 +826,19 @@ export function RoutineDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Cabecera de la rutina: la MISMA ficha que la de una rutina de la
-            comunidad (degradado, nombre e intensidad a la derecha), para que
-            una rutina se vea igual entres por donde entres. Solo es pulsable
-            (editar nombre/descripción) en modo edición. */}
+        {/* Ficha de la rutina: de qué va y cuánto pesa. Sin el nombre (ya es
+            el título de la barra; antes salía dos veces seguidas) salvo en
+            edición, que es lo que se cambia al pulsarla. Neutra: el oro de
+            borde y fondo es para llamar la atención y aquí no hay nada que
+            hacer. */}
         <Pressable
           style={styles.infoBlock}
           onPress={handleOpenInfoModal}
-          disabled={!isEditing || isClosed || !canEdit}
+          disabled={!showsEditableName}
         >
-          <GradientFill accent={theme.colors.primaryLine} />
-          <View style={styles.infoHead}>
-            <Text style={styles.infoName}>{currentRoutine.name}</Text>
-            {totalSets > 0 && (
-              <RoutineIntensityPill level={routineIntensity(totalSets)} />
-            )}
-            {isEditing && canEdit && !isClosed && (
+          {showsEditableName && (
+            <View style={styles.infoHead}>
+              <Text style={styles.infoName}>{currentRoutine.name}</Text>
               <View style={[styles.infoEditChip, styles.infoEditChipEditable]}>
                 <MaterialCommunityIcons
                   name="pencil"
@@ -833,8 +846,8 @@ export function RoutineDetailScreen({
                   color={theme.colors.onGold}
                 />
               </View>
-            )}
-          </View>
+            </View>
+          )}
           {/* De quién es la rutina, y con enlace a su perfil. La enlazada no es
               tuya (por eso no se edita) y la copia sí, pero el crédito se queda
               escrito. Antes la enlazada lo decía en la ceja y la copia en la
@@ -853,6 +866,33 @@ export function RoutineDetailScreen({
               {currentRoutine.description}
             </Text>
           )}
+          {/* Lo que pesa la semana: ejercicios, series e intensidad. */}
+          <View
+            style={[
+              styles.infoFacts,
+              (showsEditableName ||
+                !!currentRoutine.description ||
+                isLinked ||
+                !!currentRoutine.sourceAuthor) &&
+                styles.infoFactsDivided,
+            ]}
+          >
+            <View style={styles.infoFact}>
+              <Text style={styles.infoFactValue}>{totalExercises}</Text>
+              <Text style={styles.infoFactLabel}>{t('ejercicios')}</Text>
+            </View>
+            <View style={styles.infoFactDivider} />
+            <View style={styles.infoFact}>
+              <Text style={styles.infoFactValue}>{totalSets}</Text>
+              <Text style={styles.infoFactLabel}>{t('series / semana')}</Text>
+            </View>
+            {totalSets > 0 && (
+              <RoutineIntensityPill
+                level={routineIntensity(totalSets)}
+                style={styles.infoIntensity}
+              />
+            )}
+          </View>
           {/* Antes un candado sin explicar, mientras días y ejercicios se
               editaban igual: prometía más de lo que bloquea. */}
           {isEditing && canEdit && isClosed && (
@@ -1317,14 +1357,49 @@ const makeStyles = () =>
     // Deliberadamente distinto de las tarjetas de día (que son transparentes con
     // borde izquierdo de acento) para que no se lea como un día más.
     infoBlock: {
-      backgroundColor: theme.colors.primaryMuted,
+      backgroundColor: theme.colors.surface,
       borderRadius: theme.borderRadius.lg,
       borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
+      borderColor: theme.colors.border,
       padding: theme.spacing.md,
       marginBottom: 16,
       overflow: 'hidden',
-      gap: 6,
+      gap: 8,
+      ...theme.shadow.soft,
+    },
+    infoFacts: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 14,
+    },
+    // Con algo encima (nombre, autor o descripción), una raya los separa.
+    infoFactsDivided: {
+      marginTop: 4,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    infoFact: {
+      gap: 1,
+    },
+    infoFactValue: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.colors.text,
+      fontVariant: ['tabular-nums'],
+    },
+    infoFactLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+    },
+    infoFactDivider: {
+      width: 1,
+      height: 28,
+      backgroundColor: theme.colors.border,
+    },
+    infoIntensity: {
+      marginLeft: 'auto',
     },
     // Nombre + intensidad (+ lápiz en edición) arriba a la derecha. Alineados
     // arriba para que, con un nombre a dos líneas, acompañen a la primera.
@@ -1368,9 +1443,9 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
     },
     infoDescription: {
-      fontSize: 14,
-      lineHeight: 19,
-      color: theme.colors.textSecondary,
+      fontSize: 15,
+      lineHeight: 21,
+      color: theme.colors.text,
     },
     // La lista arrastrable pinta ella el hueco entre días (gap): el bloque
     // deja su margen y el envoltorio pone el de después del último.

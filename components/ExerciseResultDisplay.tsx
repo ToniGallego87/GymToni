@@ -30,6 +30,9 @@ interface ExerciseResultDisplayProps {
   onAssignGif?: (catalogId: string) => void;
   // Abre la evolución de este ejercicio (gráfica de progreso) preseleccionado.
   onOpenProgress?: () => void;
+  // Ejercicio ADICIONAL (no es del día, lib/extraExercises): borde azul y una
+  // marca bajo el nombre. No trae comparación (no se compara con nada).
+  extra?: boolean;
 }
 
 type ComparisonStatus = 'up' | 'same' | 'down' | 'missing';
@@ -73,6 +76,7 @@ export function ExerciseResultDisplay({
   accent = theme.colors.current,
   onAssignGif,
   onOpenProgress,
+  extra = false,
 }: ExerciseResultDisplayProps) {
   // En render para leer los colores del tema VIVO (cambio de tema en caliente).
   const STATUS_COLOR: Record<ComparisonStatus, string> = {
@@ -111,7 +115,7 @@ export function ExerciseResultDisplay({
   const hasTarget = !!targetSets || !!targetReps;
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, extra && styles.containerExtra]}>
       {isDetail && <GradientFill accent={accent} />}
 
       {/* Cabecera: nombre del ejercicio + objetivo y mejora a la derecha. */}
@@ -164,6 +168,19 @@ export function ExerciseResultDisplay({
           />
         )}
       </View>
+
+      {extra && (
+        <View style={styles.extraTag}>
+          <MaterialCommunityIcons
+            name="plus-circle-outline"
+            size={14}
+            color={theme.colors.emoji_blue}
+          />
+          <Text style={styles.extraTagText}>
+            {t('Ejercicio adicional · no es de este día')}
+          </Text>
+        </View>
+      )}
 
       {/* Etiquetas de columna; el objetivo (4×10) ocupa el hueco central. Sin
           sesión anterior, el objetivo se alinea a la derecha y no hay columna
@@ -232,6 +249,22 @@ const makeStyles = () =>
       ...theme.shadow.soft,
     },
 
+    containerExtra: {
+      borderWidth: 2,
+      borderColor: theme.colors.emoji_blue,
+    },
+    extraTag: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginTop: -2,
+      marginBottom: 8,
+    },
+    extraTagText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.colors.emoji_blue,
+    },
     header: {
       flexDirection: 'row',
       alignItems: 'center',

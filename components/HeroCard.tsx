@@ -1,11 +1,10 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect } from 'react';
+import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withSpring,
-  withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -99,15 +98,6 @@ export function HeroCard({
     transform: [{ scale: scale.value }],
   }));
 
-  // Fundido sutil de entrada del CONTENIDO (icono + textos); el marco queda fijo.
-  const contentOpacity = useSharedValue(0);
-  useEffect(() => {
-    contentOpacity.value = withTiming(1, { duration: 260 });
-  }, []);
-  const contentStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value,
-  }));
-
   return (
     <AnimatedPressable
       style={[styles.wrapper, animatedStyle]}
@@ -144,9 +134,11 @@ export function HeroCard({
           pointerEvents="none"
         />
 
-        <Animated.View
-          style={[styles.content, hasStats && styles.contentWide, contentStyle]}
-        >
+        {/* Sin fundido de entrada: el contenido nacía a opacidad 0 y, si la
+            animación no llegaba a correr (Android con la app en segundo plano
+            o el hilo de UI ocupado al montar), la tarjeta se quedaba dorada
+            con el icono y el texto casi invisibles. */}
+        <View style={[styles.content, hasStats && styles.contentWide]}>
           <View
             style={[styles.iconWrap, hasSubtitle && styles.iconWrapCompact]}
           >
@@ -226,7 +218,7 @@ export function HeroCard({
               ))}
             </View>
           )}
-        </Animated.View>
+        </View>
       </LinearGradient>
     </AnimatedPressable>
   );

@@ -1,5 +1,6 @@
 import { ExerciseLog, ParsedSet, WorkoutLog } from '../types';
 import { canonicalCatalogId, slugExerciseName } from './exerciseIdentity';
+import { isExtraExerciseLog } from './extraExercises';
 
 export interface ImprovementResult {
   isImproved: boolean;
@@ -113,6 +114,7 @@ export function hasScoringSets(exerciseLog: ExerciseLog | null): boolean {
  * El emparejado es por `exerciseId`; si no cuadra, por el ejercicio del
  * catálogo (el mismo ejercicio cambia de id entre rutinas, y de nombre si se
  * reescribe); y si tampoco, por nombre normalizado (apuntes sin catálogo).
+ * Los ejercicios ADICIONALES (lib/extraExercises) no entran en ningún lado.
  */
 export function getComparableWorkoutScores(
   currentLog: WorkoutLog | null,
@@ -131,7 +133,7 @@ export function getComparableWorkoutScores(
     if (key && !map.has(key)) map.set(key, log);
   };
   (previousLog.exercises || [])
-    .filter(hasScoringSets)
+    .filter((e) => hasScoringSets(e) && !isExtraExerciseLog(e))
     .forEach((exerciseLog) => {
       remember(previousById, exerciseLog.exerciseId, exerciseLog);
       remember(previousByCatalog, catalogKey(exerciseLog), exerciseLog);
@@ -146,20 +148,22 @@ export function getComparableWorkoutScores(
   let current = 0;
   let previous = 0;
 
-  (currentLog.exercises || []).filter(hasScoringSets).forEach((exerciseLog) => {
-    const catalog = catalogKey(exerciseLog);
-    const match =
-      (exerciseLog.exerciseId
-        ? previousById.get(exerciseLog.exerciseId)
-        : undefined) ||
-      (catalog ? previousByCatalog.get(catalog) : undefined) ||
-      previousByName.get(slugExerciseName(exerciseLog.exerciseName));
-    if (!match || matched.has(match)) return;
+  (currentLog.exercises || [])
+    .filter((e) => hasScoringSets(e) && !isExtraExerciseLog(e))
+    .forEach((exerciseLog) => {
+      const catalog = catalogKey(exerciseLog);
+      const match =
+        (exerciseLog.exerciseId
+          ? previousById.get(exerciseLog.exerciseId)
+          : undefined) ||
+        (catalog ? previousByCatalog.get(catalog) : undefined) ||
+        previousByName.get(slugExerciseName(exerciseLog.exerciseName));
+      if (!match || matched.has(match)) return;
 
-    matched.add(match);
-    current += getExerciseStrengthScore(exerciseLog);
-    previous += getExerciseStrengthScore(match);
-  });
+      matched.add(match);
+      current += getExerciseStrengthScore(exerciseLog);
+      previous += getExerciseStrengthScore(match);
+    });
 
   return { current, previous };
 }

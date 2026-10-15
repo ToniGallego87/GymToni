@@ -546,6 +546,36 @@ export function topDisciplineIconName(
   return disciplineIconName(top.type, hasIncline(top.maxPendiente));
 }
 
+/** Una disciplina de la semana y en cuántos días se hizo. */
+export interface WeekDisciplineCount {
+  type: string;
+  incline: boolean;
+  days: number;
+}
+
+/**
+ * Disciplinas de una semana con los DÍAS en que se hicieron (dos cintas el
+ * mismo día cuentan uno: el día ya las trae fusionadas), de más a menos días y,
+ * a igualdad, en el orden en que aparecieron. Alimenta los iconos de la
+ * cabecera de semana de Cardio ("cinta ×2, bici").
+ */
+export function weekDisciplineCounts(
+  week: Pick<CardioWeek, 'days'>
+): WeekDisciplineCount[] {
+  const byKey = new Map<string, WeekDisciplineCount>();
+  for (const day of week.days) {
+    for (const d of day.disciplines) {
+      const incline = hasIncline(d.maxPendiente);
+      const key = disciplineKey(d.type, incline);
+      const entry = byKey.get(key);
+      if (entry) entry.days += 1;
+      else byKey.set(key, { type: d.type, incline, days: 1 });
+    }
+  }
+  // sort es estable: a igualdad de días se queda el orden de aparición.
+  return Array.from(byKey.values()).sort((a, b) => b.days - a.days);
+}
+
 /** Convierte un log en una sesión de cardio, o null si no tiene cardio. */
 export function cardioSessionFromLog(
   log: WorkoutLog,

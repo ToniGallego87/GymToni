@@ -25,8 +25,11 @@ import type Svg from 'react-native-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AchievementPoster,
+  NAME_FONT,
+  NAME_LETTER_SPACING,
   POSTER_WIDTH,
   POSTER_HEIGHT,
+  posterUserName,
 } from '@components/AchievementPoster';
 import {
   FloatingBackButton,
@@ -38,6 +41,7 @@ import {
   StretchScrollView,
 } from '../../components';
 import { WeekAchievements } from '@lib/achievements';
+import { useMyProfile } from '@hooks/useMyProfile';
 import { shareBase64Png } from '@lib/imageShare';
 import { encodeFramesToMp4, isVideoEncoderAvailable } from '@lib/videoExport';
 import { theme } from '@lib/theme';
@@ -145,6 +149,12 @@ export function WeekAchievementScreen({
 }: WeekAchievementScreenProps) {
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
+  // Quién completó la semana: el póster lleva su nombre y su foto.
+  const { profile } = useMyProfile();
+  // Ancho real del nombre en Anton, medido con un texto de la app (fuera de
+  // pantalla): el SVG no sabe medirlo y el nivel quedaba lejos del nombre.
+  const posterName = posterUserName(profile?.display_name ?? undefined);
+  const [nameWidth, setNameWidth] = useState<number | undefined>(undefined);
   const posterRef = useRef<Svg>(null);
   const [busy, setBusy] = useState(false);
   const [videoBusy, setVideoBusy] = useState(false);
@@ -367,8 +377,10 @@ export function WeekAchievementScreen({
           <AchievementPoster
             ref={posterRef}
             achievements={achievements}
-            routineName={routineName}
             titleUri={titleUri}
+            userName={profile?.display_name ?? undefined}
+            avatarUri={profile?.avatar_url ?? undefined}
+            nameWidth={nameWidth}
             reveal={revealValue}
             width={previewWidth}
             height={previewHeight}
@@ -395,6 +407,20 @@ export function WeekAchievementScreen({
         onLayout={onTopBarLayout}
       />
 
+      {/* Medidor del nombre del póster (invisible y fuera de pantalla). */}
+      {!!posterName && (
+        <View style={styles.measureBox} pointerEvents="none">
+          <Text
+            style={styles.measureText}
+            numberOfLines={1}
+            allowFontScaling={false}
+            onLayout={(e) => setNameWidth(e.nativeEvent.layout.width)}
+          >
+            {posterName}
+          </Text>
+        </View>
+      )}
+
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
       {toast && (
@@ -410,6 +436,20 @@ export function WeekAchievementScreen({
 
 const makeStyles = () =>
   StyleSheet.create({
+    measureBox: {
+      position: 'absolute',
+      left: -5000,
+      top: 0,
+      width: 4000,
+      opacity: 0,
+      alignItems: 'flex-start',
+    },
+    measureText: {
+      fontFamily: theme.fonts.display,
+      fontSize: NAME_FONT,
+      letterSpacing: NAME_LETTER_SPACING,
+      includeFontPadding: false,
+    },
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,

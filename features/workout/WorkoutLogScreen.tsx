@@ -33,6 +33,7 @@ import {
   RestTimerModal,
   DatePickerModal,
   DayAccentIcon,
+  ExerciseEditorModal,
   ExerciseInputField,
   ExerciseTileGrid,
   InvalidAddReason,
@@ -90,6 +91,7 @@ import {
   ExerciseLog,
   CardioLog,
   ParsedSet,
+  WorkoutExercise,
   WorkoutRoutine,
 } from '../../types';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
@@ -100,6 +102,17 @@ import {
   sessionDurationMinutes,
 } from '@lib/progress';
 import { withExerciseCatalogId } from '@lib/routines';
+import {
+  buildTargetReps,
+  createEmptyExercise,
+  ExerciseForm,
+} from '@lib/exerciseForm';
+import {
+  extraExercisesFromLog,
+  isExtraExerciseId,
+  isExtraExerciseLog,
+  makeExtraExerciseId,
+} from '@lib/extraExercises';
 import {
   exerciseLogKey,
   getRecordSetIndexes,
@@ -152,6 +165,9 @@ const TIMER_DRAG_SLOP = 6;
 // Espera antes de bajar al panel o al remate: el tiempo de que el panel nuevo
 // se pinte e informe de su posición.
 const SCROLL_SETTLE_MS = 120;
+// Padding lateral del scroll. La tira de casillas lo recibe para sangrar hasta
+// el borde de la pantalla y arrancar alineada con el panel.
+const SCROLL_SIDE_PADDING = 16;
 // Claves del panel del ejercicio elegido y de la tarjeta "Entreno completado"
 // entre las posiciones de tarjetas.
 const PANEL_KEY = '__panel__';
@@ -159,13 +175,15 @@ const COMPLETED_CARD_KEY = '__completed__';
 // El panel se da por visto si su borde superior cae entre la barra de título y
 // esta fracción de la pantalla; si no, la lista baja hasta él.
 const PANEL_VISIBLE_RATIO = 0.5;
-// Transición del panel al cambiar de ejercicio: entra desde el lado de la
-// casilla elegida (derecha si va después, izquierda si va antes) mientras se
-// aclara. Corta y sin pasar por transparente del todo, para que no parpadee.
-const PANEL_SWAP_MS = 200;
-const PANEL_SWAP_SHIFT = 24;
-const PANEL_SWAP_START_OPACITY = 0.3;
-const makePanelEntering = (dir: 1 | -1) => () => {
+// Transición del panel al cambiar de ejercicio. El MARCO no se anima: el nuevo
+// aparece en el mismo frame en que se va el viejo y se lee como la misma
+// tarjeta. Solo su contenido entra, rápido, deslizándose un poco desde el lado
+// hacia el que giró la ruleta mientras aparece. Antes se animaba la tarjeta
+// entera (aparecía medio transparente, o se cruzaba con la vieja) y se leía
+// como un parpadeo.
+const PANEL_SWAP_MS = 220;
+const PANEL_SWAP_SHIFT = 12;
+const makePanelContentEntering = (dir: 1 | -1) => () => {
   'worklet';
   const config = {
     duration: PANEL_SWAP_MS,
@@ -173,7 +191,7 @@ const makePanelEntering = (dir: 1 | -1) => () => {
   };
   return {
     initialValues: {
-      opacity: PANEL_SWAP_START_OPACITY,
+      opacity: 0,
       transform: [{ translateX: dir * PANEL_SWAP_SHIFT }],
     },
     animations: {
@@ -297,8 +315,27 @@ export function WorkoutLogScreen({
     (!!log && (log.date ?? getToday()) !== getToday()) ||
     (!!initialDate && initialDate !== getToday());
 
+  // Ejercicios ADICIONALES de la sesión (lib/extraExercises): los añade el "+"
+  // de la ruleta y no son del día. También en un ref: el guardado que sigue a
+  // añadir uno tiene que verlo en el mismo tick, antes del re-render.
+  const [extraExercises, setExtraExercisesState] = useState<WorkoutExercise[]>(
+    () => extraExercisesFromLog(existingLog?.exercises)
+  );
+  const extraExercisesRef = useRef(extraExercises);
+  const setExtraExercises = (next: WorkoutExercise[]) => {
+    extraExercisesRef.current = next;
+    setExtraExercisesState(next);
+  };
+  // Lo que se registra en esta sesión: los del día y, detrás, los adicionales.
+  const sessionExercises: WorkoutExercise[] = [
+    ...selectedDay.exercises,
+    ...extraExercises,
+  ];
+  // Adicional que se está creando en el popup (el mismo de la rutina).
+  const [extraDraft, setExtraDraft] = useState<ExerciseForm | null>(null);
+
   // Cargar datos iniciales del log existente si existe
-  const initialExerciseSets = selectedDay.exercises.reduce(
+  const initialExerciseSets = sessionExercises.reduce(
     (acc, ex) => {
       if (existingLog) {
         const exerciseLog = existingLog.exercises.find(
@@ -321,7 +358,7 @@ export function WorkoutLogScreen({
     {} as Record<string, ParsedSet[]>
   );
 
-  const initialNotes = selectedDay.exercises.reduce(
+  const initialNotes = sessionExercises.reduce(
     (acc, ex) => {
       if (existingLog) {
         const exerciseLog = existingLog.exercises.find(
@@ -543,7 +580,7 @@ export function WorkoutLogScreen({
   const stopTimer = () => stopRestTimer();
 
   const startOrResetTimer = (exerciseId: string, durationSeconds: number) => {
-    const exercise = selectedDay.exercises.find((ex) => ex.id === exerciseId);
+    const exercise = sessionExercises.find((ex) => ex.id === exerciseId);
     // El permiso de notificaciones se pide AQUÍ, al primer descanso, y no al
     // abrir la pantalla: pedido nada más entrar, antes de la primera serie y
     // sin saber que existe el descanso, el diálogo del sistema se deniega.
@@ -662,7 +699,7 @@ export function WorkoutLogScreen({
   const countIncompleteExercises = (
     sets: Record<string, ParsedSet[]>
   ): number =>
-    selectedDay.exercises.filter((ex) => {
+    sessionExercises.filter((ex) => {
       const target = effectiveTargetSets(ex.targetSets);
       if (target <= 0) return false;
       return (sets[ex.id]?.length || 0) < target;
@@ -680,7 +717,7 @@ export function WorkoutLogScreen({
   // El primero del día sin hacer: con él se arranca y a él se pasa al
   // completar el elegido. Null si ya no queda ninguno.
   const firstIncomplete = (sets: Record<string, ParsedSet[]>): string | null =>
-    selectedDay.exercises.find((ex) => !isExerciseDone(ex, sets))?.id ?? null;
+    sessionExercises.find((ex) => !isExerciseDone(ex, sets))?.id ?? null;
 
   // Momento de esta sesión, para que los récords se midan solo contra lo
   // anterior (al rellenar un día pasado no cuenta lo que vino después).
@@ -700,6 +737,7 @@ export function WorkoutLogScreen({
         return;
       }
       l.exercises.forEach((ex) => {
+        if (isExtraExerciseLog(ex)) return;
         const id = keys.get(exerciseLogKey(ex, resolveExerciseKey));
         if (!id) return;
         const sets = ex.parsedSets?.length
@@ -719,12 +757,12 @@ export function WorkoutLogScreen({
 
   // ── Ejercicio elegido y subir hasta su panel ──────────────────────────────
   //
-  // Los ejercicios van en casillas y SIEMPRE hay uno elegido (borde de oro),
-  // cuyo panel de series va DEBAJO de la cuadrícula, con el mismo borde de
-  // oro. Arranca en el primero sin hacer; tocar otra casilla lo cambia, y al
-  // completar el elegido se pasa al primero de la lista que quede sin hacer.
-  // Con el día terminado no queda ninguno y el panel desaparece (tocar una
-  // casilla lo vuelve a abrir para corregir).
+  // Los ejercicios van en una ruleta y SIEMPRE hay uno elegido: el que encaja
+  // en su marco de oro, cuyo panel de series va DEBAJO, con el mismo borde de
+  // oro. Arranca en el primero sin hacer; girar la ruleta o tocar otra casilla
+  // lo cambia, y al completar el elegido se pasa al primero de la lista que
+  // quede sin hacer. Con el día terminado el panel se queda abierto en el
+  // último (para corregir) y debajo sale "Entreno completado".
   // `pickedExerciseId` es lo elegido a mano o por avance; null = el primero
   // sin hacer (ver `selectedExerciseId`, más abajo).
   const [pickedExerciseId, setPickedExerciseId] = useState<string | null>(null);
@@ -738,9 +776,26 @@ export function WorkoutLogScreen({
   const noteCardTop = (key: string) => (e: LayoutChangeEvent) => {
     cardTopRef.current[key] = e.nativeEvent.layout.y;
   };
-  const selectExercise = (exerciseId: string | null) => {
+  // A qué baja la lista al atender la petición: al panel, o al remate si el
+  // cambio es por haber terminado el día.
+  const scrollTargetRef = useRef<'panel' | 'completed'>('panel');
+  const selectExercise = (
+    exerciseId: string,
+    target: 'panel' | 'completed' = 'panel'
+  ) => {
     setPickedExerciseId(exerciseId);
+    scrollTargetRef.current = target;
     setScrollRequest((n) => n + 1);
+  };
+  // Al completar el elegido: al siguiente sin hacer o, si no queda, se queda
+  // en él y la lista baja hasta "Entreno completado".
+  const advanceFrom = (
+    exerciseId: string,
+    sets: Record<string, ParsedSet[]>
+  ) => {
+    const next = firstIncomplete(sets);
+    if (next) selectExercise(next);
+    else selectExercise(exerciseId, 'completed');
   };
 
   const recordSetsOf = (exerciseId: string, sets: ParsedSet[]) =>
@@ -748,7 +803,7 @@ export function WorkoutLogScreen({
 
   const handleAddSet = (exerciseId: string, set: ParsedSet) => {
     const targetSets = effectiveTargetSets(
-      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets
+      sessionExercises.find((ex) => ex.id === exerciseId)?.targetSets
     );
 
     const updated = {
@@ -764,7 +819,7 @@ export function WorkoutLogScreen({
       targetSets > 0 &&
       updated[exerciseId].length === targetSets
     ) {
-      selectExercise(firstIncomplete(updated));
+      advanceFrom(exerciseId, updated);
     }
 
     if (
@@ -869,6 +924,7 @@ export function WorkoutLogScreen({
   // histórico entre rutinas): cambiar de rutina o de nombre no borra la memoria
   // de un press de banca que llevas meses haciendo.
   const getPreviousExerciseRuns = (exerciseId: string) => {
+    const isExtra = isExtraExerciseId(exerciseId);
     // La sesión en curso nunca es su propia referencia (su id ya es estable,
     // esté el log creado o no).
     const currentLogId = sessionLogId;
@@ -894,18 +950,24 @@ export function WorkoutLogScreen({
         )
         .flatMap((log) =>
           log.exercises
-            .filter(matches)
+            // Lo hecho como adicional no es referencia de los de la rutina; un
+            // adicional sí ve todo su historial (ver abajo).
+            .filter((ex) => (isExtra || !isExtraExerciseLog(ex)) && matches(ex))
             .map((ex) => ({ ...ex, logDate: log.createdAt, logId: log.id }))
         )
         .sort((a, b) => b.logDate - a.logDate);
 
-    const sameDayRuns = collectRuns(
-      state.logs.filter((log) => log.dayId === selectedDay.id),
-      (ex) => ex.exerciseId === exerciseId
-    );
+    // Un adicional no es de este día: su "anterior" es la última vez que se
+    // hizo ESE ejercicio, en la rutina que sea (o como adicional).
+    const sameDayRuns = isExtra
+      ? []
+      : collectRuns(
+          state.logs.filter((log) => log.dayId === selectedDay.id),
+          (ex) => ex.exerciseId === exerciseId
+        );
     if (sameDayRuns.length > 0) return sameDayRuns;
 
-    const exercise = selectedDay.exercises.find((ex) => ex.id === exerciseId);
+    const exercise = sessionExercises.find((ex) => ex.id === exerciseId);
     if (!exercise) return sameDayRuns;
     const key = resolveExerciseKey(exercise);
     return collectRuns(
@@ -968,7 +1030,7 @@ export function WorkoutLogScreen({
 
   const handleFinishExercise = (exerciseId: string) => {
     const targetSets = effectiveTargetSets(
-      selectedDay.exercises.find((ex) => ex.id === exerciseId)?.targetSets
+      sessionExercises.find((ex) => ex.id === exerciseId)?.targetSets
     );
     if (targetSets > 0) {
       // Rellenar con guiones cada serie que falte para alcanzar el objetivo
@@ -984,7 +1046,7 @@ export function WorkoutLogScreen({
         setExerciseSets(finalSets);
         autoSaveWorkout(finalSets);
         if (exerciseId === selectedExerciseId) {
-          selectExercise(firstIncomplete(finalSets));
+          advanceFrom(exerciseId, finalSets);
         }
       }
 
@@ -1006,7 +1068,11 @@ export function WorkoutLogScreen({
     sets: Record<string, ParsedSet[]>,
     isDeloadValue: boolean = isDeloadSession
   ): WorkoutLog => {
-    const exerciseLogs: ExerciseLog[] = selectedDay.exercises.map((ex) => {
+    // Los adicionales, del ref: pueden haberse añadido en este mismo tick.
+    const exerciseLogs: ExerciseLog[] = [
+      ...selectedDay.exercises,
+      ...extraExercisesRef.current,
+    ].map((ex) => {
       const exSets = sets[ex.id] || [];
       const rawInput = exSets
         .map((s) =>
@@ -1112,7 +1178,7 @@ export function WorkoutLogScreen({
   // conserva lo insertado.
   const applyDeload = (next: boolean, clearData: boolean) => {
     const sets = clearData
-      ? selectedDay.exercises.reduce(
+      ? sessionExercises.reduce(
           (acc, ex) => ({ ...acc, [ex.id]: [] }),
           {} as Record<string, ParsedSet[]>
         )
@@ -1225,6 +1291,20 @@ export function WorkoutLogScreen({
   // buscador). Se guarda en la rutina, no en el log, para que el play quede
   // directo la próxima vez y viaje al compartir.
   const handleAssignGif = (exerciseId: string, catalogId: string) => {
+    if (isExtraExerciseId(exerciseId)) {
+      setExtraExercises(
+        extraExercisesRef.current.map((ex) =>
+          ex.id === exerciseId ? { ...ex, catalogId } : ex
+        )
+      );
+      if (sessionLogExistsRef.current) autoSaveWorkout(exerciseSets);
+      setToast({
+        message: t('GIF asignado al ejercicio'),
+        type: 'success',
+        duration: 2000,
+      });
+      return;
+    }
     const routineId = getRoutineIdForDay();
     const routine = state.routines.find((r) => r.id === routineId);
     const day = routine?.days.find((d) => d.id === selectedDay.id);
@@ -1251,11 +1331,36 @@ export function WorkoutLogScreen({
   const liveCatalogId = (exerciseId: string): string | undefined =>
     liveDay?.exercises.find((ex) => ex.id === exerciseId)?.catalogId;
 
+  // "+" de la ruleta: el popup de añadir ejercicio de la rutina. Al cerrarlo
+  // con nombre, el adicional entra al final y se lleva al marco.
+  const commitExtraDraft = () => {
+    const draft = extraDraft;
+    setExtraDraft(null);
+    if (!draft || !draft.name.trim()) return;
+    const targetReps = buildTargetReps(draft);
+    const exercise: WorkoutExercise = {
+      id: makeExtraExerciseId(draft.sets, targetReps),
+      name: draft.name.trim(),
+      order:
+        selectedDay.exercises.length + extraExercisesRef.current.length + 1,
+      targetSets: draft.sets,
+      targetReps,
+      catalogId: draft.catalogId,
+    };
+    setExtraExercises([...extraExercisesRef.current, exercise]);
+    const sets = { ...exerciseSetsRef.current, [exercise.id]: [] };
+    setExerciseSets(sets);
+    // Con el entreno ya guardado, el adicional se guarda ya (si no, al salir
+    // sin meterle series se perdería); si no, entra con la primera serie.
+    if (sessionLogExistsRef.current) autoSaveWorkout(sets);
+    selectExercise(exercise.id);
+  };
+
   // ¿Está todo el día hecho? Solo cuenta si se ha metido algo: un día cuyos
   // ejercicios no tienen objetivo daría cero incompletos sin haber empezado.
   const allExercisesDone =
     !cardioOnly &&
-    selectedDay.exercises.length > 0 &&
+    sessionExercises.length > 0 &&
     hasInsertedData &&
     countIncompleteExercises(exerciseSets) === 0;
 
@@ -1357,17 +1462,15 @@ export function WorkoutLogScreen({
       </Pressable>
     ) : null;
 
-  // Ejercicio cuyo panel se pinta bajo la cuadrícula: el elegido (a mano o al
-  // completar el anterior) o, si no hay, el primero sin hacer. Con el día
-  // terminado y nada elegido no hay ninguno: el panel desaparece.
+  // Ejercicio cuyo panel se pinta bajo la ruleta: el elegido (a mano o al
+  // completar el anterior) o, si no hay, el primero sin hacer. Al abrir un día
+  // ya terminado, el primero: la ruleta siempre tiene uno en el marco.
   const selectedExerciseId =
     pickedExerciseId &&
-    selectedDay.exercises.some((ex) => ex.id === pickedExerciseId)
+    sessionExercises.some((ex) => ex.id === pickedExerciseId)
       ? pickedExerciseId
-      : allExercisesDone
-      ? null
-      : firstIncomplete(exerciseSets);
-  const selectedExercise = selectedDay.exercises.find(
+      : firstIncomplete(exerciseSets) ?? sessionExercises[0]?.id ?? null;
+  const selectedExercise = sessionExercises.find(
     (ex) => ex.id === selectedExerciseId
   );
 
@@ -1381,7 +1484,7 @@ export function WorkoutLogScreen({
   }>({ id: selectedExerciseId, dir: 1, animate: false });
   if (panelSwap.id !== selectedExerciseId) {
     const indexOf = (id: string | null) =>
-      selectedDay.exercises.findIndex((ex) => ex.id === id);
+      sessionExercises.findIndex((ex) => ex.id === id);
     setPanelSwap({
       id: selectedExerciseId,
       dir: indexOf(selectedExerciseId) >= indexOf(panelSwap.id) ? 1 : -1,
@@ -1403,10 +1506,11 @@ export function WorkoutLogScreen({
       });
     };
     const timer = setTimeout(() => {
-      if (!selectedExerciseId) {
+      if (scrollTargetRef.current === 'completed') {
         if (allExercisesDone) scrollToCard(COMPLETED_CARD_KEY);
         return;
       }
+      if (!selectedExerciseId) return;
       panelRef.current?.measureInWindow((_x, y) => {
         if (y >= topBarHeight && y <= windowHeight * PANEL_VISIBLE_RATIO) {
           return;
@@ -1430,9 +1534,7 @@ export function WorkoutLogScreen({
   // derecha.
   // ¿El descanso es antes de otra serie del mismo ejercicio o antes del
   // siguiente? Lo dice si el ejercicio que lo lanzó ya tiene todas sus series.
-  const restExercise = selectedDay.exercises.find(
-    (ex) => ex.id === activeTimerId
-  );
+  const restExercise = sessionExercises.find((ex) => ex.id === activeTimerId);
   const restTarget = effectiveTargetSets(restExercise?.targetSets);
   const restBeforeNextExercise =
     restTarget > 0 &&
@@ -1535,31 +1637,29 @@ export function WorkoutLogScreen({
         ) : (
           <>
             {/* Los ejercicios en casillas (el mismo dibujo que la ficha de la
-            rutina, más compactas): se elige uno con un toque y su panel sale
-            debajo, enlazado por el mismo borde de oro. */}
-            {selectedDay.exercises.length > 0 && (
+            rutina), en una tira que se desliza en horizontal: se elige uno con
+            un toque y su panel sale debajo, enlazado por el mismo borde de
+            oro. El GIF se reproduce desde la casilla elegida (su play). */}
+            {sessionExercises.length > 0 && (
               <View style={styles.exerciseGrid}>
                 <ExerciseTileGrid
-                  exercises={selectedDay.exercises.map((exercise) => ({
+                  exercises={sessionExercises.map((exercise) => ({
                     id: exercise.id,
                     name: exercise.name,
                     catalogId: liveCatalogId(exercise.id) ?? exercise.catalogId,
                     targetSets: effectiveTargetSets(exercise.targetSets),
                     targetReps: exercise.targetReps,
+                    extra: isExtraExerciseId(exercise.id),
                   }))}
                   accent={dayAccent}
                   selection={{
                     selectedId: selectedExerciseId,
-                    // Día terminado: la casilla abre el panel para corregir y
-                    // otro toque en la misma lo vuelve a cerrar.
-                    onSelect: (id) =>
-                      selectExercise(
-                        allExercisesDone && id === selectedExerciseId
-                          ? null
-                          : id
-                      ),
+                    inset: SCROLL_SIDE_PADDING,
+                    onAssignGif: handleAssignGif,
+                    onSelect: (id) => selectExercise(id),
+                    onAdd: () => setExtraDraft(createEmptyExercise()),
                     progressOf: (id) => {
-                      const exercise = selectedDay.exercises.find(
+                      const exercise = sessionExercises.find(
                         (ex) => ex.id === id
                       );
                       const sets = exerciseSets[id] || [];
@@ -1574,7 +1674,10 @@ export function WorkoutLogScreen({
                         target: effectiveTargetSets(exercise?.targetSets),
                         completed,
                         trend:
-                          completed && !isDeloadSession
+                          // Un adicional ve su anterior, pero no puntúa mejora.
+                          completed &&
+                          !isDeloadSession &&
+                          !isExtraExerciseId(id)
                             ? buildExerciseImprovement(
                                 sets,
                                 getPreviousExerciseLog(id)
@@ -1583,6 +1686,17 @@ export function WorkoutLogScreen({
                       };
                     },
                   }}
+                />
+                <ExerciseEditorModal
+                  visible={!!extraDraft}
+                  exercise={extraDraft}
+                  accent={theme.colors.primaryLine}
+                  onChange={(changes) =>
+                    setExtraDraft((draft) =>
+                      draft ? { ...draft, ...changes } : draft
+                    )
+                  }
+                  onDone={commitExtraDraft}
                 />
               </View>
             )}
@@ -1614,75 +1728,71 @@ export function WorkoutLogScreen({
                     collapsable={false}
                     onLayout={noteCardTop(PANEL_KEY)}
                   >
-                    {/* Una sola transición para toda la tarjeta: sin
-                    `skipEntering`, cada bloque de dentro hacía su propio
-                    fundido al montarse y el cambio parpadeaba. */}
-                    <Animated.View
-                      key={exercise.id}
-                      entering={
-                        panelSwap.animate
-                          ? makePanelEntering(panelSwap.dir)
-                          : undefined
-                      }
-                    >
-                      <LayoutAnimationConfig skipEntering>
-                        <ExerciseInputField
-                          pinnedOpen
-                          exerciseName={exercise.name}
-                          catalogId={
-                            liveCatalogId(exercise.id) ?? exercise.catalogId
-                          }
-                          onAssignGif={(catalogId) =>
-                            handleAssignGif(exercise.id, catalogId)
-                          }
-                          target={{
-                            sets: effectiveTargetSets(exercise.targetSets),
-                            reps: exercise.targetReps,
-                          }}
-                          deload={isDeloadSession}
-                          addedSets={currentSets}
-                          recordSetIndexes={recordSetsOf(
-                            exercise.id,
-                            currentSets
-                          )}
-                          weightStep={weightStepFromHistory(
-                            [
-                              ...(previousSetsByExercise[exercise.id] ?? []),
-                              ...currentSets,
-                            ].map((s) => s.weight)
-                          )}
-                          onAddSet={(set: ParsedSet) =>
-                            handleAddSet(exercise.id, set)
-                          }
-                          onInvalidAdd={(reason) =>
-                            setToast({
-                              message: getInvalidAddMessage(reason),
-                              type: 'error',
-                              duration: 2000,
-                            })
-                          }
-                          onRemoveSet={(index) =>
-                            handleRemoveSet(exercise.id, index)
-                          }
-                          onFinishExercise={() =>
-                            handleFinishExercise(exercise.id)
-                          }
-                          onNotesChange={(text) =>
-                            handleExerciseNoteChange(exercise.id, text)
-                          }
-                          notes={exerciseNotes[exercise.id]}
-                          previousLog={previousLogForField}
-                          improvement={isDeloadSession ? null : improvement}
-                          accent={dayAccent}
-                        />
-                      </LayoutAnimationConfig>
-                    </Animated.View>
+                    {/* `skipExiting`, con la `key` en él: al cambiar de
+                      ejercicio el panel viejo se va ENTERO y al instante. Sin
+                      esto sus bloques ("Anterior", la nota…) hacían su propio
+                      fundido de salida encima del nuevo: textos dobles. */}
+                    <LayoutAnimationConfig skipExiting key={exercise.id}>
+                      <ExerciseInputField
+                        pinnedOpen
+                        extra={isExtraExerciseId(exercise.id)}
+                        contentEntering={
+                          panelSwap.animate
+                            ? makePanelContentEntering(panelSwap.dir)
+                            : undefined
+                        }
+                        exerciseName={exercise.name}
+                        target={{
+                          sets: effectiveTargetSets(exercise.targetSets),
+                          reps: exercise.targetReps,
+                        }}
+                        deload={isDeloadSession}
+                        addedSets={currentSets}
+                        recordSetIndexes={recordSetsOf(
+                          exercise.id,
+                          currentSets
+                        )}
+                        weightStep={weightStepFromHistory(
+                          [
+                            ...(previousSetsByExercise[exercise.id] ?? []),
+                            ...currentSets,
+                          ].map((s) => s.weight)
+                        )}
+                        onAddSet={(set: ParsedSet) =>
+                          handleAddSet(exercise.id, set)
+                        }
+                        onInvalidAdd={(reason) =>
+                          setToast({
+                            message: getInvalidAddMessage(reason),
+                            type: 'error',
+                            duration: 2000,
+                          })
+                        }
+                        onRemoveSet={(index) =>
+                          handleRemoveSet(exercise.id, index)
+                        }
+                        onFinishExercise={() =>
+                          handleFinishExercise(exercise.id)
+                        }
+                        onNotesChange={(text) =>
+                          handleExerciseNoteChange(exercise.id, text)
+                        }
+                        notes={exerciseNotes[exercise.id]}
+                        previousLog={previousLogForField}
+                        improvement={
+                          isDeloadSession || isExtraExerciseId(exercise.id)
+                            ? null
+                            : improvement
+                        }
+                        accent={dayAccent}
+                      />
+                    </LayoutAnimationConfig>
                   </View>
                 );
               })()}
 
             {/* Fuerza: al completar el último ejercicio, un remate que diga que
-            está hecho, en el sitio del panel (que desaparece). Sin CTA de
+            está hecho, bajo el panel (que sigue abierto para corregir). Sin CTA de
             cierre: el registro se autoguarda y "Volver" ya sale (el antiguo
             "Terminar" hacía exactamente lo mismo). */}
             {allExercisesDone && (
@@ -2036,7 +2146,7 @@ const makeStyles = () =>
       flex: 1,
     },
     scrollContent: {
-      paddingHorizontal: 16,
+      paddingHorizontal: SCROLL_SIDE_PADDING,
       paddingTop: 0,
     },
     // Spinner del frame en que la vista ya está y sus tarjetas aún no.

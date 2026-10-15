@@ -39,6 +39,7 @@ import {
   WeightSegment,
 } from '@lib/cardio';
 import { withExerciseCatalogId } from '@lib/routines';
+import { isExtraExerciseLog, parseExtraExerciseId } from '@lib/extraExercises';
 import { TrendDelta } from '@components/TrendDelta';
 import { getCardioWeightHistory } from '@lib/storage';
 import {
@@ -377,6 +378,16 @@ export function DetailScreen({
     }
   }
 
+  // Ejercicios ADICIONALES (lib/extraExercises): no son del día, así que no
+  // se emparejan con los suyos (ni por nombre ni por orden) ni se comparan con
+  // nada. Van al final, marcados.
+  const routineExerciseLogs = (log.exercises ?? []).filter(
+    (e) => !isExtraExerciseLog(e)
+  );
+  const extraExerciseLogs = (log.exercises ?? [])
+    .filter(isExtraExerciseLog)
+    .sort((a, b) => a.order - b.order);
+
   const getExerciseFromLog = (
     sourceLog: WorkoutLog | null,
     exerciseId: string,
@@ -384,18 +395,21 @@ export function DetailScreen({
     order?: number
   ): ExerciseLog | null => {
     if (!sourceLog || !sourceLog.exercises) return null;
+    const candidates = sourceLog.exercises.filter(
+      (e) => !isExtraExerciseLog(e)
+    );
 
     // Buscar por ID de ejercicio
-    let found = sourceLog.exercises.find((e) => e.exerciseId === exerciseId);
+    let found = candidates.find((e) => e.exerciseId === exerciseId);
     if (found) return found;
 
     // Buscar por nombre
-    found = sourceLog.exercises.find((e) => e.exerciseName === exerciseName);
+    found = candidates.find((e) => e.exerciseName === exerciseName);
     if (found) return found;
 
     // Buscar por orden si todo lo demás falla
     if (order !== undefined) {
-      found = sourceLog.exercises.find((e) => e.order === order);
+      found = candidates.find((e) => e.order === order);
       if (found) return found;
     }
 
@@ -514,10 +528,8 @@ export function DetailScreen({
 
               // Si no encuentra el ejercicio por ID/nombre/order, intenta por índice
               const fallbackExercise =
-                !currentExercise &&
-                log.exercises &&
-                log.exercises[exerciseIndex]
-                  ? log.exercises[exerciseIndex]
+                !currentExercise && routineExerciseLogs[exerciseIndex]
+                  ? routineExerciseLogs[exerciseIndex]
                   : currentExercise;
 
               const prevExercise = getExerciseFromLog(
@@ -573,6 +585,25 @@ export function DetailScreen({
                   improvement={exerciseImprovement}
                   isDetail={true}
                   accent={dayAccent}
+                />
+              );
+            })}
+
+            {extraExerciseLogs.map((exerciseLog) => {
+              const target = parseExtraExerciseId(exerciseLog.exerciseId);
+              return (
+                <ExerciseResultDisplay
+                  key={exerciseLog.exerciseId}
+                  exerciseName={exerciseLog.exerciseName}
+                  catalogId={exerciseLog.catalogId}
+                  targetSets={target?.targetSets || undefined}
+                  targetReps={target?.targetReps || undefined}
+                  rawInput={exerciseLog.rawInput || '-'}
+                  parsedSets={exerciseLog.parsedSets || []}
+                  notes={exerciseLog.notes}
+                  isDetail={true}
+                  accent={theme.colors.emoji_blue}
+                  extra
                 />
               );
             })}

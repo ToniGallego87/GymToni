@@ -6,12 +6,13 @@ import {
   Pressable,
   StyleProp,
   StyleSheet,
+  View,
   ViewStyle,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { getCatalogExercise, thumbUrl } from '@data/exerciseCatalog';
+import { getCatalogExercise, gifUrl, thumbUrl } from '@data/exerciseCatalog';
 import { ExercisePickerModal } from './ExercisePickerModal';
 import { GifViewerModal } from './GifViewerModal';
 
@@ -39,6 +40,17 @@ interface ExerciseGifButtonProps {
    * donde el ejercicio pertenece a una rutina editable (registro e historial).
    */
   onAssign?: (catalogId: string) => void;
+  /**
+   * CAPA sobre una miniatura que ya pinta otro (la casilla del marco del
+   * registro): sin fondo, borde ni fotograma propios, así elegir la casilla no
+   * recarga su imagen (antes se cambiaba por la de este botón y parpadeaba).
+   * Pinta solo el GIF EN MOVIMIENTO, que aparece cuando ha cargado (hasta
+   * entonces, y sin conexión, se ve la miniatura de debajo), y una lupa
+   * amarilla en la esquina: amplía en el visor, o busca uno si no tiene. Es UNA
+   * casilla a la vez: varios GIF animados son los que hacían ir lenta la app
+   * (ver la nota del componente).
+   */
+  layer?: boolean;
 }
 
 /**
@@ -59,6 +71,7 @@ export function ExerciseGifButton({
   style,
   fitMode = 'cover',
   onAssign,
+  layer = false,
 }: ExerciseGifButtonProps) {
   const [showGif, setShowGif] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
@@ -68,6 +81,8 @@ export function ExerciseGifButton({
   // Miniatura ya pintada. Hasta entonces, un spinner en su sitio: el cuadro
   // vacío parecía roto. Por URL, para que al asignar otro GIF vuelva a salir.
   const [loadedThumb, setLoadedThumb] = useState<string | null>(null);
+  // GIF animado de la capa ya pintado (hasta entonces, invisible).
+  const [loadedGif, setLoadedGif] = useState<string | null>(null);
   // Los modales se montan la PRIMERA vez que se abren y luego se quedan (así
   // cierran con su animación). Montados de entrada en cada tarjeta, abrir el
   // registro, el detalle o un día de una rutina pagaba un visor y un buscador
@@ -83,6 +98,7 @@ export function ExerciseGifButton({
   const hasGif = !!catalogId;
   const showThumb = !!exercise && !thumbFailed;
   const thumb = exercise ? thumbUrl(exercise) : null;
+  const gif = layer && exercise ? gifUrl(exercise) : null;
 
   const handlePress = () => {
     if (hasGif) {
@@ -93,6 +109,62 @@ export function ExerciseGifButton({
       setShowPicker(true);
     }
   };
+
+  const renderModals = () => (
+    <>
+      {gifMounted && (
+        <GifViewerModal
+          visible={showGif}
+          onRequestClose={() => setShowGif(false)}
+          catalogId={catalogId}
+          fallbackName={name}
+        />
+      )}
+      {pickerMounted && (
+        <ExercisePickerModal
+          visible={showPicker}
+          onRequestClose={() => setShowPicker(false)}
+          reference
+          initialQuery={name}
+          onAssign={onAssign}
+        />
+      )}
+    </>
+  );
+
+  if (layer) {
+    return (
+      <>
+        <Pressable
+          style={({ pressed }) => [
+            styles.layer,
+            style,
+            pressed && styles.pressed,
+          ]}
+          onPress={handlePress}
+          accessibilityRole="button"
+          accessibilityLabel={hasGif ? t('Ver GIF') : t('Buscar GIF')}
+        >
+          {!!gif && (
+            <Image
+              key={gif}
+              source={{ uri: gif }}
+              style={[
+                styles.thumb,
+                styles.thumbContain,
+                loadedGif !== gif && styles.hidden,
+              ]}
+              resizeMode="contain"
+              fadeDuration={0}
+              onLoad={() => setLoadedGif(gif)}
+            />
+          )}
+          <GifCornerBadge search={!hasGif} />
+        </Pressable>
+        {renderModals()}
+      </>
+    );
+  }
 
   return (
     <>
@@ -136,24 +208,25 @@ export function ExerciseGifButton({
         )}
       </Pressable>
 
-      {gifMounted && (
-        <GifViewerModal
-          visible={showGif}
-          onRequestClose={() => setShowGif(false)}
-          catalogId={catalogId}
-          fallbackName={name}
-        />
-      )}
-      {pickerMounted && (
-        <ExercisePickerModal
-          visible={showPicker}
-          onRequestClose={() => setShowPicker(false)}
-          reference
-          initialQuery={name}
-          onAssign={onAssign}
-        />
-      )}
+      {renderModals()}
     </>
+  );
+}
+
+/**
+ * Lupa amarilla de la esquina de una miniatura: ampliar el GIF (o buscar uno,
+ * `search`, si no tiene). La lleva cada casilla del registro; en la del marco
+ * es además el botón (modo `layer`).
+ */
+export function GifCornerBadge({ search = false }: { search?: boolean }) {
+  return (
+    <View style={styles.cornerBadge} pointerEvents="none">
+      <MaterialCommunityIcons
+        name={search ? 'movie-search-outline' : 'magnify-plus-outline'}
+        size={16}
+        color={theme.colors.onGold}
+      />
+    </View>
   );
 }
 
@@ -192,6 +265,30 @@ const makeStyles = () =>
     },
     thumbSpinner: {
       position: 'absolute',
+    },
+    // Modo capa: ocupa la miniatura de debajo, sin piel propia.
+    layer: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+    },
+    hidden: {
+      opacity: 0,
+    },
+    // Abajo a la derecha y pequeño: no tapa la figura del GIF.
+    cornerBadge: {
+      position: 'absolute',
+      right: 4,
+      bottom: 4,
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+      ...theme.shadow.soft,
     },
     pressed: {
       opacity: 0.8,

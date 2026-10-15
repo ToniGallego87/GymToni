@@ -377,6 +377,7 @@ register({
     'Incomplete week: {n} of {total} days',
   '% frente a la vez anterior': '% vs the previous time',
   ejercicios: 'exercises',
+  'series / semana': 'sets / week',
   'Pulsa para indicar tu peso': 'Tap to set your weight',
   'Pulsa para actualizarlo': 'Tap to update it',
   '{d} kg desde el anterior': '{d} kg since the previous one',
@@ -522,6 +523,9 @@ register({
   reps: 'reps',
   seg: 'sec',
   'Añadir ejercicio': 'Add exercise',
+  'Sin datos': 'No data',
+  'Ejercicio adicional · no es de este día':
+    'Extra exercise · not part of this day',
   'Añadir día': 'Add day',
   'Quitar día': 'Remove day',
   // Quitar un día del formulario de "Nueva rutina" (se confirma antes)
@@ -610,6 +614,9 @@ register({
   'El codificador de vídeo no está disponible en esta versión.':
     'The video encoder is not available in this build.',
   SEMANA: 'WEEK',
+  'SEMANA {n}': 'WEEK {n}',
+  'RETOS SUPERADOS': 'CHALLENGES WON',
+  'LOGROS NUEVOS': 'NEW BADGES',
   '¡COMPLETADA!': 'COMPLETED!',
   '{n} día entrenado': '{n} day trained',
   '{n} días entrenados': '{n} days trained',
@@ -1081,6 +1088,10 @@ register({
   'Completa 50 sesiones de cardio.': 'Complete 50 cardio sessions.',
   Maratoniano: 'Marathoner',
   'Completa 100 sesiones de cardio.': 'Complete 100 cardio sessions.',
+  'Pulmones de acero': 'Lungs of steel',
+  'Completa 200 sesiones de cardio.': 'Complete 200 cardio sessions.',
+  Incansable: 'Tireless',
+  'Completa 500 sesiones de cardio.': 'Complete 500 cardio sessions.',
   Semanas: 'Weeks',
   'Completado el {date}': 'Completed on {date}',
   'Aún sin conseguir': 'Not unlocked yet',

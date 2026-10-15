@@ -1,12 +1,6 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { useMemo, useState } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  useWindowDimensions,
-} from 'react-native';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -19,13 +13,8 @@ import {
   GlassTopBar,
   GLASS_TOP_BAR_CONTENT_GAP,
   useGlassTopBarHeight,
+  BadgeMedal,
   GradientFill,
-  getMenuTileWidth,
-  MENU_TILE_GAP,
-  MENU_TILE_INSET,
-  MENU_TILE_PADDING,
-  MENU_TILES_PER_ROW,
-  ProgressRing,
   StretchScrollView,
 } from '@components';
 import { Badge, BADGE_CATEGORY_ORDER, badgeCategoryLabel } from '@lib/badges';
@@ -33,7 +22,7 @@ import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useChallengeWins, XP_PER_BADGE, XP_PER_CHALLENGE } from '@lib/level';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
-import { longDate } from '@lib/utils';
+import { longDate, shortDayMonth } from '@lib/utils';
 
 interface AchievementsScreenProps {
   onBack: () => void;
@@ -41,17 +30,14 @@ interface AchievementsScreenProps {
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-// Tres por fila, la misma retícula que el menú de Perfil y las casillas de
-// ejercicio (`menuTileTokens`): con cuatro los nombres largos ('Corazón en
-// marcha') se encogían hasta no leerse.
-const TILES_PER_ROW = MENU_TILES_PER_ROW;
-const TILE_ICON_SIZE = 33;
-// Anillo de progreso alrededor del icono de una insignia aún sin conseguir.
-const TILE_RING_SIZE = 44;
-// Cuadrada y con las mismas medidas que el menú de Perfil (`menuTileTokens`):
-// las dos cuadrículas se ven una detrás de otra y no pueden desencajar. Lo que
-// se encoge para que quepa todo dentro del cuadrado es el contenido: anillo,
-// icono y letra (antes la casilla era más ancha y más alta, `TILE_ASPECT` 0,88).
+// Tres medallas por fila dentro de la tarjeta de cada tipo de logro.
+const MEDALS_PER_ROW = 3;
+// Medalla: el círculo y su icono. Las que van por recuento llevan alrededor
+// el anillo de progreso (MEDAL_RING), y todas reservan ese hueco para que los
+// nombres caigan a la misma altura.
+const MEDAL_SIZE = 60;
+// En el popup de detalle, la misma medalla más grande.
+const DETAIL_MEDAL_SIZE = 84;
 
 /**
  * Logros: catálogo fijo de insignias que se desbloquean con el histórico.
@@ -60,10 +46,14 @@ const TILE_RING_SIZE = 44;
  * lleva 60 entrenos lo ve aquí y sabe cuánto le falta para el siguiente. Todo
  * sale de los logs al abrir (lib/badges): nada que guardar ni sincronizar.
  *
- * Misma cuadrícula de casillas que el menú de Perfil: icono + nombre, en color
- * si está conseguido y, si no, en gris con el progreso a la vista (anillo
- * alrededor del icono y '37/50' bajo el nombre). El popup al tocar da la
- * condición completa y la fecha.
+ * Muro de medallas, una tarjeta por tipo de logro con lo conseguido y su barra.
+ * Conseguida: medalla de oro (el degradado de la marca, con tinta oscura) y la
+ * fecha. Por recuento y sin conseguir: medalla apagada con el anillo de lo que
+ * llevas y '186/200'. De sí/no sin conseguir: apagada con un candado. Antes
+ * eran casillas cuadradas y las conseguidas iban rellenas de oro con borde de
+ * oro: con casi todo conseguido la pantalla era un bloque amarillo y lo que
+ * faltaba (lo interesante) se perdía. El popup al tocar da la condición
+ * completa y la fecha.
  *
  * La cabecera enseña las DOS mitades del nivel (retos superados y logros) y
  * la regla de puntos, y desde aquí se abren todos los retos de la semana
@@ -85,18 +75,19 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
   const weekChallengesDone = weekChallenges.filter((c) => c.done).length;
 
   // Grupos por tipo, cada uno en filas de tres (la última se rellena con
-  // huecos invisibles para que las casillas no se estiren).
+  // huecos para que las medallas que hay queden en su columna).
   const groups = useMemo(
     () =>
       BADGE_CATEGORY_ORDER.map((category) => {
         const items = badges.filter((b) => b.category === category);
         const rows: (Badge | null)[][] = [];
-        for (let i = 0; i < items.length; i += TILES_PER_ROW) {
-          const row: (Badge | null)[] = items.slice(i, i + TILES_PER_ROW);
-          while (row.length < TILES_PER_ROW) row.push(null);
+        for (let i = 0; i < items.length; i += MEDALS_PER_ROW) {
+          const row: (Badge | null)[] = items.slice(i, i + MEDALS_PER_ROW);
+          while (row.length < MEDALS_PER_ROW) row.push(null);
           rows.push(row);
         }
-        return { category, rows };
+        const done = items.filter((b) => b.unlocked).length;
+        return { category, rows, done, total: items.length };
       }).filter((g) => g.rows.length > 0),
     [badges]
   );
@@ -104,11 +95,6 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
   const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: backBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
-  // Ancho FIJO de la casilla (misma fuente que el menú de Perfil): con
-  // `flex: 1` las casillas de una fila con nombres largos salían más anchas.
-  const { width: windowWidth } = useWindowDimensions();
-  const tileWidth = getMenuTileWidth(windowWidth);
-
   // Los de sí/no (objetivo 1) no llevan progreso: o están o no están.
   const showsProgress = (b: Badge) => !b.unlocked && b.target > 1;
 
@@ -212,22 +198,40 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
           />
         </Pressable>
 
-        {groups.map(({ category, rows }) => (
+        {groups.map(({ category, rows, done, total }) => (
           <View key={category} style={styles.group}>
-            <Text style={styles.groupTitle}>
-              {badgeCategoryLabel(category)}
-            </Text>
+            <View style={styles.groupHeader}>
+              <Text style={styles.groupTitle}>
+                {badgeCategoryLabel(category)}
+              </Text>
+              <Text
+                style={[
+                  styles.groupCount,
+                  done === total && styles.groupCountDone,
+                ]}
+              >
+                {done}
+                <Text style={styles.groupCountTotal}>/{total}</Text>
+              </Text>
+            </View>
+            <View style={styles.groupTrack}>
+              <View
+                style={[
+                  styles.groupFill,
+                  done === total && styles.groupFillDone,
+                  { width: `${Math.round((done / total) * 100)}%` },
+                ]}
+              />
+            </View>
             {rows.map((row, rowIndex) => (
-              <View key={rowIndex} style={styles.gridRow}>
+              <View key={rowIndex} style={styles.medalRow}>
                 {row.map((badge, i) =>
                   badge ? (
                     <Pressable
                       key={badge.id}
                       style={({ pressed }) => [
-                        styles.tile,
-                        { width: tileWidth },
-                        badge.unlocked && styles.tileUnlocked,
-                        pressed && styles.tilePressed,
+                        styles.medalCell,
+                        pressed && styles.medalPressed,
                       ]}
                       onPress={() => setSelected(badge)}
                       accessibilityRole="button"
@@ -239,57 +243,43 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                           : t('Aún sin conseguir')
                       }`}
                     >
-                      {/* Sin conseguir: solo el icono va apagado (el nombre
-                          se queda entero, que hay que poder leerlo) y, si es
-                          de recuento, un anillo con lo que llevas. */}
-                      {showsProgress(badge) ? (
-                        <ProgressRing
-                          progress={badge.current / badge.target}
-                          size={TILE_RING_SIZE}
-                          strokeWidth={3}
-                          color={theme.colors.primary}
-                        >
-                          <MaterialCommunityIcons
-                            name={badge.icon as IconName}
-                            size={TILE_ICON_SIZE - 4}
-                            color={theme.colors.textSecondary}
-                            style={styles.tileIconLocked}
-                          />
-                        </ProgressRing>
-                      ) : (
-                        <View style={styles.tileIconBox}>
-                          <MaterialCommunityIcons
-                            name={badge.icon as IconName}
-                            size={TILE_ICON_SIZE}
-                            color={
-                              badge.unlocked
-                                ? theme.colors.primary
-                                : theme.colors.textSecondary
-                            }
-                            style={!badge.unlocked && styles.tileIconLocked}
-                          />
-                        </View>
-                      )}
+                      <BadgeMedal
+                        icon={badge.icon}
+                        unlocked={badge.unlocked}
+                        progress={
+                          showsProgress(badge)
+                            ? badge.current / badge.target
+                            : undefined
+                        }
+                        size={MEDAL_SIZE}
+                      />
                       <Text
                         style={[
-                          styles.tileLabel,
-                          !badge.unlocked && styles.tileLabelLocked,
+                          styles.medalName,
+                          !badge.unlocked && styles.medalNameLocked,
                         ]}
                         numberOfLines={2}
                       >
                         {badge.name}
                       </Text>
-                      {showsProgress(badge) && (
-                        <Text style={styles.tileProgress}>
-                          {badge.current}/{badge.target}
-                        </Text>
-                      )}
+                      <Text
+                        style={[
+                          styles.medalMeta,
+                          showsProgress(badge) && styles.medalMetaProgress,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {badge.unlocked
+                          ? badge.unlockedAt
+                            ? shortDayMonth(badge.unlockedAt)
+                            : ' '
+                          : showsProgress(badge)
+                          ? `${badge.current}/${badge.target}`
+                          : ' '}
+                      </Text>
                     </Pressable>
                   ) : (
-                    <View
-                      key={`gap-${i}`}
-                      style={[styles.tileGap, { width: tileWidth }]}
-                    />
+                    <View key={`gap-${i}`} style={styles.medalCell} />
                   )
                 )}
               </View>
@@ -337,22 +327,17 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
       >
         {!!selected && (
           <View style={styles.detail}>
-            <View
-              style={[
-                styles.detailIconWrap,
-                selected.unlocked && styles.detailIconWrapUnlocked,
-              ]}
-            >
-              <MaterialCommunityIcons
-                name={selected.icon as IconName}
-                size={44}
-                color={
-                  selected.unlocked
-                    ? theme.colors.primary
-                    : theme.colors.textSecondary
-                }
-              />
-            </View>
+            {/* La misma medalla que en la lista, más grande. */}
+            <BadgeMedal
+              icon={selected.icon}
+              unlocked={selected.unlocked}
+              progress={
+                showsProgress(selected)
+                  ? selected.current / selected.target
+                  : undefined
+              }
+              size={DETAIL_MEDAL_SIZE}
+            />
             <Text style={styles.detailDescription}>{selected.description}</Text>
 
             {selectedShowsProgress && (
@@ -508,90 +493,96 @@ const makeStyles = () =>
       backgroundColor: theme.colors.primary,
     },
 
-    group: { gap: 12 },
+    // Tarjeta de un tipo de logro: neutra; el oro lo ponen las medallas
+    // conseguidas, no el marco.
+    group: {
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.md,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      paddingHorizontal: 12,
+      paddingTop: 14,
+      paddingBottom: 6,
+      ...theme.shadow.soft,
+    },
+    groupHeader: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      paddingHorizontal: 4,
+    },
     groupTitle: {
       fontSize: 12,
       fontWeight: '800',
       letterSpacing: 1,
       textTransform: 'uppercase',
       color: theme.colors.textSecondary,
-      paddingHorizontal: 2,
     },
-
-    // Cuadrícula: las mismas casillas cuadradas del menú de Perfil, con sus
-    // mismas medidas (separación, margen a los lados y aire interior).
-    gridRow: {
-      flexDirection: 'row',
-      gap: MENU_TILE_GAP,
-      marginHorizontal: MENU_TILE_INSET,
-    },
-    tile: {
-      aspectRatio: 1,
-      alignItems: 'center',
-      justifyContent: 'center',
-      gap: 3,
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      padding: MENU_TILE_PADDING,
-    },
-    // Sin sombra en ninguna casilla: la elevación de Android se pintaba como
-    // un cuadrado más oscuro bajo el fondo translúcido del dorado, y si solo
-    // la llevaban las bloqueadas parecían más grandes.
-    tileUnlocked: {
-      backgroundColor: theme.colors.primaryMuted,
-      borderColor: theme.colors.primaryLine,
-    },
-    // Bloqueado: se apaga SOLO el icono; el nombre y la cifra van enteros
-    // (en tema claro, gris al 60 % sobre surface rozaba el mínimo de contraste).
-    tileIconLocked: { opacity: 0.55 },
-    // Mismo alto que el anillo, para que icono y nombre caigan igual en todas
-    // las casillas, lleven anillo o no.
-    tileIconBox: {
-      height: TILE_RING_SIZE,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    tilePressed: { opacity: 0.8 },
-    tileProgress: {
-      fontSize: 11,
-      fontWeight: '700',
-      color: theme.colors.textSecondary,
+    // Mismo dibujo que el recuento de retos de Inicio: lo hecho grande en
+    // color y "/total" pequeño en blanco.
+    groupCount: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.primary,
       fontVariant: ['tabular-nums'],
-      lineHeight: 13,
     },
-    // Hueco de relleno de la última fila incompleta: mantiene el orden de
-    // lectura (las casillas que hay quedan a la izquierda). Ya no hace falta
-    // que imite la caja de una casilla —el ancho es fijo, no repartido—, pero
-    // sí que mida lo mismo.
-    tileGap: {
-      aspectRatio: 1,
+    groupCountDone: { color: theme.colors.success },
+    groupCountTotal: {
+      fontSize: 12,
+      color: theme.colors.text,
     },
-    tileLabel: {
+    groupTrack: {
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: theme.colors.surfaceAlt,
+      overflow: 'hidden',
+      marginTop: 8,
+      marginBottom: 6,
+      marginHorizontal: 4,
+    },
+    groupFill: {
+      height: '100%',
+      borderRadius: 2,
+      backgroundColor: theme.colors.primary,
+    },
+    groupFillDone: { backgroundColor: theme.colors.success },
+
+    medalRow: {
+      flexDirection: 'row',
+    },
+    medalCell: {
+      flex: 1,
+      alignItems: 'center',
+      paddingVertical: 10,
+      paddingHorizontal: 4,
+      gap: 6,
+    },
+    medalPressed: { opacity: 0.7 },
+    medalName: {
       fontSize: 12,
       fontWeight: '800',
       color: theme.colors.text,
       lineHeight: 15,
       textAlign: 'center',
+      minHeight: 30,
     },
-    tileLabelLocked: { color: theme.colors.textSecondary },
+    medalNameLocked: { color: theme.colors.textSecondary },
+    // Bajo el nombre: la fecha si está conseguido, lo que llevas si va por
+    // recuento.
+    medalMeta: {
+      marginTop: -4,
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
+      fontVariant: ['tabular-nums'],
+      lineHeight: 13,
+    },
+    medalMetaProgress: {
+      fontWeight: '800',
+      color: theme.colors.primary,
+    },
 
     detail: { alignItems: 'center', gap: 6 },
-    detailIconWrap: {
-      width: 76,
-      height: 76,
-      borderRadius: 38,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: theme.colors.surfaceAlt,
-      marginBottom: 6,
-    },
-    detailIconWrapUnlocked: {
-      backgroundColor: theme.colors.primaryMuted,
-      borderWidth: 1,
-      borderColor: theme.colors.primaryLine,
-    },
     detailDescription: {
       fontSize: 15,
       color: theme.colors.text,

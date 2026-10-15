@@ -21,6 +21,8 @@ export { Avatar } from './Avatar';
 // AnimatedCounter no se re-exporta: solo lo consume TrendDelta por ruta relativa.
 export { TrendDelta } from './TrendDelta';
 export { BarChart, getChartWidth } from './BarChart';
+export { SplashFade } from './SplashFade';
+export { BadgeMedal } from './BadgeMedal';
 export type { BarChartPoint } from './BarChart';
 export { DayAccentIcon } from './DayAccentIcon';
 export {

@@ -4,6 +4,7 @@ import {
   ExerciseKeyResolver,
   exerciseKeyOf,
 } from './exerciseIdentity';
+import { isExtraExerciseLog } from './extraExercises';
 import { getEstimatedOneRepMax, isValidSet } from './progress';
 import { getLogTimestamp } from './utils';
 
@@ -91,7 +92,11 @@ function setsForKeyInLog(
   resolve: ExerciseKeyResolver
 ): ParsedSet[] {
   return log.exercises
-    .filter((exerciseLog) => exerciseLogKey(exerciseLog, resolve) === key)
+    .filter(
+      (exerciseLog) =>
+        !isExtraExerciseLog(exerciseLog) &&
+        exerciseLogKey(exerciseLog, resolve) === key
+    )
     .flatMap((exerciseLog) => exerciseLog.parsedSets || [])
     .filter(isValidSet);
 }
@@ -144,6 +149,8 @@ export function listExercises(
     const timestamp = getLogTimestamp(log);
 
     for (const exerciseLog of log.exercises) {
+      // Los adicionales quedan fuera de la evolución (lib/extraExercises).
+      if (isExtraExerciseLog(exerciseLog)) continue;
       const sets = (exerciseLog.parsedSets || []).filter(isValidSet);
       if (sets.length === 0) continue;
 

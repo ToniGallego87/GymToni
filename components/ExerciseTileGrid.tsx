@@ -1,13 +1,27 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { ReactNode, useState } from 'react';
+import React, {
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import Animated, {
+  interpolate,
+  runOnJS,
+  SharedValue,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+} from 'react-native-reanimated';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { getCatalogExercise, thumbUrl } from '@data/exerciseCatalog';
 import { buildTargetReps, ExerciseForm } from '@lib/exerciseForm';
 import { ConfirmModal } from './ConfirmModal';
-import { ExerciseGifButton } from './ExerciseGifButton';
+import { ExerciseGifButton, GifCornerBadge } from './ExerciseGifButton';
 import { SortableGrid } from './SortableGrid';
 import { TrendDelta } from './TrendDelta';
 
@@ -16,11 +30,40 @@ import { TrendDelta } from './TrendDelta';
 // GIF entero pide más alto que ancho.
 const COLUMNS = 3;
 const GAP = 12;
-// Registro (`selection`): casillas más pequeñas, cuatro por fila, para que el
-// panel de series y todos los ejercicios quepan sin tanto scroll.
-const COMPACT_COLUMNS = 4;
-const COMPACT_GAP = 8;
+// Registro (`selection`): ruleta horizontal bajo un marco fijo (ver
+// `ExerciseWheel`). Todas las casillas se maquetan a WHEEL_BIG y se ESCALAN:
+// a tamaño completo en el marco y a WHEEL_SMALL fuera (textos incluidos).
 const COMPACT_NAME_LINES = 2;
+const COMPACT_NAME_LINE_HEIGHT = 17;
+// Pie de la casilla (0/3): el cuerpo del nombre y, en la del marco, mayor (ver
+// `setsSelected`); el alto es el de la mayor.
+const COMPACT_FOOT_HEIGHT = 24;
+const WHEEL_BIG = 146;
+const WHEEL_SMALL = 100;
+const WHEEL_GAP = 10;
+const WHEEL_SMALL_SCALE = WHEEL_SMALL / WHEEL_BIG;
+// Miniatura: fracción del ancho interior de la casilla (`thumbCompact`).
+const WHEEL_THUMB_RATIO = 0.86;
+// Paso del encaje: lo que separa dos casillas pequeñas.
+const WHEEL_STEP = WHEEL_SMALL + WHEEL_GAP;
+// Lo que se apartan las vecinas cuando la del marco está grande.
+const WHEEL_PUSH = (WHEEL_BIG - WHEEL_SMALL) / 2;
+// Alto de la casilla grande, calculado (no medido) para que el marco lo sepa
+// desde el primer frame: borde y padding (1 + 6 por lado; el adicional, 2 + 5),
+// nombre, pie, los dos huecos entre ellos (4) y la miniatura cuadrada.
+// Si cambian esos estilos, cambia esto.
+const WHEEL_TILE_CHROME = 2 * (1 + 6);
+const WHEEL_BIG_HEIGHT =
+  WHEEL_TILE_CHROME +
+  COMPACT_NAME_LINES * COMPACT_NAME_LINE_HEIGHT +
+  COMPACT_FOOT_HEIGHT +
+  2 * 4 +
+  WHEEL_THUMB_RATIO * (WHEEL_BIG - WHEEL_TILE_CHROME);
+// Aire arriba y abajo para la sombra de las casillas (el ScrollView recorta).
+const WHEEL_SHADOW_ROOM = 5;
+const WHEEL_HEIGHT = WHEEL_BIG_HEIGHT + WHEEL_SHADOW_ROOM * 2;
+// Soltar sin inercia: espera antes de elegir (ver `endDrag`).
+const SETTLE_FALLBACK_MS = 150;
 // Líneas que reserva el nombre (centrado en ese hueco si ocupa menos).
 const NAME_LINES = 3;
 const NAME_LINE_HEIGHT = 13;
@@ -36,6 +79,8 @@ export interface ExerciseTile {
   catalogId?: string;
   targetSets?: number | string;
   targetReps?: number | string;
+  /** Ejercicio adicional del registro (no es del día): borde azul. */
+  extra?: boolean;
 }
 
 /** Filas del editor → casillas, con el plan escrito como en lectura. */
@@ -78,6 +123,15 @@ export interface ExerciseTileSelection {
   selectedId: string | null;
   onSelect: (id: string) => void;
   progressOf: (id: string) => ExerciseTileProgress;
+  /** Fija un GIF del catálogo al ejercicio (desde la lupa de la elegida). */
+  onAssignGif?: (id: string, catalogId: string) => void;
+  /** "+" al final de la ruleta: añadir un ejercicio adicional a la sesión. */
+  onAdd?: () => void;
+  /**
+   * Padding lateral de la pantalla: la tira sangra hasta el borde (las
+   * casillas se deslizan por debajo) y arranca alineada con el resto.
+   */
+  inset?: number;
 }
 
 interface ExerciseTileGridProps {
@@ -106,9 +160,10 @@ interface ExerciseTileGridProps {
  * El GIF no se recorta (`fitMode="contain"`): se ve el movimiento entero, y
  * la casilla crece en alto lo que haga falta.
  *
- * En el registro (`selection`) cada casilla se elige con un toque: la elegida
- * lleva borde de oro y el pie dice las series hechas de su objetivo. El panel
- * para meterlas lo pinta el registro bajo la cuadrícula.
+ * En el registro (`selection`) las casillas van en una sola fila deslizable y
+ * cada una se elige con un toque: la elegida lleva borde de oro, el play de su
+ * GIF y el pie dice las series hechas de su objetivo. El panel para meterlas lo
+ * pinta el registro bajo la tira.
  */
 export function ExerciseTileGrid({
   exercises,
@@ -162,56 +217,49 @@ export function ExerciseTileGrid({
     );
   }
 
-  const columns = selection ? COMPACT_COLUMNS : COLUMNS;
+  if (selection) {
+    return (
+      <ExerciseWheel
+        exercises={exercises}
+        accent={accent}
+        selection={selection}
+      />
+    );
+  }
+
+  const columns = COLUMNS;
   const rows: ExerciseTile[][] = [];
   for (let i = 0; i < exercises.length; i += columns) {
     rows.push(exercises.slice(i, i + columns));
   }
 
   return (
-    <View style={[styles.grid, selection && styles.gridCompact]}>
+    <View style={styles.grid}>
       {rows.map((row, rowIndex) => (
-        <View
-          key={rowIndex}
-          style={[styles.row, selection && styles.gridCompact]}
-        >
-          {row.map((exercise) =>
-            selection ? (
-              <SelectableTile
-                key={exercise.id}
-                exercise={exercise}
-                accent={accent}
-                selected={exercise.id === selection.selectedId}
-                progress={selection.progressOf(exercise.id)}
-                onPress={() => selection.onSelect(exercise.id)}
-              />
-            ) : (
-              <View key={exercise.id} style={[styles.tile, styles.tileFlex]}>
-                <TileName name={exercise.name} />
-                {exercise.catalogId ? (
-                  <View style={styles.gifWrap}>
-                    <ExerciseGifButton
-                      name={exercise.name}
-                      catalogId={exercise.catalogId}
-                      fitMode="contain"
-                      style={styles.gif}
-                    />
-                  </View>
-                ) : (
-                  <GifPlaceholder accent={accent} />
-                )}
-                <TileSets exercise={exercise} />
-              </View>
-            )
-          )}
+        <View key={rowIndex} style={styles.row}>
+          {row.map((exercise) => (
+            <View key={exercise.id} style={[styles.tile, styles.tileFlex]}>
+              <TileName name={exercise.name} />
+              {exercise.catalogId ? (
+                <View style={styles.gifWrap}>
+                  <ExerciseGifButton
+                    name={exercise.name}
+                    catalogId={exercise.catalogId}
+                    fitMode="contain"
+                    style={styles.gif}
+                  />
+                </View>
+              ) : (
+                <GifPlaceholder accent={accent} />
+              )}
+              <TileSets exercise={exercise} />
+            </View>
+          ))}
           {/* Huecos vacíos en la última fila para que las casillas que sí hay
               no se estiren y midan lo mismo que las demás. */}
           {row.length < columns &&
             Array.from({ length: columns - row.length }).map((_, i) => (
-              <View
-                key={`spacer-${i}`}
-                style={[styles.spacer, selection && styles.spacerCompact]}
-              />
+              <View key={`spacer-${i}`} style={styles.spacer} />
             ))}
         </View>
       ))}
@@ -225,15 +273,23 @@ export function ExerciseTileGrid({
 function TileName({
   name,
   lines = NAME_LINES,
+  compact,
 }: {
   name: string;
   lines?: number;
+  /** Casilla del registro: letra algo mayor (la casilla también lo es). */
+  compact?: boolean;
 }) {
   const trimmed = name.trim();
+  const lineHeight = compact ? COMPACT_NAME_LINE_HEIGHT : NAME_LINE_HEIGHT;
   return (
-    <View style={[styles.nameBox, { height: lines * NAME_LINE_HEIGHT }]}>
+    <View style={[styles.nameBox, { height: lines * lineHeight }]}>
       <Text
-        style={[styles.name, !trimmed && styles.nameEmpty]}
+        style={[
+          styles.name,
+          compact && styles.nameCompact,
+          !trimmed && styles.nameEmpty,
+        ]}
         numberOfLines={lines}
       >
         {trimmed || t('Sin nombre')}
@@ -299,38 +355,309 @@ function TileThumb({
   );
 }
 
+/**
+ * Registro: los ejercicios como una ruleta horizontal bajo un marco de oro
+ * FIJO en el centro. Se arrastra la fila; el ejercicio que encaja en el marco
+ * es el elegido y su panel sale debajo. Al soltar, la casilla con más de la
+ * mitad dentro se encaja sola (`snapToInterval`). Las casillas crecen al
+ * acercarse al marco y encogen al alejarse, siguiendo al dedo (`WheelSlot`).
+ *
+ * Tocar una casilla la lleva al marco; y si la elegida cambia desde fuera
+ * (al completar un ejercicio se pasa al siguiente), la ruleta gira sola.
+ */
+function ExerciseWheel({
+  exercises,
+  accent,
+  selection,
+}: {
+  exercises: ExerciseTile[];
+  accent: string;
+  selection: ExerciseTileSelection;
+}) {
+  const { selectedId, inset = 0 } = selection;
+  const scrollRef = useRef<Animated.ScrollView>(null);
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const selectedIndex = exercises.findIndex((e) => e.id === selectedId);
+  const scrollX = useSharedValue(Math.max(0, selectedIndex) * WHEEL_STEP);
+  // Primera colocación sin animación: al entrar, la ruleta ya está en su sitio.
+  const placedRef = useRef(false);
+  const draggingRef = useRef(false);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Lo último que llegó por props, para los avisos del gesto (que llegan del
+  // hilo de UI a funciones estables).
+  const latestRef = useRef({
+    exercises,
+    selectedId,
+    onSelect: selection.onSelect,
+  });
+  latestRef.current = { exercises, selectedId, onSelect: selection.onSelect };
+
+  const cancelSettle = useCallback(() => {
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = null;
+  }, []);
+
+  // La ruleta se ha parado en `x`: elige el ejercicio del marco.
+  const settle = useCallback(
+    (x: number) => {
+      cancelSettle();
+      const {
+        exercises: list,
+        selectedId: current,
+        onSelect,
+      } = latestRef.current;
+      const index = Math.min(
+        list.length - 1,
+        Math.max(0, Math.round(x / WHEEL_STEP))
+      );
+      const id = list[index]?.id;
+      if (id && id !== current) onSelect(id);
+    },
+    [cancelSettle]
+  );
+
+  const beginDrag = useCallback(() => {
+    draggingRef.current = true;
+    cancelSettle();
+  }, [cancelSettle]);
+
+  // Al soltar casi siempre sigue un encaje con inercia (y su fin elige). Por
+  // si no llega —soltar justo en su sitio—, se elige igual tras un momento.
+  const endDrag = useCallback(
+    (x: number) => {
+      draggingRef.current = false;
+      cancelSettle();
+      settleTimerRef.current = setTimeout(() => settle(x), SETTLE_FALLBACK_MS);
+    },
+    [cancelSettle, settle]
+  );
+
+  useEffect(() => cancelSettle, [cancelSettle]);
+
+  const onScroll = useAnimatedScrollHandler({
+    onScroll: (e) => {
+      scrollX.value = e.contentOffset.x;
+    },
+    onBeginDrag: () => {
+      runOnJS(beginDrag)();
+    },
+    onEndDrag: (e) => {
+      runOnJS(endDrag)(e.contentOffset.x);
+    },
+    onMomentumBegin: () => {
+      runOnJS(cancelSettle)();
+    },
+    onMomentumEnd: (e) => {
+      runOnJS(settle)(e.contentOffset.x);
+    },
+  });
+
+  useEffect(() => {
+    if (!viewportWidth || selectedIndex < 0 || draggingRef.current) return;
+    const x = selectedIndex * WHEEL_STEP;
+    scrollRef.current?.scrollTo({ x, animated: placedRef.current });
+    if (!placedRef.current) scrollX.value = x;
+    placedRef.current = true;
+  }, [selectedIndex, viewportWidth, scrollX]);
+
+  // Aire a los lados para que el primero y el último también lleguen al marco.
+  const sidePadding = Math.max(0, (viewportWidth - WHEEL_STEP) / 2);
+
+  return (
+    <View
+      style={[styles.wheel, { marginHorizontal: -inset }]}
+      onLayout={(e) => setViewportWidth(e.nativeEvent.layout.width)}
+    >
+      {viewportWidth > 0 && (
+        <>
+          <Animated.ScrollView
+            ref={scrollRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={WHEEL_STEP}
+            decelerationRate="fast"
+            onScroll={onScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={{ paddingLeft: sidePadding }}
+          >
+            {exercises.map((exercise, index) => (
+              <WheelSlot key={exercise.id} index={index} scrollX={scrollX}>
+                <SelectableTile
+                  exercise={exercise}
+                  accent={accent}
+                  selected={exercise.id === selectedId}
+                  progress={selection.progressOf(exercise.id)}
+                  onPress={() => selection.onSelect(exercise.id)}
+                  onAssignGif={
+                    selection.onAssignGif
+                      ? (catalogId) =>
+                          selection.onAssignGif?.(exercise.id, catalogId)
+                      : undefined
+                  }
+                />
+              </WheelSlot>
+            ))}
+            {/* Aire de la derecha (el mismo que el padding izquierdo): con él
+              el último llega al marco y no más allá. El "+" vive DENTRO de
+              ese aire, en el sitio del siguiente: se ve junto al último pero
+              la ruleta no puede encajarlo en el marco. */}
+            <View style={{ width: sidePadding }}>
+              {!!selection.onAdd && <WheelAddTile onPress={selection.onAdd} />}
+            </View>
+          </Animated.ScrollView>
+          {/* El marco: fijo, encima, y deja pasar los toques (el play). Con
+            un adicional dentro lleva por dentro su anillo azul. */}
+          <View
+            pointerEvents="none"
+            style={[
+              styles.wheelFrame,
+              { left: (viewportWidth - WHEEL_BIG) / 2 },
+            ]}
+          >
+            {!!exercises[selectedIndex]?.extra && (
+              <View style={styles.wheelFrameExtra} />
+            )}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Hueco de una casilla en la ruleta: todos miden lo mismo (el paso del
+ * encaje); la casilla de dentro se escala según su distancia al marco —entera
+ * en él, pequeña a partir de un paso, y todo su contenido con ella— y se
+ * aparta lo que crece la del marco, para que entre casilla y casilla quede
+ * siempre el mismo hueco.
+ */
+function WheelSlot({
+  index,
+  scrollX,
+  children,
+}: {
+  index: number;
+  scrollX: SharedValue<number>;
+  children: ReactNode;
+}) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const offset = index - scrollX.value / WHEEL_STEP;
+    const distance = Math.min(Math.abs(offset), 1);
+    return {
+      transform: [
+        // Primero el desplazamiento: así no lo encoge la escala.
+        { translateX: Math.sign(offset) * WHEEL_PUSH * distance },
+        { scale: interpolate(distance, [0, 1], [1, WHEEL_SMALL_SCALE]) },
+      ],
+    };
+  });
+  return (
+    <View style={styles.wheelSlot}>
+      <Animated.View style={[styles.wheelTile, animatedStyle]}>
+        {children}
+      </Animated.View>
+    </View>
+  );
+}
+
+/**
+ * "+" de la ruleta: añadir un ejercicio adicional. Mismo tamaño y sitio que
+ * una casilla pequeña más allá de la última (siempre fuera del marco), con
+ * borde punteado como la casilla de añadir de la rutina.
+ */
+function WheelAddTile({ onPress }: { onPress: () => void }) {
+  return (
+    <View style={styles.wheelSlot}>
+      <View
+        style={[
+          styles.wheelTile,
+          {
+            transform: [
+              { translateX: WHEEL_PUSH },
+              { scale: WHEEL_SMALL_SCALE },
+            ],
+          },
+        ]}
+      >
+        <Pressable
+          style={({ pressed }) => [
+            styles.tile,
+            styles.tileCompact,
+            styles.addTile,
+            styles.wheelAddTile,
+            pressed && styles.pressed,
+          ]}
+          onPress={onPress}
+          accessibilityRole="button"
+          accessibilityLabel={t('Añadir ejercicio')}
+        >
+          <View style={styles.addCircle}>
+            <MaterialCommunityIcons
+              name="plus"
+              size={30}
+              color={theme.colors.primary}
+            />
+          </View>
+          <Text style={[styles.addLabel, styles.nameCompact]} numberOfLines={2}>
+            {t('Añadir ejercicio')}
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 interface SelectableTileProps {
   exercise: ExerciseTile;
   accent: string;
   selected: boolean;
   progress: ExerciseTileProgress;
   onPress: () => void;
+  onAssignGif?: (catalogId: string) => void;
 }
 
-// Casilla del registro: un toque la elige y su panel de series sale bajo la
-// cuadrícula. La elegida lleva borde de oro; una completada, borde verde con
-// su check y la mejora frente a la vez anterior (o las series hechas, si
-// alguna se saltó). Con nota, un icono en la esquina de la miniatura.
+// Casilla del registro: la del marco es la elegida, y un toque en otra la lleva
+// al marco. Una completada lleva borde verde con su check y la mejora frente a
+// la vez anterior (o las series hechas, si alguna se saltó). Con nota, un icono
+// arriba a la derecha de la miniatura.
+//
+// La elegida enseña el GIF EN MOVIMIENTO (solo ella: uno a la vez) con una lupa
+// amarilla abajo a la derecha: un toque lo amplía en el visor. Sin GIF
+// asignado, la lupa de buscar uno.
 function SelectableTile({
   exercise,
   accent,
   selected,
   progress,
   onPress,
+  onAssignGif,
 }: SelectableTileProps) {
   const name = exercise.name.trim() || t('Sin nombre');
   const { done, target, completed, hasNote, trend } = progress;
   // Completado con alguna serie saltada: se dice cuántas se hicieron (2/3),
   // no la mejora.
   const showTrend = completed && !!trend && done >= target;
+  const noteBadge = hasNote ? (
+    <View
+      style={styles.noteBadge}
+      accessible
+      accessibilityLabel={t('Nota del ejercicio')}
+    >
+      <MaterialCommunityIcons
+        name="note-text"
+        size={11}
+        color={theme.colors.onGold}
+      />
+    </View>
+  ) : null;
   return (
     <Pressable
       style={({ pressed }) => [
         styles.tile,
-        styles.tileFlex,
         styles.tileCompact,
         completed && styles.tileCompleted,
-        selected && styles.tileSelected,
+        exercise.extra && styles.tileExtra,
         pressed && styles.pressed,
       ]}
       onPress={onPress}
@@ -342,32 +669,37 @@ function SelectableTile({
           : name
       }
     >
-      <TileName name={exercise.name} lines={COMPACT_NAME_LINES} />
+      <TileName name={exercise.name} lines={COMPACT_NAME_LINES} compact />
+      {/* La miniatura fija está SIEMPRE (elegir no la recarga: antes se
+          cambiaba por la del botón de GIF y parpadeaba); la elegida gana
+          encima la capa con el GIF en movimiento y la lupa. */}
       <TileThumb
         catalogId={exercise.catalogId}
         accent={accent}
         compact
         badge={
-          hasNote ? (
-            <View
-              style={styles.noteBadge}
-              accessible
-              accessibilityLabel={t('Nota del ejercicio')}
-            >
-              <MaterialCommunityIcons
-                name="note-text"
-                size={11}
-                color={theme.colors.onGold}
+          <>
+            {selected ? (
+              <ExerciseGifButton
+                name={exercise.name}
+                catalogId={exercise.catalogId}
+                onAssign={onAssignGif}
+                layer
               />
-            </View>
-          ) : null
+            ) : (
+              // Fuera del marco la lupa solo se ve (el toque lleva la
+              // casilla al marco, y ahí ya amplía).
+              <GifCornerBadge search={!exercise.catalogId} />
+            )}
+            {noteBadge}
+          </>
         }
       />
       <View style={styles.progressRow}>
         {completed && (
           <MaterialCommunityIcons
             name="check-circle"
-            size={13}
+            size={14}
             color={theme.colors.success}
           />
         )}
@@ -375,17 +707,34 @@ function SelectableTile({
           <TrendDelta
             value={trend.percent}
             improved={trend.isImproved}
-            iconSize={11}
+            iconSize={12}
             textStyle={styles.progressTrend}
           />
+        ) : target > 0 ? (
+          // Mismo dibujo que el recuento de retos de Inicio (ChallengesStrip):
+          // las hechas grandes y en color —oro; azul si es adicional; verde
+          // si está completo— y "/objetivo" pequeño en blanco. En el marco,
+          // todo más grande.
+          <View style={styles.countRow}>
+            <Text
+              style={[
+                styles.countDone,
+                selected && styles.countDoneSelected,
+                exercise.extra && styles.countDoneExtra,
+                completed && styles.setsCompleted,
+              ]}
+            >
+              {done}
+            </Text>
+            <Text
+              style={[styles.countTotal, selected && styles.countTotalSelected]}
+            >
+              /{target}
+            </Text>
+          </View>
         ) : (
-          <Text
-            style={[styles.sets, completed && styles.setsCompleted]}
-            numberOfLines={1}
-          >
-            {target > 0
-              ? `${done}/${target}`
-              : `${exercise.targetSets || '-'}x${exercise.targetReps || '-'}`}
+          <Text style={[styles.sets, styles.setsCompact]} numberOfLines={1}>
+            {`${exercise.targetSets || '-'}x${exercise.targetReps || '-'}`}
           </Text>
         )}
       </View>
@@ -531,43 +880,118 @@ const makeStyles = () =>
     },
     // Registro: la casilla elegida, con borde de oro más grueso (el padding
     // cede lo que gana el borde para que la casilla no crezca).
+    // Registro: el ancho lo pone `WheelSlot` (animado). Padding, borde y
+    // huecos entran en WHEEL_BIG_HEIGHT.
     tileCompact: {
+      width: '100%',
       padding: 6,
-      gap: 3,
+      gap: 4,
     },
-    tileSelected: {
+    wheel: {
+      height: WHEEL_HEIGHT,
+    },
+    wheelSlot: {
+      width: WHEEL_STEP,
+      height: WHEEL_HEIGHT,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Maquetada siempre a tamaño completo (más ancha que su hueco, centrada):
+    // la escala de `WheelSlot` la encoge.
+    wheelTile: {
+      width: WHEEL_BIG,
+    },
+    // Borde más grueso que el de la rutina: escalado a casilla pequeña, el de
+    // 1 px se quedaba en un hilo.
+    wheelAddTile: {
+      borderWidth: 2,
+      padding: 5,
+      height: WHEEL_BIG_HEIGHT,
+      justifyContent: 'center',
+      gap: 10,
+    },
+    // El marco fijo: el mismo borde de oro que el panel de debajo.
+    wheelFrame: {
+      position: 'absolute',
+      top: WHEEL_SHADOW_ROOM,
+      width: WHEEL_BIG,
+      height: WHEEL_BIG_HEIGHT,
       borderWidth: 3,
-      padding: 4,
       borderColor: theme.colors.primaryLine,
+      borderRadius: theme.borderRadius.md,
     },
-    gridCompact: {
-      gap: COMPACT_GAP,
-    },
-    spacerCompact: {
-      padding: 6,
+    // Anillo azul del adicional, por dentro del oro (tapa el borde azul de la
+    // propia casilla, que queda debajo del marco).
+    wheelFrameExtra: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      borderWidth: 3,
+      borderColor: theme.colors.emoji_blue,
+      borderRadius: theme.borderRadius.md - 3,
     },
     // Miniatura del registro: algo más estrecha que la casilla, centrada.
     thumbCompact: {
-      width: '72%',
+      width: `${WHEEL_THUMB_RATIO * 100}%`,
     },
     tileCompleted: {
       borderColor: theme.colors.success,
     },
+    // Adicional (no es del día): borde azul más grueso; el padding cede lo que
+    // gana el borde para que mida lo mismo (WHEEL_BIG_HEIGHT).
+    tileExtra: {
+      borderWidth: 2,
+      padding: 5,
+      borderColor: theme.colors.emoji_blue,
+    },
     progressRow: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 3,
-      height: 13,
+      gap: 4,
+      height: COMPACT_FOOT_HEIGHT,
+    },
+    setsCompact: {
+      fontSize: 13,
+      fontWeight: '800',
+      lineHeight: COMPACT_FOOT_HEIGHT,
+    },
+    countRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+    },
+    countDone: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      fontVariant: ['tabular-nums'],
+    },
+    countDoneSelected: {
+      fontSize: 20,
+      lineHeight: COMPACT_FOOT_HEIGHT,
+    },
+    countDoneExtra: {
+      color: theme.colors.emoji_blue,
+    },
+    countTotal: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: theme.colors.text,
+      fontVariant: ['tabular-nums'],
+    },
+    countTotalSelected: {
+      fontSize: 14,
     },
     setsCompleted: {
       color: theme.colors.success,
     },
     // Nota del ejercicio: insignia dorada (oro de superficie con su tinta)
-    // abajo a la derecha de la miniatura; destaca sobre el fondo claro de los
-    // GIF del catálogo en día y en noche.
+    // arriba a la derecha de la miniatura (abajo va el play de la elegida);
+    // destaca sobre el fondo claro de los GIF del catálogo en día y en noche.
     noteBadge: {
       position: 'absolute',
-      bottom: 2,
+      top: 2,
       right: 2,
       width: 18,
       height: 18,
@@ -577,8 +1001,8 @@ const makeStyles = () =>
       backgroundColor: theme.colors.primaryFill,
     },
     progressTrend: {
-      fontSize: 11,
-      lineHeight: 13,
+      fontSize: 13,
+      lineHeight: COMPACT_FOOT_HEIGHT,
     },
     // En edición el asa y las acciones van a ras de los bordes de la casilla.
     tileEditing: {
@@ -646,6 +1070,10 @@ const makeStyles = () =>
       lineHeight: NAME_LINE_HEIGHT,
       color: theme.colors.text,
       textAlign: 'center',
+    },
+    nameCompact: {
+      fontSize: 13,
+      lineHeight: COMPACT_NAME_LINE_HEIGHT,
     },
     nameEmpty: {
       color: theme.colors.textSecondary,

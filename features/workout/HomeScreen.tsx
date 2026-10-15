@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
 import { useAccountLevel } from '@hooks/useAccountLevel';
+import { useOnTabLeave } from '@hooks/useTabFocus';
 import {
   WorkoutDay,
   WorkoutRoutine,
@@ -46,6 +47,8 @@ import {
   WeekProgressPoint,
 } from '@lib/weeks';
 import { computeWeekAchievements, WeekAchievements } from '@lib/achievements';
+import { computeWeekExtras } from '@lib/weekExtras';
+import { useChallengeWins } from '@lib/level';
 import {
   AnchorMenu,
   Button,
@@ -195,7 +198,9 @@ export function HomeScreen({
   const { state, dispatch } = useWorkout();
   // Retos de fuerza de la semana, en la tira bajo la hero: el reto solo
   // funciona si se ve donde se decide entrenar.
-  const { challenges } = useAccountLevel();
+  const { challenges, badges } = useAccountLevel();
+  // Retos superados (claves permanentes): los del póster de cada semana.
+  const wins = useChallengeWins();
   const heroChallenges = challenges.filter((c) => c.category === 'strength');
   const [showChallenges, setShowChallenges] = useState(false);
   // La cabecera (hero + barra) se pinta al instante; el historial de semanas y
@@ -211,6 +216,16 @@ export function HomeScreen({
   // Paginación del historial de semanas: se muestran las 5 más recientes y
   // "Cargar más" añade 5 (como Cardio). Se reinicia al cambiar de rutina.
   const [visibleWeekCount, setVisibleWeekCount] = useState(WEEKS_PAGE);
+  // Al cambiar a otra pestaña de la barra, Inicio vuelve arriba y se pliega
+  // entero: al volver se encuentra como recién abierto (no al abrir un detalle
+  // encima, ver useTabFocus).
+  const scrollRef = useRef<React.ElementRef<typeof StretchScrollView>>(null);
+  useOnTabLeave(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    setShowWeeklyProgressChart(false);
+    setExpandedWeekBlocks({});
+    setVisibleWeekCount(WEEKS_PAGE);
+  });
   const [logToDeleteId, setLogToDeleteId] = useState<string | undefined>(
     undefined
   );
@@ -555,7 +570,7 @@ export function HomeScreen({
 
     const streakForBlock = computeStreak(groupedByBlock, activeDays, block);
 
-    return computeWeekAchievements({
+    const achievements = computeWeekAchievements({
       weekLogs,
       previousWeekLogs: groupedByBlock[block - 1] || [],
       weekNumber: block,
@@ -567,6 +582,21 @@ export function HomeScreen({
         .filter((point) => point.week <= block)
         .map((point) => ({ week: point.week, improvement: point.improvement })),
     });
+    // Retos, logros y nivel de esa semana (lib/weekExtras).
+    return displayedRoutine
+      ? {
+          ...achievements,
+          extras: computeWeekExtras({
+            routineId: displayedRoutine.id,
+            block,
+            weekLogs,
+            logs: state.logs,
+            routines: state.routines,
+            wins,
+            badges,
+          }),
+        }
+      : achievements;
   };
 
   const handleShowWeekAchievementForBlock = (block: number) => {
@@ -819,6 +849,7 @@ export function HomeScreen({
       />
 
       <StretchScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.homeScrollContent,

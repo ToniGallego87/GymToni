@@ -369,3 +369,31 @@ export function challengeProgressLabel(c: Challenge, compact = false): string {
   if (compact) return `${current}/${c.target}${c.unit === '%' ? ' %' : ''}`;
   return `${current} / ${c.target}${c.unit ? ` ${c.unit}` : ''}`;
 }
+
+/**
+ * Nombre e icono de un reto por su id, para pintar uno ya superado del que solo
+ * queda la clave (`id@periodo`, ver lib/level.ts): el póster de la semana.
+ * Los mismos que pone cada reto al calcularse.
+ */
+export function challengeMeta(id: string): { name: string; icon: string } {
+  switch (id as ChallengeId) {
+    case 'full-week':
+      return { name: t('Semana completa'), icon: 'calendar-check' };
+    case 'improve-3':
+      return { name: t('+3 %'), icon: 'trending-up' };
+    case 'personal-record':
+      return { name: t('Récord personal'), icon: 'medal-outline' };
+    case 'full-days':
+      return { name: t('Días completos'), icon: 'clipboard-check-outline' };
+    case 'first-marks':
+      return { name: t('Primeras marcas'), icon: 'flag-outline' };
+    case 'kcal-3-days-200':
+      return { name: t('200 kcal, 3 días'), icon: 'fire' };
+    case 'kcal-week-1000':
+      return { name: t('1000 kcal esta semana'), icon: 'fire-circle' };
+    case 'two-cardio':
+      return { name: t('Dos cardios'), icon: 'run-fast' };
+    default:
+      return { name: id, icon: 'flag-checkered' };
+  }
+}

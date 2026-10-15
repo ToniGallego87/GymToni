@@ -149,6 +149,10 @@ export function NewRoutineScreen({
   const [editingExerciseId, setEditingExerciseId] = useState<string | null>(
     null
   );
+  // Ejercicio recién añadido cuyo popup aún no se ha cerrado: no sale en la
+  // cuadrícula hasta "Listo" (antes aparecía debajo, vacío, mientras se
+  // rellenaba). Cerrarlo sin nombre lo descarta.
+  const [draftExerciseId, setDraftExerciseId] = useState<string | null>(null);
   // Día cuyo selector de icono está abierto.
   const [iconPickerDayId, setIconPickerDayId] = useState<string | null>(null);
   // Día pendiente de confirmar su borrado (antes se quitaba sin preguntar).
@@ -273,6 +277,7 @@ export function NewRoutineScreen({
       ...day,
       exercises: [...day.exercises, exercise],
     }));
+    setDraftExerciseId(exercise.id);
     setEditingExerciseId(exercise.id);
   };
 
@@ -479,7 +484,9 @@ export function NewRoutineScreen({
             edición: barrita para arrastrar, lápiz, papelera y, al final,
             la casilla "+" para añadir. */}
         <ExerciseTileGrid
-          exercises={exerciseTilesFromForms(day.exercises)}
+          exercises={exerciseTilesFromForms(
+            day.exercises.filter((ex) => ex.id !== draftExerciseId)
+          )}
           accent={accent}
           editing={{
             onEdit: setEditingExerciseId,
@@ -509,6 +516,7 @@ export function NewRoutineScreen({
                 if (!editing.name.trim()) {
                   handleRemoveExercise(day.id, editing.id);
                 }
+                setDraftExerciseId(null);
                 setEditingExerciseId(null);
               }}
             />

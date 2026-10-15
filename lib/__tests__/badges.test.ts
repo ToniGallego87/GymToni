@@ -105,6 +105,8 @@ describe('computeBadges', () => {
     expect(byId['first-cardio'].unlocked).toBe(false);
     expect(byId['cardio-10']).toMatchObject({ current: 0, target: 10 });
     expect(byId['workouts-500']).toMatchObject({ current: 12, target: 500 });
+    expect(byId['cardio-200']).toMatchObject({ current: 0, target: 200 });
+    expect(byId['cardio-500']).toMatchObject({ current: 0, target: 500 });
   });
 
   it('la escalera de Progreso cuenta semanas mejoradas, no récords de peso', () => {
@@ -152,7 +154,7 @@ describe('computeBadges', () => {
 
   it('devuelve el catálogo entero aunque no haya nada', () => {
     const badges = computeBadges([], []);
-    expect(badges).toHaveLength(16);
+    expect(badges).toHaveLength(18);
     expect(badges.every((b) => !b.unlocked && b.current === 0)).toBe(true);
   });
 });

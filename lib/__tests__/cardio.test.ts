@@ -20,6 +20,7 @@ import {
   CARDIO_ONLY_DAY_ID,
   lastCardioEntryByDiscipline,
   recentCustomDisciplines,
+  weekDisciplineCounts,
 } from '../cardio';
 import { WorkoutLog } from '../../types';
 
@@ -116,6 +117,23 @@ describe('buildCardioWeeks', () => {
     ]);
     expect(week.weekStart).toBe('2026-06-29');
     expect(week.weekEnd).toBe('2026-07-05');
+  });
+});
+
+describe('weekDisciplineCounts', () => {
+  it('cuenta días por disciplina, de más a menos y en orden de aparición', () => {
+    const [week] = buildCardioWeeks([
+      makeLog('a', '2026-06-29', 'Bici: 30min'),
+      makeLog('b', '2026-06-30', 'Cinta: 20min, 10kmh'),
+      // Dos cintas el mismo día cuentan un día.
+      makeLog('c', '2026-07-01', 'Cinta: 10min, 10kmh | Cinta: 10min, 11kmh'),
+      makeLog('d', '2026-07-02', 'Elíptica: 15min'),
+    ]);
+    expect(weekDisciplineCounts(week).map((d) => [d.type, d.days])).toEqual([
+      ['Cinta', 2],
+      ['Bici', 1],
+      ['Elíptica', 1],
+    ]);
   });
 });
 

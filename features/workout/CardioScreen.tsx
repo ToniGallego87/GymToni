@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
 import { useAccountLevel } from '@hooks/useAccountLevel';
+import { useOnTabLeave } from '@hooks/useTabFocus';
 import {
   dateKey,
   findDayInRoutines,
@@ -32,6 +33,8 @@ import {
   disciplineIconName,
   formatMergedResults,
   hasIncline,
+  weekDisciplineCounts,
+  WeekDisciplineCount,
   CardioDay,
   CardioMonth,
   CARDIO_ONLY_DAY,
@@ -89,6 +92,63 @@ const disciplineIcon = (
   disciplineIconName(type, incline) as React.ComponentProps<
     typeof MaterialCommunityIcons
   >['name'];
+
+// Iconos de disciplina de la cabecera de semana: mismo círculo que los días de
+// la semana en curso de Inicio.
+const WEEK_DOT_SIZE = 26;
+// Hueco entre iconos: deja sitio a la insignia "×2", que asoma por la derecha.
+const WEEK_DOT_GAP = 9;
+
+/**
+ * Las disciplinas de la semana como iconos redondos (el mismo dibujo que los
+ * días de la semana en curso de Inicio), con "×N" si se hicieron varios días.
+ * Antes ponía "4 sesiones", que no decía QUÉ cardio. Se pintan todas las que
+ * quepan en el hueco que deja el título; si no caben, la última posición es un
+ * "+N" con las que faltan.
+ */
+function WeekDisciplineDots({ items }: { items: WeekDisciplineCount[] }) {
+  const [width, setWidth] = useState(0);
+  const capacity = Math.floor(
+    (width + WEEK_DOT_GAP) / (WEEK_DOT_SIZE + WEEK_DOT_GAP)
+  );
+  const shown =
+    items.length <= capacity ? items.length : Math.max(0, capacity - 1);
+  const hidden = items.length - shown;
+
+  return (
+    <View
+      style={styles.weekDots}
+      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
+      accessible
+      accessibilityLabel={items
+        .map((item) =>
+          item.days > 1 ? `${item.type} ×${item.days}` : item.type
+        )
+        .join(', ')}
+    >
+      {width > 0 &&
+        items.slice(0, shown).map((item) => (
+          <View key={`${item.type}|${item.incline}`} style={styles.weekDot}>
+            <MaterialCommunityIcons
+              name={disciplineIcon(item.type, item.incline)}
+              size={15}
+              color={theme.colors.text}
+            />
+            {item.days > 1 && (
+              <View style={styles.weekDotBadge}>
+                <Text style={styles.weekDotBadgeText}>×{item.days}</Text>
+              </View>
+            )}
+          </View>
+        ))}
+      {width > 0 && hidden > 0 && (
+        <View style={styles.weekDot}>
+          <Text style={styles.weekDotMore}>+{hidden}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 // "jul" a partir de un mes.
 const monthLabel = (m: CardioMonth) =>
@@ -233,6 +293,15 @@ export function CardioScreen({
   const [expandedWeeks, setExpandedWeeks] = useState<Record<string, boolean>>(
     {}
   );
+  // Al cambiar a otra pestaña de la barra, Cardio vuelve arriba y se pliega
+  // entero (como Inicio, ver useTabFocus).
+  const scrollRef = useRef<React.ElementRef<typeof StretchScrollView>>(null);
+  useOnTabLeave(() => {
+    scrollRef.current?.scrollTo({ y: 0, animated: false });
+    setShowChart(false);
+    setExpandedWeeks({});
+    setVisibleCount(WEEKS_PAGE);
+  });
   // Tramos de peso: Cardio los CONSUME (las kcal de cada sesión se estiman con
   // el peso vigente entonces) pero ya no los edita — eso vive en Perfil → Peso
   // corporal. Por eso el dato viene del store y no de un estado local: así la
@@ -395,6 +464,7 @@ export function CardioScreen({
       />
 
       <StretchScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.scrollContent,
@@ -561,10 +631,7 @@ export function CardioScreen({
                     )}
                   </View>
                   <View style={styles.weekMetaRow}>
-                    <Text style={styles.weekMeta}>
-                      {week.sessionCount}{' '}
-                      {week.sessionCount === 1 ? t('sesión') : t('sesiones')}
-                    </Text>
+                    <WeekDisciplineDots items={weekDisciplineCounts(week)} />
                     <MaterialCommunityIcons
                       name={isExpanded ? 'chevron-up' : 'chevron-down'}
                       size={20}
@@ -745,15 +812,62 @@ const makeStyles = () =>
     // Título de la semana (rango de fechas): estilo display compartido con Inicio
     // (lib/textStyles). El color lo pone el render inline (blanco).
     weekTitle: weekTitleText(),
+    // Lo que el título deja libre: ahí se miden los iconos que caben.
     weekMetaRow: {
+      flex: 1,
+      minWidth: 0,
+      marginLeft: 10,
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 2,
+      gap: 6,
     },
-    weekMeta: {
-      fontSize: 14,
-      fontWeight: '700',
+    weekDots: {
+      flex: 1,
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      alignItems: 'center',
+      gap: WEEK_DOT_GAP,
+      height: WEEK_DOT_SIZE,
+    },
+    // Copia del círculo de día pendiente de Inicio (`weekDayDot`): aro y fondo
+    // suaves. Neutro a propósito: en Cardio el verde/rojo es de la subida o
+    // bajada de kcal.
+    weekDot: {
+      width: WEEK_DOT_SIZE,
+      height: WEEK_DOT_SIZE,
+      borderRadius: WEEK_DOT_SIZE / 2,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1.5,
+      borderColor: theme.colors.textMuted + '99',
+      backgroundColor: theme.colors.surfaceAlt,
+    },
+    // "×2": insignia dorada abajo a la derecha (la misma piel que la marca de
+    // nota de las casillas del registro).
+    weekDotBadge: {
+      position: 'absolute',
+      right: -8,
+      bottom: -5,
+      minWidth: 18,
+      height: 14,
+      paddingHorizontal: 3,
+      borderRadius: 7,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+    },
+    weekDotBadgeText: {
+      fontSize: 9,
+      fontWeight: '800',
+      lineHeight: 11,
+      color: theme.colors.onGold,
+      includeFontPadding: false,
+    },
+    weekDotMore: {
+      fontSize: 11,
+      fontWeight: '800',
       color: theme.colors.textSecondary,
+      includeFontPadding: false,
     },
     // Tarjeta diaria con el mismo formato/tamaño que las de Inicio (Fuerza).
     // Mismo ajuste (y mismas medidas) que la tarjeta de día de Inicio: padding

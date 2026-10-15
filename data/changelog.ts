@@ -9,6 +9,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.7',
+    items: [
+      'Entrenar es más cómodo: tus ejercicios pasan por una ruleta con un marco dorado en el centro. El que queda dentro es el que apuntas, se ve su imagen en movimiento y, al terminarlo, la ruleta pasa sola al siguiente.',
+      'Ahora puedes añadir ejercicios extra a tu entreno con el "+" del final de la ruleta, sin cambiar tu rutina. Se ven en azul y no cuentan para tus comparaciones.',
+      'Siempre ves lo que hiciste la vez anterior en cada ejercicio, justo encima de tus series.',
+      'La imagen de semana completada es más bonita: sale tu foto, tu nombre y tu nivel, y también los retos y logros que conseguiste esa semana.',
+      'Los Logros se ven como un muro de medallas: las conseguidas en dorado con su fecha y las pendientes con lo que te falta. Y hay dos logros nuevos de cardio: 200 y 500 sesiones.',
+      'En Cardio ves de un vistazo qué actividades has hecho cada semana, con un icono para cada una.',
+      'La ficha de cada rutina es más limpia y te enseña cuántos ejercicios tiene, cuántas series haces a la semana y su intensidad.',
+      'Al cambiar de pestaña, Inicio y Cardio vuelven arriba para que empieces siempre desde el principio.',
+      'La gráfica de progreso de cada ejercicio se lee mejor: las fechas ya no se pisan y puedes deslizarla para ver sesiones anteriores.',
+      'GymBro se abre sin destellos blancos y con una entrada más suave.',
+      'Arreglos varios: ya no hay parpadeos al cambiar de ejercicio, los nombres de los retos caben en una línea y la tarjeta principal de Inicio ya no sale con el texto casi invisible.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.6',
     items: [
       'Entrenar es más cómodo: tus ejercicios aparecen como casillas con su imagen. Toca una y apunta sus series justo debajo; cada casilla te dice cuántas series llevas y se marca en verde al terminarla.',

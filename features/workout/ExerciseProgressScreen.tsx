@@ -85,8 +85,9 @@ interface ExerciseProgressScreenProps {
   emptyAction?: { label: string; onPress: () => void };
 }
 
-// Sesiones que caben en la gráfica sin que las barras se conviertan en rayas.
-const MAX_CHART_SESSIONS = 8;
+// Sesiones de la gráfica. No caben todas a la vez: con fechas ("14 sept") de
+// etiqueta, la gráfica se desliza (`scrollable`) y arranca en las últimas.
+const MAX_CHART_SESSIONS = 12;
 
 // Ejercicios por página: con un historial largo pintar la lista entera de golpe
 // bloquea la entrada a la pantalla. Se amplía de PAGE_SIZE en PAGE_SIZE.
@@ -600,6 +601,7 @@ export function ExerciseProgressScreen({
                     domain={chart.domain}
                     width={chartWidth}
                     formatYTick={(value) => metric.fmt(value)}
+                    scrollable
                   />
                 ) : (
                   <Text style={styles.chartEmpty}>
