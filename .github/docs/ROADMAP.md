@@ -213,16 +213,29 @@ primero porque sin ellas no se publica.
       **Archivos:** `data/exerciseCatalog.ts:63-67` (`CDN`, `ATTRIBUTION`,
       `gifUrl`, `thumbUrl`), `data/exerciseCatalog.json` (1324 `mediaId`).
       **Esfuerzo:** medio.
-- [ ] **[Lanzamiento] Supabase listo para producción** — plan Pro con tope de
-      gasto (backups, sin pausa), SMTP propio (Resend/Brevo/SES: el de
-      Supabase tiene un cupo de envíos mínimo y los códigos de registro
-      dejarían de llegar) y captcha en el registro (Turnstile o hCaptcha,
-      que Supabase Auth admite) contra altas masivas de bots.
-      **Por qué:** con usuarios reales, sin esto el registro falla o la base
-      se llena de cuentas falsas.
+- [ ] **[Lanzamiento] Supabase y dominio listos para producción** — cuatro
+      piezas, casi todas decisión y configuración más que código:
+      **dominio propio** (~10–15 €/año, p. ej. `gymbro.app`: correo desde una
+      dirección propia, URL de la política de privacidad y la página web de
+      borrado de cuenta que pide Play); **SMTP propio** (Resend 3.000/mes o
+      Brevo 300/día gratis: el de Supabase tiene un cupo mínimo y los códigos
+      de registro dejarían de llegar; mirar antes si ya hay uno en
+      Authentication → Emails → SMTP Settings); **plan Pro** (~25 $/mes:
+      backups, sin pausa) con tope de gasto activado; y **captcha** en el
+      registro (Turnstile o hCaptcha, gratis; exige añadir
+      `react-native-webview`, a justificar según CONVENTIONS).
+      **Decisiones pendientes:** nombre del dominio, proveedor de SMTP, cuándo
+      pasar a Pro (propuesta: justo antes de abrir al público) y si el
+      captcha va desde el inicio o solo si aparecen bots (propuesta: después).
+      Dominio y SMTP van primero: los necesitan "Política de privacidad" y
+      "Borrar la cuenta".
+      **Por qué:** con usuarios reales, sin esto el registro falla, no hay
+      dónde publicar la política ni el borrado, o la base se llena de cuentas
+      falsas.
       **Archivos:** `lib/cloud/auth.ts:83` (`signUp`, recibiría el
-      `captchaToken`), `features/workout/DataScreen.tsx:154`; el resto es
-      configuración del panel de Supabase.
+      `captchaToken`), `features/workout/DataScreen.tsx:154`,
+      `privacy-policy.html`; el resto es configuración del panel de Supabase y
+      del registrador del dominio.
       **Esfuerzo:** medio.
 - [ ] **[Lanzamiento] Avisos de cuelgues (Sentry o Crashlytics)** — hoy no
       hay reporte de errores: si la app se cae en móviles que no son los
