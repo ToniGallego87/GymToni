@@ -2,7 +2,12 @@ import { useEffect, useReducer } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSession } from '@lib/cloud/auth';
-import { getProfile, Profile } from '@lib/cloud/social';
+import {
+  getProfile,
+  isLegacyAvatarUrl,
+  migrateLegacyAvatar,
+  Profile,
+} from '@lib/cloud/social';
 
 // Perfil público del usuario que ha iniciado sesión, en un store de módulo con
 // suscriptores (mismo patrón que `themeStore`) en vez de un `useState` por
@@ -120,12 +125,31 @@ async function fetchMyProfile(userId: string): Promise<void> {
       profile: changed ? fresh : state.profile,
       loading: false,
     });
+    migrateAvatarOnce(userId, fresh?.avatar_url);
   } catch {
     // Sin red: se queda la copia local (o lo que hubiera en memoria). Antes
     // aquí se ponía `null` y Perfil pasaba a decir "Sin perfil".
     if (state.userId !== userId) return;
     setState({ userId, profile: state.profile, loading: false });
   }
+}
+
+// Foto en la ruta fija de las versiones viejas (`{uid}/avatar.jpg`): se pasa a
+// un nombre aleatorio en segundo plano (lib/cloud/social.ts →
+// migrateLegacyAvatar) y se recarga el perfil para pintar la URL nueva. Un
+// intento por cuenta y sesión: si falla (sin red), en el próximo arranque.
+const avatarMigrationTried = new Set<string>();
+
+function migrateAvatarOnce(
+  userId: string,
+  avatarUrl: string | null | undefined
+): void {
+  if (!isLegacyAvatarUrl(userId, avatarUrl)) return;
+  if (avatarMigrationTried.has(userId)) return;
+  avatarMigrationTried.add(userId);
+  void migrateLegacyAvatar(userId, avatarUrl)
+    .then((url) => (url ? loadMyProfile(userId, true) : undefined))
+    .catch(() => {});
 }
 
 export function useMyProfile(): { profile: Profile | null; loading: boolean } {

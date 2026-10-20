@@ -13,28 +13,14 @@ Supabase (cuentas, sync y social) está entregado; plan en
 
 Última revisión completa: 2026-10-09.
 
+Las fichas con etiqueta salen del análisis de salida a producción del
+2026-10-20: **[Lanzamiento]** = bloquea publicar en Google Play o es un agujero
+de seguridad; **[Monetización]** e **[iOS]** = siguientes pasos tras el
+lanzamiento. El SDK nuevo (ver "[Lanzamiento] Subir a Expo SDK 54") es
+requisito previo de anuncios, suscripción e iOS.
+
 ## Mejoras visuales y de UX
 
-- [x] **Actividad por meses: una cabecera por mes con su resumen** — hoy la
-      Actividad es una lista plana de filas idénticas (círculo, título y una
-      línea gris de 12 px) con fechas sin año ("13 oct"): con más de un año de
-      historial no se sabe de cuál es. Encima lleva tres casillas (Días /
-      Retos / Logros) con totales de por vida que parecen botones y no hacen
-      nada, y que repiten el "{n} hitos" del subtítulo. Propuesta: agrupar
-      por mes con una cabecera "Octubre 2026" (`SectionLegend`, la de los
-      historiales de Inicio y Cardio) y a su derecha el resumen del mes ("12
-      entrenos · 2 retos · 1 logro"); quitar las tres casillas; el subtítulo
-      de la barra pasa a "{n} hitos desde mar 2025". Igual en el perfil de
-      otra persona, que usa la misma lista.
-      **Por qué:** se lee como un diario ("¿qué hice en septiembre?"), el año
-      va en la cabecera y desaparece una fila de falsos botones. Los totales
-      siguen: por mes en cada cabecera, el de hitos en el subtítulo y el de
-      logros en Logros ("n de total").
-      **Archivos:** `features/workout/ActivityScreen.tsx:192` (casillas),
-      `:262` (subtítulo), `components/ActivityList.tsx:43` (la lista plana),
-      `components/SectionLegend.tsx`, `lib/utils.ts:57` (`shortDayMonth`, sin
-      año), `features/workout/UserProfileScreen.tsx:657` (la otra Actividad).
-      **Esfuerzo:** medio.
 - [ ] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
       una fila con el icono de cada día (verde hecho, aro dorado el que toca,
       anillo que se llena el de hoy) y Elige la sesión, un toque después, como
@@ -46,60 +32,52 @@ Supabase (cuentas, sync y social) está entregado; plan en
       **Archivos:** `features/workout/HomeScreen.tsx:1153` (`weekDaysRow`),
       `features/workout/DaySelectorScreen.tsx:151` (`weekBar`).
       **Esfuerzo:** bajo.
-- [x] **Actividad: los retos con su semana y sin eco** — un reto se fecha con
-      el lunes de su semana pero se pinta como si fuera un día exacto ("13
-      oct"), y un reto antiguo cuyo nombre ya no está en el catálogo sale
-      "Reto superado · 13 oct · reto superado". Propuesta: los retos dicen
-      "Semana del 13 oct"; el genérico se titula "Reto semanal" y la línea de
-      debajo no repite "reto superado" cuando el título ya lo dice.
-      **Por qué:** la fecha no engaña y la fila no dice dos veces lo mismo.
-      **Archivos:** `lib/activity.ts:206` (`weekKeyToDate`) y `:266` (título
-      genérico), `components/ActivityList.tsx:75` (la línea de fecha y tipo).
-      **Esfuerzo:** bajo.
+- [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
+      duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
+      "Añadir serie" serían un zumbido largo (~400 ms) en cada pulsación, y el
+      patrón de fin de descanso se queda en uno. Pasar a `expo-haptics`
+      (impacto ligero para los toques, notificación para el descanso). Y no
+      hay `KeyboardAvoidingView` en ningún sitio: en Android lo resuelve
+      `adjustResize`, en iOS el teclado tapará el login, los comentarios, el
+      peso corporal y las casillas del registro.
+      **Por qué:** sin esto la app en iPhone vibra como una alarma a cada
+      serie y no deja ver lo que escribes.
+      **Archivos:** `components/ExerciseInputField.tsx:440`, `:573`, `:1094`,
+      `lib/restTimerStore.ts:277`, `features/workout/DataScreen.tsx:549`
+      (login), `features/workout/CommunityScreen.tsx:1060` (comentarios),
+      `features/workout/WorkoutLogScreen.tsx:1722`,
+      `features/workout/BodyWeightScreen.tsx`.
+      **Esfuerzo:** medio.
+- [ ] **[iOS] Cristal de las barras y descanso flotante** — `glass-blur` y
+      `pip-timer` son módulos solo Android: en iOS las barras caen a un fondo
+      plano y minimizar con descanso no muestra nada. El cristal se resuelve
+      con el desenfoque nativo de iOS (`UIVisualEffectView` vía `expo-blur`,
+      allí barato; el coste por frame era cosa de Android). La ventanita no
+      existe en iOS para vistas normales: la alternativa es una Live Activity
+      (pantalla de bloqueo / Dynamic Island, extensión en Swift) o quedarse
+      con la notificación de fin de descanso que ya hay.
+      **Por qué:** la identidad glass es la de la app, y el descanso visible
+      fuera de la app es de lo más usado entre series.
+      **Archivos:** `components/GlassBlur.tsx:41`, `lib/pipTimer.ts:30`,
+      `modules/glass-blur/expo-module.config.json`,
+      `modules/pip-timer/expo-module.config.json`, `components/PipRestTimer.tsx`.
+      **Esfuerzo:** bajo (cristal) / alto (Live Activity).
 
 ## Funcionalidades a simplificar
 
-- [x] **Actividad: los entrenos plegados en una fila por mes, los hitos
-      delante** — cada entreno de fuerza es una fila: con 4 días por semana
-      son ~17 filas al mes de "Pecho · Mi rutina" frente a uno o dos logros o
-      retos, que se pierden entre ellas; y esos días ya están en el historial
-      de Inicio y en el Calendario. Propuesta: dentro de cada mes, logros y
-      retos como filas completas (icono en su color sobre fondo tintado) y
-      los entrenos fundidos en UNA fila "12 entrenos" con los iconos de sus
-      días y un chevron visible que la despliega en la lista de días.
-      **Por qué:** lo que se viene a mirar a Actividad (logros y retos) queda
-      a la vista, y los días siguen ahí a un toque: no se pierde ninguno.
-      **Archivos:** `components/ActivityList.tsx:43`, `lib/activity.ts:272`
-      (un hito por log), `features/workout/ActivityScreen.tsx:66` (recuentos).
-      **Esfuerzo:** medio.
-- [x] **Actividad: un entreno abre esa sesión, no la ficha de la rutina** —
-      hoy tocar un día abre la ficha de su rutina, que no dice nada de ese
-      entreno, y la fila del día no lleva ningún dato. Propuesta: en la
-      Actividad propia el día abre su Detalle (el mismo que desde Inicio o el
-      Calendario, con un origen `activity` para que "Volver" regrese aquí) y
-      enseña su % de mejora con `TrendDelta`, como el historial de Inicio. La
-      ficha de la rutina sigue en la pestaña Rutinas; en el perfil de otra
-      persona la fila sigue abriendo su rutina pública (de las sesiones
-      ajenas no hay Detalle).
-      **Por qué:** "¿qué hice ese día?" es lo que se pregunta al tocar un
-      entreno.
-      **Archivos:** `features/workout/ActivityScreen.tsx:212`, `app/App.tsx:157`
-      (pantalla `detail` y sus `origin`) y `:1627`, `lib/progress.ts:179`
-      (`buildWorkoutImprovement`), `components/TrendDelta.tsx`.
-      **Esfuerzo:** bajo.
-- [x] **Actividad: "Meses anteriores" visible en vez de tirar más allá del
-      final** — la Actividad propia carga tandas de 10 al estirar la lista
-      pasado el final, con una rueda y una espera artificial de 450 ms, y
-      nada dice que haya más: es un gesto oculto. El perfil de otra persona
-      ya usa `LoadMoreButton`. Propuesta: paginar por meses (encaja con la
-      cabecera por mes) con un `LoadMoreButton` "Meses anteriores" al pie; se
-      quitan la rueda, el retraso y `onPullPastEnd`.
-      **Por qué:** se ve que hay más y se llega de un toque, con el mismo
-      patrón en las dos Actividades (y sin gesto escondido, como pide AGENTS).
-      **Archivos:** `features/workout/ActivityScreen.tsx:33` (retraso), `:80`
-      (`loadMore`), `:112` (rueda), `:172` (`onPullPastEnd`),
-      `features/workout/UserProfileScreen.tsx:667`,
-      `components/LoadMoreButton.tsx`.
+- [ ] **[Lanzamiento] Quitar permisos sobrantes y adelgazar la APK** — el
+      manifest pide `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW` (el PiP no lo
+      necesita) y `READ/WRITE_EXTERNAL_STORAGE`, que nada usa; y
+      `SCHEDULE_EXACT_ALARM` viene denegado por defecto en Android 14+.
+      Quitarlos (con `tools:node="remove"` si los mete una dependencia).
+      Activar R8 (`minifyEnabled` + `shrinkResources`): la APK release pesa
+      75 MB. Valorar `allowBackup=false` o excluir la sesión de Supabase del
+      backup de Android.
+      **Por qué:** cada permiso de más es una pregunta en la revisión de Play
+      y una línea más en Data Safety; una APK pequeña se instala más.
+      **Archivos:** `android/app/src/main/AndroidManifest.xml:2-9` y `:17`
+      (`allowBackup`), `android/app/build.gradle:98` y `:151-152`,
+      `app.json` (`android.permissions`).
       **Esfuerzo:** bajo.
 - [ ] **Ordenar los días de una rutina sin plegarlos uno a uno** — en la
       edición de una ficha, los días solo se arrastran con todos plegados, y
@@ -128,7 +106,7 @@ Supabase (cuentas, sync y social) está entregado; plan en
       **Por qué:** es lo que quita de verdad el troceo de texto y la
       comprobación de que filas y texto cuadran; hasta entonces es una red de
       seguridad que se paga en cada lectura.
-      **Archivos:** `lib/db/mappers.ts:504` (`entriesMatchRaw` en
+      **Archivos:** `lib/db/mappers.ts:509` (`entriesMatchRaw` en
       `rowsToAppData`), `lib/cardio.ts:310` (`cardioEntriesOf`) y
       `cardioEntriesFromRaw`, `components/CardioInputField.tsx:139` (el texto
       partido por `' | '`), `features/workout/WorkoutLogScreen.tsx:1101`
@@ -137,8 +115,180 @@ Supabase (cuentas, sync y social) está entregado; plan en
 
 ## Nuevas funcionalidades
 
-Candidatas (compatibles con las restricciones):
+Candidatas (compatibles con las restricciones). Las **[Lanzamiento]** van
+primero porque sin ellas no se publica.
 
+- [x] **[Lanzamiento] Blindar la RLS social: plan ajeno, perfiles privados,
+      tamaños y avatares** — cuatro agujeros de la nube, arreglados en SQL
+      más un filtro en el cliente. **Plan ajeno**: cualquiera colaba días y
+      ejercicios en la rutina pública de otro (las policies solo miraban el
+      `user_id`) y el refresco de enlazadas los repartía; ahora solo se leen
+      filas del dueño de la rutina. **Perfil privado**: "yo le sigo" abría
+      perfil y Actividad, y seguir es unilateral; queda solo "él me sigue".
+      **Topes**: `CHECK` de longitud, máximo de días por rutina, ejercicios
+      por día y rutinas públicas, bucket `avatars` limitado, likes solo a
+      públicas y `popular_routines` acotado. **Avatar**: solo la URL del
+      bucket propio, sin caída a base64.
+      **Por qué:** hoy un usuario malintencionado puede ensuciar la rutina más
+      popular para todos, leer la actividad de un perfil privado o tumbar la
+      base de datos.
+      **Estado (2026-10-20):** hecho en código y SQL ejecutado en Supabase
+      (ver UPDATES "Sin publicar"); se borra al cerrar la versión. Fuera de
+      esta ficha queda el tope de filas del historial privado (logs y series):
+      lo frenan el captcha y el plan Pro de "Supabase listo para producción".
+      **Archivos:** `supabase/social-schema.sql` (policies "read public …" y
+      sección "Blindaje"), `supabase/storage-avatars.sql`,
+      `lib/cloud/social.ts` (`fetchPublicRoutine`, `getRoutineSetTotals`,
+      `uploadAvatar`, `pruneAvatars`), `lib/cloud/cloudRows.ts`,
+      `lib/exerciseForm.ts` (límites), `hooks/useAvatarPicker.ts`.
+      **Esfuerzo:** bajo.
+- [ ] **[Lanzamiento] Subir a Expo SDK 54 (páginas de 16 KB, requisito de
+      iOS)** — las 49 `.so` de arm64 de la release están alineadas a 4 KB
+      (comprobado 2026-10-20 en `app-release.apk`); Play exige 16 KB a apps
+      con target ≥ 35 desde nov-2025. Lo trae RN ≥ 0.77. SDK 54 es el último
+      que permite seguir en arquitectura antigua (`newArchEnabled=false`), lo
+      que esquiva el bug de toques muertos del intento de agosto. También es
+      requisito para compilar iOS con Xcode 26 y para las SDK de anuncios y
+      pagos. Rehacer o retirar los tres `patches/` tras subir.
+      **Por qué:** sin esto Play rechaza el binario y no hay versión iOS.
+      **Archivos:** `package.json` (expo ~51, react-native 0.74.5),
+      `android/gradle.properties` (`newArchEnabled`), `android/build.gradle:7-11`,
+      `patches/`, `.github/docs/backend-design.md` §14 (lo aprendido en el
+      intento anterior).
+      **Esfuerzo:** alto.
+- [ ] **[Lanzamiento] Borrar la cuenta desde la app (y desde una web)** —
+      obligatorio en Play y App Store para apps con cuentas. Botón en Datos y
+      nube con confirmación que llama a una Edge Function (con
+      `service_role`) que borra el usuario de Auth (las tablas ya caen en
+      cascada por `on delete cascade`) y su carpeta de `avatars`; más una URL
+      pública para pedirlo sin la app, que va en la ficha de Play.
+      **Por qué:** sin ello la ficha no pasa revisión, y es un derecho del
+      usuario (RGPD).
+      **Archivos:** `features/workout/DataScreen.tsx:263` (`handleSignOut`,
+      junto a donde iría), `lib/cloud/auth.ts:91`, `supabase/schema.sql`
+      (FKs `on delete cascade`).
+      **Esfuerzo:** medio.
+- [ ] **[Lanzamiento] Política de privacidad real y Data Safety** — la actual
+      dice "GymBro no recopila ningún dato, no tiene servidores": ya es falso
+      (email, entrenos, peso, fotos, contenido social en Supabase). Reescribirla
+      (qué se guarda, dónde —Supabase, región—, para qué, borrado, contacto),
+      enlazarla desde Ajustes y rellenar Data Safety y la declaración de apps
+      de salud de Play de acuerdo con ella. Peso y entrenos pueden ser datos
+      de salud en el RGPD: consentimiento explícito al crear cuenta.
+      **Por qué:** una política que contradice lo que hace la app es motivo
+      de retirada y de sanción.
+      **Archivos:** `privacy-policy.html`, `features/workout/SettingsScreen.tsx:266`
+      (bloque de enlaces), `features/workout/DataScreen.tsx:145`
+      (`handleAuth`, donde iría el consentimiento).
+      **Esfuerzo:** bajo.
+- [ ] **[Lanzamiento] Bloquear usuarios y términos de uso** — Play (contenido
+      generado por usuarios) y Apple (1.2) piden reportar, **bloquear** y
+      unos términos que prohíban el contenido ofensivo. Hoy hay reportar y
+      ocultar lo reportado en local. Falta "Bloquear" en el perfil ajeno (oculta
+      sus rutinas, comentarios y actividad, y le impide seguirte: tabla
+      `blocks` + RLS) y unos términos aceptados al crear cuenta.
+      **Por qué:** sin ello la comunidad no pasa revisión, y quien recibe
+      acoso no tiene cómo cortarlo.
+      **Archivos:** `features/workout/UserProfileScreen.tsx:387` (reportar
+      perfil), `lib/moderation.ts`, `components/ReportModal.tsx`,
+      `supabase/social-schema.sql` (follows y lecturas públicas).
+      **Esfuerzo:** medio.
+- [ ] **[Lanzamiento] Recuperar la contraseña** — no existe: quien la olvida
+      pierde la cuenta y sus datos en la nube. "¿Has olvidado la contraseña?"
+      en el login con el mismo patrón de código de 6 dígitos que el registro
+      (`resetPasswordForEmail` + `verifyOtp` tipo `recovery` + `updateUser`).
+      **Por qué:** con usuarios reales es la petición de soporte número uno.
+      **Archivos:** `lib/cloud/auth.ts:83` (junto a `signUp` y
+      `verifySignUpCode`), `features/workout/DataScreen.tsx:145` y `:182`
+      (flujo de código ya existente).
+      **Esfuerzo:** bajo.
+- [ ] **[Lanzamiento] Licencia de los GIFs de ejercicios** — los GIFs vienen
+      de un repo de GitHub de un tercero vía jsDelivr (`@main`) y la
+      atribución dice "© Gym Visual", que los vende con licencia. En una app
+      con ingresos es riesgo de DMCA; y `@main` puede cambiar: lo que suba el
+      dueño del repo sale en la app. Comprar la licencia o cambiar de fuente,
+      y servirlos desde un sitio propio o un commit fijado.
+      **Por qué:** una reclamación de copyright puede tumbar la ficha de la
+      tienda entera.
+      **Archivos:** `data/exerciseCatalog.ts:63-67` (`CDN`, `ATTRIBUTION`,
+      `gifUrl`, `thumbUrl`), `data/exerciseCatalog.json` (1324 `mediaId`).
+      **Esfuerzo:** medio.
+- [ ] **[Lanzamiento] Supabase listo para producción** — plan Pro con tope de
+      gasto (backups, sin pausa), SMTP propio (Resend/Brevo/SES: el de
+      Supabase tiene un cupo de envíos mínimo y los códigos de registro
+      dejarían de llegar) y captcha en el registro (Turnstile o hCaptcha,
+      que Supabase Auth admite) contra altas masivas de bots.
+      **Por qué:** con usuarios reales, sin esto el registro falla o la base
+      se llena de cuentas falsas.
+      **Archivos:** `lib/cloud/auth.ts:83` (`signUp`, recibiría el
+      `captchaToken`), `features/workout/DataScreen.tsx:154`; el resto es
+      configuración del panel de Supabase.
+      **Esfuerzo:** medio.
+- [ ] **[Lanzamiento] Avisos de cuelgues (Sentry o Crashlytics)** — hoy no
+      hay reporte de errores: si la app se cae en móviles que no son los
+      tuyos, no se sabe. Integrar el SDK con el source map de Hermes y sin
+      datos personales.
+      **Por qué:** es la única forma de enterarse de un cuelgue antes de que
+      llegue como reseña de una estrella.
+      **Archivos:** `app/_layout.tsx`, `app/App.tsx` (arranque),
+      `android/app/build.gradle` (source maps de Hermes).
+      **Esfuerzo:** bajo.
+- [ ] **[Monetización] GymBro Pro (suscripción)** — suscripción con
+      RevenueCat (Play y App Store a la vez): 3,99 €/mes, 24,99 €/año con 7
+      días de prueba y un vitalicio (~49,99 €). Pro = sin anuncios + algo
+      que valga por sí mismo: progreso avanzado y 1RM por ejercicio,
+      tendencia de peso corporal, temas, póster/vídeo de la semana sin marca
+      de agua y, quizá, sync entre dispositivos. Comunidad gratis siempre. Si
+      Pro abre algo de la nube, el derecho se guarda en Supabase por webhook
+      (el cliente solo no basta). Mantener gratis a los testers actuales lo
+      que ya usan.
+      **Por qué:** en apps de registro de gimnasio (Hevy, Strong) la
+      suscripción es lo que paga; "solo quitar anuncios" apenas convierte.
+      **Archivos:** `features/workout/SettingsScreen.tsx` (entrada a Pro),
+      `features/workout/ExerciseProgressScreen.tsx`,
+      `features/workout/BodyWeightScreen.tsx`,
+      `features/workout/WeekAchievementScreen.tsx`, `lib/themeStore.ts`,
+      `hooks/useCloudSync.ts`.
+      **Esfuerzo:** alto.
+- [ ] **[Monetización] Anuncios donde no molestan** — AdMob con consentimiento
+      UMP (obligatorio en la UE) y ATT en iOS. Dónde: nativo en el tablón de
+      Comunidad cada ~8 rutinas; banner al final del scroll en Calendario,
+      Detalle de un entreno pasado y Progreso; interstitial al salir del
+      registro con series metidas (máx. 1/día); rewarded para el póster/vídeo
+      en HD o una estadística Pro 24 h. Nunca en el registro en curso, el
+      descanso, el PiP, la tarjeta de Inicio ni al abrir la app. Ojo: un
+      banner bajo las barras de cristal cuenta como "tapado" y uno junto a la
+      barra inferior provoca clics accidentales; las dos cosas son causa de
+      baja en AdMob. Medir el coste de `GlassBlur` con un WebView de anuncio
+      debajo.
+      **Por qué:** ingreso con quien no paga sin estropear el uso entre
+      series, que es el corazón de la app.
+      **Archivos:** `features/workout/CommunityScreen.tsx:379` (lista del
+      tablón), `features/workout/CalendarScreen.tsx`,
+      `features/workout/DetailScreen.tsx`,
+      `features/workout/ExerciseProgressScreen.tsx`,
+      `features/workout/WorkoutLogScreen.tsx` (salida),
+      `components/FloatingPrimaryNav.tsx`, `components/GlassTopBar.tsx`,
+      `components/GlassBlur.tsx`.
+      **Esfuerzo:** alto.
+- [ ] **[iOS] Publicar en App Store** — con el SDK nuevo, la base de la
+      versión iPhone: cuenta Apple Developer (99 $/año), build y envío con
+      EAS (sin Mac) y pruebas en iPhone físico por TestFlight;
+      `supportsTablet: false` para no pasar revisión en iPad; textos de
+      permisos (fotos, notificaciones) en `app.json`; aviso de actualización
+      con la URL de App Store y fila `ios` en `app_releases`; compilar y
+      probar el `video-encoder` en Swift (nunca se ha ejecutado); revisar a
+      ojo los ajustes de texto por plataforma. Apple pide además lo de
+      Android (borrar cuenta, bloquear) y pago con su sistema para la
+      suscripción (RevenueCat lo cubre).
+      **Por qué:** dobla el público con el mismo código y la misma nube: las
+      cuentas valen en los dos sistemas.
+      **Archivos:** `app.json` (`ios`), `eas.json`, `lib/appUpdate.ts:50`
+      (`playStoreUrls`, solo Play), `app/App.tsx:548` y `:583`,
+      `lib/cloud/release.ts:26` (`platform = 'android'` fijo),
+      `modules/video-encoder/ios/VideoEncoderModule.swift`,
+      `lib/textStyles.ts:26`.
+      **Esfuerzo:** alto.
 - [ ] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
       rutina deja renombrar, cambiar el icono, reordenar y quitar días, y
       editar sus ejercicios, pero no añadir uno nuevo: Nueva rutina sí tiene
@@ -153,23 +303,6 @@ Candidatas (compatibles con las restricciones):
       (`renderDayBlock`, edición de días) y `:565` (`handleMoveDayTo`, el
       renumerado ya existe), `features/workout/NewRoutineScreen.tsx:301`
       (`handleAddDay`), `lib/exerciseForm.ts`.
-      **Esfuerzo:** medio.
-- [x] **Récords personales como hitos de la Actividad** — el hito más
-      motivador del gimnasio ("nuevo récord en Press banca: 85 kg") no sale
-      en la Actividad: solo logros, retos y días, y el récord solo se ve un
-      momento en el registro. La app ya calcula los récords de cada
-      ejercicio. Propuesta: un tipo de hito `record` (trofeo en oro) con
-      ejercicio, marca y fecha, que abre Progreso por ejercicio; uno por
-      ejercicio y día (la mejor marca), sin contar las descargas. Para el
-      perfil público, `kind` es texto en la nube, así que basta con publicar
-      el tipo nuevo (antes, comprobar que la tabla no limita `kind` con un
-      CHECK).
-      **Por qué:** es lo que de verdad dice "voy progresando", y queda
-      guardado en vez de durar dos segundos.
-      **Archivos:** `lib/activity.ts:181` (`ActivityItem.kind`) y `:228`
-      (`buildLocalActivity`), `lib/exerciseProgress.ts:247` y `:275`
-      (`getExerciseRecords`), `components/ActivityList.tsx:24` (`KIND_COLOR`),
-      `lib/cloud/activity.ts:100` (`publishActivity`).
       **Esfuerzo:** medio.
 - [ ] **De un ejercicio de la ficha de rutina a su evolución** — en el Detalle
       de una sesión cada ejercicio lleva a su gráfica y sus récords ("Ver
@@ -186,20 +319,14 @@ Candidatas (compatibles con las restricciones):
       (el acceso que ya existe), `app/App.tsx:208` (la pantalla
       `exercise-progress`, que hoy solo sabe volver al Detalle o a Perfil).
       **Esfuerzo:** medio.
-- [x] **Actividad: decir si Comunidad la ve** — tu Actividad es la misma
-      lista que ven los demás en tu perfil, pero la pantalla no lo dice, ni
-      si la compartes: el interruptor está en Editar perfil. Propuesta: con
-      sesión iniciada, una línea al pie "Visible en tu perfil de Comunidad" /
-      "Solo la ves tú" con un botón "Cambiar" que abre Editar perfil. Sin
-      cuenta, nada.
-      **Por qué:** saber quién ve tus entrenos es parte de que la lista sea
-      tuya; hoy hay que adivinarlo.
-      **Archivos:** `features/workout/ActivityScreen.tsx` (pie de la lista),
-      `features/workout/ProfileEditModal.tsx:162` (`share_activity`).
-      **Esfuerzo:** bajo.
 
 ## Descartado por restricciones del proyecto
 
+- **Nivel, XP, Actividad y récords calculados en el servidor**: sin planificar
+  por prioridad (análisis del 2026-10-20). Hoy los declara el propio cliente y
+  se pueden falsear con la API, pero solo se enseñan en tu perfil: no hay
+  rankings ni premios. Si llegan rankings entre usuarios o premios reales,
+  vuelve, porque entonces sí hay que calcularlos en la nube.
 - **Los retos superados de cada semana en su tarjeta de Inicio**: retirado en la
   revisión del 2026-10-01 tras dos pasadas sin que nadie la tocara. Añadía tres
   iconos más a cada cabecera de semana del historial, que ya lleva %, días y

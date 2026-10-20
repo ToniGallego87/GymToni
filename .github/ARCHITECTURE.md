@@ -6,11 +6,43 @@
 | ------------- | ---------------------------------------------------------------------------------------- |
 | Framework     | React Native + Expo (SDK 51)                                                             |
 | Lenguaje      | TypeScript strict                                                                        |
-| Estado global | Context API + useReducer                                                                 |
+| Estado global | Context API + useReducer (dominio); stores de módulo con `useSyncExternalStore` (resto)  |
 | Persistencia  | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web                         |
 | Navegación    | State-based (sin react-navigation); pager de pestañas nativo (`react-native-pager-view`) |
 | Backend       | Supabase (cuentas, sync incremental, social) — opcional, offline-first                   |
 | UI            | Componentes custom + sistema glass                                                       |
+
+## Capas y dependencias
+
+```
+app/App.tsx          raíz: navegación por estado, pager, popups globales
+   ↓
+features/workout/    pantallas (componen, no calculan)
+   ↓
+components/          presentación reutilizable (sin lógica de negocio)
+   ↓
+hooks/               puente React ↔ lib (useWorkout, useCloudSync, useMyProfile…)
+   ↓
+lib/                 dominio PURO y testeado (parsers, weeks, progress, badges…)
+  ├─ efectos en los bordes: db/ (SQLite), cloud/ (Supabase), persistence.ts,
+  │  storage.ts, fileIO.ts, módulos nativos (pipTimer, videoExport)
+  └─ stores de módulo (theme, i18n, sesión, descanso, premios)
+   ↓
+types/               tipos centralizados
+```
+
+- Las flechas son la ÚNICA dirección permitida: `lib/` no importa de
+  `components/`, `features/` ni `hooks/`; `components/` no importa de `features/`.
+  Excepción: `hooks/useWorkout.ts` consume `WorkoutContext`, que vive con las
+  pantallas.
+- "Clean architecture" aquí es eso (dependencias hacia dentro, dominio puro, efectos
+  en los bordes, una fuente de verdad por concepto), **no** más capas: nada de
+  repositorios, inyección de dependencias ni interfaces de una sola implementación
+  (AGENTS.md).
+- **Dos tipos de estado**: el dominio (rutinas y logs) va por `WorkoutContext` +
+  reducer y se persiste en SQLite; lo transversal (tema, idioma, sesión, descanso
+  en curso, premios por avisar, peso corporal) vive en stores de módulo con
+  `useSyncExternalStore` y una sola suscripción, sin pasar por el reducer.
 
 ## Flujo de datos
 
@@ -89,7 +121,10 @@ hooks/                  → useWorkout (consumer del context), useCloudSync (syn
                           fondo), useDeferredReady (difiere el contenido pesado),
                           useMyProfile (perfil público propio), useAccountLevel
                           (retos y nivel; useRecordAccountLevel, solo en la raíz,
-                          los apunta) y useAvatarPicker (cambiar la foto)
+                          los apunta), useAvatarPicker (cambiar la foto),
+                          useExerciseKeyResolver (identidad de ejercicio sobre
+                          todo el historial, construida una vez y compartida) y
+                          useTabFocus (¿es esta la pestaña elegida?)
 lib/                    → Lógica compartida
   ├── normalize.ts      → Fuente única: syncActiveRoutine, ensureParsedSets, normalizeAppData
   ├── storage.ts        → Persistencia (load/save/clear): SQLite en nativo, JSON en web
@@ -98,8 +133,15 @@ lib/                    → Lógica compartida
   ├── cloud/            → Nube (opcional): auth.ts (sesión Supabase, store único), backup.ts
   │                       (copia/restauración completa), sync.ts (motor push/pull
   │                       incremental sobre sync_outbox), social.ts (perfiles,
-  │                       seguir, tablón de rutinas públicas, likes, comentarios
-  │                       y reportes)
+  │                       seguir, tablón de rutinas públicas, likes, guardados,
+  │                       comentarios y reportes), activity.ts (Actividad
+  │                       publicada en el perfil), release.ts (última versión en
+  │                       la tienda) y optionalColumns.ts (upsert que tolera
+  │                       columnas que la nube aún no tiene)
+  ├── supabase.ts       → Cliente único de Supabase, creado perezoso al primer uso
+  ├── supabaseConfig.ts → URL y anon key (pública; la protege la RLS)
+  ├── socialCache.ts    → Copia en disco de lo último de cada pantalla social (se
+  │                       pinta sin esperar a la red)
   ├── i18n.ts           → Idioma en caliente: t(), dateLocale, decimalSeparator y
   │                       el formato de pintado de números (localizeDecimals, fmtNum)
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
@@ -133,6 +175,26 @@ lib/                    → Lógica compartida
   │                       una vez (ajustes) + logros → puntos y nivel
   ├── awards.ts         → Cola de premios por avisar (reto, logro, nivel) que
   │                       consume App.tsx (AwardModal); la llena useAccountLevel
+  ├── activity.ts       → Hitos de la Actividad (insignia, reto, día, récord):
+  │                       derivados de los logs, agrupados por mes
+  ├── weekExtras.ts     → Retos, logros y nivel de una semana cerrada (póster)
+  ├── extraExercises.ts → Ejercicios adicionales del registro (fuera del día de
+  │                       la rutina, sin tocar la rutina)
+  ├── bodyWeight.ts     → Peso corporal por tramos (store): las kcal del cardio
+  │                       usan el peso vigente en cada sesión
+  ├── restFill.ts       → Relleno del descanso, el único lenguaje de su paso
+  │                       (tarjeta, barra flotante y PiP)
+  ├── gymIcons.ts       → Iconos de grupo muscular: lógica pura (los paths SVG
+  │                       viven en components/GymIcon.tsx)
+  ├── appSettings.ts    → Tema e idioma leídos SÍNCRONOS al arrancar, antes de
+  │                       crear estilos y textos
+  ├── appUpdate.ts      → Comparar versiones y enlaces a la tienda (puro, con test)
+  ├── themeStore.ts     → Suscripción al modo de tema (fuera de theme.ts para no
+  │                       crear ciclos de import)
+  ├── themeTransition.ts / levelPulse.ts / achievementsLink.ts
+  │                     → Canales mínimos entre una pieza y la raíz (revelado del
+  │                       tema, latido de la píldora de nivel, abrir Logros)
+  ├── textStyles.ts     → Estilos de texto compartidos con la fuente display
   ├── routineShare.ts   → Compartir rutina (QR / texto plano)
   ├── imageShare.ts     → Compartir imagen de logros
   ├── videoExport.ts    → Vídeo de logros (módulo nativo video-encoder)
@@ -302,9 +364,76 @@ parseCardioString('Cinta: 22.5mins, 11.5kmh')
   - Historial: `workout_logs` → `exercise_logs` → `log_sets`, más `cardio_logs` (1:1 con log) → `cardio_entries` (una fila por entrada, disciplina como id fijo; convive con `cardio_logs.raw_input`, que manda si no cuadran, hasta que todos los móviles lo entiendan). Referencias al plan débiles (`ON DELETE SET NULL`) para que el historial sobreviva a cambios de rutina; `exercise_name` es snapshot intencionado.
   - `settings` (clave/valor): `active_routine_id`, `selected_routine_id` y la marca `initialized`.
   - Convención FK: nombre de la tabla referenciada + `_id` (p. ej. `workout_days_id`). Ids GUID.
-- Migraciones por `PRAGMA user_version` (`lib/db/schema.ts`).
+- Migraciones por `PRAGMA user_version` (`lib/db/schema.ts`, `SCHEMA_VERSION`), siempre aditivas: un móvil que actualiza no pierde nada.
 - **Escrituras granulares** (`lib/persistence.ts`): el wrapper de `dispatch` traduce cada acción a su escritura mínima (upsert/borrado de una rutina, día o log; cambio de rutina activa), serializadas en una cola. `UPDATE_ROUTINE`/`UPDATE_DAY` hacen upsert preservando la identidad de rutina y días para no romper (`SET NULL`) las referencias del historial. `saveAppDataToDb` (reemplazo completo en transacción) se reserva para importación, migración legacy y seed inicial.
 - Migración legacy: al arrancar, si la BD está vacía y hay JSON del formato anterior en AsyncStorage, se importa y se borran las claves antiguas. En primer arranque sin datos se siembra con los datos de fábrica.
 - Vaciar datos deja la BD vacía **e inicializada** (marca `initialized`): las rutinas de fábrica no reaparecen al reiniciar.
 - **Web**: JSON en localStorage (expo-sqlite no soporta web en SDK 51), guardado completo con debounce; mismo `storage.ts`/`persistence.ts`, rama por plataforma.
 - Importar/exportar: `lib/fileIO.ts` (plataforma web via DOM, nativa via DocumentPicker + Sharing)
+
+## Nube (Supabase)
+
+Opcional y offline-first: sin cuenta la app funciona entera; con cuenta, SQLite
+sigue siendo la verdad local y la nube es su espejo más lo social. Plan y fases
+en [docs/backend-design.md](docs/backend-design.md).
+
+### Sync
+
+- **Cliente único y perezoso** (`lib/supabase.ts`): `supabase-js` se carga la
+  primera vez que alguien lo usa, no al arrancar. Sesión en un store de módulo
+  (`lib/cloud/auth.ts`).
+- **Push**: cada escritura granular de `lib/db/index.ts` encola su cambio en
+  `sync_outbox` dentro de la MISMA transacción (no hay cambio local sin su
+  entrada); `lib/cloud/sync.ts` lo sube por lotes con upsert. Las tablas
+  espejo llevan `user_id`, `updated_at` (epoch ms) y `deleted` (tombstone: borrar
+  es marcar).
+- **Pull** incremental por `updated_at` sobre un cursor, filtrado por `user_id` y
+  paginado. Antes, `sync_max_updated()` responde en una petición si hay algo nuevo.
+  Conflictos: last-write-wins.
+- **Cuándo**: al arrancar y al volver a primer plano (`hooks/useCloudSync.ts`),
+  y tras cada escritura con debounce (`schedulePush` de `lib/cloud/sync.ts`, que
+  llama `lib/persistence.ts`).
+- **Filas del plan** (rutina, días, ejercicios): las arma `lib/cloud/cloudRows.ts`
+  para el sync y para la copia completa por igual: quita las columnas que solo
+  existen en local y recorta los textos a los topes de la nube.
+- **Rutinas enlazadas** (de otra persona, `linkedOwnerId`): nunca se suben; se
+  refrescan del autor tras cada sync (`refreshLinkedRoutines`).
+- **Versiones conviviendo**: las migraciones de Supabase se ejecutan a mano y la
+  app puede llegar antes. Una columna nueva que la app sube va en
+  `OPTIONAL_COLUMNS` (`lib/cloud/optionalColumns.ts`): sin ella en la nube el dato
+  se queda en local y el sync no se para.
+
+### Modelo de seguridad
+
+La anon key va en la app y es pública: quien la tenga y una cuenta propia puede
+hablar con la API REST sin pasar por la app. Lo que protege los datos es el
+servidor (`supabase/*.sql`), nunca el cliente:
+
+- **RLS en todas las tablas.** Las propias solo para su dueño (`user_id =
+auth.uid()` en lectura y en `with check`).
+- **Lectura pública solo de lo marcado público, y solo filas del dueño del
+  padre.** No hay FKs entre tablas espejo (el sync sube en orden arbitrario), así
+  que cualquiera puede crear una fila suya colgando de algo ajeno: el plan de una
+  rutina pública (días, ejercicios) se lee solo si la fila es del dueño de la
+  rutina.
+- **Privado es privado.** Seguir no pide permiso, así que un perfil o una
+  Actividad privados solo los ve la gente **a la que esa persona sigue** (seguir
+  es decisión suya), nunca quien la sigue a ella. Lo borrado (tombstones) solo lo
+  lee su dueño.
+- **Fotos de perfil**: el bucket `avatars` se sirve en público por URL, pero no
+  se puede listar (cada quien lee solo su carpeta) y cada foto lleva un nombre
+  aleatorio: sin listado ni ruta fija, el id de alguien no basta para bajarse su
+  cara.
+- **Topes en el servidor**: `CHECK` de longitud en el texto que ven otros, tope
+  de filas de lo que otros descargan entero (días por rutina, ejercicios por día,
+  rutinas públicas por persona) y de reportes al día, avatar solo del bucket
+  propio y bucket con tamaño, tipo y nº de fotos limitados. La app limita antes,
+  muy por debajo (`lib/exerciseForm.ts`), y recorta al subir
+  (`lib/cloud/cloudRows.ts`): lo que ella crea nunca choca con un tope.
+- **Autodeclarado**: nivel, XP, Actividad y récords los calcula el cliente: se
+  enseñan, pero no dan nada con valor.
+- **Contenido de terceros** solo como texto; reportar oculta en local
+  (`lib/moderation.ts`) y deja el parte en `reports`.
+
+Las reglas para código nuevo están en [CONVENTIONS.md](CONVENTIONS.md#nube-y-seguridad)
+y se comprueban con `/revisar-codigo`.

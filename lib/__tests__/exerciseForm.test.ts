@@ -3,8 +3,11 @@ import {
   buildTargetReps,
   buildWorkoutExercises,
   createEmptyExercise,
+  EXERCISE_NAME_MAX_LENGTH,
   exerciseFormFromExercise,
+  MAX_IMPORTED_EXERCISES_PER_DAY,
   parseImportedExercise,
+  REPS_MAX_LENGTH,
 } from '../exerciseForm';
 import { WorkoutExercise } from '../../types';
 
@@ -49,6 +52,15 @@ describe('parseImportedExercise', () => {
   it('recorta las series al máximo permitido', () => {
     expect(parseImportedExercise('Curl [99x10]').sets).toBe(12);
   });
+
+  it('recorta un texto pegado larguísimo a los límites del formulario', () => {
+    // Una línea entera de un chat: sin recortar, la nube rechazaba el día.
+    const long = parseImportedExercise('x'.repeat(500));
+    expect(long.name).toHaveLength(EXERCISE_NAME_MAX_LENGTH);
+
+    const bracket = parseImportedExercise(`Remo [3x${'1'.repeat(50)}]`);
+    expect(bracket.reps).toHaveLength(REPS_MAX_LENGTH);
+  });
 });
 
 describe('buildExercisesFromText', () => {
@@ -60,6 +72,13 @@ describe('buildExercisesFromText', () => {
   it('devuelve una fila vacía si no hay nada que leer', () => {
     expect(buildExercisesFromText('   ')).toHaveLength(1);
     expect(buildExercisesFromText('   ')[0].name).toBe('');
+  });
+
+  it('no importa más ejercicios por día de los que admite', () => {
+    const text = Array.from({ length: 150 }, (_, i) => `Ej ${i}`).join('\n');
+    expect(buildExercisesFromText(text)).toHaveLength(
+      MAX_IMPORTED_EXERCISES_PER_DAY
+    );
   });
 });
 

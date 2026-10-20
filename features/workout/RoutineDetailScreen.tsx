@@ -43,8 +43,11 @@ import { t } from '@lib/i18n';
 import {
   buildWorkoutExercises,
   createEmptyExercise,
+  DAY_TITLE_MAX_LENGTH,
   ExerciseForm,
   exerciseFormFromExercise,
+  ROUTINE_DESCRIPTION_MAX_LENGTH,
+  ROUTINE_NAME_MAX_LENGTH,
 } from '@lib/exerciseForm';
 import {
   buildRoutineShareLink,
@@ -1115,7 +1118,7 @@ export function RoutineDetailScreen({
           placeholderTextColor={theme.colors.textSecondary}
           value={dayNameInput}
           onChangeText={setDayNameInput}
-          maxLength={30}
+          maxLength={DAY_TITLE_MAX_LENGTH}
         />
         <Text style={styles.fieldLabel}>{t('Icono:')}</Text>
         <GymIconGrid
@@ -1158,7 +1161,7 @@ export function RoutineDetailScreen({
           placeholderTextColor={theme.colors.textSecondary}
           value={nameInput}
           onChangeText={setNameInput}
-          maxLength={40}
+          maxLength={ROUTINE_NAME_MAX_LENGTH}
         />
         <Text style={styles.fieldLabel}>{t('Descripción:')}</Text>
         <TextInput
@@ -1167,7 +1170,7 @@ export function RoutineDetailScreen({
           placeholderTextColor={theme.colors.textSecondary}
           value={descriptionInput}
           onChangeText={setDescriptionInput}
-          maxLength={80}
+          maxLength={ROUTINE_DESCRIPTION_MAX_LENGTH}
         />
       </AppModal>
 

@@ -6,7 +6,7 @@
 
 - **`log_sets.is_extra`** (SQLite v11, `ParsedSet.extra`): marca la serie de
   más sobre el objetivo. Anulable, como `catalog_id`: NULL se lee como "no es
-  extra". En el texto (`rawInput`) la extra lleva un `*` final ("55x10*"), con
+  extra". En el texto (`rawInput`) la extra lleva un `*` final ("55x10\*"), con
   `formatSeriesString` como inverso de `parseSeriesString`; no un "+" delante,
   que ya es la suma de cargas combinadas. Viaja a la nube como columna
   opcional (`OPTIONAL_COLUMNS` + `keepLocal`): sin ella el sync no se para y la
@@ -23,6 +23,83 @@
   `supabase/social-schema.sql`):
   `ALTER TABLE public.activity DROP CONSTRAINT IF EXISTS activity_kind_check;`
   `ALTER TABLE public.activity ADD CONSTRAINT activity_kind_check CHECK (kind IN ('badge','challenge','day','record'));`
+- **Blindaje de la RLS social** (análisis de salida a producción, 2026-10-20).
+  Cuatro agujeros de la nube cerrados en `supabase/social-schema.sql` y
+  `supabase/storage-avatars.sql`:
+  - **Plan ajeno:** "read public days/exercises" solo enseñan filas del dueño
+    de la rutina. Antes cualquiera colaba un día suyo con el `routines_id` de
+    una rutina pública ajena y salía en ella para todos (y en sus copias
+    enlazadas). `fetchPublicRoutine` filtra además por `user_id` del autor.
+    Índices nuevos `idx_days_routine` e `idx_exercises_day`.
+  - **Perfil privado:** perfil y Actividad privados solo los ve la gente **a
+    la que esa persona sigue**, ya no cualquiera que la siga a ella (seguir es
+    unilateral y los ids salen de likes, guardados y comentarios: cualquiera
+    podía abrirlos).
+  - **Topes:** CHECK `NOT VALID` de longitud en perfiles, rutinas, días,
+    ejercicios, actividad y reportes; triggers de máximo 30 días por rutina,
+    100 ejercicios por día y 50 rutinas públicas por persona; like solo a
+    rutinas públicas; `popular_routines` acotado a 100; bucket `avatars` solo
+    JPEG hasta 512 KB.
+  - **Avatar:** `profiles_avatar_url_own` solo admite la URL de tu carpeta del
+    bucket; `useAvatarPicker` deja de caer a base64 en el perfil (si la
+    subida falla, sale el error).
+    **SQL ya ejecutado en Supabase** (2026-10-20, con la comprobación previa a
+    0; incluye el CHECK de `record` de arriba). Verificado con curl: tablón y
+    plan de las rutinas públicas se siguen leyendo, sin filas ajenas al dueño.
+- **Segunda pasada del blindaje** (tras `/revisar-codigo`, 2026-10-20):
+  - **Fotos de perfil:** el bucket `avatars` ya no se puede listar (cada quien
+    lee solo su carpeta): antes cualquiera sin sesión listaba las carpetas
+    —una por cuenta— y bajaba la foto de un perfil privado por su ruta fija
+    `{uid}/avatar.jpg`. Ahora cada foto se sube con nombre aleatorio
+    (`uploadAvatar`) y la anterior se borra al guardar el perfil
+    (`pruneAvatars`); subir exige `{uid}/{nombre}.jpg` y como mucho 3 fotos.
+    `profiles_avatar_url_own` pasa a regex (el `like` aceptaba `..`).
+  - **Likes:** "update own likes" exige también rutina pública (un PATCH
+    movía un like a una rutina privada).
+  - **Tombstones:** los días y ejercicios borrados de una rutina pública ya
+    no los lee nadie más que su dueño.
+  - **Reportes:** máximo 30 al día por persona (trigger con
+    `reports.inserted_at`, hora del servidor).
+  - **Tope de rutinas públicas** con `hint` `public_routines_limit`:
+    `setRoutinePublic` lo traduce a un aviso en el idioma de la app.
+  - **`getRoutineSetTotals`** recibe `{ id, owner_id }` y solo suma el plan
+    del autor (como `fetchPublicRoutine`).
+  - **Límites de texto en origen** (`lib/exerciseForm.ts`): las mismas
+    constantes en los `maxLength` y en lo importado (texto plano, enlace,
+    QR): nombre de ejercicio 80, reps 10, título de día 30 (el de Nueva
+    rutina no tenía límite), rutina 40/80 y 40 ejercicios por día importado.
+    El enlace por deep link también se corta a 7 días, como el pegado.
+  - **`lib/cloud/cloudRows.ts`** (nuevo, con test): arma las filas del plan
+    para sync y copia por igual, sin las columnas solo locales y con los
+    textos recortados a los topes de la nube. La Actividad recorta igual
+    (`itemToRow`): un récord con nombre larguísimo bloqueaba el lote entero.
+  - **Migración de fotos viejas:** las subidas por versiones anteriores
+    siguen en `{uid}/avatar.jpg` (2 de las 3 cuentas no públicas
+    enumerables, comprobado). Al cargar el perfil propio, si la foto está en
+    esa ruta, `migrateLegacyAvatar` la baja, la sube con nombre aleatorio y
+    apunta el perfil a la nueva SOLO si sigue apuntando a la vieja
+    (compare-and-set; si no, borra su copia). Un intento por sesión
+    (`hooks/useMyProfile.ts`).
+  - **El tope de fotos nunca bloquea:** `pruneAvatars` (todo menos la foto
+    del perfil) corre ANTES de subir, además de después; con versiones
+    mezcladas en dos móviles los restos llegaban a 3 y no se podía volver a
+    cambiar la foto.
+  - **`Avatar`** cae al marcador si la URL no carga (las fotos viejas se
+    borran y una caché puede traer la URL antigua).
+  - **Recortes por caracteres reales** (`truncateText`, lib/utils.ts): `slice`
+    partía un emoji y dejaba medio carácter que Postgres rechaza. El `ref` de
+    un récord (`clave@fecha`) conserva la fecha al recortarse.
+  - `MAX_ROUTINE_DAYS` sustituye el 7 repetido en Nueva rutina, y
+    `parseRoutineShareLink` ya corta el enlace a esos días. `own` sale de
+    `cloudRows.ts` (estaba tres veces).
+  - **`.claude/` dentro de GymToni:** comandos y agentes viven y se versionan
+    aquí (`.claude/commands`, `.claude/agents`); `Projects/.claude` los ve por
+    junctions (SETUP.md explica cómo recrearlas). `settings.local.json` y el
+    lock, ignorados.
+    **SQL ya ejecutado en Supabase** (2026-10-20). Verificado con curl: el
+    listado anónimo del bucket devuelve vacío, las fotos de los perfiles
+    públicos se siguen sirviendo (200), tablón y plan intactos y
+    `reports.inserted_at` existe.
 
 ### Nuevas funcionalidades
 
@@ -161,6 +238,18 @@
 
 ### Correcciones
 
+- **"Subir copia" a la nube fallaba con cualquier rutina.** `backupToCloud`
+  subía la fila de rutina con las columnas de procedencia que solo existen en
+  el SQLite local (`linked_owner_id`, `source_*`) y la nube la rechazaba
+  entera (PGRST204); además intentaba subir las rutinas enlazadas, que son de
+  otra persona. Ahora usa las filas de `lib/cloud/cloudRows.ts`, como el sync,
+  y deja fuera las enlazadas.
+- **Fecha de un entreno sin fecha guardada, en UTC.** La Actividad sacaba el
+  día de `createdAt` con `toISOString()`: un entreno a las 00:30 caía en el día
+  anterior. Ahora `logDateKey` (huso del móvil). Igual el "mes de hoy" de las
+  métricas de Cardio (`getToday`).
+- **Aviso de perfil privado** en Seguidos: decía "solo ella puede verlo"; ahora
+  dice que lo ven ella y las personas a las que sigue.
 - **Nivel del póster de la semana por debajo del real.** `lib/weekExtras`
   data los retos de fuerza (`id@rutina:bloque`) por el fin de su bloque, pero
   los números de bloque son posicionales: un día repetido, un entreno borrado o
@@ -296,7 +385,7 @@
   en que se va el viejo— y solo su contenido entra, rápido, deslizándose desde
   el lado hacia el que giró la ruleta (`ExerciseInputField` `contentEntering`).
   El panel viejo se va entero y al instante (`LayoutAnimationConfig
-  skipExiting` con la `key`): sus bloques hacían su propio fundido de salida
+skipExiting` con la `key`): sus bloques hacían su propio fundido de salida
   encima del nuevo y se veían textos dobles.
 - **Casilla elegida sin parpadeo.** Al elegirla, su miniatura se cambiaba por
   la del botón de GIF, que la recargaba (un instante en blanco). Ahora la
@@ -512,7 +601,7 @@
 - **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.6;
   `versionCode` 32 → 33. Pendiente en Supabase (no bloquea: la app lo
   tolera): `ALTER TABLE public.exercise_logs ADD COLUMN IF NOT EXISTS
-  catalog_id text;` (comprobado con curl el 2026-10-14; `routine_saves` ya
+catalog_id text;` (comprobado con curl el 2026-10-14; `routine_saves` ya
   existe).
 
 ### Correcciones

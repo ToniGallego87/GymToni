@@ -32,8 +32,13 @@ import {
   buildExercisesFromText,
   buildWorkoutExercises,
   createEmptyExercise,
+  DAY_TITLE_MAX_LENGTH,
   ExerciseForm,
+  MAX_IMPORTED_EXERCISES_PER_DAY,
+  MAX_ROUTINE_DAYS,
   parseImportedExercise,
+  ROUTINE_DESCRIPTION_MAX_LENGTH,
+  ROUTINE_NAME_MAX_LENGTH,
 } from '@lib/exerciseForm';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -99,7 +104,9 @@ function buildDaysFromRoutineText(text: string): NewRoutineDayForm[] {
     .map((lines) => {
       const [titleLine, ...rest] = lines;
       const { title, icon } = stripIconTag(titleLine);
-      const exercises = rest.map(parseImportedExercise);
+      const exercises = rest
+        .slice(0, MAX_IMPORTED_EXERCISES_PER_DAY)
+        .map(parseImportedExercise);
       return {
         id: generateId(),
         title,
@@ -123,7 +130,8 @@ export function NewRoutineScreen({
   const [routineDescription, setRoutineDescription] = useState('');
   const [days, setDays] = useState<NewRoutineDayForm[]>(() =>
     initialDays && initialDays.length
-      ? initialDays.map((day) => ({
+      ? // Mismo tope de días que al pegar el enlace a mano (handleImportLink).
+        initialDays.slice(0, MAX_ROUTINE_DAYS).map((day) => ({
           id: generateId(),
           title: day.title,
           icon: day.icon,
@@ -167,7 +175,7 @@ export function NewRoutineScreen({
       });
       return;
     }
-    const limited = parsed.slice(0, 7);
+    const limited = parsed.slice(0, MAX_ROUTINE_DAYS);
     setDays(limited);
     setShowImport(false);
     setImportText('');
@@ -197,7 +205,7 @@ export function NewRoutineScreen({
       return;
     }
     setDays(
-      shared.days.slice(0, 7).map((day) => ({
+      shared.days.slice(0, MAX_ROUTINE_DAYS).map((day) => ({
         id: generateId(),
         title: day.title,
         icon: day.icon,
@@ -210,7 +218,7 @@ export function NewRoutineScreen({
     setToast({
       message: t(
         shared.days.length > 1 ? 'Importados {n} días' : 'Importado 1 día',
-        { n: Math.min(shared.days.length, 7) }
+        { n: Math.min(shared.days.length, MAX_ROUTINE_DAYS) }
       ),
       type: 'success',
     });
@@ -238,7 +246,7 @@ export function NewRoutineScreen({
   }, [days]);
   const titleMissing = (day: NewRoutineDayForm) =>
     !day.title.trim() && day.exercises.some((ex) => ex.name.trim());
-  const canAddMoreDays = canAddNewDay && days.length < 7;
+  const canAddMoreDays = canAddNewDay && days.length < MAX_ROUTINE_DAYS;
 
   const updateDay = (
     dayId: string,
@@ -299,7 +307,7 @@ export function NewRoutineScreen({
   };
 
   const handleAddDay = () => {
-    if (days.length >= 7) {
+    if (days.length >= MAX_ROUTINE_DAYS) {
       setToast({ message: t('Máximo 7 días'), type: 'error' });
       return;
     }
@@ -475,6 +483,7 @@ export function NewRoutineScreen({
             placeholderTextColor={theme.colors.textSecondary}
             value={day.title}
             onChangeText={(value) => handleUpdateTitle(day.id, value)}
+            maxLength={DAY_TITLE_MAX_LENGTH}
           />
         </View>
 
@@ -649,7 +658,7 @@ export function NewRoutineScreen({
               placeholderTextColor={theme.colors.textSecondary}
               value={routineName}
               onChangeText={setRoutineName}
-              maxLength={40}
+              maxLength={ROUTINE_NAME_MAX_LENGTH}
             />
           </View>
           <View style={styles.inputRow}>
@@ -659,7 +668,7 @@ export function NewRoutineScreen({
               placeholderTextColor={theme.colors.textSecondary}
               value={routineDescription}
               onChangeText={setRoutineDescription}
-              maxLength={80}
+              maxLength={ROUTINE_DESCRIPTION_MAX_LENGTH}
             />
           </View>
         </View>

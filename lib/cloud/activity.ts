@@ -1,4 +1,5 @@
 import { supabase } from '../supabase';
+import { CLOUD_TEXT_LIMITS, clampText } from './cloudRows';
 import {
   ActivityCounts,
   ActivityItem,
@@ -15,7 +16,7 @@ import {
 // `activity` de supabase/social-schema.sql.
 //
 // Quién ve qué lo decide la RLS, no esta capa: la misma regla que el perfil
-// (público, propio o con relación de seguimiento) más `profiles.share_activity`.
+// (público, propio o te sigue) más `profiles.share_activity`.
 // El historial de entrenos sigue privado; aquí solo viaja "entrené el día X de
 // la rutina Y", sin series ni pesos.
 
@@ -97,16 +98,41 @@ export async function getActivityCounts(
   };
 }
 
+// El ref de un récord es `clave@fecha` y el de un reto `reto@periodo`
+// (lib/activity.ts, lib/level.ts). Si hay que recortarlo se recorta la parte de
+// delante y se conserva el `@…`: sin él, todos los récords de un ejercicio de
+// nombre larguísimo compartirían ref y el `unique` descartaría los siguientes
+// sin error.
+function clampRef(ref: string): string {
+  const max = CLOUD_TEXT_LIMITS.activityRef;
+  if (clampText(ref, max) === ref) return ref;
+  const at = ref.lastIndexOf('@');
+  if (at <= 0) return clampText(ref, max);
+  const suffix = ref.slice(at);
+  return clampText(ref.slice(0, at), max - suffix.length) + suffix;
+}
+
 // Fila de la tabla para un hito. La marca del récord va dentro del título: la
-// tabla no tiene columna para ella.
+// tabla no tiene columna para ella. Los textos se recortan a los topes de la
+// nube: un nombre de ejercicio larguísimo haría rechazar el lote ENTERO de
+// récords en cada intento y no se publicaría ninguno más.
 const itemToRow = (userId: string, item: ActivityItem, now: number) => ({
   user_id: userId,
   kind: item.kind,
-  ref: item.ref,
-  title: item.detail ? `${item.title} · ${item.detail}` : item.title,
-  icon: item.icon ?? null,
-  routine_id: item.routineId ?? null,
-  routine_name: item.routineName ?? null,
+  ref: clampRef(item.ref),
+  title: clampText(
+    item.detail ? `${item.title} · ${item.detail}` : item.title,
+    CLOUD_TEXT_LIMITS.activityTitle
+  ),
+  icon: clampText(item.icon ?? null, CLOUD_TEXT_LIMITS.activityIcon),
+  routine_id: clampText(
+    item.routineId ?? null,
+    CLOUD_TEXT_LIMITS.activityRoutineId
+  ),
+  routine_name: clampText(
+    item.routineName ?? null,
+    CLOUD_TEXT_LIMITS.activityRoutineName
+  ),
   happened_on: item.happenedOn,
   created_at: now,
 });
@@ -126,9 +152,7 @@ export async function publishActivity(
   { limit = 120 }: { limit?: number } = {}
 ): Promise<number> {
   const published = new Set(getStoredPublishedActivity());
-  const unpublished = items.filter(
-    (item) => !published.has(activityKey(item))
-  );
+  const unpublished = items.filter((item) => !published.has(activityKey(item)));
   // El tope va por separado para récords y resto: unos récords que la base
   // rechaza no pueden ocupar el cupo y dejar sin subir los demás hitos.
   const base = unpublished
@@ -141,12 +165,10 @@ export async function publishActivity(
 
   const now = Date.now();
   const upsert = (batch: ActivityItem[]) =>
-    supabase
-      .from('activity')
-      .upsert(
-        batch.map((item) => itemToRow(userId, item, now)),
-        { onConflict: 'user_id,kind,ref', ignoreDuplicates: true }
-      );
+    supabase.from('activity').upsert(
+      batch.map((item) => itemToRow(userId, item, now)),
+      { onConflict: 'user_id,kind,ref', ignoreDuplicates: true }
+    );
   const markPublished = (batch: ActivityItem[]) => {
     batch.forEach((item) => published.add(activityKey(item)));
     setStoredPublishedActivity([...published]);

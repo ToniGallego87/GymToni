@@ -23,11 +23,26 @@ Comandos de verificación:
 
 ```bash
 npm run type-check # tsc --noEmit
-npm test           # Jest sobre lib/ (21 suites, 316 tests)
+npm test           # Jest sobre lib/
 npm run format     # Prettier
 ```
 
 La construcción de la APK release está documentada en [COMMANDS.md](COMMANDS.md).
+
+### Comandos y agentes de Claude
+
+Los comandos (`/roadmap`, `/revisar-codigo`, `/revisar-vista`, `/revision-app`)
+y los agentes (`close-version`, `revisor-codigo`) viven en `GymToni/.claude/`.
+Si se trabaja abriendo la carpeta que contiene el repo (`Projects/`), esa carpeta
+los ve mediante dos enlaces de carpeta. En un ordenador nuevo, desde `Projects/`
+(cmd):
+
+```bat
+mklink /J .claude\commands GymToni\.claude\commands
+mklink /J .claude\agents GymToni\.claude\agents
+```
+
+Abriendo directamente `GymToni/` no hace falta nada.
 
 ## Estructura de archivos
 
@@ -135,7 +150,7 @@ GymToni/
   última"), y "Saltar resto / Saltar ejercicio" cierra el ejercicio desde el ⋯
   de su cabecera. Con el objetivo cumplido los campos se van y "Serie extra"
   los vuelve a sacar para una serie de más, que se guarda marcada
-  (`ParsedSet.extra`, `log_sets.is_extra`, "55x10*" en el texto) y no puntúa
+  (`ParsedSet.extra`, `log_sets.is_extra`, "55x10\*" en el texto) y no puntúa
   en la mejora.
 - **Cardio**: por disciplina en `CardioInputField` (cinta andar/correr, bici,
   elíptica…), con duración, velocidad/pendiente. Se guarda como `rawInput` y

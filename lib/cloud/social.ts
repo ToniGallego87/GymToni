@@ -1,5 +1,8 @@
+import { Platform } from 'react-native';
 import type { WorkoutRoutine } from '../../types';
 import { supabase } from '../supabase';
+import { t } from '../i18n';
+import { generateId } from '../utils';
 import {
   isLinkedRoutine,
   linkPublicRoutine,
@@ -48,9 +51,9 @@ export interface ProfileLite {
   display_name: string | null;
   avatar_url: string | null;
   /**
-   * Perfil privado. Con relación contigo (te sigue o le sigues) la RLS lo
-   * devuelve entero y las listas lo pintan con su foto y su nombre más un
-   * candado; sin relación no lo devuelve y solo se sabe su id (vuelve sin
+   * Perfil privado. Si te sigue, la RLS lo devuelve entero y las listas lo
+   * pintan con su foto y su nombre más un candado; si no (aunque tú le sigas:
+   * seguir no pide permiso) no lo devuelve y solo se sabe su id (vuelve sin
    * nombre ni foto, para que el contador y la lista cuadren).
    */
   private?: boolean;
@@ -169,22 +172,117 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 // Sube la foto (jpeg base64) al bucket `avatars` de Storage y devuelve su URL
-// pública (con cache-bust). Requiere el bucket creado (supabase/storage-avatars.sql).
-// Si falla (bucket sin configurar), el llamante cae a guardar el base64 en el perfil.
+// pública. Requiere el bucket creado (supabase/storage-avatars.sql). Es la
+// ÚNICA forma de poner foto: el perfil solo admite URLs de ese bucket
+// (`profiles_avatar_url_own`, supabase/social-schema.sql).
+//
+// Cada foto lleva un nombre ALEATORIO, no `avatar.jpg`: el bucket se sirve en
+// público y con una ruta fija bastaba el id de alguien (sale de likes y
+// comentarios) para bajarse la cara de un perfil privado. El nombre nuevo
+// también evita la caché sin `?v=`. La anterior la borra `pruneAvatars`
+// cuando el perfil ya apunta a esta.
 export async function uploadAvatar(
   userId: string,
   base64Jpeg: string
 ): Promise<string> {
-  const path = `${userId}/avatar.jpg`;
+  const path = `${userId}/${generateId()}.jpg`;
   const { error } = await supabase.storage
     .from('avatars')
-    .upload(path, base64ToBytes(base64Jpeg), {
-      contentType: 'image/jpeg',
-      upsert: true,
-    });
+    .upload(path, base64ToBytes(base64Jpeg), { contentType: 'image/jpeg' });
   if (error) throw new Error(`avatars: ${error.message}`);
   const { data } = supabase.storage.from('avatars').getPublicUrl(path);
-  return `${data.publicUrl}?v=${Date.now()}`;
+  return data.publicUrl;
+}
+
+// Foto subida por una versión vieja de la app: ruta fija `{uid}/avatar.jpg`.
+const LEGACY_AVATAR_NAME = 'avatar.jpg';
+
+/** ¿Es esta URL de foto la de la ruta fija vieja (`{uid}/avatar.jpg`)? */
+export function isLegacyAvatarUrl(
+  userId: string,
+  url: string | null | undefined
+): boolean {
+  return (
+    !!url && url.split('?')[0].endsWith(`/${userId}/${LEGACY_AVATAR_NAME}`)
+  );
+}
+
+/**
+ * Pasa una foto de perfil vieja (`{uid}/avatar.jpg`, una ruta que cualquiera
+ * podía adivinar con el id) a un nombre aleatorio: la baja, la vuelve a subir
+ * como una foto nueva, apunta el perfil a ella y borra la vieja. Nadie pierde
+ * su foto. Devuelve la URL nueva, o null si no había nada que migrar.
+ *
+ * El perfil se apunta a la nueva SOLO si sigue apuntando a la vieja
+ * (compare-and-set): si mientras tanto otro móvil cambió la foto, se respeta
+ * esa y se borra la copia propia.
+ */
+export async function migrateLegacyAvatar(
+  userId: string,
+  avatarUrl: string | null | undefined
+): Promise<string | null> {
+  if (Platform.OS === 'web' || !avatarUrl) return null;
+  if (!isLegacyAvatarUrl(userId, avatarUrl)) return null;
+
+  const FileSystem =
+    require('expo-file-system') as typeof import('expo-file-system');
+  const dir = FileSystem.cacheDirectory;
+  if (!dir) return null;
+  const tmp = `${dir}avatar-migration-${Date.now()}.jpg`;
+  const bucket = supabase.storage.from('avatars');
+  try {
+    const download = await FileSystem.downloadAsync(avatarUrl, tmp);
+    if (download.status !== 200) return null;
+    const base64 = await FileSystem.readAsStringAsync(tmp, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    // Sitio para la copia: fuera los restos de intentos fallidos (el bucket
+    // admite pocas fotos por persona), conservando la vieja.
+    await pruneAvatars(userId, avatarUrl);
+    const url = await uploadAvatar(userId, base64);
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .update({ avatar_url: url, updated_at: Date.now() })
+      .eq('id', userId)
+      .eq('avatar_url', avatarUrl)
+      .select('id');
+    if (error || !data?.length) {
+      // El perfil ya no apuntaba a la vieja: la copia sobra.
+      await bucket.remove([url.split('/').slice(-2).join('/')]);
+      if (error) throw new Error(`profiles: ${error.message}`);
+      return null;
+    }
+    // Ya apunta a la nueva: fuera la vieja (y cualquier resto).
+    await pruneAvatars(userId, url);
+    return url;
+  } finally {
+    await FileSystem.deleteAsync(tmp, { idempotent: true }).catch(() => {});
+  }
+}
+
+/**
+ * Borra de tu carpeta de `avatars` todas las fotos menos la de `keepUrl` (la
+ * del perfil; sin ella, todas). Se llama ANTES de subir una foto, para que el
+ * tope de fotos por persona del bucket nunca bloquee el cambio, y DESPUÉS de
+ * apuntar el perfil a la nueva, para borrar la anterior: nunca se borra la
+ * foto a la que apunta el perfil.
+ */
+export async function pruneAvatars(
+  userId: string,
+  keepUrl: string | null | undefined
+): Promise<void> {
+  const keepName = keepUrl?.split('?')[0].split('/').pop();
+  const bucket = supabase.storage.from('avatars');
+  const { data, error } = await bucket.list(userId);
+  if (error) throw new Error(`avatars: ${error.message}`);
+  const stale = (data ?? [])
+    .map((file) => file.name)
+    .filter((name) => name && name !== keepName)
+    .map((name) => `${userId}/${name}`);
+  if (!stale.length) return;
+  const { error: removeError } = await bucket.remove(stale);
+  if (removeError) throw new Error(`avatars: ${removeError.message}`);
 }
 
 // ─────────────────────────── Seguir ───────────────────────────
@@ -293,8 +391,22 @@ export async function setRoutinePublic(
     .from('routines')
     .update({ is_public: isPublic, updated_at: Date.now() })
     .eq('id', routineId);
+  // El tope de rutinas públicas lo pone un trigger de la nube
+  // (`limit_public_routines`, supabase/social-schema.sql), que se identifica
+  // con su `hint`: su mensaje es SQL en español y no sirve para el aviso.
+  if (error?.hint === PUBLIC_ROUTINES_LIMIT_HINT) {
+    throw new Error(
+      t('Has llegado al máximo de {n} rutinas públicas', {
+        n: MAX_PUBLIC_ROUTINES,
+      })
+    );
+  }
   if (error) throw new Error(`routines: ${error.message}`);
 }
+
+/** Lo mismo que `limit_public_routines` (supabase/social-schema.sql). */
+const MAX_PUBLIC_ROUTINES = 50;
+const PUBLIC_ROUTINES_LIMIT_HINT = 'public_routines_limit';
 
 export interface PublicRoutineSummary {
   id: string;
@@ -595,10 +707,17 @@ export async function fetchPublicRoutine(
   if (rErr) throw new Error(`routines: ${rErr.message}`);
   if (!routineRow) return null;
 
+  // Días y ejercicios SOLO del autor. Cualquiera puede subir un día suyo con
+  // el `routines_id` de una rutina ajena; la RLS ya no se lo enseña a nadie
+  // (social-schema.sql, "read public days"), y esto lo cierra también contra
+  // una base sin esa migración. Importa porque lo que baja aquí acaba en las
+  // copias enlazadas de todos (refreshLinkedRoutines).
+  const ownerId = (routineRow as { user_id: string }).user_id;
   const { data: days, error: dErr } = await supabase
     .from('workout_days')
     .select('*')
     .eq('routines_id', routineId)
+    .eq('user_id', ownerId)
     .eq('deleted', false);
   if (dErr) throw new Error(`workout_days: ${dErr.message}`);
 
@@ -609,6 +728,7 @@ export async function fetchPublicRoutine(
       .from('exercises')
       .select('*')
       .in('workout_days_id', dayIds)
+      .eq('user_id', ownerId)
       .eq('deleted', false);
     if (eErr) throw new Error(`exercises: ${eErr.message}`);
     exercises = ex ?? [];
@@ -681,40 +801,56 @@ export async function refreshLinkedRoutines(
 // El resultado alimenta el distintivo Suave/Medio/Intenso del tablón
 // (`routineIntensity` en lib/routines.ts). Se pide en segundo plano, después de
 // pintar la lista: es un adorno, no debe retrasar el tablón.
+//
+// Solo cuenta el plan del AUTOR de cada rutina, como `fetchPublicRoutine`: la
+// RLS ya no enseña filas ajenas colgadas de una rutina pública, pero sí las
+// propias de quien mira, y un día suyo con el `routines_id` de otro le sumaría
+// series a esa rutina.
 export async function getRoutineSetTotals(
-  routineIds: string[]
+  routines: { id: string; owner_id: string }[]
 ): Promise<Map<string, number>> {
   const totals = new Map<string, number>();
-  const ids = Array.from(new Set(routineIds)).filter(Boolean);
-  if (!ids.length) return totals;
+  const ownerOf = new Map<string, string>();
+  for (const r of routines)
+    if (r.id && r.owner_id) ownerOf.set(r.id, r.owner_id);
+  if (!ownerOf.size) return totals;
 
   const { data: days, error: dErr } = await supabase
     .from('workout_days')
-    .select('id, routines_id')
-    .in('routines_id', ids)
+    .select('id, routines_id, user_id')
+    .in('routines_id', Array.from(ownerOf.keys()))
     .eq('deleted', false);
   if (dErr) throw new Error(`workout_days: ${dErr.message}`);
 
-  // día → rutina, para repartir las series de cada ejercicio en su rutina.
-  const dayToRoutine = new Map<string, string>();
+  // día → rutina y dueño, para repartir las series de cada ejercicio en su
+  // rutina y descartar lo que no sea del autor.
+  const dayInfo = new Map<string, { routineId: string; ownerId: string }>();
   for (const row of days ?? []) {
-    const d = row as { id: string; routines_id: string };
-    dayToRoutine.set(d.id, d.routines_id);
+    const d = row as { id: string; routines_id: string; user_id: string };
+    if (ownerOf.get(d.routines_id) !== d.user_id) continue;
+    dayInfo.set(d.id, { routineId: d.routines_id, ownerId: d.user_id });
   }
-  if (!dayToRoutine.size) return totals;
+  if (!dayInfo.size) return totals;
 
   const { data: exercises, error: eErr } = await supabase
     .from('exercises')
-    .select('workout_days_id, target_sets')
-    .in('workout_days_id', Array.from(dayToRoutine.keys()))
+    .select('workout_days_id, target_sets, user_id')
+    .in('workout_days_id', Array.from(dayInfo.keys()))
     .eq('deleted', false);
   if (eErr) throw new Error(`exercises: ${eErr.message}`);
 
   for (const row of exercises ?? []) {
-    const ex = row as { workout_days_id: string; target_sets: number | null };
-    const routineId = dayToRoutine.get(ex.workout_days_id);
-    if (!routineId) continue;
-    totals.set(routineId, (totals.get(routineId) ?? 0) + (ex.target_sets ?? 0));
+    const ex = row as {
+      workout_days_id: string;
+      target_sets: number | null;
+      user_id: string;
+    };
+    const day = dayInfo.get(ex.workout_days_id);
+    if (!day || day.ownerId !== ex.user_id) continue;
+    totals.set(
+      day.routineId,
+      (totals.get(day.routineId) ?? 0) + (ex.target_sets ?? 0)
+    );
   }
   return totals;
 }

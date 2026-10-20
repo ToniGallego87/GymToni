@@ -29,8 +29,13 @@ const log = (
 };
 
 const records = (logs: WorkoutLog[]) =>
-  buildLocalActivity({ logs, routines: [], badges: [], challenges: [], wins: [] })
-    .filter((item) => item.kind === 'record');
+  buildLocalActivity({
+    logs,
+    routines: [],
+    badges: [],
+    challenges: [],
+    wins: [],
+  }).filter((item) => item.kind === 'record');
 
 describe('récords de la Actividad', () => {
   it('la primera vez no es récord; más peso que nunca sí', () => {
@@ -54,6 +59,17 @@ describe('récords de la Actividad', () => {
       log('c', '2026-09-15', { Banca: 82.5 }),
     ]);
     expect(result).toHaveLength(0);
+  });
+
+  it('sin fecha guardada, el día sale de la hora local, no de UTC', () => {
+    // 00:30 del 15 en el móvil: en UTC (España, +1/+2) aún es el 14.
+    const createdAt = new Date(2026, 8, 15, 0, 30).getTime();
+    const result = records([
+      log('a', '2026-09-01', { Banca: 80 }),
+      log('b', '', { Banca: 90 }, { createdAt, updatedAt: createdAt }),
+    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0].happenedOn).toBe('2026-09-15');
   });
 });
 

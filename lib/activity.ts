@@ -5,7 +5,7 @@ import { exerciseLogKey } from './exerciseProgress';
 import { isExtraExerciseLog } from './extraExercises';
 import { isValidSet } from './progress';
 import { getDisplayDayName } from './theme';
-import { findDayInRoutines, getLogTimestamp } from './utils';
+import { findDayInRoutines, getLogTimestamp, logDateKey } from './utils';
 import { WorkoutLog, WorkoutRoutine } from '../types';
 import { dateLocale, fmtNum, t } from './i18n';
 
@@ -132,7 +132,9 @@ export function buildLocalActivity({
     // "he entrenado este día" (mismo criterio que Inicio).
     if (log.cardioOnly) continue;
     const day = findDayInRoutines(routines, log.dayId);
-    const routine = routines.find((r) => r.days.some((d) => d.id === log.dayId));
+    const routine = routines.find((r) =>
+      r.days.some((d) => d.id === log.dayId)
+    );
     items.push({
       kind: 'day',
       ref: log.id,
@@ -140,7 +142,7 @@ export function buildLocalActivity({
       icon: day?.emoji,
       routineId: routine?.id,
       routineName: routine?.name,
-      happenedOn: log.date || new Date(log.createdAt).toISOString().slice(0, 10),
+      happenedOn: logDateKey(log),
     });
   }
 
@@ -182,8 +184,7 @@ function buildRecordItems(
       }
     }
 
-    const date =
-      log.date || new Date(log.createdAt).toISOString().slice(0, 10);
+    const date = logDateKey(log);
     sessionMax.forEach(({ weight, name }, key) => {
       const previous = best.get(key);
       if (previous === undefined || weight > previous) best.set(key, weight);

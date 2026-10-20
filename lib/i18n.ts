@@ -1131,8 +1131,10 @@ register({
   'Días de entrenamiento que tiene la rutina cada semana. Cada uno lleva sus propios ejercicios.':
     'Training days the routine has each week. Each one has its own exercises.',
   'Perfil privado': 'Private profile',
-  'Esta persona tiene el perfil en privado: solo ella puede verlo.':
-    'This person keeps their profile private: only they can see it.',
+  'Esta persona tiene el perfil en privado: solo lo ven ella y las personas a las que sigue.':
+    'This person keeps their profile private: only they and the people they follow can see it.',
+  'Has llegado al máximo de {n} rutinas públicas':
+    'You have reached the limit of {n} public routines',
   Listo: 'Done',
   'Sin nombre': 'Unnamed',
   '¿Quitar el ejercicio?': 'Remove the exercise?',

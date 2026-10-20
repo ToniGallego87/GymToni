@@ -2,6 +2,12 @@ import * as Linking from 'expo-linking';
 import { WorkoutExercise, WorkoutRoutine } from '../types';
 import { getDisplayDayName } from './theme';
 import { GymIconName, isGymIconName, resolveDayIcon } from './gymIcons';
+import {
+  DAY_TITLE_MAX_LENGTH,
+  MAX_ROUTINE_DAYS,
+  ROUTINE_NAME_MAX_LENGTH,
+} from './exerciseForm';
+import { truncateText } from './utils';
 
 // Ruta del deep link de importación: gymbro://import-routine?data=...
 // El esquema (gymbro) está declarado en app.json → expo.scheme.
@@ -41,9 +47,18 @@ export function stripIconTag(titleLine: string): {
   const match = titleLine.match(ICON_TAG_REGEX);
   const tag = match?.[1]?.toLowerCase();
   if (match && isGymIconName(tag)) {
-    return { title: titleLine.replace(ICON_TAG_REGEX, '').trim(), icon: tag };
+    return {
+      title: clampDayTitle(titleLine.replace(ICON_TAG_REGEX, '')),
+      icon: tag,
+    };
   }
-  return { title: titleLine.trim() };
+  return { title: clampDayTitle(titleLine) };
+}
+
+// El título importado no pasa por el campo del formulario (que ya lo limita):
+// mismo tope aquí, o un texto pegado de un chat dejaba días imposibles de subir.
+function clampDayTitle(title: string): string {
+  return truncateText(title.trim(), DAY_TITLE_MAX_LENGTH);
 }
 
 // Línea de ejercicio en el formato que entiende NewRoutineScreen: "Nombre [SxR]".
@@ -103,8 +118,10 @@ export function parseRoutineShareLink(url: string): SharedRoutine | null {
 
     const days: SharedRoutineDay[] = payload.d
       .filter((day) => day && typeof day.t === 'string' && Array.isArray(day.e))
+      // Lo que pasa de una rutina no se procesa: un enlace puede traer cualquier cosa.
+      .slice(0, MAX_ROUTINE_DAYS)
       .map((day) => ({
-        title: day.t,
+        title: clampDayTitle(day.t),
         exercisesText: day.e
           .filter((line) => typeof line === 'string')
           .join('\n'),
@@ -114,7 +131,10 @@ export function parseRoutineShareLink(url: string): SharedRoutine | null {
     if (!days.length) return null;
 
     return {
-      name: typeof payload.n === 'string' ? payload.n : undefined,
+      name:
+        typeof payload.n === 'string'
+          ? truncateText(payload.n.trim(), ROUTINE_NAME_MAX_LENGTH)
+          : undefined,
       days,
     };
   } catch {

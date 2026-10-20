@@ -103,7 +103,8 @@ export function FollowingScreen({
     // Lo de la última visita, ya: se pinta al instante y el refresco de abajo
     // ocurre por detrás, sin devolver la rueda sobre datos buenos. En memoria si
     // la app sigue abierta desde entonces; si no, la copia de disco.
-    const hit = listCache.get(key) ?? (await readSocialCache<ProfileLite[]>(key));
+    const hit =
+      listCache.get(key) ?? (await readSocialCache<ProfileLite[]>(key));
     if (hit?.length) {
       listCache.set(key, hit);
       setProfiles(hit);
@@ -164,10 +165,10 @@ export function FollowingScreen({
         ) : (
           profiles.map((p) =>
             p.private && !p.display_name && !p.avatar_url ? (
-              // Perfil privado SIN relación (la RLS no lo devuelve): sale en
-              // la lista (si no, el contador no cuadra) pero no se puede
-              // abrir; tocarlo lo explica. Con relación llega entero y se
-              // pinta abajo como uno más, con candado.
+              // Perfil privado que NO te sigue (la RLS no lo devuelve, aunque
+              // tú le sigas): sale en la lista (si no, el contador no cuadra)
+              // pero no se puede abrir; tocarlo lo explica. Si te sigue llega
+              // entero y se pinta abajo como uno más, con candado.
               <Pressable
                 key={p.id}
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
@@ -225,7 +226,7 @@ export function FollowingScreen({
         icon="lock-outline"
         title={t('Perfil privado')}
         message={t(
-          'Esta persona tiene el perfil en privado: solo ella puede verlo.'
+          'Esta persona tiene el perfil en privado: solo lo ven ella y las personas a las que sigue.'
         )}
         footer={
           <Button

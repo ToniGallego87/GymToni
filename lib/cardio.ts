@@ -912,7 +912,9 @@ export function buildCardioMonths(
   }
 
   const keys = Array.from(byMonth.keys()).sort();
-  const todayKey = new Date().toISOString().slice(0, 7);
+  // Mes de hoy en el huso del móvil (no UTC: el día 1 de madrugada contaría
+  // como el mes anterior).
+  const todayKey = getToday().slice(0, 7);
 
   let prevKcal: number | null = null;
   return keys.map((key) => {

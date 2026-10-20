@@ -27,12 +27,23 @@ interface AvatarProps {
  */
 export function Avatar({ uri, size = 40, loading }: AvatarProps) {
   const round = { width: size, height: size, borderRadius: size / 2 };
+  // URL que no carga (la foto anterior se borra al cambiarla, y una caché
+  // social o la copia del perfil en otro móvil pueden traer la vieja): marcador
+  // en vez de un círculo vacío. Se recuerda por URL para que una nueva vuelva a
+  // intentarse.
+  const [failedUri, setFailedUri] = React.useState<string | null>(null);
 
   if (loading && !uri) {
     return <View style={[styles.loading, round]} />;
   }
-  if (uri) {
-    return <Image source={{ uri }} style={[styles.photo, round]} />;
+  if (uri && uri !== failedUri) {
+    return (
+      <Image
+        source={{ uri }}
+        style={[styles.photo, round]}
+        onError={() => setFailedUri(uri)}
+      />
+    );
   }
   return (
     <View style={[styles.placeholder, round]}>

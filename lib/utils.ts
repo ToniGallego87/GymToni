@@ -202,6 +202,18 @@ export function logDateKey(log: WorkoutLog): string {
   return log.date || dateKey(new Date(log.createdAt));
 }
 
+/**
+ * Recorta un texto a `max` caracteres de verdad (puntos de código), no a
+ * unidades UTF-16 como `slice`: un `slice` puede partir un emoji por la mitad y
+ * dejar un carácter suelto que Postgres rechaza, tumbando el lote entero al
+ * subirlo. Cuenta igual que el `char_length` de los CHECK de la nube.
+ */
+export function truncateText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const chars = Array.from(text);
+  return chars.length <= max ? text : chars.slice(0, max).join('');
+}
+
 export type ImprovementKind = 'up' | 'down' | 'neutral';
 
 /**

@@ -275,7 +275,7 @@ export function CommunityScreen({
         try {
           const ids = rows.map((r) => r.id);
           const [totals, commentCounts, saveCounts] = await Promise.all([
-            getRoutineSetTotals(ids),
+            getRoutineSetTotals(rows),
             getCommentCounts(ids).catch(() => new Map<string, number>()),
             getSaveCounts(ids).catch(() => new Map<string, number>()),
           ]);

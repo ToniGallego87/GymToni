@@ -124,6 +124,15 @@ Antes de finalizar, verificar:
 - No hay cambios en context/reducer sin actualizar dispatch usage
 - Tipos coherentes entre definición y uso
 
+Code review completo (arquitectura, seguridad de datos y RLS, sync, código
+limpio, rendimiento, plataforma): `/revisar-codigo`, o el agente
+`revisor-codigo` para revisar en solo lectura con contexto limpio. Rúbrica única en
+`.claude/commands/revisar-codigo.md`.
+
+Los comandos (`.claude/commands/`) y agentes (`.claude/agents/`) del proyecto
+viven en este repo; la carpeta `Projects` que lo contiene los ve por enlaces
+de carpeta (junctions) en su propio `.claude/`.
+
 ---
 
 ## Diseño UI

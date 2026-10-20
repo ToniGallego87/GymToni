@@ -1,6 +1,12 @@
 import type { WorkoutAppData } from '../../types';
 import { supabase } from '../supabase';
 import { upsertTolerant } from './optionalColumns';
+import {
+  cloudDayRow,
+  cloudExerciseRow,
+  cloudRoutineRow,
+  own,
+} from './cloudRows';
 import { clearOutbox } from '../db';
 import {
   appDataToRows,
@@ -98,23 +104,27 @@ export async function backupToCloud(
   data: WorkoutAppData,
   userId: string
 ): Promise<number> {
-  const rows = appDataToRows(data);
-  const now = Date.now();
-  const own = <T extends object>(r: T): Record<string, unknown> => ({
-    ...r,
-    user_id: userId,
-    updated_at: now,
-    deleted: false,
+  // Las rutinas ENLAZADAS (de otra persona) no se suben: sus ids son de su
+  // dueño y la RLS las rechazaría, igual que en el sync (pushRoutineUpsert).
+  // Sus entrenos sí: son tuyos y apuntan a ellas por referencia débil.
+  const rows = appDataToRows({
+    ...data,
+    routines: data.routines.filter((routine) => !routine.linkedOwnerId),
   });
+  const now = Date.now();
+  const mine = <T extends object>(r: T) => own(r, userId, now);
 
+  // El plan pasa por las mismas filas que el sync (lib/cloud/cloudRows.ts): sin
+  // las columnas solo locales de la rutina (con ellas la copia fallaba entera)
+  // y con los textos dentro de los topes de la nube.
   const tables: [string, Record<string, unknown>[]][] = [
-    ['routines', rows.routines.map(own)],
-    ['workout_days', rows.workoutDays.map(own)],
-    ['exercises', rows.exercises.map(own)],
-    ['workout_logs', rows.workoutLogs.map(own)],
-    ['exercise_logs', rows.exerciseLogs.map(own)],
-    ['log_sets', rows.logSets.map(own)],
-    ['cardio_logs', rows.cardioLogs.map(own)],
+    ['routines', rows.routines.map((r) => cloudRoutineRow(r, userId, now))],
+    ['workout_days', rows.workoutDays.map((d) => cloudDayRow(d, userId, now))],
+    ['exercises', rows.exercises.map((e) => cloudExerciseRow(e, userId, now))],
+    ['workout_logs', rows.workoutLogs.map(mine)],
+    ['exercise_logs', rows.exerciseLogs.map(mine)],
+    ['log_sets', rows.logSets.map(mine)],
+    ['cardio_logs', rows.cardioLogs.map(mine)],
   ];
   for (const [table, tableRows] of tables) {
     await upsertAll(table, tableRows);
@@ -123,7 +133,7 @@ export async function backupToCloud(
   // Entradas de cardio: tabla nueva. Si aún no existe en la nube, la copia
   // sigue valiendo (el texto de cardio_logs lleva el dato).
   try {
-    const entryRows = (rows.cardioEntries ?? []).map(own);
+    const entryRows = (rows.cardioEntries ?? []).map(mine);
     await upsertAll('cardio_entries', entryRows);
     await tombstoneMissing('cardio_entries', entryRows, userId, now);
   } catch (error) {

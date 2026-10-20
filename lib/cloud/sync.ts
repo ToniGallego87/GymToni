@@ -15,12 +15,13 @@ import {
   type RemoteChanges,
   type RemoteTableChange,
 } from '../db';
+import { dayToRows, logToRows, routineToRows } from '../db/mappers';
 import {
-  dayToRows,
-  logToRows,
-  routineToRows,
-  type RoutineRow,
-} from '../db/mappers';
+  cloudDayRow,
+  cloudExerciseRow,
+  cloudRoutineRow,
+  own,
+} from './cloudRows';
 
 // Motor de sincronización incremental (Fase 3). Push + pull artesanales sobre el
 // `sync_outbox` y las tablas espejo de Supabase.
@@ -88,23 +89,9 @@ export async function getLastSync(userId: string): Promise<number | null> {
 
 // ─────────────────────────── PUSH (local → nube) ───────────────────────────
 
-function own<T extends object>(row: T, userId: string, now: number): Row {
-  return { ...row, user_id: userId, updated_at: now, deleted: false };
-}
-
-// La fila de rutina lleva columnas que solo existen en el SQLite local (la
-// procedencia de una rutina traída del tablón): se quitan antes de subirla, o
-// el upsert fallaría por columna desconocida.
-function cloudRoutineRow(row: RoutineRow, userId: string, now: number): Row {
-  const {
-    linked_owner_id: _linked,
-    source_routine_id: _source,
-    source_author: _author,
-    source_owner_id: _owner,
-    ...rest
-  } = row;
-  return own(rest, userId, now);
-}
+// Las filas del plan (rutina, días, ejercicios) salen de lib/cloud/cloudRows.ts,
+// que comparte la copia completa: quita las columnas solo locales y recorta los
+// textos a los topes de la nube.
 
 async function cloudUpsert(table: string, rows: Row[]): Promise<void> {
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
@@ -193,7 +180,7 @@ async function pushRoutineUpsert(
   if (days.length)
     await cloudUpsert(
       'workout_days',
-      days.map((d) => own(d, userId, now))
+      days.map((d) => cloudDayRow(d, userId, now))
     );
 
   // Reconciliar ejercicios: alcance = días vivos + días eliminados (para arrastrar
@@ -210,7 +197,7 @@ async function pushRoutineUpsert(
   if (exercises.length)
     await cloudUpsert(
       'exercises',
-      exercises.map((e) => own(e, userId, now))
+      exercises.map((e) => cloudExerciseRow(e, userId, now))
     );
 }
 
@@ -255,7 +242,7 @@ async function pushDayUpsert(
   now: number
 ): Promise<void> {
   const { day: dayRow, exercises } = dayToRows(routineId, day);
-  await cloudUpsert('workout_days', [own(dayRow, userId, now)]);
+  await cloudUpsert('workout_days', [cloudDayRow(dayRow, userId, now)]);
   await reconcileChildren(
     'exercises',
     'workout_days_id',
@@ -267,7 +254,7 @@ async function pushDayUpsert(
   if (exercises.length)
     await cloudUpsert(
       'exercises',
-      exercises.map((e) => own(e, userId, now))
+      exercises.map((e) => cloudExerciseRow(e, userId, now))
     );
 }
 

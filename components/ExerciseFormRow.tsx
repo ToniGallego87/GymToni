@@ -19,7 +19,14 @@ import {
   targetLabel,
   thumbUrl,
 } from '@data/exerciseCatalog';
-import { ExerciseForm, MAX_SETS, MIN_SETS, RepUnit } from '@lib/exerciseForm';
+import {
+  ExerciseForm,
+  EXERCISE_NAME_MAX_LENGTH,
+  MAX_SETS,
+  MIN_SETS,
+  RepUnit,
+  REPS_MAX_LENGTH,
+} from '@lib/exerciseForm';
 import { formatExerciseNames, otherExerciseNames } from '@lib/exerciseIdentity';
 import { useExerciseNames } from '@hooks/useExerciseKeyResolver';
 import { AppModal } from './AppModal';
@@ -134,7 +141,7 @@ export function ExerciseEditorModal({
           // de línea: Intro cierra el teclado.
           blurOnSubmit
           returnKeyType="done"
-          maxLength={80}
+          maxLength={EXERCISE_NAME_MAX_LENGTH}
           // El nombre es solo la etiqueta: cambiarlo NO rompe el vínculo con
           // el catálogo (llamarlo "Banca" sigue siendo el press de banca, con
           // su GIF y su historial). Vaciarlo sí: es empezar otro ejercicio.
@@ -361,7 +368,7 @@ export function ExerciseEditorModal({
                 value={exercise?.reps ?? ''}
                 onChangeText={(value) => onChange({ reps: value })}
                 keyboardType="numbers-and-punctuation"
-                maxLength={10}
+                maxLength={REPS_MAX_LENGTH}
                 accessibilityLabel={
                   unit === 'seg' ? t('Segundos') : t('Repeticiones')
                 }

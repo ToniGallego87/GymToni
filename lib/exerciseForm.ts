@@ -7,7 +7,7 @@
 // (como hacía el editor por texto, que los repartía por posición) cruzaba las
 // comparaciones de progreso entre ejercicios distintos.
 import { WorkoutExercise } from '../types';
-import { generateId } from './utils';
+import { generateId, truncateText } from './utils';
 
 export type RepUnit = 'reps' | 'seg';
 
@@ -24,6 +24,21 @@ export interface ExerciseForm {
 
 export const MIN_SETS = 1;
 export const MAX_SETS = 12;
+
+// Longitudes máximas del formulario de rutina: las de los `maxLength` de los
+// campos, y las mismas para lo que entra importado (texto plano, enlace, QR),
+// que no pasa por esos campos. Muy por debajo de los topes de la nube
+// (lib/cloud/cloudRows.ts): lo que la app crea siempre se puede subir.
+export const ROUTINE_NAME_MAX_LENGTH = 40;
+export const ROUTINE_DESCRIPTION_MAX_LENGTH = 80;
+export const DAY_TITLE_MAX_LENGTH = 30;
+export const EXERCISE_NAME_MAX_LENGTH = 80;
+export const REPS_MAX_LENGTH = 10;
+const CATALOG_ID_MAX_LENGTH = 40;
+/** Ejercicios por día al importar (la nube admite 100; un día real tiene ~10). */
+export const MAX_IMPORTED_EXERCISES_PER_DAY = 40;
+/** Días de una rutina: crear, importar por texto y por enlace/QR. */
+export const MAX_ROUTINE_DAYS = 7;
 
 // Formato con corchetes ("Press banca [4x6-8]").
 const EXERCISE_LINE_REGEX = /^(.*?)\s*\[(\d+)\s*x\s*([^\]]+)\]\s*$/i;
@@ -63,11 +78,11 @@ export function makeExercise(
 
   return {
     id: generateId(),
-    name: name.trim(),
+    name: truncateText(name.trim(), EXERCISE_NAME_MAX_LENGTH),
     sets,
-    reps: reps || '10',
+    reps: truncateText(reps || '10', REPS_MAX_LENGTH),
     unit,
-    catalogId,
+    catalogId: catalogId && truncateText(catalogId, CATALOG_ID_MAX_LENGTH),
   };
 }
 
@@ -91,11 +106,11 @@ export function parseImportedExercise(line: string): ExerciseForm {
 
   return {
     id: generateId(),
-    name: trimmed,
+    name: truncateText(trimmed, EXERCISE_NAME_MAX_LENGTH),
     sets: 3,
     reps: '10-12',
     unit: 'reps',
-    catalogId,
+    catalogId: catalogId && truncateText(catalogId, CATALOG_ID_MAX_LENGTH),
   };
 }
 
@@ -105,6 +120,7 @@ export function buildExercisesFromText(exercisesText: string): ExerciseForm[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
+    .slice(0, MAX_IMPORTED_EXERCISES_PER_DAY)
     .map(parseImportedExercise);
 
   return exercises.length ? exercises : [createEmptyExercise()];

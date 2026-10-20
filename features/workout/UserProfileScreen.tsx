@@ -127,8 +127,7 @@ async function hydrateProfileCache(
 function activityCountsLabel(counts: ActivityCounts): string {
   const { badges, challenges, days, records } = counts;
   return [
-    days > 0 &&
-      (days === 1 ? t('1 entreno') : t('{n} entrenos', { n: days })),
+    days > 0 && (days === 1 ? t('1 entreno') : t('{n} entrenos', { n: days })),
     records > 0 &&
       (records === 1 ? t('1 récord') : t('{n} récords', { n: records })),
     badges > 0 &&
@@ -270,7 +269,10 @@ export function UserProfileScreen({
         setLoadingMeta(true);
         const ids = routs.map((r) => r.id);
         const [totals, commentCounts, likes, saveCounts] = await Promise.all([
-          getRoutineSetTotals(ids).catch(() => new Map<string, number>()),
+          // Todas son del perfil que se mira (getUserPublicRoutines).
+          getRoutineSetTotals(
+            routs.map((r) => ({ id: r.id, owner_id: userId }))
+          ).catch(() => new Map<string, number>()),
           getCommentCounts(ids).catch(() => new Map<string, number>()),
           getLikeInfo(ids, user?.id ?? null).catch(
             () => new Map<string, { likes: number; liked: boolean }>()
