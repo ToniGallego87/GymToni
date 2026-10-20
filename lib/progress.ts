@@ -51,9 +51,12 @@ export const BODYWEIGHT_VIRTUAL_LOAD = 10;
  * más series y más repeticiones.
  * La carga virtual hace la escala CONTINUA: pasar de 0 a 0,5 kg siempre sube la
  * nota, nunca la hunde.
+ * Una serie EXTRA (de más sobre el objetivo) puntúa 0: de aquí cuelgan todos
+ * los porcentajes (ejercicio, sesión, semana, logros), y apuntar una serie de
+ * más no puede subir la nota frente a una semana que no la hizo.
  */
 export function getSetPerformanceScore(setItem: ParsedSet): number {
-  if (!isValidSet(setItem)) return 0;
+  if (setItem.extra || !isValidSet(setItem)) return 0;
 
   return getEstimatedOneRepMax(
     setItem.weight + BODYWEIGHT_VIRTUAL_LOAD,

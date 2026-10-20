@@ -128,8 +128,9 @@ Antes de finalizar, verificar:
 
 ## Diseño UI
 
-- Inputs rápidos (ej: `60x8`): peso y reps en dos campos con flechas +/− y un
-  botón grande de añadir serie; cada serie metida se borra con su propia ×
+- Inputs rápidos (ej: `60x8`): peso y reps en dos campos de una pieza (cifra
+  rellena con lo sugerido y − | + en su pie) y un botón grande de añadir serie;
+  cada serie metida se borra con su propia ×
 - Uso con una mano, navegación simple
 - Evitar modales innecesarios y formularios largos
 - Sistema glass: usar tokens de `glassTokens.ts`

@@ -108,8 +108,11 @@ interface ChartCardStatProps {
   caption: string;
   /** Cifra en texto ("1.240 kcal"). */
   text?: string;
-  /** O una tendencia (▲/▼ + %), pintada con `TrendDelta`. */
-  trend?: { value: number; color?: string };
+  /**
+   * O una tendencia (▲/▼ + %), pintada con `TrendDelta`. `suffix`/`decimals`
+   * para cuando el cambio no es un % (" kg" en Progreso por ejercicio).
+   */
+  trend?: { value: number; color?: string; suffix?: string; decimals?: number };
 }
 
 /**
@@ -127,6 +130,8 @@ export function ChartCardStat({ caption, text, trend }: ChartCardStatProps) {
           <TrendDelta
             value={trend.value}
             color={trend.color}
+            suffix={trend.suffix}
+            decimals={trend.decimals}
             iconSize={16}
             textStyle={styles.statValue}
           />

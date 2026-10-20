@@ -71,6 +71,10 @@ export const darkColors = {
   current: '#6F8FDF',
   accent: '#F7CC3D',
   overlay: 'rgba(6, 8, 12, 0.72)',
+  // Velo tras un aviso momentáneo del centro (récord, mejora): oscuro, para
+  // que la tarjeta se lea sola sobre el registro (con el velo ligero se
+  // confundía con las cajas de peso y reps de detrás).
+  scrim: 'rgba(6, 8, 12, 0.7)',
   emoji_blue: '#6F8FDF',
   emoji_orange: '#FF9500',
   // Tintes translúcidos (fondos de chip/badge) de los colores de arriba: mismo
@@ -156,6 +160,7 @@ const lightColors: typeof darkColors = {
   current: '#3E60B8',
   accent: '#B08800',
   overlay: 'rgba(13, 16, 23, 0.5)',
+  scrim: 'rgba(13, 16, 23, 0.55)',
   emoji_blue: '#3E60B8',
   emoji_orange: '#C26F00',
   emoji_blueMuted: 'rgba(62, 96, 184, 0.14)',

@@ -223,8 +223,9 @@ create policy "read own reports" on public.reports
 --   · `unique (user_id, kind, ref)` hace la publicación IDEMPOTENTE: subir dos
 --     veces el mismo hito no duplica nada (upsert con ignoreDuplicates).
 --   · El historial de entrenos (`workout_logs`) sigue siendo privado: esto NO lo
---     abre. Aquí solo viaja "entrené el día X de la rutina Y", sin series, pesos
---     ni nada medible.
+--     abre. Aquí solo viaja "entrené el día X de la rutina Y", sin series, y
+--     los récords personales ("Press banca · 85 kg", kind 'record'): la marca
+--     de un ejercicio, no la sesión.
 --   · Visibilidad: la MISMA regla que el perfil (público, propio, o hay relación
 --     de seguimiento), y además `profiles.share_activity`, que permite apagar
 --     solo la actividad sin volver el perfil entero privado.
@@ -234,7 +235,7 @@ alter table public.profiles
 create table if not exists public.activity (
   id           uuid primary key default gen_random_uuid(),
   user_id      uuid not null references auth.users(id) on delete cascade,
-  kind         text not null check (kind in ('badge', 'challenge', 'day')),
+  kind         text not null check (kind in ('badge', 'challenge', 'day', 'record')),
   -- Identidad del hito dentro de su tipo: id de insignia, `reto@periodo`
   -- (lib/level.ts) o id del log del día. Con `kind` forma la clave única.
   ref          text not null,
@@ -253,6 +254,12 @@ create table if not exists public.activity (
 );
 create index if not exists idx_activity_user
   on public.activity(user_id, happened_on desc);
+
+-- Récords personales como hito (kind 'record'). Las tablas creadas antes de
+-- ellos tienen el CHECK sin 'record': se rehace (idempotente).
+alter table public.activity drop constraint if exists activity_kind_check;
+alter table public.activity add constraint activity_kind_check
+  check (kind in ('badge', 'challenge', 'day', 'record'));
 
 alter table public.activity enable row level security;
 

@@ -1,18 +1,7 @@
 import { computeWeekExtras } from '../weekExtras';
 import { Badge } from '../badges';
 import { levelForXp, totalXp } from '../level';
-import { WorkoutLog, WorkoutRoutine } from '../../types';
-
-const routine = {
-  id: 'r1',
-  name: 'Rutina',
-  isActive: true,
-  createdAt: 0,
-  days: [
-    { id: 'd1', dayNumber: 1, name: 'A', emoji: '', exercises: [] },
-    { id: 'd2', dayNumber: 2, name: 'B', emoji: '', exercises: [] },
-  ],
-} as WorkoutRoutine;
+import { WorkoutLog } from '../../types';
 
 const log = (id: string, dayId: string, date: string): WorkoutLog => ({
   id,
@@ -52,7 +41,6 @@ describe('computeWeekExtras', () => {
       block: 1,
       weekLogs: logs.slice(0, 2),
       logs,
-      routines: [routine],
       wins: ['full-week@r1:1', 'full-week@r1:2', 'two-cardio@2026-W41'],
       badges: [
         badge('first-workout', '2026-10-05'),
@@ -68,5 +56,36 @@ describe('computeWeekExtras', () => {
     ]);
     expect(extras.badges.map((b) => b.id)).toEqual(['first-workout']);
     expect(extras.level).toBe(levelForXp(totalXp(2, 1)));
+  });
+
+  it('un reto de un bloque que ya no existe se data en el último', () => {
+    // `r1:5` se apuntó cuando había más bloques (un día repetido que luego se
+    // borró): se ganó como muy tarde en el último bloque, el 2. Un cardio
+    // posterior hace que no sea la semana más reciente.
+    const extras = computeWeekExtras({
+      routineId: 'r1',
+      block: 2,
+      weekLogs: logs.slice(2),
+      logs: [...logs, { ...log('e', 'd1', '2026-10-12'), cardioOnly: true }],
+      wins: ['full-week@r1:1', 'improve-3@r1:5'],
+      badges: [],
+    });
+    expect(extras.level).toBe(levelForXp(totalXp(2, 0)));
+  });
+
+  it('la semana más reciente lleva el nivel de ahora', () => {
+    // Retos sin fecha posible (rutina sin entrenos) y logros sin fecha: todo lo
+    // ganado ya había pasado, así que el nivel es el de la cuenta.
+    const wins = Array.from({ length: 30 }, (_, i) => `full-week@gone:${i}`);
+    const badges = [badge('a', '2026-10-05'), badge('b', '2026-10-09')];
+    const extras = computeWeekExtras({
+      routineId: 'r1',
+      block: 2,
+      weekLogs: logs.slice(2),
+      logs,
+      wins,
+      badges,
+    });
+    expect(extras.level).toBe(levelForXp(totalXp(30, 2)));
   });
 });

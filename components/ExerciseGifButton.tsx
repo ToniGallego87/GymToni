@@ -51,6 +51,13 @@ interface ExerciseGifButtonProps {
    * (ver la nota del componente).
    */
   layer?: boolean;
+  /**
+   * Solo imagen, sin toque propio: la miniatura dentro de una fila que ya es
+   * entera un botón (la lista de Progreso). Dos dianas en una fila hacían que
+   * a veces se abriera el GIF en vez de la ficha. Sin GIF enseña una mancuerna
+   * neutra, no la lupa de buscar. El visor queda donde se abre la fila.
+   */
+  decorative?: boolean;
 }
 
 /**
@@ -72,6 +79,7 @@ export function ExerciseGifButton({
   fitMode = 'cover',
   onAssign,
   layer = false,
+  decorative = false,
 }: ExerciseGifButtonProps) {
   const [showGif, setShowGif] = useState(false);
   const [showPicker, setShowPicker] = useState(false);
@@ -166,6 +174,30 @@ export function ExerciseGifButton({
     );
   }
 
+  if (decorative) {
+    return (
+      <View
+        style={[styles.button, styles.buttonDecorative, style]}
+        pointerEvents="none"
+      >
+        {showThumb && thumb ? (
+          <Image
+            source={{ uri: thumb }}
+            style={[styles.thumb, fitMode === 'contain' && styles.thumbContain]}
+            resizeMode={fitMode}
+            onError={() => setThumbFailed(true)}
+          />
+        ) : (
+          <MaterialCommunityIcons
+            name="dumbbell"
+            size={size}
+            color={theme.colors.textSecondary}
+          />
+        )}
+      </View>
+    );
+  }
+
   return (
     <>
       <Pressable
@@ -244,6 +276,10 @@ const makeStyles = () =>
       // desbordar el borde dorado, que sigue diciendo que esto es pulsable.
       overflow: 'hidden',
       backgroundColor: theme.colors.surface,
+    },
+    // Sin toque propio, sin el borde dorado que dice "pulsable".
+    buttonDecorative: {
+      borderColor: theme.colors.border,
     },
     // Los GIF del catálogo son opacos y "cover" llena el cuadro; el fondo solo
     // se ve mientras cargan, así que va el neutro de marcador (el mismo del

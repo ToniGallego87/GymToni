@@ -13,6 +13,8 @@ export const MAX_SET_REPS = 100;
  * Parsea un string de formato "60x8, 65x6, 65x4" a array de sets.
  * - Soporta decimales: "12.5x15".
  * - Soporta pesos combinados (p. ej. mancuernas) sumándolos: "8+8x11" -> { weight: 16, reps: 11 }.
+ * - Una serie extra (de más sobre el objetivo) lleva un "*" al final: "55x10*".
+ *   No puede ser un "+" delante, que ya es la suma de cargas combinadas.
  * - Ignora entradas sin reps ("80x"), con formato no reconocido o fuera de
  *   rango (MAX_SET_WEIGHT_KG / MAX_SET_REPS).
  * Retorna array vacío si no puede parsear nada.
@@ -43,12 +45,29 @@ export function parseSeriesString(input: string): ParsedSet[] {
         weight <= MAX_SET_WEIGHT_KG &&
         reps <= MAX_SET_REPS
       ) {
-        sets.push({ weight, reps });
+        sets.push(
+          trimmed.endsWith('*') ? { weight, reps, extra: true } : { weight, reps }
+        );
       }
     }
   }
 
   return sets;
+}
+
+/**
+ * Texto de las series de un ejercicio (`rawInput`), el inverso de
+ * `parseSeriesString`: "60x8, 60x8, -, 55x10*". Las omitidas ("Saltar resto")
+ * son "-" y las extra llevan "*".
+ */
+export function formatSeriesString(sets: ParsedSet[]): string {
+  return sets
+    .map((s) =>
+      s.weight === -1 || s.reps === -1
+        ? '-'
+        : `${s.weight}x${s.reps}${s.extra ? '*' : ''}`
+    )
+    .join(', ');
 }
 
 /**

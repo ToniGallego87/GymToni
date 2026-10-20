@@ -81,6 +81,50 @@ describe('getTotalSetsStrengthScore (1RM estimado sobre carga virtual)', () => {
   });
 });
 
+describe('serie extra: no puntúa en la mejora', () => {
+  const plan: ParsedSet[] = [
+    { weight: 60, reps: 8 },
+    { weight: 60, reps: 8 },
+    { weight: 60, reps: 8 },
+  ];
+
+  it('una serie extra no suma a la puntuación del ejercicio', () => {
+    expect(
+      getTotalSetsStrengthScore([
+        ...plan,
+        { weight: 55, reps: 10, extra: true },
+      ])
+    ).toBe(getTotalSetsStrengthScore(plan));
+  });
+
+  it('la misma sesión con una serie de más no sale como mejora', () => {
+    const log = (sets: ParsedSet[]): WorkoutLog => ({
+      id: `l${sets.length}`,
+      routineId: 'r1',
+      dayId: 'd1',
+      date: '2026-10-16',
+      createdAt: 1,
+      updatedAt: 1,
+      exercises: [
+        {
+          id: `el${sets.length}`,
+          exerciseId: 'e1',
+          exerciseName: 'Press banca',
+          order: 1,
+          rawInput: '',
+          parsedSets: sets,
+          timestamp: 1,
+        },
+      ],
+    });
+    const result = buildWorkoutImprovement(
+      log([...plan, { weight: 70, reps: 6, extra: true }]),
+      log(plan)
+    );
+    expect(result?.percent).toBe(0);
+  });
+});
+
 describe('buildImprovementFromStrengthScores', () => {
   it('asigna el valor de primera vez cuando no había base', () => {
     expect(buildImprovementFromStrengthScores(100, 0)).toEqual({

@@ -11,7 +11,6 @@ import {
   LayoutChangeEvent,
   PanResponder,
   Platform,
-  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -20,7 +19,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import { StatusBar } from 'expo-status-bar';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  useSafeAreaFrame,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
 import { useExerciseKeyResolver } from '@hooks/useExerciseKeyResolver';
 import { useAfterFirstPaint } from '@hooks/useDeferredReady';
@@ -72,6 +74,7 @@ import {
 import {
   MAX_SET_REPS,
   MAX_SET_WEIGHT_KG,
+  formatSeriesString,
   parseCardioString,
   parseSeriesString,
 } from '@lib/parsers';
@@ -95,7 +98,7 @@ import {
   WorkoutRoutine,
 } from '../../types';
 import { theme, getTrainingAccent, getDisplayDayName } from '@lib/theme';
-import { t } from '@lib/i18n';
+import { localizeDecimals, t } from '@lib/i18n';
 import {
   buildImprovementFromStrengthScores,
   getTotalSetsStrengthScore,
@@ -218,7 +221,11 @@ export function WorkoutLogScreen({
   useKeepAwake();
 
   const insets = useSafeAreaInsets();
-  const { height: windowHeight } = useWindowDimensions();
+  // Alto de la ventana desde el marco del área segura, no `useWindowDimensions`:
+  // ese marco es el que `FullSizeLayoutLock` congela mientras la app está en la
+  // ventanita del descanso, así que el tope del bloque del descanso no salta al
+  // volver.
+  const { height: windowHeight } = useSafeAreaFrame();
   const { state, dispatch } = useWorkout();
   const resolveExerciseKey = useExerciseKeyResolver();
   // Las tarjetas de ejercicio (lo caro de pintar) entran un frame después de la
@@ -402,12 +409,26 @@ export function WorkoutLogScreen({
   const [sessionNote, setSessionNote] = useState(
     () => existingLog?.notes ?? ''
   );
-  // La nota solo ocupa sitio si ya hay algo escrito; si no, se ofrece como un
-  // botón (mismo criterio que el cardio: quien no la usa no la arrastra al pie
-  // de la pantalla que más se usa).
+  // La nota solo ocupa sitio si ya hay algo escrito; si no, se pide desde el ⋯
+  // de la barra en fuerza (cada nota en el ⋯ de su ámbito: la del ejercicio,
+  // en el del panel) y desde un botón al pie en cardio, cuya barra no lleva ⋯.
   const [sessionNoteOpen, setSessionNoteOpen] = useState(
     () => !!existingLog?.notes
   );
+  const sessionNoteInputRef = useRef<TextInput>(null);
+  const [sessionNoteFocusRequest, setSessionNoteFocusRequest] = useState(0);
+  const openSessionNote = () => {
+    setSessionNoteOpen(true);
+    setSessionNoteFocusRequest((n) => n + 1);
+  };
+  // Escribiendo: "Hecho" cierra el teclado (multilínea: Intro salta de línea).
+  const [sessionNoteFocused, setSessionNoteFocused] = useState(false);
+  // Borrar es vaciarla y recogerla (se autoguarda vacía = sin nota).
+  const deleteSessionNote = () => {
+    setSessionNote('');
+    setSessionNoteOpen(false);
+    sessionNoteInputRef.current?.blur();
+  };
   // Rutina a la que pertenece el día (si ya no está en ninguna, la activa).
   const getRoutineIdForDay = () => {
     const owningRoutine = state.routines.find((routine) =>
@@ -479,10 +500,14 @@ export function WorkoutLogScreen({
   const [showTimerModal, setShowTimerModal] = useState(false);
   const [toast, setToast] = useState<{
     message: string;
-    type: 'success' | 'error';
+    type: 'success' | 'error' | 'info';
     duration?: number;
-    // Píldora breve en el centro (el aviso de récord), no cartel al pie.
+    // Tarjeta breve en el centro (récord, mejora), no cartel al pie.
     centered?: boolean;
+    // Solo centrada: el dato grande, su icono y su color (ver Toast).
+    headline?: string;
+    icon?: React.ComponentProps<typeof Toast>['icon'];
+    tone?: React.ComponentProps<typeof Toast>['tone'];
     // Ráfaga de confeti tras la píldora centrada.
     celebrate?: boolean;
     // "Deshacer" de un borrado (serie o entrada de cardio).
@@ -684,6 +709,11 @@ export function WorkoutLogScreen({
     }
   };
 
+  // Series del PLAN de un ejercicio (las saltadas "—" cuentan, que cierran el
+  // objetivo; las extra no, que van por encima de él).
+  const planSetCount = (sets: ParsedSet[] | undefined): number =>
+    (sets ?? []).filter((s) => !s.extra).length;
+
   // Objetivo de series efectivo. En descarga se recorta una serie (3→2, 2→1),
   // nunca por debajo de una; sin descarga es el objetivo tal cual.
   const effectiveTargetSets = (targetSets?: number): number => {
@@ -702,7 +732,7 @@ export function WorkoutLogScreen({
     sessionExercises.filter((ex) => {
       const target = effectiveTargetSets(ex.targetSets);
       if (target <= 0) return false;
-      return (sets[ex.id]?.length || 0) < target;
+      return planSetCount(sets[ex.id]) < target;
     }).length;
 
   // ¿Ejercicio hecho? Solo con objetivo y alcanzado: sin objetivo nunca lo está.
@@ -711,7 +741,7 @@ export function WorkoutLogScreen({
     sets: Record<string, ParsedSet[]>
   ): boolean => {
     const target = effectiveTargetSets(exercise.targetSets);
-    return target > 0 && (sets[exercise.id]?.length || 0) >= target;
+    return target > 0 && planSetCount(sets[exercise.id]) >= target;
   };
 
   // El primero del día sin hacer: con él se arranca y a él se pasa al
@@ -814,38 +844,91 @@ export function WorkoutLogScreen({
     if (!isEditingPastLog) exerciseStampRef.current[exerciseId] = Date.now();
     setExerciseSets(updated);
     autoSaveWorkout(updated);
-    if (
-      exerciseId === selectedExerciseId &&
+    // Al cerrar el objetivo se pasa al siguiente; una serie extra (por encima
+    // de él) se queda en este ejercicio.
+    const completesExercise =
       targetSets > 0 &&
-      updated[exerciseId].length === targetSets
-    ) {
+      !set.extra &&
+      planSetCount(updated[exerciseId]) === targetSets;
+    if (exerciseId === selectedExerciseId && completesExercise) {
       advanceFrom(exerciseId, updated);
     }
 
-    if (
-      recordSetsOf(exerciseId, updated[exerciseId]).has(
-        updated[exerciseId].length - 1
-      )
-    ) {
+    // Al cerrar el ejercicio, su mejora frente a la vez anterior (el dato de
+    // su casilla), en la misma píldora y con la misma duración que el récord.
+    // Mismas reglas que la casilla: sin descarga, sin adicionales y sin
+    // series saltadas (ahí no se compara).
+    const trend =
+      completesExercise &&
+      !isDeloadSession &&
+      !isExtraExerciseId(exerciseId) &&
+      !updated[exerciseId].some((s) => s.weight === -1 || s.reps === -1)
+        ? buildExerciseImprovement(
+            updated[exerciseId],
+            getPreviousExerciseLog(exerciseId)
+          )
+        : null;
+    const trendText = trend
+      ? trend.isImproved
+        ? `+${t('{n} % de mejora', {
+            n: localizeDecimals(Math.abs(trend.percent).toFixed(1)),
+          })}`
+        : t('Sin mejora')
+      : null;
+    const isRecord = recordSetsOf(exerciseId, updated[exerciseId]).has(
+      updated[exerciseId].length - 1
+    );
+
+    if (isRecord) {
       // Con confeti y algo más de tiempo: es el momento de más subidón del
       // registro. La `key` reinicia aviso y ráfaga si llega otro récord
-      // seguido.
+      // seguido. Si además cierra el ejercicio, la mejora va en la misma
+      // tarjeta, debajo (un aviso no pisa al otro).
       setToast({
-        message: t('Récord'),
+        headline: t('Récord'),
+        message: trendText ?? '',
+        icon: 'trophy',
+        tone: 'gold',
         type: 'success',
         duration: 2200,
         centered: true,
         celebrate: true,
         key: Date.now(),
       });
+    } else if (trend) {
+      // La cifra en grande y el rótulo debajo: el dato se lee de un vistazo.
+      setToast(
+        trend.isImproved
+          ? {
+              headline: `+${localizeDecimals(
+                Math.abs(trend.percent).toFixed(1)
+              )} %`,
+              message: t('de mejora'),
+              icon: 'trending-up',
+              tone: 'success',
+              type: 'success',
+              duration: 2200,
+              centered: true,
+              key: Date.now(),
+            }
+          : {
+              headline: t('Sin mejora'),
+              message: t('frente a la vez anterior'),
+              icon: 'trending-neutral',
+              tone: 'neutral',
+              type: 'info',
+              duration: 2200,
+              centered: true,
+              key: Date.now(),
+            }
+      );
     }
 
     // Editando un entreno de otro día: se guarda la serie pero no hay descanso.
     if (isEditingPastLog) return;
 
-    const currentSetsCount = exerciseSets[exerciseId]?.length || 0;
     const willReachTarget =
-      targetSets > 0 && currentSetsCount + 1 >= targetSets;
+      targetSets > 0 && planSetCount(updated[exerciseId]) >= targetSets;
 
     if (willReachTarget) {
       // Objetivo alcanzado. Si aún quedan ejercicios por completar en el día, el
@@ -1035,7 +1118,7 @@ export function WorkoutLogScreen({
     if (targetSets > 0) {
       // Rellenar con guiones cada serie que falte para alcanzar el objetivo
       const currentSets = exerciseSets[exerciseId] || [];
-      const setsToAdd = targetSets - currentSets.length;
+      const setsToAdd = targetSets - planSetCount(currentSets);
 
       if (setsToAdd > 0) {
         const filledSets = [...currentSets];
@@ -1074,11 +1157,7 @@ export function WorkoutLogScreen({
       ...extraExercisesRef.current,
     ].map((ex) => {
       const exSets = sets[ex.id] || [];
-      const rawInput = exSets
-        .map((s) =>
-          s.weight === -1 || s.reps === -1 ? '-' : `${s.weight}x${s.reps}`
-        )
-        .join(', ');
+      const rawInput = formatSeriesString(exSets);
 
       return {
         id: generateId(),
@@ -1523,6 +1602,17 @@ export function WorkoutLogScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scrollRequest]);
 
+  // "Nota de la sesión" del ⋯: la tarjeta sale al pie de la lista, así que se
+  // baja hasta ella y se deja lista para escribir.
+  useEffect(() => {
+    if (!sessionNoteFocusRequest) return;
+    const timer = setTimeout(() => {
+      listRef.current?.scrollToEnd({ animated: true });
+      sessionNoteInputRef.current?.focus();
+    }, SCROLL_SETTLE_MS);
+    return () => clearTimeout(timer);
+  }, [sessionNoteFocusRequest]);
+
   // Contenido del temporizador de descanso (cuenta atrás + acciones). Antes se
   // inyectaba dentro de la tarjeta del ejercicio (o debajo, si ya estaba
   // completa), así que se movía por la lista y desaparecía al hacer scroll;
@@ -1538,7 +1628,7 @@ export function WorkoutLogScreen({
   const restTarget = effectiveTargetSets(restExercise?.targetSets);
   const restBeforeNextExercise =
     restTarget > 0 &&
-    (exerciseSets[activeTimerId ?? '']?.length || 0) >= restTarget;
+    planSetCount(exerciseSets[activeTimerId ?? '']) >= restTarget;
 
   const renderRestTimerContent = () => (
     <>
@@ -1626,6 +1716,10 @@ export function WorkoutLogScreen({
           },
         ]}
         showsVerticalScrollIndicator={false}
+        // Con el teclado abierto, el toque en "Añadir serie" (o en las
+        // flechas) llega al botón: sin esto, el primero solo cerraba el
+        // teclado y había que volver a pulsar.
+        keyboardShouldPersistTaps="handled"
       >
         {/* La vista entra YA (barra, fondo, volver) y las tarjetas un frame
             después: ver `contentReady`. */}
@@ -1666,9 +1760,10 @@ export function WorkoutLogScreen({
                       const completed =
                         !!exercise && isExerciseDone(exercise, exerciseSets);
                       return {
-                        // Las saltadas (—) no cuentan como hechas.
+                        // Las saltadas (—) no cuentan como hechas, ni las
+                        // extra (van por encima del objetivo).
                         done: sets.filter(
-                          (s) => s.weight !== -1 && s.reps !== -1
+                          (s) => s.weight !== -1 && s.reps !== -1 && !s.extra
                         ).length,
                         hasNote: !!exerciseNotes[id]?.trim(),
                         target: effectiveTargetSets(exercise?.targetSets),
@@ -1734,14 +1829,12 @@ export function WorkoutLogScreen({
                       fundido de salida encima del nuevo: textos dobles. */}
                     <LayoutAnimationConfig skipExiting key={exercise.id}>
                       <ExerciseInputField
-                        pinnedOpen
                         extra={isExtraExerciseId(exercise.id)}
                         contentEntering={
                           panelSwap.animate
                             ? makePanelContentEntering(panelSwap.dir)
                             : undefined
                         }
-                        exerciseName={exercise.name}
                         target={{
                           sets: effectiveTargetSets(exercise.targetSets),
                           reps: exercise.targetReps,
@@ -1857,7 +1950,10 @@ export function WorkoutLogScreen({
             {/* Nota de la SESIÓN, al pie y junto al cardio: lo que pasó hoy y no
             cabe en ningún ejercicio ("gym lleno, cambié banca por mancuernas").
             Es lo que explica los datos raros al revisar el histórico. Se
-            autoguarda como el cardio, así que no lleva botón propio. */}
+            autoguarda como el cardio: no lleva "Guardar", solo borrar y, al
+            escribir, "Hecho" para cerrar el teclado. Sin
+            escribir, en fuerza se pide desde el ⋯ de la barra; en cardio, con
+            el botón de debajo. */}
             {sessionNoteOpen ? (
               <View
                 style={[styles.sessionNoteCard, { borderLeftColor: dayAccent }]}
@@ -1871,11 +1967,53 @@ export function WorkoutLogScreen({
                   <Text style={styles.sessionNoteTitle}>
                     {t('Nota de la sesión')}
                   </Text>
+                  <View style={styles.sessionNoteActions}>
+                    <Pressable
+                      onPress={deleteSessionNote}
+                      hitSlop={8}
+                      style={({ pressed }) => [
+                        styles.sessionNoteAction,
+                        pressed && styles.buttonPressed,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('Borrar nota')}
+                    >
+                      <MaterialCommunityIcons
+                        name="trash-can-outline"
+                        size={20}
+                        color={theme.colors.textSecondary}
+                      />
+                    </Pressable>
+                    {sessionNoteFocused && (
+                      <Pressable
+                        onPress={() => sessionNoteInputRef.current?.blur()}
+                        hitSlop={8}
+                        style={({ pressed }) => [
+                          styles.sessionNoteDone,
+                          pressed && styles.buttonPressed,
+                        ]}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('Terminar nota')}
+                      >
+                        <MaterialCommunityIcons
+                          name="check"
+                          size={16}
+                          color={theme.colors.onGold}
+                        />
+                        <Text style={styles.sessionNoteDoneText}>
+                          {t('Hecho')}
+                        </Text>
+                      </Pressable>
+                    )}
+                  </View>
                 </View>
                 <TextInput
+                  ref={sessionNoteInputRef}
                   style={styles.sessionNoteInput}
                   value={sessionNote}
                   onChangeText={setSessionNote}
+                  onFocus={() => setSessionNoteFocused(true)}
+                  onBlur={() => setSessionNoteFocused(false)}
                   placeholder={t('Ej: gym lleno, cambié banca por mancuernas')}
                   placeholderTextColor={theme.colors.textSecondary}
                   multiline
@@ -1883,7 +2021,7 @@ export function WorkoutLogScreen({
                   maxLength={280}
                 />
               </View>
-            ) : (
+            ) : cardioOnly ? (
               <Pressable
                 style={({ pressed }) => [
                   styles.addSessionNoteButton,
@@ -1902,7 +2040,7 @@ export function WorkoutLogScreen({
                   {t('Añadir nota de la sesión')}
                 </Text>
               </Pressable>
-            )}
+            ) : null}
 
             {/* Ni fuerza ni cardio llevan botón de guardar: las series, las
             disciplinas y las notas se autoguardan al meterlas, así que "Volver"
@@ -1955,6 +2093,14 @@ export function WorkoutLogScreen({
           cardioOnly
             ? undefined
             : [
+                // La nota de la sesión, en el ⋯ de la sesión (como la del
+                // ejercicio en el de su panel). Escrita, su tarjeta ya está al
+                // pie y esto lleva a ella.
+                {
+                  icon: 'note-text-outline' as const,
+                  label: t('Nota de la sesión'),
+                  onPress: openSessionNote,
+                },
                 ...(onOpenRoutine
                   ? [
                       {
@@ -2112,6 +2258,9 @@ export function WorkoutLogScreen({
           duration={toast.duration}
           centered={toast.centered}
           celebrate={toast.celebrate}
+          headline={toast.headline}
+          icon={toast.icon}
+          tone={toast.tone}
           actionLabel={toast.undo ? t('Deshacer') : undefined}
           onAction={
             toast.undo
@@ -2219,8 +2368,6 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
       fontVariant: ['tabular-nums'],
     },
-    // "Añadir cardio": ocupa el hueco del campo cuando está plegado. Contorno
-    // discontinuo, como el resto de "añadir" de la app (Añadir ejercicio/día).
     // Nota de la sesión: misma carpintería que la tarjeta de cardio (borde
     // izquierdo del acento del día), para que se lean como dos apuntes del día.
     sessionNoteCard: {
@@ -2241,9 +2388,37 @@ const makeStyles = () =>
       gap: 8,
     },
     sessionNoteTitle: {
+      flex: 1,
       fontSize: 16,
       fontWeight: '800',
       color: theme.colors.text,
+    },
+    // Borrar y "Hecho" a la derecha del título.
+    sessionNoteActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    sessionNoteAction: {
+      width: 30,
+      height: 30,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sessionNoteDone: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingVertical: 5,
+      paddingHorizontal: 12,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.primaryFill,
+    },
+    sessionNoteDoneText: {
+      color: theme.colors.onGold,
+      fontSize: 13,
+      fontWeight: '800',
     },
     sessionNoteInput: {
       minHeight: 64,

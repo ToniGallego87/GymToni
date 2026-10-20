@@ -27,6 +27,8 @@ import {
 } from '@components';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useWorkout } from '@hooks/useWorkout';
+import { useExerciseKeyResolver } from '@hooks/useExerciseKeyResolver';
+import { listExercises } from '@lib/exerciseProgress';
 import { ProfileEditModal } from './ProfileEditModal';
 import { hasProfileFilled, useMyProfile } from '@hooks/useMyProfile';
 import { useAvatarPicker } from '@hooks/useAvatarPicker';
@@ -168,6 +170,9 @@ export function ProfileScreen({
   const activeRoutine = state.routines.find((routine) => routine.isActive);
   const bodyWeight = currentBodyWeight(weightSegments);
   const unlockedBadges = badges.filter((badge) => badge.unlocked).length;
+  // Ejercicios con historial: los mismos que lista Progreso (por su identidad
+  // y sin las semanas de descarga). También agrupa los récords de la Actividad.
+  const resolveExerciseKey = useExerciseKeyResolver();
   const latestActivity = useMemo(
     () =>
       buildLocalActivity({
@@ -176,8 +181,17 @@ export function ProfileScreen({
         badges,
         challenges,
         wins,
+        resolveExerciseKey,
       })[0],
-    [state.logs, state.routines, badges, challenges, wins]
+    [state.logs, state.routines, badges, challenges, wins, resolveExerciseKey]
+  );
+  const exerciseCount = useMemo(
+    () =>
+      listExercises(
+        state.logs.filter((log) => !log.isDeload),
+        resolveExerciseKey
+      ).length,
+    [state.logs, resolveExerciseKey]
   );
   const menu: MenuEntry[] = [
     {
@@ -191,8 +205,15 @@ export function ProfileScreen({
       onPress: onOpenRoutines,
     },
     {
+      // "Progreso", como se llama la pantalla: "Ejercicios" sonaba a catálogo.
       icon: 'chart-line',
-      label: t('Ejercicios'),
+      label: t('Progreso'),
+      hint:
+        exerciseCount === 0
+          ? t('Sin registros')
+          : exerciseCount === 1
+          ? t('1 ejercicio')
+          : t('{n} ejercicios', { n: exerciseCount }),
       onPress: onOpenExerciseProgress,
     },
     {

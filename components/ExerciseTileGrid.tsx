@@ -64,6 +64,12 @@ const WHEEL_SHADOW_ROOM = 5;
 const WHEEL_HEIGHT = WHEEL_BIG_HEIGHT + WHEEL_SHADOW_ROOM * 2;
 // Soltar sin inercia: espera antes de elegir (ver `endDrag`).
 const SETTLE_FALLBACK_MS = 150;
+// Lo que hay que arrastrar la ruleta para que gire (~30% del paso entre
+// casillas). Android, con `snapToInterval`, salta a la casilla siguiente con
+// CUALQUIER impulso al soltar, por pequeño que sea el arrastre: un roce sin
+// querer cambiaba de ejercicio. Por debajo de esto, la ruleta vuelve a su
+// casilla (y se nota como una pequeña resistencia).
+const WHEEL_DRAG_THRESHOLD = WHEEL_STEP * 0.3;
 // Líneas que reserva el nombre (centrado en ese hueco si ocupa menos).
 const NAME_LINES = 3;
 const NAME_LINE_HEIGHT = 13;
@@ -378,11 +384,24 @@ function ExerciseWheel({
   const scrollRef = useRef<Animated.ScrollView>(null);
   const [viewportWidth, setViewportWidth] = useState(0);
   const selectedIndex = exercises.findIndex((e) => e.id === selectedId);
+  const selectedExercise = exercises[selectedIndex];
+  // Mismo orden que los bordes de la casilla: el azul del adicional gana.
+  const frameRingColor = !selectedExercise
+    ? null
+    : selectedExercise.extra
+    ? theme.colors.emoji_blue
+    : selection.progressOf(selectedExercise.id).completed
+    ? theme.colors.success
+    : null;
   const scrollX = useSharedValue(Math.max(0, selectedIndex) * WHEEL_STEP);
   // Primera colocación sin animación: al entrar, la ruleta ya está en su sitio.
   const placedRef = useRef(false);
   const draggingRef = useRef(false);
   const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Dónde estaba la ruleta al empezar a arrastrar, y si un roce la está
+  // devolviendo a su casilla (entonces el asentamiento no elige nada).
+  const dragStartXRef = useRef(0);
+  const returningRef = useRef(false);
 
   // Lo último que llegó por props, para los avisos del gesto (que llegan del
   // hilo de UI a funciones estables).
@@ -402,6 +421,11 @@ function ExerciseWheel({
   const settle = useCallback(
     (x: number) => {
       cancelSettle();
+      // Vuelta de un roce: la elegida no cambia.
+      if (returningRef.current) {
+        returningRef.current = false;
+        return;
+      }
       const {
         exercises: list,
         selectedId: current,
@@ -417,17 +441,36 @@ function ExerciseWheel({
     [cancelSettle]
   );
 
-  const beginDrag = useCallback(() => {
-    draggingRef.current = true;
-    cancelSettle();
-  }, [cancelSettle]);
+  const beginDrag = useCallback(
+    (x: number) => {
+      draggingRef.current = true;
+      returningRef.current = false;
+      dragStartXRef.current = x;
+      cancelSettle();
+    },
+    [cancelSettle]
+  );
 
   // Al soltar casi siempre sigue un encaje con inercia (y su fin elige). Por
   // si no llega —soltar justo en su sitio—, se elige igual tras un momento.
+  // Si el arrastre no llegó al umbral es un roce: la ruleta vuelve a su
+  // casilla. El `scrollTo` cancela el salto nativo ya lanzado (el comando
+  // aborta la inercia en curso antes de mover).
   const endDrag = useCallback(
     (x: number) => {
       draggingRef.current = false;
       cancelSettle();
+      if (Math.abs(x - dragStartXRef.current) < WHEEL_DRAG_THRESHOLD) {
+        const home = Math.round(dragStartXRef.current / WHEEL_STEP) * WHEEL_STEP;
+        returningRef.current = true;
+        scrollRef.current?.scrollTo({ x: home, animated: true });
+        // Por si la vuelta no dispara fin de inercia: se da por asentada.
+        settleTimerRef.current = setTimeout(
+          () => settle(home),
+          SETTLE_FALLBACK_MS * 3
+        );
+        return;
+      }
       settleTimerRef.current = setTimeout(() => settle(x), SETTLE_FALLBACK_MS);
     },
     [cancelSettle, settle]
@@ -439,8 +482,8 @@ function ExerciseWheel({
     onScroll: (e) => {
       scrollX.value = e.contentOffset.x;
     },
-    onBeginDrag: () => {
-      runOnJS(beginDrag)();
+    onBeginDrag: (e) => {
+      runOnJS(beginDrag)(e.contentOffset.x);
     },
     onEndDrag: (e) => {
       runOnJS(endDrag)(e.contentOffset.x);
@@ -506,8 +549,9 @@ function ExerciseWheel({
               {!!selection.onAdd && <WheelAddTile onPress={selection.onAdd} />}
             </View>
           </Animated.ScrollView>
-          {/* El marco: fijo, encima, y deja pasar los toques (el play). Con
-            un adicional dentro lleva por dentro su anillo azul. */}
+          {/* El marco: fijo, encima, y deja pasar los toques (el play). Por
+            dentro lleva el anillo del estado de la casilla, que el oro
+            taparía: azul si es adicional, verde si está completada. */}
           <View
             pointerEvents="none"
             style={[
@@ -515,8 +559,13 @@ function ExerciseWheel({
               { left: (viewportWidth - WHEEL_BIG) / 2 },
             ]}
           >
-            {!!exercises[selectedIndex]?.extra && (
-              <View style={styles.wheelFrameExtra} />
+            {!!frameRingColor && (
+              <View
+                style={[
+                  styles.wheelFrameInner,
+                  { borderColor: frameRingColor },
+                ]}
+              />
             )}
           </View>
         </>
@@ -920,23 +969,26 @@ const makeStyles = () =>
       borderColor: theme.colors.primaryLine,
       borderRadius: theme.borderRadius.md,
     },
-    // Anillo azul del adicional, por dentro del oro (tapa el borde azul de la
-    // propia casilla, que queda debajo del marco).
-    wheelFrameExtra: {
+    // Anillo por dentro del oro: azul del adicional o verde de la completada
+    // (tapa el borde de la propia casilla, que queda debajo del marco).
+    wheelFrameInner: {
       position: 'absolute',
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
       borderWidth: 3,
-      borderColor: theme.colors.emoji_blue,
       borderRadius: theme.borderRadius.md - 3,
     },
     // Miniatura del registro: algo más estrecha que la casilla, centrada.
     thumbCompact: {
       width: `${WHEEL_THUMB_RATIO * 100}%`,
     },
+    // Completada: borde verde grueso como el azul del adicional (el padding
+    // cede lo que gana el borde para que mida lo mismo).
     tileCompleted: {
+      borderWidth: 2,
+      padding: 5,
       borderColor: theme.colors.success,
     },
     // Adicional (no es del día): borde azul más grueso; el padding cede lo que

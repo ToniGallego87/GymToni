@@ -165,7 +165,7 @@ export function ProfileEditModal({ visible, onClose }: ProfileEditModalProps) {
         <Text style={styles.hint}>
           {shareActivity
             ? t(
-                'Tu perfil enseña tus logros, retos superados y días entrenados.'
+                'Tu perfil enseña tus logros, retos superados, récords y días entrenados.'
               )
             : t('Nadie verá tu actividad, y se retira la ya publicada.')}
         </Text>

@@ -240,6 +240,12 @@ function getDb(): Promise<SQLiteDatabase> {
             'ALTER TABLE exercise_logs ADD COLUMN catalog_id TEXT'
           );
         } catch {}
+        // v11: serie extra (de más sobre el objetivo), que no puntúa en la
+        // mejora. Anulable (la bajada de una nube sin la columna trae NULL); lo
+        // anterior se queda a NULL, que se lee como "no es extra".
+        try {
+          await db.execAsync('ALTER TABLE log_sets ADD COLUMN is_extra INTEGER');
+        } catch {}
         await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
       }
       return db;
@@ -313,13 +319,14 @@ function insertExerciseLog(
 
 function insertLogSet(runner: SQLiteRunner, row: LogSetRow): Promise<unknown> {
   return runner.runAsync(
-    'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+    'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps, is_extra, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     [
       row.id,
       row.exercise_logs_id,
       row.set_order,
       row.weight,
       row.reps,
+      row.is_extra ?? 0,
       Date.now(),
     ]
   );
@@ -550,7 +557,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
     );
     await bulkInsert(
       txn,
-      'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO log_sets (id, exercise_logs_id, set_order, weight, reps, is_extra) VALUES (?, ?, ?, ?, ?, ?)',
       rows.logSets,
       (row) => [
         row.id,
@@ -558,6 +565,7 @@ export async function saveAppDataToDb(data: WorkoutAppData): Promise<void> {
         row.set_order,
         row.weight,
         row.reps,
+        row.is_extra ?? 0,
       ]
     );
     await bulkInsert(
@@ -1176,8 +1184,11 @@ const REMOTE_TABLES: {
       'set_order',
       'weight',
       'reps',
+      'is_extra',
       'updated_at',
     ],
+    // La nube puede no tener aún la columna (migración SQL manual).
+    keepLocal: ['is_extra'],
   },
   {
     key: 'cardioLogs',

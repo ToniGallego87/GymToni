@@ -17,6 +17,8 @@ export interface AnchorMenuItem {
   icon: IconName;
   label: string;
   onPress: () => void;
+  /** Opción en uso (un menú de elegir, como el orden de Progreso): ✓ y oro. */
+  selected?: boolean;
 }
 
 interface AnchorMenuProps {
@@ -101,13 +103,30 @@ export function AnchorMenu({
               ]}
               accessibilityRole="button"
               accessibilityLabel={item.label}
+              accessibilityState={
+                item.selected != null ? { selected: item.selected } : undefined
+              }
             >
               <MaterialCommunityIcons
                 name={item.icon}
                 size={20}
-                color={theme.colors.text}
+                color={item.selected ? theme.colors.primary : theme.colors.text}
               />
-              <Text style={styles.itemText}>{item.label}</Text>
+              <Text
+                style={[
+                  styles.itemText,
+                  item.selected && styles.itemTextSelected,
+                ]}
+              >
+                {item.label}
+              </Text>
+              {item.selected && (
+                <MaterialCommunityIcons
+                  name="check"
+                  size={18}
+                  color={theme.colors.primary}
+                />
+              )}
             </Pressable>
           ))}
         </View>
@@ -142,10 +161,14 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surfaceAlt,
     },
     itemText: {
+      flex: 1,
       fontSize: 15,
       fontWeight: '700',
       color: theme.colors.text,
       lineHeight: 20,
+    },
+    itemTextSelected: {
+      color: theme.colors.primary,
     },
   });
 

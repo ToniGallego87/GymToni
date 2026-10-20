@@ -1,14 +1,18 @@
 import { Badge } from './badges';
 import { Challenge } from './challenges';
+import { ExerciseKeyResolver, exerciseKeyOf } from './exerciseIdentity';
+import { exerciseLogKey } from './exerciseProgress';
+import { isExtraExerciseLog } from './extraExercises';
+import { isValidSet } from './progress';
 import { getDisplayDayName } from './theme';
-import { findDayInRoutines } from './utils';
+import { findDayInRoutines, getLogTimestamp } from './utils';
 import { WorkoutLog, WorkoutRoutine } from '../types';
-import { t } from './i18n';
+import { dateLocale, fmtNum, t } from './i18n';
 
 /**
  * Un hito de la Actividad: lo que el perfil de una persona enseña de su
- * trayectoria. Tres tipos, y los tres se pintan igual (icono + título + fecha):
- * una insignia desbloqueada, un reto superado o un día entrenado.
+ * trayectoria. Cuatro tipos: una insignia desbloqueada, un reto superado, un
+ * día entrenado o un récord personal (más peso que nunca en un ejercicio).
  *
  * Es la MISMA forma en los dos sentidos: la que se deriva de los datos locales
  * (`buildLocalActivity`) para el perfil propio y la que baja de la nube
@@ -16,8 +20,11 @@ import { t } from './i18n';
  * con un solo componente.
  */
 export interface ActivityItem {
-  kind: 'badge' | 'challenge' | 'day';
-  /** Identidad dentro de su tipo: id de insignia, `reto@periodo` o id del log. */
+  kind: 'badge' | 'challenge' | 'day' | 'record';
+  /**
+   * Identidad dentro de su tipo: id de insignia, `reto@periodo`, id del log o
+   * `ejercicio@fecha` del récord.
+   */
   ref: string;
   title: string;
   /** Icono de MaterialCommunityIcons (o de los de día, en los `day`). */
@@ -25,9 +32,19 @@ export interface ActivityItem {
   /** Rutina de la que salió el día, para enlazarla si es pública. */
   routineId?: string;
   routineName?: string;
+  /**
+   * Solo en los récords LOCALES: la marca ("85 kg"). En la nube no hay
+   * columna para ella y viaja dentro del título ("Press banca · 85 kg").
+   */
+  detail?: string;
+  /** Solo en los récords locales: identidad del ejercicio, para su Progreso. */
+  exerciseKey?: string;
   /** `YYYY-MM-DD`: por esto se ordena, no por cuándo se subió. */
   happenedOn: string;
 }
+
+/** Título de un reto viejo cuyo nombre ya no está en el catálogo. */
+export const genericChallengeTitle = () => t('Reto semanal');
 
 /** Clave de un hito: lo que decide si ya está publicado (ver appSettings). */
 export const activityKey = (item: ActivityItem): string =>
@@ -61,6 +78,8 @@ function weekKeyToDate(periodKey: string): string | undefined {
  *
  * `wins` son las claves `id@periodo` de `lib/level.ts`; `challenges` el catálogo
  * vivo, del que se saca el nombre y el icono de cada reto superado.
+ * `resolveExerciseKey` agrupa los ejercicios para los récords como Progreso
+ * por ejercicio (mismo ejercicio en otra rutina o con otro nombre).
  */
 export function buildLocalActivity({
   logs,
@@ -68,12 +87,14 @@ export function buildLocalActivity({
   badges,
   challenges,
   wins,
+  resolveExerciseKey = exerciseKeyOf,
 }: {
   logs: WorkoutLog[];
   routines: WorkoutRoutine[];
   badges: Badge[];
   challenges: Challenge[];
   wins: string[];
+  resolveExerciseKey?: ExerciseKeyResolver;
 }): ActivityItem[] {
   const items: ActivityItem[] = [];
 
@@ -100,7 +121,7 @@ export function buildLocalActivity({
     items.push({
       kind: 'challenge',
       ref: win,
-      title: known?.name ?? t('Reto superado'),
+      title: known?.name ?? genericChallengeTitle(),
       icon: known?.icon ?? 'trophy-variant',
       happenedOn,
     });
@@ -123,7 +144,94 @@ export function buildLocalActivity({
     });
   }
 
+  items.push(...buildRecordItems(logs, resolveExerciseKey));
+
   return sortActivity(items);
+}
+
+/**
+ * Récords personales: cada sesión en la que un ejercicio levantó más peso que
+ * en todas las anteriores. La primera vez no cuenta (no había nada que batir),
+ * y un récord en semana de descarga sube el listón pero no sale como hito (es
+ * raro y no es lo que se buscaba esa semana). Mismo criterio de "más peso que
+ * nunca" que la burbuja dorada del registro; los adicionales quedan fuera,
+ * como en Progreso por ejercicio.
+ */
+function buildRecordItems(
+  logs: WorkoutLog[],
+  resolve: ExerciseKeyResolver
+): ActivityItem[] {
+  const records: ActivityItem[] = [];
+  const best = new Map<string, number>();
+  const chronological = logs
+    .filter((log) => !log.cardioOnly)
+    .sort((a, b) => getLogTimestamp(a) - getLogTimestamp(b));
+
+  for (const log of chronological) {
+    // Peso máximo de cada ejercicio en ESTA sesión (puede repetirse por id).
+    const sessionMax = new Map<string, { weight: number; name: string }>();
+    for (const exerciseLog of log.exercises) {
+      if (isExtraExerciseLog(exerciseLog)) continue;
+      const weight = (exerciseLog.parsedSets || [])
+        .filter(isValidSet)
+        .reduce((max, s) => Math.max(max, s.weight), 0);
+      if (weight <= 0) continue;
+      const key = exerciseLogKey(exerciseLog, resolve);
+      if (weight > (sessionMax.get(key)?.weight ?? 0)) {
+        sessionMax.set(key, { weight, name: exerciseLog.exerciseName.trim() });
+      }
+    }
+
+    const date =
+      log.date || new Date(log.createdAt).toISOString().slice(0, 10);
+    sessionMax.forEach(({ weight, name }, key) => {
+      const previous = best.get(key);
+      if (previous === undefined || weight > previous) best.set(key, weight);
+      if (previous === undefined || weight <= previous || log.isDeload) return;
+      records.push({
+        kind: 'record',
+        ref: `${key}@${date}`,
+        title: name,
+        icon: 'trophy',
+        detail: `${fmtNum(weight)} kg`,
+        exerciseKey: key,
+        happenedOn: date,
+      });
+    });
+  }
+
+  return records;
+}
+
+/** Un mes de la Actividad: su clave `YYYY-MM` y sus hitos, en orden. */
+export interface ActivityMonth {
+  month: string;
+  items: ActivityItem[];
+}
+
+/**
+ * Los hitos agrupados por mes, conservando el orden de la lista (de más
+ * reciente a más antiguo). Es como se lee la Actividad: un diario por meses.
+ */
+export function groupActivityByMonth(items: ActivityItem[]): ActivityMonth[] {
+  const months: ActivityMonth[] = [];
+  for (const item of items) {
+    const month = item.happenedOn.slice(0, 7);
+    const last = months[months.length - 1];
+    if (last?.month === month) last.items.push(item);
+    else months.push({ month, items: [item] });
+  }
+  return months;
+}
+
+/** "Octubre de 2026" a partir de una clave `YYYY-MM`. */
+export function monthLabel(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  const label = new Date(year, monthNumber - 1, 1).toLocaleDateString(
+    dateLocale,
+    { month: 'long', year: 'numeric' }
+  );
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 /** De más reciente a más antiguo, con el tipo como desempate estable. */
@@ -146,5 +254,6 @@ export interface ActivityCounts {
   badges: number;
   challenges: number;
   days: number;
+  records: number;
   total: number;
 }

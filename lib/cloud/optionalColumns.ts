@@ -7,6 +7,7 @@
 // columna exista y el registro se vuelva a guardar o se haga una copia.
 const OPTIONAL_COLUMNS: Record<string, string[]> = {
   exercise_logs: ['catalog_id'],
+  log_sets: ['is_extra'],
 };
 
 // Columnas que ya sabemos que faltan en esta sesión: no se vuelve a probar con

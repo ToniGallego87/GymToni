@@ -23,7 +23,7 @@ import {
 } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
-import { t } from '@lib/i18n';
+import { localizeDecimals, t } from '@lib/i18n';
 import { buildWorkoutImprovement, ImprovementResult } from '@lib/progress';
 import {
   findDayInRoutines,
@@ -591,7 +591,6 @@ export function HomeScreen({
             block,
             weekLogs,
             logs: state.logs,
-            routines: state.routines,
             wins,
             badges,
           }),
@@ -750,7 +749,9 @@ export function HomeScreen({
         icon: 'check-bold',
         title: t('Entrenamiento completado'),
         subtitle: improved
-          ? t('{n} % de mejora', { n: Math.round(improvement!.percent) })
+          ? t('{n} % de mejora', {
+              n: localizeDecimals(improvement!.percent.toFixed(1)),
+            })
           : t('Sin mejora'),
         subtitleIcon: improved ? 'arrow-up-bold' : undefined,
       };

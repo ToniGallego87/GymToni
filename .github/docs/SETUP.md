@@ -127,22 +127,26 @@ GymToni/
 
 ## Formato de entrada
 
-- **Series**: `{peso}x{reps}`, una a una — `60x8`, `22.5x10`. Dos campos con
-  flechas +/− y el botón ancho "Añadir serie", fijo bajo las casillas en todas
-  las series y rotulado con la que entra ("Añadir serie 3/4"); las burbujas de
-  lo ya metido van debajo. Cada serie metida lleva su × para
-  borrarla (no hay "borrar última"), y "Saltar resto / Saltar ejercicio" cierra
-  el ejercicio desde el ⋯ de su cabecera.
+- **Series**: `{peso}x{reps}`, una a una — `60x8`, `22.5x10`. Dos campos de
+  una pieza (la cifra y, en su pie, − | +) que llegan rellenos con lo sugerido,
+  y el botón ancho "Añadir serie", fijo bajo los campos en todas las series y
+  rotulado con la que entra ("Añadir 3.ª serie"); las burbujas de lo ya metido
+  van debajo. Cada serie metida lleva su × para borrarla (no hay "borrar
+  última"), y "Saltar resto / Saltar ejercicio" cierra el ejercicio desde el ⋯
+  de su cabecera. Con el objetivo cumplido los campos se van y "Serie extra"
+  los vuelve a sacar para una serie de más, que se guarda marcada
+  (`ParsedSet.extra`, `log_sets.is_extra`, "55x10*" en el texto) y no puntúa
+  en la mejora.
 - **Cardio**: por disciplina en `CardioInputField` (cinta andar/correr, bici,
   elíptica…), con duración, velocidad/pendiente. Se guarda como `rawInput` y
   también como filas de `cardio_entries` (una por entrada); mientras queden
   móviles sin actualizar, si no cuadran manda el texto.
-- **Notas del ejercicio**: desde el ⋯ del ejercicio (modal); con la tarjeta
-  plegada, el icono de nota junto al título avisa de que hay algo escrito y la
-  abre.
+- **Notas del ejercicio**: desde el ⋯ del panel del ejercicio, escritas en el
+  propio panel; en la ruleta, la casilla con nota lleva su icono.
 - **Nota de la sesión**: el contexto del día ("gym lleno, cambié banca por
-  mancuernas"), al pie del registro junto al cardio. Se ofrece como botón
-  mientras no haya nada escrito y se autoguarda; el Detalle la pinta bajo la
+  mancuernas"), al pie del registro. Mientras no haya nada escrito se pide
+  desde el ⋯ de la barra en fuerza y con un botón al pie en cardio (cuya barra
+  no lleva ⋯); se autoguarda, y el Detalle la pinta bajo la
   tira de resumen. Campo `notes` de `WorkoutLog` (columna `notes` en
   `workout_logs`, local y en la nube).
 

@@ -1,5 +1,206 @@
 # UPDATES
 
+## Sin publicar
+
+### Arquitectura
+
+- **`log_sets.is_extra`** (SQLite v11, `ParsedSet.extra`): marca la serie de
+  más sobre el objetivo. Anulable, como `catalog_id`: NULL se lee como "no es
+  extra". En el texto (`rawInput`) la extra lleva un `*` final ("55x10*"), con
+  `formatSeriesString` como inverso de `parseSeriesString`; no un "+" delante,
+  que ya es la suma de cargas combinadas. Viaja a la nube como columna
+  opcional (`OPTIONAL_COLUMNS` + `keepLocal`): sin ella el sync no se para y la
+  marca se queda en local. **SQL pendiente en Supabase** (comprobado con curl
+  el 2026-10-16: 42703, la columna no existe):
+  `ALTER TABLE public.log_sets ADD COLUMN IF NOT EXISTS is_extra integer;`
+- **Hito `record` en `activity`.** `ActivityItem.kind` suma `'record'` (con
+  `detail` = la marca y `exerciseKey`, solo en local). En la nube la marca va
+  dentro de `title` ("Press banca · 85 kg"): no hay columna para ella.
+  `publishActivity` sube los récords en un upsert aparte y con su propio cupo:
+  si la base aún tiene el CHECK viejo de `kind`, se rechazan solos sin frenar
+  al resto y se reintentan después. `getActivityCounts` cuenta también
+  `records`. **SQL pendiente en Supabase** (rehace el CHECK, ya en
+  `supabase/social-schema.sql`):
+  `ALTER TABLE public.activity DROP CONSTRAINT IF EXISTS activity_kind_check;`
+  `ALTER TABLE public.activity ADD CONSTRAINT activity_kind_check CHECK (kind IN ('badge','challenge','day','record'));`
+
+### Nuevas funcionalidades
+
+- **Récords personales en la Actividad.** Cada sesión en la que un ejercicio
+  levanta más peso que en todas las anteriores es un hito (trofeo y marca en
+  naranja `emoji_orange`, para no confundirlo con el oro de los logros) que
+  abre Progreso por ejercicio de ese ejercicio.
+  `buildLocalActivity` los deriva de los logs (`buildRecordItems`): agrupa
+  por identidad de ejercicio (`resolveExerciseKey`, como Progreso), la
+  primera vez no cuenta, los adicionales quedan fuera y una descarga sube el
+  listón sin salir como hito. Se publican en el perfil (ver Arquitectura) y
+  Editar perfil lo dice en la pista de "Compartir".
+- **Actividad: quién la ve.** Con sesión iniciada, una línea al pie dice
+  "Visible en tu perfil de Comunidad" o "Solo la ves tú" (según
+  `share_activity`) con un "Cambiar" que abre Editar perfil ahí mismo.
+
+- **Serie extra.** Con el objetivo del ejercicio cumplido, un enlace
+  secundario "Serie extra" bajo las burbujas vuelve a sacar las casillas
+  (botón "Añadir serie", sin ordinal) para apuntar una serie de más; tras
+  meterla se recogen otra vez. Antes, al completar, las casillas desaparecían
+  y una cuarta serie no se podía registrar. **No cuenta para la mejora**:
+  `getSetPerformanceScore` la puntúa 0, y de ahí cuelgan todos los
+  porcentajes (ejercicio, sesión, semana, logros y el reto "Récord personal"
+  por mejor sesión). Tampoco cuenta para completar el ejercicio ni para el
+  "2/3" de su casilla. Sí puede llevar trofeo de récord y entra en las marcas
+  de Progreso por ejercicio (mejor 1RM, peso máximo, volumen): es peso que se
+  levantó. Se ve aparte: burbuja de contorno discontinuo con "+" en el
+  registro, y en el Detalle va detrás de las del plan, con "+" y sin flecha de
+  comparación.
+
+### Cambios
+
+- **Casillas con el valor de verdad.** Peso y reps llegan rellenos con lo
+  sugerido (la serie anterior, la vez pasada, el 75% en descarga o el tope
+  del rango) en tinta normal, no como pista gris; tocarlas selecciona la cifra
+  entera y teclear la sustituye. Lo que se ve es lo que se guarda, y el botón
+  se queda en una línea ("Añadir 3.ª serie"). Sin historial ni rango, las reps
+  quedan vacías y piden el dato.
+- **Cada campo, una sola pieza.** La cifra arriba, en Anton (la letra de los
+  números grandes de la app), y − | + en el pie del mismo contorno, separados
+  por filetes: ~60 × 44 cada uno (50 de alto con el `hitSlop`). Antes eran dos
+  chevrones apilados de 40 × 24 junto a la caja. El rótulo de las reps pasa a
+  "REPS · 8-10" y ya cabe a la misma letra que el del peso.
+- **"Anterior" como línea de texto**, sin caja, a la altura del ⋯. La primera
+  vez con un ejercicio dice "Primera vez: hoy marcas la referencia" en vez de
+  "Sin datos".
+- **Apuntar una serie se nota**: un toque corto del vibrador (`Vibration`,
+  18 ms) y la burbuja nueva entra con un pequeño "pop" (`ZoomIn` con rebote)
+  en vez de un fundido. Borrar una serie vibra distinto: dos toques cortos
+  ("tac-tac", patrón `[0, 22, 90, 22]`), para distinguirlo sin mirar. Y cada
+  paso de − / + da un roce apenas perceptible (6 ms), también al mantener.
+- **Mantener pulsado − / + avanza a ritmo fijo** (un paso cada 120 ms, cada
+  uno con su roce del vibrador) en vez de acelerar hasta 45 ms.
+- **Una sola señal de progreso en el panel.** Fuera los puntos ●●○ y la línea
+  "Completado · 3/3 series": el recuento lo lleva la casilla de la ruleta y la
+  serie que entra, el botón.
+- **Nota de la sesión en el ⋯ de la barra (fuerza).** Sin nada escrito ya no
+  ocupa el pie del registro con un botón dorado; "Nota de la sesión" en el ⋯
+  abre la tarjeta, baja hasta ella y pone el foco. En cardio (sin ⋯) sigue el
+  botón al pie.
+- **`ExerciseInputField` sin el modo plegable**, que ya solo se usaba con
+  `pinnedOpen`: fuera la cabecera con GIF y nombre, la barra de pliegue y las
+  props `pinnedOpen`, `isCurrent`, `onLayout`, `exerciseName`, `catalogId` y
+  `onAssignGif`.
+- **Progreso, lista más limpia.** De hasta cinco controles encima de la lista
+  a dos: buscador y una fila de zonas ("Todas" en vez de "Cualquier zona";
+  `CatalogTagFilters zoneOnly`). Fuera los raíles de músculo y equipo: el
+  buscador ya encuentra por etiquetas ("bíceps mancuerna"); el buscador del
+  catálogo de rutinas conserva la cascada. El orden deja de ser un raíl: va en
+  una cabecera de lista (`SectionLegend` con `right`) con el recuento ("34
+  ejercicios", "8 de 34" filtrando) y un botón "⇅ Reciente" que abre un
+  `AnchorMenu` con ✓ en el elegido (`AnchorMenuItem.selected`). Sin
+  resultados, botón "Quitar filtros".
+- **Progreso, filas de una sola diana.** La miniatura del GIF es solo imagen
+  (`ExerciseGifButton decorative`; sin GIF, una mancuerna en vez de la lupa) y
+  toda la fila abre la ficha. El visor sigue en la cabecera de la ficha.
+- **Progreso, ficha con titular.** La tarjeta dice cuánto ha cambiado la
+  medida elegida desde su primera sesión ("▲ 5 kg · desde el 3 ago",
+  `ChartCardStat` con `suffix`/`decimals`), y cambia con la medida. El nombre
+  ya no se repite: la barra superior dice "Progreso" con las sesiones y la
+  última fecha de subtítulo.
+- **Progreso, colores explicados.** Leyenda bajo la gráfica (verde mejor que
+  la anterior, rojo peor, oro la última); la primera barra pasa de azul a
+  neutro, porque el azul ya significa descarga en el resto de la app.
+- **Un nombre para Progreso**: la casilla de Perfil pasa de "Ejercicios" a
+  "Progreso", con el número de ejercicios de pista.
+- **Mejora al cerrar un ejercicio.** Al completar el objetivo de series sale
+  una píldora central con su % de mejora frente a la vez anterior (o "Sin
+  mejora"), como el aviso de récord y con su misma duración. Mismas reglas
+  que la casilla: ni en descarga, ni en adicionales, ni con series saltadas.
+  Si la serie es además récord, va en la misma píldora ("Récord · +3,2 %…").
+- **Avisos centrales con velo.** La píldora de récord/mejora oscurece un poco
+  la pantalla detrás (`theme.colors.scrim`, nuevo token) para que resalte.
+- **% de mejora con un decimal** en la hero de entrenamiento completado
+  ("0,4 % de mejora", no "0 %").
+- **Progreso con subtítulo siempre** ("Tu evolución por ejercicio" cuando el
+  total ya lo dice la cabecera de la lista): sin él la barra encogía y el
+  nivel subía respecto a las demás pantallas.
+- **"×N" de las disciplinas de Cardio en blanco**, no en oro: es un recuento,
+  no un estado.
+- **Actividad como diario por meses.** `ActivityList` agrupa por mes
+  (`groupActivityByMonth`) con una cabecera `SectionLegend` ("Octubre de
+  2026") y su resumen ("12 entrenos · 3 récords · 1 logro · 2 retos"), cada
+  mes en su tarjeta. Dentro, por este orden: entrenos, récords, logros y
+  retos. Entrenos y récords, con más de dos, van plegados en una fila ("12
+  entrenos" con los iconos de sus días) que se despliega con su chevron. Igual en el perfil de otra persona, cuyo
+  resumen total ahora dice "entrenos" y suma los récords. Fuera las tres
+  casillas de totales (parecían botones y no hacían nada): la barra dice "34
+  hitos desde mar 2025".
+- **Un entreno de tu Actividad abre esa sesión** (su Detalle, con `back` a la
+  Actividad) en vez de la ficha de la rutina, y lleva su % de mejora frente a
+  la sesión anterior del día (sin descargas), como el historial de Inicio. El
+  perfil ajeno sigue abriendo la rutina pública. Progreso por ejercicio
+  aprende a volver a un `back` (el récord) y el Detalle se lo pasa al abrir
+  "Ver evolución", para no perder la vuelta a la Actividad.
+- **"Meses anteriores" en vez de estirar la lista.** La Actividad propia
+  pagina de 3 en 3 meses con `LoadMoreButton` (que acepta `label`); fuera el
+  `onPullPastEnd`, la rueda y la espera artificial de 450 ms.
+- **Retos con su semana.** "Semana del 13 oct" en vez de un día exacto (se
+  fechan por el lunes de la semana); el reto antiguo sin nombre se titula
+  "Reto semanal" y no repite "reto superado" debajo.
+- **Aviso de récord y de mejora como tarjeta.** El `Toast` centrado deja la
+  píldora verde con tinta clara (apenas contrastaba) por una tarjeta de
+  superficie con icono en círculo, el dato en grande en Anton y el rótulo
+  debajo: trofeo y "Récord" en oro, "+4,4 %" / "de mejora" en verde, "Sin
+  mejora" en neutro. El color va en icono, dato y filo (`tone`). El velo de
+  detrás (`scrim`) se oscurece: 0,45 → 0,7 de noche y 0,3 → 0,55 de día.
+- **Ejercicio completado más visible en la ruleta.** Borde verde de 2 px
+  (como el azul del adicional) y, en el marco dorado, anillo verde por dentro
+  igual que el azul: antes el oro tapaba el verde al seleccionarlo.
+- **Notas con borrar y terminar.** La del ejercicio y la de la sesión llevan
+  papelera (vacía y recoge la nota) y, mientras se escribe, un ✓ / "Hecho"
+  que cierra el teclado: al ser multilínea, Intro salta de línea y no había
+  forma de terminar salvo tocar fuera. La nota del ejercicio ya no lleva
+  texto de ejemplo dentro.
+
+### Correcciones
+
+- **Nivel del póster de la semana por debajo del real.** `lib/weekExtras`
+  data los retos de fuerza (`id@rutina:bloque`) por el fin de su bloque, pero
+  los números de bloque son posicionales: un día repetido, un entreno borrado o
+  forzar semana nueva los renumeran y el reto quedaba apuntando a un bloque que
+  ya no existe, sin fecha, y se descartaba (el nivel de la cuenta sí lo cuenta:
+  es permanente). Ahora un bloque inexistente se data en el último de su
+  rutina, los bloques se sacan del `routineId` de los logs (cuentan los de
+  rutinas borradas) y la semana más reciente lleva el nivel de ahora tal cual.
+  `computeWeekExtras` ya no recibe `routines`.
+- **Nota del ejercicio sin hueco.** El `TextInput` multiline de Android se
+  quedaba en su alto mínimo nativo (~48dp) con una sola línea; ahora su alto
+  sigue al texto (`onContentSizeChange`).
+- **Mantener pulsado − / + no avanzaba.** El temporizador de la repetición
+  llamaba siempre a la función del render en que empezó la pulsación, que
+  leía el valor de entonces: cada paso volvía a escribir el mismo número.
+  `stepWeight`/`stepReps` actualizan ahora sobre el valor vigente
+  (actualización funcional del estado).
+- **La ruleta ya no cambia de ejercicio con un roce.** Android, con
+  `snapToInterval`, salta a la casilla siguiente con cualquier impulso al
+  soltar, por mínimo que sea el arrastre. Ahora, si el arrastre no llega al
+  ~30% del paso entre casillas (`WHEEL_DRAG_THRESHOLD`), la ruleta vuelve a su
+  casilla: el `scrollTo` cancela el salto nativo ya lanzado y se nota como una
+  pequeña resistencia.
+- **Volver de la ventanita del descanso ya no recoloca el registro.** El árbol
+  sigue montado bajo la ventanita (PiP) y React lo volvía a maquetar a ese
+  tamaño; al volver, la ruleta, la barra superior y los márgenes recuperaban
+  su sitio en dos pasadas y se veía todo moverse. `FullSizeLayoutLock`
+  (raíz de `App.tsx`) congela el tamaño y los márgenes de pantalla completa
+  mientras la ventana sea más estrecha que la pantalla (solo pasa en la
+  ventanita: la app va en vertical y el teclado solo cambia el alto). El
+  registro mide la ventana con ese marco (`useSafeAreaFrame`).
+- **Salir de la ventanita no rehace el registro abierto.** Si ya se está en el
+  registro del día que lanzó el descanso, se queda tal cual; antes se volvía a
+  abrir con otro origen y "Volver" dejaba de llevar al Detalle desde el que se
+  corregía.
+- **"Añadir serie" a la primera con el teclado abierto.** El scroll del
+  registro lleva `keyboardShouldPersistTaps="handled"`: antes el primer toque
+  solo cerraba el teclado. Y "Siguiente" en el teclado del peso salta a las
+  reps.
+
 ## Version 0.8.7 - 2026-10-15
 
 ### Nuevas funcionalidades

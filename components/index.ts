@@ -73,6 +73,7 @@ export { WhatsNewModal } from './WhatsNewModal';
 export { UpdateAvailableModal } from './UpdateAvailableModal';
 export { ThemeRevealOverlay } from './ThemeRevealOverlay';
 export { PipRestTimer } from './PipRestTimer';
+export { FullSizeLayoutLock } from './FullSizeLayoutLock';
 // REST_TIMER_BAR_HEIGHT no se re-exporta: la barra se coloca con el `bottom`
 // que le pasa App.tsx y su alto solo lo usa ella misma.
 export { RestTimerBar } from './RestTimerBar';

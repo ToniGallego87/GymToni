@@ -97,20 +97,37 @@ export function ExerciseResultDisplay({
   // hiciste"). El % de mejora ya llega vacío en ese caso (lo decide Detail).
   const hasPrevious = !!(previousSets && previousSets.length > 0);
 
-  const maxRows = hasPrevious
-    ? Math.max(effectiveParsedSets.length, previousSets?.length ?? 0)
-    : effectiveParsedSets.length;
+  // Las series del plan se comparan fila a fila; las EXTRA (de más sobre el
+  // objetivo) van detrás, con "+" y sin flecha: no puntúan, y compararlas con
+  // una serie del plan de la otra sesión no diría nada.
+  const planCurrent = effectiveParsedSets.filter((s) => !s.extra);
+  const extraCurrent = effectiveParsedSets.filter((s) => s.extra);
+  const planPrevious = (previousSets ?? []).filter((s) => !s.extra);
+  const extraPrevious = (previousSets ?? []).filter((s) => s.extra);
 
-  const rows = Array.from({ length: maxRows }).map((_, i) => {
-    const current = effectiveParsedSets[i];
-    const previous = previousSets?.[i];
-
-    return {
-      currentText: current ? formatParsedSet(current) : '—',
-      previousText: previous ? formatParsedSet(previous) : '—',
-      status: compareSetPerformance(current, previous),
-    };
-  });
+  const pairRows = (
+    current: ParsedSet[],
+    previous: ParsedSet[],
+    isExtra: boolean
+  ) => {
+    const count = hasPrevious
+      ? Math.max(current.length, previous.length)
+      : current.length;
+    const text = (set?: ParsedSet) =>
+      set ? `${isExtra ? '+' : ''}${formatParsedSet(set)}` : '—';
+    return Array.from({ length: count }).map((_, i) => ({
+      currentText: text(current[i]),
+      previousText: text(previous[i]),
+      status: isExtra
+        ? null
+        : compareSetPerformance(current[i], previous[i]),
+      isExtra,
+    }));
+  };
+  const rows = [
+    ...pairRows(planCurrent, planPrevious, false),
+    ...pairRows(extraCurrent, extraPrevious, true),
+  ];
 
   const hasTarget = !!targetSets || !!targetReps;
 
@@ -209,7 +226,17 @@ export function ExerciseResultDisplay({
 
       {rows.map((row, index) => (
         <View key={index} style={[styles.row, index > 0 && styles.rowDivider]}>
-          <Text style={[styles.setValue, styles.currentValue]}>
+          <Text
+            style={[
+              styles.setValue,
+              row.isExtra ? styles.extraValue : styles.currentValue,
+            ]}
+            accessibilityLabel={
+              row.isExtra
+                ? `${row.currentText}. ${t('Serie extra')}`
+                : undefined
+            }
+          >
             {row.currentText}
           </Text>
           {hasPrevious && (
@@ -217,10 +244,10 @@ export function ExerciseResultDisplay({
               <Text
                 style={[
                   styles.statusGlyph,
-                  { color: STATUS_COLOR[row.status] },
+                  row.status && { color: STATUS_COLOR[row.status] },
                 ]}
               >
-                {STATUS_GLYPH[row.status]}
+                {row.status ? STATUS_GLYPH[row.status] : ''}
               </Text>
               <Text style={[styles.setValue, styles.previousValue]}>
                 {row.previousText}
@@ -360,6 +387,11 @@ const makeStyles = () =>
 
     currentValue: {
       color: theme.colors.text,
+    },
+
+    // Serie extra: apuntada pero fuera del plan (no puntúa), en tinta segunda.
+    extraValue: {
+      color: theme.colors.textSecondary,
     },
 
     previousValue: {

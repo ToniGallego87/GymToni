@@ -35,14 +35,29 @@ interface ToastProps {
   actionLabel?: string;
   onAction?: () => void;
   /**
-   * Píldora corta en el centro de la pantalla en vez de cartel al pie: para
+   * Tarjeta corta en el centro de la pantalla en vez de cartel al pie: para
    * celebraciones de un vistazo ("Récord") que no deben competir con el
    * descanso flotante ni con "Volver". Ignora `bottom` y la acción.
    */
   centered?: boolean;
-  /** Solo con `centered`: ráfaga de confeti detrás de la píldora (récord). */
+  /** Solo con `centered`: ráfaga de confeti detrás de la tarjeta (récord). */
   celebrate?: boolean;
+  /**
+   * Solo con `centered`: el dato en grande ("Récord", "+4,4 %"); `message` va
+   * debajo como rótulo. Sin él, `message` hace de dato.
+   */
+  headline?: string;
+  /** Solo con `centered`: icono de la tarjeta (trofeo, tendencia...). */
+  icon?: keyof typeof MaterialCommunityIcons.glyphMap;
+  /**
+   * Solo con `centered`: color del icono, el dato y el filo de la tarjeta.
+   * Oro para el récord, verde para la mejora, neutro sin mejora. Por defecto
+   * sale de `type`.
+   */
+  tone?: CenteredTone;
 }
+
+type CenteredTone = 'gold' | 'success' | 'neutral';
 
 // Con acción el aviso dura más: hay que leerlo Y decidir tocarlo.
 const ACTION_DURATION_MS = 6000;
@@ -57,6 +72,9 @@ export function Toast({
   onAction,
   centered = false,
   celebrate = false,
+  headline,
+  icon,
+  tone,
 }: ToastProps) {
   const insets = useSafeAreaInsets();
   const opacity = React.useRef(new Animated.Value(1)).current;
@@ -86,13 +104,6 @@ export function Toast({
     return () => clearTimeout(timer);
   }, [resolvedDuration, opacity, message]);
 
-  const backgroundColor =
-    type === 'success'
-      ? theme.colors.success
-      : type === 'error'
-      ? theme.colors.error
-      : theme.colors.surfaceAlt;
-
   // El cartel al pie es cristal oscuro (el del descanso flotante, que vive en
   // el mismo rincón del registro), no un bloque de color: el estado lo dice el
   // icono. Un verde a toda la anchura con la acción en contorno blanco parecía
@@ -116,15 +127,44 @@ export function Toast({
   const resolvedBottom = bottom ?? Math.max(insets.bottom, 10) + 94;
 
   if (centered) {
+    // Tarjeta de superficie, como las de la app. Antes era una píldora de
+    // color de estado con tinta clara encima (verde con blanco), que apenas
+    // contrastaba: ahora el color va en el icono, el dato y el filo.
+    const resolvedTone: CenteredTone =
+      tone ?? (type === 'success' ? 'success' : 'neutral');
+    const toneColor =
+      resolvedTone === 'gold'
+        ? theme.colors.primary
+        : resolvedTone === 'success'
+        ? theme.colors.success
+        : theme.colors.textSecondary;
+    const toneTint =
+      resolvedTone === 'gold'
+        ? theme.colors.primaryMuted
+        : resolvedTone === 'success'
+        ? theme.colors.successMuted
+        : theme.colors.surfaceAlt;
+    const title = headline ?? message;
+    const detail = headline ? message : '';
     return (
       <Animated.View
         pointerEvents="none"
         style={[styles.centerLayer, { opacity }]}
       >
         {celebrate && <ConfettiBurst />}
-        <Animated.View style={[styles.centerPill, { backgroundColor }]}>
-          <Text style={styles.text}>{message}</Text>
-        </Animated.View>
+        <View style={[styles.centerCard, { borderColor: toneColor }]}>
+          <View style={[styles.centerIcon, { backgroundColor: toneTint }]}>
+            <MaterialCommunityIcons
+              name={icon ?? statusIcon}
+              size={28}
+              color={toneColor}
+            />
+          </View>
+          <Text style={[styles.centerHeadline, { color: toneColor }]}>
+            {title}
+          </Text>
+          {!!detail && <Text style={styles.centerDetail}>{detail}</Text>}
+        </View>
       </Animated.View>
     );
   }
@@ -188,22 +228,47 @@ const makeStyles = () =>
       ...StyleSheet.absoluteFillObject,
       backgroundColor: GLASS_BACK_BUTTON_OVERLAY,
     },
+    // Velo oscuro detrás de la tarjeta: sobre el registro se perdía. Se funde
+    // con ella (va en la misma capa con opacidad).
     centerLayer: {
       ...StyleSheet.absoluteFillObject,
+      backgroundColor: theme.colors.scrim,
       zIndex: 60,
       alignItems: 'center',
       justifyContent: 'center',
     },
-    centerPill: {
-      paddingVertical: 12,
+    centerCard: {
+      minWidth: 200,
+      maxWidth: 300,
+      alignItems: 'center',
+      gap: 4,
+      paddingTop: 18,
+      paddingBottom: 18,
       paddingHorizontal: 28,
-      borderRadius: theme.borderRadius.pill,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
+      borderRadius: theme.borderRadius.lg,
+      borderWidth: 2,
+      backgroundColor: theme.colors.surface,
       ...theme.shadow.card,
       elevation: 24,
     },
-    text: {
+    centerIcon: {
+      width: 52,
+      height: 52,
+      borderRadius: 26,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 4,
+    },
+    // El dato, en la fuente de los titulares (Anton), como las cifras grandes
+    // del registro.
+    centerHeadline: {
+      fontFamily: theme.fonts.display,
+      fontSize: 34,
+      lineHeight: 46,
+      letterSpacing: 0.5,
+      textAlign: 'center',
+    },
+    centerDetail: {
       color: theme.colors.text,
       fontSize: 15,
       fontWeight: '700',

@@ -29,6 +29,11 @@ interface LoadMoreButtonProps {
    * no un catálogo).
    */
   step?: number;
+  /**
+   * Rótulo propio cuando lo que se carga tiene nombre ("Meses anteriores (4)"
+   * en la Actividad). Manda sobre `step` y `remaining`.
+   */
+  label?: string;
 }
 
 // Botón "Cargar más" del historial paginado. Fuente única de la paginación:
@@ -40,6 +45,7 @@ export function LoadMoreButton({
   style,
   remaining,
   step,
+  label,
 }: LoadMoreButtonProps) {
   return (
     <TouchableOpacity
@@ -53,7 +59,9 @@ export function LoadMoreButton({
         color={theme.colors.text}
       />
       <Text style={styles.text}>
-        {step != null
+        {label
+          ? label
+          : step != null
           ? t('Cargar más (+{n})', { n: step })
           : remaining != null
           ? t('Cargar más ({n})', { n: remaining })

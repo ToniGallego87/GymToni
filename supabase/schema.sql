@@ -119,8 +119,15 @@ create table if not exists public.log_sets (
   weight           real not null,
   reps             integer not null,
   updated_at       bigint not null default 0,
-  deleted          boolean not null default false
+  deleted          boolean not null default false,
+  -- Serie extra (de más sobre el objetivo): no puntúa en la mejora. Sin
+  -- default a propósito: NULL = "no lo sé" y la bajada no pisa el valor local.
+  is_extra         integer
 );
+
+-- Para bases ya creadas.
+alter table public.log_sets
+  add column if not exists is_extra integer;
 
 create table if not exists public.cardio_logs (
   id              text primary key,

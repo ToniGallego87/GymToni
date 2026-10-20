@@ -262,6 +262,33 @@ describe('ejercicio del catálogo en el historial (exercise_logs.catalog_id)', (
   });
 });
 
+describe('serie extra (log_sets.is_extra)', () => {
+  it('ida y vuelta: la serie extra sigue marcada y las demás no', () => {
+    const data = buildAppData();
+    data.logs[0].exercises[0].parsedSets.push({
+      weight: 55,
+      reps: 10,
+      extra: true,
+    });
+
+    const rows = appDataToRows(data, stubId);
+    expect(rows.logSets.map((s) => s.is_extra)).toEqual([0, 0, 1]);
+    expect(rowsToAppData(rows).logs[0].exercises[0].parsedSets).toEqual([
+      { weight: 60, reps: 8 },
+      { weight: 60, reps: 8 },
+      { weight: 55, reps: 10, extra: true },
+    ]);
+  });
+
+  it('una fila de una nube sin la columna no es extra', () => {
+    const rows = appDataToRows(buildAppData(), stubId);
+    rows.logSets.forEach((s) => delete s.is_extra);
+    expect(
+      rowsToAppData(rows).logs[0].exercises[0].parsedSets.some((s) => s.extra)
+    ).toBe(false);
+  });
+});
+
 describe('entradas de cardio (cardio_entries)', () => {
   const withCardio = (rawInput: string): WorkoutAppData => {
     const data = buildAppData();

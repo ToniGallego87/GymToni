@@ -223,6 +223,10 @@ register({
   'Entrenamiento completado': 'Workout completed',
   'Empezar entrenamiento': 'Start workout',
   'Sin mejora': 'No improvement',
+  'de mejora': 'improvement',
+  'frente a la vez anterior': 'vs. last time',
+  'Borrar nota': 'Delete note',
+  'Terminar nota': 'Finish note',
   '{n} % de mejora': '{n}% improvement',
   'semanas seguidas': 'weeks in a row',
   Semana: 'Week',
@@ -275,6 +279,7 @@ register({
   Día: 'Day',
   'Selecciona el día que vas a registrar': "Select the day you'll log",
   '{n} ejercicios': '{n} exercises',
+  'Tu evolución por ejercicio': 'Your progress by exercise',
   '1 ejercicio': '1 exercise',
 
   // Registro de entrenamiento
@@ -290,14 +295,11 @@ register({
   'Plegar día': 'Collapse day',
   'Desplegar día': 'Expand day',
   'Nota del ejercicio': 'Exercise note',
-  'Ver la nota del ejercicio': 'See the exercise note',
   // Nota de la SESIÓN (el contexto del día), distinta de la del ejercicio
   'Nota de la sesión': 'Session note',
   'Añadir nota de la sesión': 'Add a session note',
   'Ej: gym lleno, cambié banca por mancuernas':
     'E.g.: gym was packed, swapped bench for dumbbells',
-  'Añade una nota (ej: muy cansado, fallo en última serie)':
-    'Add a note (e.g. very tired, failed last set)',
   'Descanso finalizado': 'Rest over',
   '¡A por la siguiente serie!': 'On to the next set!',
   'Es hora de tu siguiente serie': 'Time for your next set',
@@ -309,10 +311,11 @@ register({
   'Añadir serie': 'Add set',
   'Añadir {ord} serie': 'Add {ord} set',
   'Añadir última serie': 'Add last set',
+  'Serie extra': 'Extra set',
+  'Primera vez: hoy marcas la referencia': 'First time: today sets the mark',
   '{a} de {b} series hechas': '{a} of {b} sets done',
   'Saltar resto': 'Skip remaining',
   'Saltar ejercicio': 'Skip exercise',
-  'Completado · {a}/{b} series': 'Completed · {a}/{b} sets',
   Parar: 'Stop',
   'Saltar descanso': 'Skip rest',
   'Tiempo hasta la siguiente serie': 'Time until next set',
@@ -321,8 +324,6 @@ register({
   'Usar {n}s': 'Use {n}s',
   'Borrar serie {n}': 'Delete set {n}',
   Corregir: 'Edit',
-  'Plegar ejercicio': 'Collapse exercise',
-  'Desplegar ejercicio': 'Expand exercise',
   '¡Ánimo con tu nueva rutina!': 'Good luck with your new routine!',
 
   // Cardio
@@ -523,7 +524,6 @@ register({
   reps: 'reps',
   seg: 'sec',
   'Añadir ejercicio': 'Add exercise',
-  'Sin datos': 'No data',
   'Ejercicio adicional · no es de este día':
     'Extra exercise · not part of this day',
   'Añadir día': 'Add day',
@@ -647,8 +647,18 @@ register({
   // Progreso por ejercicio
   Progreso: 'Progress',
   'Progreso / semana': 'Progress / week',
-  'Tu evolución': 'Your progress',
   'Ver en la rutina': 'View in routine',
+  'Más reciente': 'Most recent',
+  'Por nombre': 'By name',
+  'Más sesiones': 'Most sessions',
+  'Mejor 1RM': 'Best 1RM',
+  'Ordenar: {sort}': 'Sort: {sort}',
+  'Quitar filtros': 'Clear filters',
+  'desde el {date}': 'since {date}',
+  'Mejor que la anterior': 'Better than previous',
+  Peor: 'Worse',
+  Última: 'Latest',
+  'Sin registros': 'No logs yet',
   'Ver en {routine}': 'View in {routine}',
   'Registra un entrenamiento y aquí verás tu evolución.':
     'Log a workout and your progress will show up here.',
@@ -1015,10 +1025,21 @@ register({
   Días: 'Days',
   Retos: 'Challenges',
   'Aún no hay actividad': 'No activity yet',
-  'Cada día que entrenes, cada reto que superes y cada logro que consigas aparecerá aquí.':
-    'Every day you train, every challenge you beat and every achievement you earn will show up here.',
-  'Cargando más actividad': 'Loading more activity',
-  '{n} hitos': '{n} milestones',
+  'Cada día que entrenes, cada récord que batas, cada reto que superes y cada logro que consigas aparecerá aquí.':
+    'Every day you train, every record you set, every challenge you beat and every achievement you earn will show up here.',
+  '{n} hitos desde {date}': '{n} milestones since {date}',
+  'Mes anterior': 'Previous month',
+  'Meses anteriores ({n})': 'Previous months ({n})',
+  '1 entreno': '1 workout',
+  '{n} entrenos': '{n} workouts',
+  '1 récord': '1 record',
+  '{n} récords': '{n} records',
+  'récord personal': 'personal record',
+  'Reto semanal': 'Weekly challenge',
+  'Semana del {d}': 'Week of {d}',
+  'Visible en tu perfil de Comunidad': 'Visible on your Community profile',
+  'Solo la ves tú': 'Only you can see it',
+  'Cambiar quién ve tu actividad': 'Change who sees your activity',
   'Sin hitos': 'No milestones',
   'Ninguna activa': 'None active',
   'Crea la primera': 'Create your first',
@@ -1159,8 +1180,8 @@ register({
   'Ver la rutina {name}': 'View the routine {name}',
   Compartir: 'Share',
   'No compartir': 'Do not share',
-  'Tu perfil enseña tus logros, retos superados y días entrenados.':
-    'Your profile shows your achievements, completed challenges and training days.',
+  'Tu perfil enseña tus logros, retos superados, récords y días entrenados.':
+    'Your profile shows your achievements, completed challenges, records and training days.',
   'Nadie verá tu actividad, y se retira la ya publicada.':
     'Nobody will see your activity, and what you already published is removed.',
   '{xp} / {next} puntos': '{xp} / {next} points',

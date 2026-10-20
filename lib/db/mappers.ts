@@ -91,6 +91,9 @@ export interface LogSetRow {
   set_order: number;
   weight: number;
   reps: number;
+  // 1 = serie extra (no puntúa en la mejora). Opcional en el tipo: las filas de
+  // una nube sin la columna no la traen.
+  is_extra?: number | null;
 }
 
 export interface CardioLogRow {
@@ -240,6 +243,7 @@ export function logToRows(
         set_order: index + 1,
         weight: set.weight,
         reps: set.reps,
+        is_extra: set.extra ? 1 : 0,
       });
     });
   }
@@ -457,10 +461,11 @@ export function rowsToAppData(rows: DbRows): WorkoutAppData {
       catalogId: row.catalog_id ?? undefined,
       order: row.exercise_order,
       rawInput: row.raw_input,
-      parsedSets: (setsByExerciseLog.get(row.id) ?? []).map((set) => ({
-        weight: set.weight,
-        reps: set.reps,
-      })),
+      parsedSets: (setsByExerciseLog.get(row.id) ?? []).map((set) =>
+        set.is_extra
+          ? { weight: set.weight, reps: set.reps, extra: true }
+          : { weight: set.weight, reps: set.reps }
+      ),
       notes: row.notes ?? undefined,
       timestamp: row.created_at,
     };

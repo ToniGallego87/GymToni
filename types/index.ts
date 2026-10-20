@@ -47,6 +47,10 @@ export interface WorkoutRoutine {
 export interface ParsedSet {
   weight: number;
   reps: number;
+  // Serie de MÁS, metida con el objetivo ya cumplido ("Serie extra"). Se apunta
+  // y puede ser récord, pero no puntúa en ningún porcentaje de mejora (ver
+  // `getSetPerformanceScore`): el % mide el trabajo del plan.
+  extra?: boolean;
 }
 
 export interface ExerciseLog {

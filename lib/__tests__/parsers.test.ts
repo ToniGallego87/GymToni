@@ -2,7 +2,35 @@ import {
   parseSeriesString,
   parseCardioString,
   formatParsedSet,
+  formatSeriesString,
 } from '../parsers';
+
+describe('serie extra en el texto (rawInput)', () => {
+  it('el "*" final marca la serie extra', () => {
+    expect(parseSeriesString('60x8, 60x8, 55x10*')).toEqual([
+      { weight: 60, reps: 8 },
+      { weight: 60, reps: 8 },
+      { weight: 55, reps: 10, extra: true },
+    ]);
+  });
+
+  it('el "+" sigue siendo carga combinada, no extra', () => {
+    expect(parseSeriesString('8+8x11')).toEqual([{ weight: 16, reps: 11 }]);
+  });
+
+  it('formatSeriesString es el inverso: omitidas "-" y extra "*"', () => {
+    const sets = [
+      { weight: 60, reps: 8 },
+      { weight: -1, reps: -1 },
+      { weight: 55, reps: 10, extra: true },
+    ];
+    expect(formatSeriesString(sets)).toBe('60x8, -, 55x10*');
+    expect(parseSeriesString(formatSeriesString(sets))).toEqual([
+      { weight: 60, reps: 8 },
+      { weight: 55, reps: 10, extra: true },
+    ]);
+  });
+});
 
 describe('parseSeriesString', () => {
   it('parsea series separadas por comas', () => {

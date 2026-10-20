@@ -1,12 +1,17 @@
 import { supabase } from '../supabase';
-import { ActivityItem, activityKey, sortActivity } from '../activity';
+import {
+  ActivityCounts,
+  ActivityItem,
+  activityKey,
+  sortActivity,
+} from '../activity';
 import {
   getStoredPublishedActivity,
   setStoredPublishedActivity,
 } from '../appSettings';
 
 // Actividad en la nube: los hitos que el perfil de una persona enseña
-// (insignias, retos y días entrenados). Requiere haber ejecutado la sección
+// (insignias, retos, días entrenados y récords). Requiere haber ejecutado la sección
 // `activity` de supabase/social-schema.sql.
 //
 // Quién ve qué lo decide la RLS, no esta capa: la misma regla que el perfil
@@ -65,12 +70,9 @@ export async function getActivity(
  * una fila) porque contar lo que hay cargado daría el tamaño de la página —20—
  * y cambiaría a cada "Cargar más".
  */
-export async function getActivityCounts(userId: string): Promise<{
-  badges: number;
-  challenges: number;
-  days: number;
-  total: number;
-}> {
+export async function getActivityCounts(
+  userId: string
+): Promise<ActivityCounts> {
   const countOf = async (kind: ActivityItem['kind']): Promise<number> => {
     const { count, error } = await supabase
       .from('activity')
@@ -80,13 +82,34 @@ export async function getActivityCounts(userId: string): Promise<{
     if (error) throw new Error(`activity: ${error.message}`);
     return count ?? 0;
   };
-  const [badges, challenges, days] = await Promise.all([
+  const [badges, challenges, days, records] = await Promise.all([
     countOf('badge'),
     countOf('challenge'),
     countOf('day'),
+    countOf('record'),
   ]);
-  return { badges, challenges, days, total: badges + challenges + days };
+  return {
+    badges,
+    challenges,
+    days,
+    records,
+    total: badges + challenges + days + records,
+  };
 }
+
+// Fila de la tabla para un hito. La marca del récord va dentro del título: la
+// tabla no tiene columna para ella.
+const itemToRow = (userId: string, item: ActivityItem, now: number) => ({
+  user_id: userId,
+  kind: item.kind,
+  ref: item.ref,
+  title: item.detail ? `${item.title} · ${item.detail}` : item.title,
+  icon: item.icon ?? null,
+  routine_id: item.routineId ?? null,
+  routine_name: item.routineName ?? null,
+  happened_on: item.happenedOn,
+  created_at: now,
+});
 
 /**
  * Sube los hitos que aún no estén publicados. Idempotente por partida doble: el
@@ -103,33 +126,47 @@ export async function publishActivity(
   { limit = 120 }: { limit?: number } = {}
 ): Promise<number> {
   const published = new Set(getStoredPublishedActivity());
-  const pending = items
-    .filter((item) => !published.has(activityKey(item)))
+  const unpublished = items.filter(
+    (item) => !published.has(activityKey(item))
+  );
+  // El tope va por separado para récords y resto: unos récords que la base
+  // rechaza no pueden ocupar el cupo y dejar sin subir los demás hitos.
+  const base = unpublished
+    .filter((item) => item.kind !== 'record')
     .slice(0, limit);
-  if (pending.length === 0) return 0;
+  const records = unpublished
+    .filter((item) => item.kind === 'record')
+    .slice(0, limit);
+  if (base.length === 0 && records.length === 0) return 0;
 
   const now = Date.now();
-  const { error } = await supabase.from('activity').upsert(
-    pending.map((item) => ({
-      user_id: userId,
-      kind: item.kind,
-      ref: item.ref,
-      title: item.title,
-      icon: item.icon ?? null,
-      routine_id: item.routineId ?? null,
-      routine_name: item.routineName ?? null,
-      happened_on: item.happenedOn,
-      created_at: now,
-    })),
-    { onConflict: 'user_id,kind,ref', ignoreDuplicates: true }
-  );
-  if (error) throw new Error(`activity: ${error.message}`);
+  const upsert = (batch: ActivityItem[]) =>
+    supabase
+      .from('activity')
+      .upsert(
+        batch.map((item) => itemToRow(userId, item, now)),
+        { onConflict: 'user_id,kind,ref', ignoreDuplicates: true }
+      );
+  const markPublished = (batch: ActivityItem[]) => {
+    batch.forEach((item) => published.add(activityKey(item)));
+    setStoredPublishedActivity([...published]);
+  };
 
-  setStoredPublishedActivity([
-    ...published,
-    ...pending.map((item) => activityKey(item)),
-  ]);
-  return pending.length;
+  if (base.length > 0) {
+    const { error } = await upsert(base);
+    if (error) throw new Error(`activity: ${error.message}`);
+    markPublished(base);
+  }
+
+  // Los récords van aparte: el CHECK de `kind` de la tabla no los admitía
+  // hasta la migración de supabase/social-schema.sql. Si la base aún no la
+  // tiene, se rechazan solos sin arrastrar al resto y se reintentan después.
+  if (records.length > 0) {
+    const { error } = await upsert(records);
+    if (!error) markPublished(records);
+  }
+
+  return base.length + records.length;
 }
 
 /**

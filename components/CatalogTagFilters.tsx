@@ -22,6 +22,12 @@ interface CatalogTagFiltersProps {
   value: TagFilter;
   onChange: (next: TagFilter) => void;
   style?: StyleProp<ViewStyle>;
+  /**
+   * Solo la fila de zonas, sin músculo ni equipo. Para listas cortas (Progreso:
+   * 30-40 ejercicios) donde la cascada entera era más chrome que lista y el
+   * buscador ya encuentra por músculo y equipo ("bíceps mancuerna").
+   */
+  zoneOnly?: boolean;
 }
 
 /**
@@ -39,11 +45,14 @@ export function CatalogTagFilters({
   value,
   onChange,
   style,
+  zoneOnly = false,
 }: CatalogTagFiltersProps) {
   const options = useMemo(() => tagFilterOptions(items, value), [items, value]);
 
   const categoryOptions: SegmentedOption<string | undefined>[] = [
-    { id: undefined, label: t('Cualquier zona') },
+    // Sola, la fila no necesita decir de qué es "cualquiera": en corto deja
+    // ver más zonas sin deslizar.
+    { id: undefined, label: zoneOnly ? t('Todas') : t('Cualquier zona') },
     ...options.category.map((key) => ({ id: key, label: categoryLabel(key) })),
     ...(options.unclassified
       ? [{ id: UNCLASSIFIED, label: t('Sin clasificar') }]
@@ -63,7 +72,8 @@ export function CatalogTagFilters({
 
   // Con una zona de verdad (no "Sin clasificar") se abre el resto. Una fila
   // con una sola opción no filtra nada: no se pinta.
-  const zoneChosen = !!value.category && value.category !== UNCLASSIFIED;
+  const zoneChosen =
+    !zoneOnly && !!value.category && value.category !== UNCLASSIFIED;
 
   return (
     <View style={[styles.container, style]}>

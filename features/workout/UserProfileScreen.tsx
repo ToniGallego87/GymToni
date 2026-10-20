@@ -125,13 +125,16 @@ async function hydrateProfileCache(
 
 /** "12 logros · 34 retos · 128 días", saltando lo que esté a cero. */
 function activityCountsLabel(counts: ActivityCounts): string {
-  const { badges, challenges, days } = counts;
+  const { badges, challenges, days, records } = counts;
   return [
+    days > 0 &&
+      (days === 1 ? t('1 entreno') : t('{n} entrenos', { n: days })),
+    records > 0 &&
+      (records === 1 ? t('1 récord') : t('{n} récords', { n: records })),
     badges > 0 &&
       (badges === 1 ? t('1 logro') : t('{n} logros', { n: badges })),
     challenges > 0 &&
       (challenges === 1 ? t('1 reto') : t('{n} retos', { n: challenges })),
-    days > 0 && (days === 1 ? t('1 día') : t('{n} días', { n: days })),
   ]
     .filter(Boolean)
     .join(' · ');

@@ -842,8 +842,8 @@ const makeStyles = () =>
       borderColor: theme.colors.textMuted + '99',
       backgroundColor: theme.colors.surfaceAlt,
     },
-    // "×2": insignia dorada abajo a la derecha (la misma piel que la marca de
-    // nota de las casillas del registro).
+    // "×2": insignia blanca abajo a la derecha (en oro competía con el
+    // amarillo de la semana en curso; es un recuento, no un estado).
     weekDotBadge: {
       position: 'absolute',
       right: -8,
@@ -854,13 +854,13 @@ const makeStyles = () =>
       borderRadius: 7,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: theme.colors.primaryFill,
+      backgroundColor: theme.colors.text,
     },
     weekDotBadgeText: {
       fontSize: 9,
       fontWeight: '800',
       lineHeight: 11,
-      color: theme.colors.onGold,
+      color: theme.colors.background,
       includeFontPadding: false,
     },
     weekDotMore: {

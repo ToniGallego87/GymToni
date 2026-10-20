@@ -16,6 +16,7 @@ import {
 } from '@lib/level';
 import { Award, pushAwards } from '@lib/awards';
 import { buildLocalActivity } from '@lib/activity';
+import { useExerciseKeyResolver } from './useExerciseKeyResolver';
 import { publishActivity } from '@lib/cloud/activity';
 import { getStoredSeenBadges, setStoredSeenBadges } from '@lib/appSettings';
 import { useSession } from '@lib/cloud/auth';
@@ -231,6 +232,8 @@ export function useRecordAccountLevel(enabled: boolean): void {
   // Solo sube lo que falte (`publishActivity` es idempotente) y únicamente si el
   // interruptor está encendido; apagarlo borra lo subido desde Editar perfil.
   const publishing = useRef(false);
+  // Los récords se agrupan por ejercicio como en Progreso por ejercicio.
+  const resolveExerciseKey = useExerciseKeyResolver();
   useEffect(() => {
     if (!enabled || !user) return;
     // Hasta que el perfil no ha llegado no se sabe si lo comparte, y publicar
@@ -244,6 +247,7 @@ export function useRecordAccountLevel(enabled: boolean): void {
       badges,
       challenges,
       wins,
+      resolveExerciseKey,
     });
     publishActivity(user.id, items)
       .catch(() => {

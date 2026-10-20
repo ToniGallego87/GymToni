@@ -62,6 +62,7 @@ import {
   FLOATING_GLASS_BAR_HEIGHT,
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
+  FullSizeLayoutLock,
   PipRestTimer,
   RestTimerBar,
   SplashFade,
@@ -221,7 +222,11 @@ type Screen =
         log: WorkoutLog;
         day: WorkoutDay;
         origin: 'home' | 'calendar' | 'cardio';
+        // La vuelta de ese Detalle (si se abrió desde la Actividad).
+        back?: Screen;
       };
+      // Otra pantalla a la que volver (la Actividad, desde un récord).
+      back?: Screen;
     }
   | {
       type: 'new-routine';
@@ -820,6 +825,10 @@ function AppContent({ onReady }: { onReady: () => void }) {
       setScreen({ type: 'detail', ...screen.detailReturn });
       return;
     }
+    if (screen.back) {
+      goBackTo(screen.back);
+      return;
+    }
     goProfile();
   };
 
@@ -1046,7 +1055,15 @@ function AppContent({ onReady }: { onReady: () => void }) {
         const timer = getRestTimer();
         if (!timer) return;
         const day = findDayInRoutines(state.routines, timer.dayId);
-        if (day) setScreen({ type: 'workout-log', day, origin: 'home' });
+        if (!day) return;
+        // Si ya se está en ese registro (lo normal: se minimizó desde él), se
+        // queda tal cual: rehacer la pantalla le cambiaba el origen y "Volver"
+        // dejaba de llevar a donde se abrió (p. ej. el Detalle que se corregía).
+        setScreen((current) =>
+          current.type === 'workout-log' && current.day.id === day.id
+            ? current
+            : { type: 'workout-log', day, origin: 'home' }
+        );
       }),
     [state.routines]
   );
@@ -1601,6 +1618,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
                   log: screen.log,
                   day: screen.day,
                   origin: screen.origin,
+                  back: screen.back,
                 },
               })
             }
@@ -1617,12 +1635,22 @@ function AppContent({ onReady }: { onReady: () => void }) {
         {screen.type === 'activity' && (
           <ActivityScreen
             onBack={() => backFromProfileChild(screen)}
-            onOpenRoutine={(routine) =>
+            // La Actividad entera (con su propio `back`) como vuelta: al salir
+            // del Detalle o del Progreso, "Volver" sigue llevando a donde se
+            // abrió la Actividad.
+            onOpenLog={(log, day) =>
               setScreen({
-                type: 'routine-details',
-                routine,
-                // La Actividad entera (con su propio `back`), para que al
-                // volver de la ficha "Volver" siga llevando a donde se abrió.
+                type: 'detail',
+                log,
+                day,
+                origin: 'home',
+                back: screen,
+              })
+            }
+            onOpenExerciseProgress={(exerciseKey) =>
+              setScreen({
+                type: 'exercise-progress',
+                initialExerciseKey: exerciseKey,
                 back: screen,
               })
             }
@@ -1944,7 +1972,11 @@ export default function App() {
             translucent
           />
           <View style={styles.container}>
-            <AppContent onReady={() => setAppReady(true)} />
+            {/* Encogida en la ventanita, la app conserva debajo su tamaño de
+              pantalla completa: al volver no se recoloca nada. */}
+            <FullSizeLayoutLock>
+              <AppContent onReady={() => setAppReady(true)} />
+            </FullSizeLayoutLock>
             {/* Ventanita flotante del descanso: el sistema encoge la app entera a
               un recuadro movible (Picture-in-Picture), donde la pantalla de
               registro no se lee. Se tapa con la cuenta atrás a tamaño grande y

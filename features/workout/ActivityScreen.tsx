@@ -1,7 +1,7 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { Animated, Easing, View, Text, StyleSheet } from 'react-native';
+import { Pressable, View, Text, StyleSheet } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -10,49 +10,58 @@ import {
   getFloatingBackButtonMetrics,
   GlassTopBar,
   GLASS_TOP_BAR_CONTENT_GAP,
+  LoadMoreButton,
   useGlassTopBarHeight,
   StretchScrollView,
 } from '@components';
-import { WorkoutRoutine } from '../../types';
+import { WorkoutDay, WorkoutLog } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
 import { useAccountLevel } from '@hooks/useAccountLevel';
+import { useExerciseKeyResolver } from '@hooks/useExerciseKeyResolver';
+import { useMyProfile } from '@hooks/useMyProfile';
+import { useSession } from '@lib/cloud/auth';
 import { useChallengeWins } from '@lib/level';
-import { buildLocalActivity } from '@lib/activity';
+import { buildLocalActivity, groupActivityByMonth } from '@lib/activity';
+import { buildWorkoutImprovement } from '@lib/progress';
+import { findDayInRoutines, getLogTimestamp } from '@lib/utils';
 import { theme } from '@lib/theme';
-import { t } from '@lib/i18n';
+import { dateLocale, t } from '@lib/i18n';
+import { ProfileEditModal } from './ProfileEditModal';
 
 interface ActivityScreenProps {
   onBack: () => void;
-  onOpenRoutine: (routine: WorkoutRoutine) => void;
+  /** Un entreno abre su sesión (el Detalle), como desde Inicio o el Calendario. */
+  onOpenLog: (log: WorkoutLog, day: WorkoutDay) => void;
+  /** Un récord abre el Progreso de su ejercicio. */
+  onOpenExerciseProgress: (exerciseKey: string) => void;
 }
 
-// Hitos por tanda: con años de historial son cientos de días, y pintarlos
-// todos al entrar se nota. La siguiente se pide tirando de la lista hacia
-// arriba más allá de su final (no solo con llegar a él).
-const PAGE_SIZE = 10;
-// Lo que gira la rueda antes de añadir la tanda. Cargar es local e inmediato,
-// pero sin este momento la lista crecería de golpe sin que se viera por qué.
-const LOAD_DELAY_MS = 450;
+// Meses por tanda: con años de historial, pintarlos todos al entrar se nota.
+// Los siguientes se piden con el botón del pie, que dice cuántos quedan.
+const MONTH_PAGE = 3;
 
 /**
- * Actividad PROPIA: tus insignias, tus retos superados y tus días entrenados en
- * una línea de tiempo, desde los datos del móvil. Es la misma lista que ven los
- * demás en tu perfil de Comunidad, pero sin depender de la nube: sin cuenta,
- * sin red o con "No compartir", uno sigue pudiendo ver su propia trayectoria.
- * Todo sale de lo que la app ya calcula (`buildLocalActivity`, el mismo cálculo
- * que se publica).
+ * Actividad PROPIA: tus logros, retos, récords y días entrenados como un diario
+ * por meses, desde los datos del móvil. Es la misma lista que ven los demás en
+ * tu perfil de Comunidad, pero sin depender de la nube: sin cuenta, sin red o
+ * con "No compartir", uno sigue pudiendo ver su propia trayectoria. Todo sale
+ * de lo que la app ya calcula (`buildLocalActivity`, el mismo cálculo que se
+ * publica).
  */
-export function ActivityScreen({ onBack, onOpenRoutine }: ActivityScreenProps) {
+export function ActivityScreen({
+  onBack,
+  onOpenLog,
+  onOpenExerciseProgress,
+}: ActivityScreenProps) {
   const insets = useSafeAreaInsets();
   const { state } = useWorkout();
   const { badges, challenges } = useAccountLevel();
   const wins = useChallengeWins();
-  const [visible, setVisible] = useState(PAGE_SIZE);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const loadingRef = useRef(false);
-  const loadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const viewportHeight = useRef(0);
-  const spin = useRef(new Animated.Value(0)).current;
+  const resolveExerciseKey = useExerciseKeyResolver();
+  const { user } = useSession();
+  const { profile } = useMyProfile();
+  const [visibleMonths, setVisibleMonths] = useState(MONTH_PAGE);
+  const [showProfileEdit, setShowProfileEdit] = useState(false);
 
   const items = useMemo(
     () =>
@@ -62,94 +71,72 @@ export function ActivityScreen({ onBack, onOpenRoutine }: ActivityScreenProps) {
         badges,
         challenges,
         wins,
+        resolveExerciseKey,
       }),
-    [state.logs, state.routines, badges, challenges, wins]
+    [state.logs, state.routines, badges, challenges, wins, resolveExerciseKey]
   );
 
-  const counts = useMemo(
-    () => ({
-      badge: items.filter((item) => item.kind === 'badge').length,
-      challenge: items.filter((item) => item.kind === 'challenge').length,
-      day: items.filter((item) => item.kind === 'day').length,
-    }),
-    [items]
+  const months = useMemo(() => groupActivityByMonth(items), [items]);
+  const shownItems = useMemo(
+    () => months.slice(0, visibleMonths).flatMap((month) => month.items),
+    [months, visibleMonths]
   );
+  const remainingMonths = Math.max(0, months.length - visibleMonths);
 
-  const hasMore = items.length > visible;
-
-  // Siguiente tanda: la rueda gira un momento y la lista crece. El ref evita
-  // pedir dos tandas a la vez.
-  const loadMore = () => {
-    if (loadingRef.current || !hasMore) return;
-    loadingRef.current = true;
-    setLoadingMore(true);
-    loadTimer.current = setTimeout(() => {
-      setVisible((n) => n + PAGE_SIZE);
-      setLoadingMore(false);
-      loadingRef.current = false;
-    }, LOAD_DELAY_MS);
+  const logsById = useMemo(
+    () => new Map(state.logs.map((log) => [log.id, log])),
+    [state.logs]
+  );
+  const dayOf = (logId: string) => {
+    const log = logsById.get(logId);
+    const day = log ? findDayInRoutines(state.routines, log.dayId) : undefined;
+    return log && day ? { log, day } : null;
   };
 
-  useEffect(
-    () => () => {
-      if (loadTimer.current) clearTimeout(loadTimer.current);
-    },
-    []
-  );
-
-  // La rueda está quieta mientras no carga, y gira solo mientras carga.
-  useEffect(() => {
-    if (!loadingMore) {
-      spin.stopAnimation();
-      spin.setValue(0);
-      return;
-    }
-    const loop = Animated.loop(
-      Animated.timing(spin, {
-        toValue: 1,
-        duration: 700,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      })
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [loadingMore, spin]);
-  const spinStyle = {
-    transform: [
-      {
-        rotate: spin.interpolate({
-          inputRange: [0, 1],
-          outputRange: ['0deg', '360deg'],
-        }),
-      },
-    ],
-  };
-
-  // Si la tanda no llena la pantalla no hay scroll que la pida: se carga sola.
-  const onContentSizeChange = (_width: number, height: number) => {
-    if (viewportHeight.current && height < viewportHeight.current) loadMore();
-  };
-
-  // Un día enlaza a su rutina si sigue existiendo en el móvil.
-  const routineIds = useMemo(
-    () => new Set(state.routines.map((routine) => routine.id)),
-    [state.routines]
-  );
+  // Mejora de cada entreno frente a la sesión anterior del mismo día, saltando
+  // las descargas (pesos rebajados a propósito): el mismo % que el historial
+  // de Inicio. Una sesión de descarga no se compara.
+  const trendByLog = useMemo(() => {
+    const byDay = new Map<string, WorkoutLog[]>();
+    state.logs
+      .filter((log) => !log.cardioOnly)
+      .forEach((log) => {
+        byDay.set(log.dayId, [...(byDay.get(log.dayId) ?? []), log]);
+      });
+    const trends = new Map<string, { percent: number; isImproved: boolean }>();
+    byDay.forEach((dayLogs) => {
+      const sorted = [...dayLogs].sort(
+        (a, b) => getLogTimestamp(a) - getLogTimestamp(b)
+      );
+      let previous: WorkoutLog | null = null;
+      for (const log of sorted) {
+        if (log.isDeload) continue;
+        const trend = previous ? buildWorkoutImprovement(log, previous) : null;
+        if (trend) trends.set(log.id, trend);
+        previous = log;
+      }
+    });
+    return trends;
+  }, [state.logs]);
 
   const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
     getFloatingBackButtonMetrics(insets.bottom);
 
-  const summary = [
-    { icon: 'calendar-check' as const, value: counts.day, label: t('Días') },
-    {
-      icon: 'trophy-variant' as const,
-      value: counts.challenge,
-      label: t('Retos'),
-    },
-    { icon: 'medal-outline' as const, value: counts.badge, label: t('Logros') },
-  ];
+  // "34 hitos desde mar 2025": el total y desde cuándo, en una línea.
+  const oldest = items[items.length - 1]?.happenedOn;
+  const since = oldest
+    ? new Date(
+        Number(oldest.slice(0, 4)),
+        Number(oldest.slice(5, 7)) - 1,
+        1
+      )
+        .toLocaleDateString(dateLocale, { month: 'short', year: 'numeric' })
+        .replace('.', '')
+    : '';
+
+  // Si Comunidad ve esta lista: solo con cuenta (sin ella no se publica nada).
+  const shared = profile ? profile.share_activity !== false : null;
 
   return (
     <View style={styles.container}>
@@ -169,11 +156,6 @@ export function ActivityScreen({ onBack, onOpenRoutine }: ActivityScreenProps) {
           },
         ]}
         showsVerticalScrollIndicator={false}
-        onPullPastEnd={loadMore}
-        onLayout={(event) => {
-          viewportHeight.current = event.nativeEvent.layout.height;
-        }}
-        onContentSizeChange={onContentSizeChange}
       >
         {items.length === 0 ? (
           <View style={styles.empty}>
@@ -185,57 +167,66 @@ export function ActivityScreen({ onBack, onOpenRoutine }: ActivityScreenProps) {
             <Text style={styles.emptyTitle}>{t('Aún no hay actividad')}</Text>
             <Text style={styles.emptyText}>
               {t(
-                'Cada día que entrenes, cada reto que superes y cada logro que consigas aparecerá aquí.'
+                'Cada día que entrenes, cada récord que batas, cada reto que superes y cada logro que consigas aparecerá aquí.'
               )}
             </Text>
           </View>
         ) : (
           <>
-            <View style={styles.summary}>
-              {summary.map((entry) => (
-                <View key={entry.label} style={styles.summaryItem}>
-                  <MaterialCommunityIcons
-                    name={entry.icon}
-                    size={18}
-                    color={theme.colors.textSecondary}
-                  />
-                  <Text style={styles.summaryValue}>{entry.value}</Text>
-                  <Text style={styles.summaryLabel}>{entry.label}</Text>
-                </View>
-              ))}
-            </View>
+            <ActivityList
+              items={shownItems}
+              canOpenDay={(item) => !!dayOf(item.ref)}
+              onOpenDay={(item) => {
+                const found = dayOf(item.ref);
+                if (found) onOpenLog(found.log, found.day);
+              }}
+              dayTrend={(item) => trendByLog.get(item.ref) ?? null}
+              onOpenRecord={(item) => {
+                if (item.exerciseKey) onOpenExerciseProgress(item.exerciseKey);
+              }}
+            />
 
-            <View style={styles.listCard}>
-              <ActivityList
-                items={items.slice(0, visible)}
-                publicRoutineIds={routineIds}
-                onOpenRoutine={(routineId) => {
-                  const routine = state.routines.find(
-                    (r) => r.id === routineId
-                  );
-                  if (routine) onOpenRoutine(routine);
-                }}
+            {remainingMonths > 0 && (
+              <LoadMoreButton
+                style={styles.loadMore}
+                label={
+                  remainingMonths === 1
+                    ? t('Mes anterior')
+                    : t('Meses anteriores ({n})', { n: remainingMonths })
+                }
+                onPress={() => setVisibleMonths((n) => n + MONTH_PAGE)}
               />
-            </View>
-
-            {/* La rueda solo existe mientras carga: aparece al tirar de la
-                lista hacia arriba más allá del final, gira y se va con la
-                siguiente tanda ya dentro. */}
-            {loadingMore && (
-              <View
-                style={styles.loader}
-                accessibilityLabel={t('Cargando más actividad')}
-              >
-                <Animated.View style={spinStyle}>
-                  <MaterialCommunityIcons
-                    name="loading"
-                    size={26}
-                    color={theme.colors.textSecondary}
-                  />
-                </Animated.View>
-              </View>
             )}
           </>
+        )}
+
+        {/* Quién ve esta lista: la misma sale en tu perfil de Comunidad si la
+            compartes. El interruptor vive en Editar perfil, a un toque. */}
+        {!!user && shared !== null && (
+          <View style={styles.shareRow}>
+            <MaterialCommunityIcons
+              name={shared ? 'account-group-outline' : 'lock-outline'}
+              size={18}
+              color={theme.colors.textSecondary}
+            />
+            <Text style={styles.shareText}>
+              {shared
+                ? t('Visible en tu perfil de Comunidad')
+                : t('Solo la ves tú')}
+            </Text>
+            <Pressable
+              onPress={() => setShowProfileEdit(true)}
+              hitSlop={8}
+              style={({ pressed }) => [
+                styles.shareButton,
+                pressed && styles.pressed,
+              ]}
+              accessibilityRole="button"
+              accessibilityLabel={t('Cambiar quién ve tu actividad')}
+            >
+              <Text style={styles.shareButtonText}>{t('Cambiar')}</Text>
+            </Pressable>
+          </View>
         )}
       </StretchScrollView>
 
@@ -243,7 +234,9 @@ export function ActivityScreen({ onBack, onOpenRoutine }: ActivityScreenProps) {
         title={t('Actividad')}
         icon="timeline-text-outline"
         subtitle={
-          items.length ? t('{n} hitos', { n: items.length }) : undefined
+          items.length
+            ? t('{n} hitos desde {date}', { n: items.length, date: since })
+            : undefined
         }
         subtitleNumberOfLines={1}
         topInset={insets.top}
@@ -251,6 +244,11 @@ export function ActivityScreen({ onBack, onOpenRoutine }: ActivityScreenProps) {
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+
+      <ProfileEditModal
+        visible={showProfileEdit}
+        onClose={() => setShowProfileEdit(false)}
+      />
     </View>
   );
 }
@@ -267,42 +265,34 @@ const makeStyles = () =>
     content: {
       paddingHorizontal: theme.spacing.md,
     },
-    summary: {
+    loadMore: {
+      marginTop: 16,
+    },
+    shareRow: {
       flexDirection: 'row',
-      gap: 10,
-      marginBottom: 12,
-    },
-    summaryItem: {
-      flex: 1,
       alignItems: 'center',
-      gap: 2,
-      paddingVertical: 12,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
+      gap: 8,
+      marginTop: 20,
+      paddingHorizontal: 4,
     },
-    summaryValue: {
-      fontSize: 20,
-      fontWeight: '800',
-      color: theme.colors.text,
-    },
-    summaryLabel: {
-      fontSize: 12,
+    shareText: {
+      flex: 1,
+      fontSize: 13,
       color: theme.colors.textSecondary,
     },
-    listCard: {
+    shareButton: {
+      paddingVertical: 6,
       paddingHorizontal: 12,
-      paddingVertical: 4,
-      borderRadius: theme.borderRadius.md,
+      borderRadius: theme.borderRadius.pill,
       borderWidth: 1,
       borderColor: theme.colors.border,
-      backgroundColor: theme.colors.surface,
     },
-    loader: {
-      alignItems: 'center',
-      paddingVertical: 18,
+    shareButtonText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: theme.colors.primary,
     },
+    pressed: { opacity: 0.6 },
     empty: {
       alignItems: 'center',
       gap: 8,

@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 10;
+export const SCHEMA_VERSION = 11;
 
 // Convención: FK = nombre de la tabla referenciada + _id (p. ej. workout_days_id).
 // Plan (routines/workout_days/exercises): integridad estricta, CASCADE.
@@ -90,7 +90,10 @@ CREATE TABLE IF NOT EXISTS log_sets (
   set_order        INTEGER NOT NULL,
   weight           REAL NOT NULL,
   reps             INTEGER NOT NULL,
-  updated_at       INTEGER NOT NULL DEFAULT 0
+  updated_at       INTEGER NOT NULL DEFAULT 0,
+  -- Serie extra (de más sobre el objetivo, v11): no puntúa en la mejora.
+  -- Anulable como catalog_id: la bajada de una nube sin la columna trae NULL.
+  is_extra         INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS cardio_logs (

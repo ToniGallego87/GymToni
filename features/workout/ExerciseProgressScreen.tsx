@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Pressable,
@@ -42,9 +42,11 @@ import { fmtNum, t } from '@lib/i18n';
 import { longDate, shortDayMonth } from '@lib/utils';
 import { WorkoutRoutine } from '../../types';
 import {
+  AnchorMenu,
   AppModal,
   BarChart,
   ChartArea,
+  ChartCardStat,
   BarChartPoint,
   getChartWidth,
   Button,
@@ -59,6 +61,7 @@ import {
   GradientFill,
   LoadMoreButton,
   SEGMENTED_FILTER_CHART_GAP,
+  SectionLegend,
   SegmentedFilter,
   SegmentedOption,
   StretchScrollView,
@@ -95,42 +98,66 @@ const PAGE_SIZE = 10;
 
 // Umbrales del chrome de la lista. Con dos o tres ejercicios registrados (las
 // primeras semanas) buscador y orden eran más control que contenido encima de
-// filas que caben enteras: el orden aparece cuando la lista deja de verse de un
-// vistazo y el buscador cuando ya no cabe en una pantalla.
+// filas que caben enteras: la cabecera con el orden aparece cuando la lista
+// deja de verse de un vistazo y el buscador cuando ya no cabe en una pantalla.
 const MIN_EXERCISES_FOR_SORT = 5;
 const MIN_EXERCISES_FOR_SEARCH = 10;
+
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // Candidatos que enseña "Es el mismo que…" a la vez: el buscador acota
 // el resto (pintar cientos de filas en un modal se nota).
 const MERGE_MAX_OPTIONS = 30;
 
-// Sin icono, a diferencia del filtro de métrica: los cuatro criterios con
-// icono + texto no caben de ancho, y "ordenar por sesiones" no tiene un dibujo
-// que se entienda solo (el filtro de días de Inicio sí: son sus siluetas).
+// El orden de la lista. No es un raíl más: con la misma piel que el filtro de
+// zonas, filtrar y ordenar no se distinguían, y el orden se cambia rara vez. Va
+// en la cabecera de la lista (el activo a la vista) y abre un menú con los
+// cuatro. `label` es el corto del botón; `menuLabel`, el que se lee en el menú.
 // Rótulos con getter para que sigan al idioma en caliente.
-const SORT_OPTIONS: SegmentedOption<ExerciseSort>[] = [
+const SORT_CHOICES: {
+  id: ExerciseSort;
+  icon: IconName;
+  label: string;
+  menuLabel: string;
+}[] = [
   {
     id: 'recent',
+    icon: 'clock-outline',
     get label() {
       return t('Reciente');
+    },
+    get menuLabel() {
+      return t('Más reciente');
     },
   },
   {
     id: 'name',
+    icon: 'sort-alphabetical-ascending',
     get label() {
       return t('Nombre');
+    },
+    get menuLabel() {
+      return t('Por nombre');
     },
   },
   {
     id: 'sessions',
+    icon: 'counter',
     get label() {
       return t('Sesiones');
+    },
+    get menuLabel() {
+      return t('Más sesiones');
     },
   },
   {
     id: 'best',
+    icon: 'trophy-outline',
     get label() {
       return t('1RM');
+    },
+    get menuLabel() {
+      return t('Mejor 1RM');
     },
   },
 ];
@@ -138,9 +165,11 @@ const SORT_OPTIONS: SegmentedOption<ExerciseSort>[] = [
 type ChartMetric = {
   id: string;
   label: string;
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
+  icon: IconName;
   get: (session: ExerciseSession) => number;
   fmt: (value: number) => string;
+  /** Unidad del cambio en el titular de la ficha (" kg", " reps"). */
+  unit: string;
 };
 
 // Rótulos con getter: t() se evalúa al pintar, no al cargar el módulo, así
@@ -154,6 +183,7 @@ const CHART_METRICS: ChartMetric[] = [
     icon: 'trophy-outline',
     get: (session) => session.bestOneRepMax,
     fmt: fmtNum,
+    unit: ' kg',
   },
   {
     id: 'weight',
@@ -163,6 +193,7 @@ const CHART_METRICS: ChartMetric[] = [
     icon: 'weight-kilogram',
     get: (session) => session.maxWeight,
     fmt: fmtNum,
+    unit: ' kg',
   },
   {
     id: 'volume',
@@ -172,6 +203,7 @@ const CHART_METRICS: ChartMetric[] = [
     icon: 'chart-box-outline',
     get: (session) => session.volume,
     fmt: (value) => String(Math.round(value)),
+    unit: ' kg',
   },
   {
     id: 'reps',
@@ -181,6 +213,9 @@ const CHART_METRICS: ChartMetric[] = [
     icon: 'repeat',
     get: (session) => session.totalReps,
     fmt: (value) => String(Math.round(value)),
+    get unit() {
+      return ` ${t('reps')}`;
+    },
   },
 ];
 
@@ -195,23 +230,49 @@ const METRIC_OPTIONS: SegmentedOption<string>[] = CHART_METRICS.map(
 );
 
 /**
+ * Las sesiones que mide una gráfica: con valor en esa medida y sin las de
+ * DESCARGA (bajar la carga es el plan, no un retroceso; dibujarlas metía un
+ * bache rojo en mitad de la progresión y ensanchaba el dominio hasta aplanar
+ * el resto de barras). La gráfica y el titular de la ficha leen la misma
+ * serie.
+ */
+function metricPoints(sessions: ExerciseSession[], metric: ChartMetric) {
+  return sessions
+    .filter((session) => !session.isDeload)
+    .map((session) => ({ session, value: metric.get(session) }))
+    .filter((point) => point.value > 0);
+}
+
+/**
+ * Titular de la ficha: cuánto ha cambiado la medida desde la primera sesión
+ * que la tiene (no solo desde la primera barra visible: "desde el 3 ago" dice
+ * la fecha). Responde a "¿cómo voy?" sin tener que leer las barras. null con
+ * menos de dos sesiones: no hay con qué comparar.
+ */
+function buildHeadline(
+  sessions: ExerciseSession[],
+  metric: ChartMetric
+): { delta: number; since: string } | null {
+  const points = metricPoints(sessions, metric);
+  if (points.length < 2) return null;
+  const first = points[0];
+  const last = points[points.length - 1];
+  return {
+    delta: Math.round((last.value - first.value) * 10) / 10,
+    since: first.session.date,
+  };
+}
+
+/**
  * Traduce las sesiones a barras: color por tendencia (sesión vs anterior) y la
  * última en amarillo. El dibujo lo hace <BarChart/> (el mismo de Inicio y
  * Cardio); aquí solo se decide qué mide cada barra y de qué color va.
- *
- * Las sesiones de DESCARGA no entran: bajar la carga es el plan, no un
- * retroceso, y dibujarlas metía un bache rojo en mitad de la progresión y
- * ensanchaba el dominio hasta aplanar el resto de barras.
  */
 function buildSessionChart(
   sessions: ExerciseSession[],
   metric: ChartMetric
 ): { bars: BarChartPoint[]; domain: { min: number; max: number } } | null {
-  const points = sessions
-    .filter((session) => !session.isDeload)
-    .map((session) => ({ session, value: metric.get(session) }))
-    .filter((point) => point.value > 0)
-    .slice(-MAX_CHART_SESSIONS);
+  const points = metricPoints(sessions, metric).slice(-MAX_CHART_SESSIONS);
   if (points.length < 2) return null;
 
   const values = points.map((point) => point.value);
@@ -230,10 +291,13 @@ function buildSessionChart(
     const isLatest = index === points.length - 1;
     const prev = index > 0 ? points[index - 1].value : null;
     const improved = prev == null ? null : point.value >= prev;
+    // La primera barra no tiene con quién compararse: va en neutro. Era azul,
+    // y el azul ya dice otra cosa en el resto de la app (descarga, semana
+    // incompleta en Inicio).
     const color = isLatest
       ? theme.colors.primaryFill
       : improved == null
-      ? theme.colors.emoji_blue
+      ? theme.colors.textMuted
       : improved
       ? theme.colors.success
       : theme.colors.error;
@@ -245,8 +309,13 @@ function buildSessionChart(
       valueLabel: metric.fmt(point.value),
       color,
       // La etiqueta es texto sobre la tarjeta: la última sesión necesita la
-      // tinta del oro, no su oro de línea (ver theme.ts).
-      valueColor: isLatest ? theme.colors.primary : color,
+      // tinta del oro, no su oro de línea (ver theme.ts), y la neutra el gris
+      // de texto, que contrasta más que el de la barra.
+      valueColor: isLatest
+        ? theme.colors.primary
+        : improved == null
+        ? theme.colors.textSecondary
+        : color,
       highlighted: isLatest,
     };
   });
@@ -281,6 +350,9 @@ export function ExerciseProgressScreen({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [query, setQuery] = useState('');
   const [tagFilter, setTagFilter] = useState<TagFilter>({});
+  // Menú del orden, anclado a su botón de la cabecera de la lista.
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+  const sortAnchorRef = useRef<View>(null);
   // "Son el mismo ejercicio": elegir con cuál se une el abierto y confirmarlo.
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTarget, setMergeTarget] = useState<ExerciseSummary | null>(null);
@@ -357,6 +429,15 @@ export function ExerciseProgressScreen({
     });
   }, [sorted, query, tagFilter, catalogEntries, namesByKey]);
   const filtering = !!query.trim() || !!tagFilter.category;
+  // Salida del "Sin resultados": texto y zona fuera de una vez.
+  const clearFilters = () => {
+    animateLayout();
+    setQuery('');
+    setTagFilter({});
+    setVisibleCount(PAGE_SIZE);
+  };
+  const activeSort =
+    SORT_CHOICES.find((choice) => choice.id === sort) ?? SORT_CHOICES[0];
   const visible = useMemo(
     () => filtered.slice(0, visibleCount),
     [filtered, visibleCount]
@@ -405,6 +486,10 @@ export function ExerciseProgressScreen({
     CHART_METRICS.find((item) => item.id === metricId) ?? CHART_METRICS[0];
   const chart = useMemo(
     () => buildSessionChart(sessions, metric),
+    [sessions, metric]
+  );
+  const headline = useMemo(
+    () => buildHeadline(sessions, metric),
     [sessions, metric]
   );
 
@@ -485,7 +570,15 @@ export function ExerciseProgressScreen({
               autoCorrect={false}
             />
             {!!query && (
-              <Pressable onPress={() => setQuery('')} hitSlop={8}>
+              <Pressable
+                onPress={() => {
+                  setQuery('');
+                  setVisibleCount(PAGE_SIZE);
+                }}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel={t('Borrar búsqueda')}
+              >
                 <MaterialCommunityIcons
                   name="close-circle"
                   size={18}
@@ -496,10 +589,12 @@ export function ExerciseProgressScreen({
           </View>
         )}
 
-        {/* Por etiquetas del catálogo: zona, y al elegirla músculo y equipo.
-            Mismo filtro que el buscador de ejercicios de las rutinas. */}
+        {/* Solo la zona: la cascada zona → músculo → equipo es para los
+            cientos de ejercicios del catálogo; aquí son 30-40 y el buscador ya
+            encuentra por músculo y equipo ("bíceps mancuerna"). */}
         {!selected && exercises.length >= MIN_EXERCISES_FOR_SEARCH && (
           <CatalogTagFilters
+            zoneOnly
             items={tagItems}
             value={tagFilter}
             onChange={(next) => {
@@ -510,23 +605,59 @@ export function ExerciseProgressScreen({
           />
         )}
 
+        {/* Cabecera de la lista: cuántos salen (y de cuántos, filtrando) y
+            cómo están ordenados, con el orden como botón de su menú. */}
         {!selected && exercises.length >= MIN_EXERCISES_FOR_SORT && (
-          <SegmentedFilter
-            // Sin margen: encabeza la lista, no cuelga de ninguna gráfica.
-            options={SORT_OPTIONS}
-            value={sort}
-            onChange={(id) => {
-              animateLayout();
-              setSort(id);
-              // La página vuelve al principio: el orden nuevo trae otras filas
-              // arriba y quedarse en la página 3 no significa nada.
-              setVisibleCount(PAGE_SIZE);
-            }}
+          <SectionLegend
+            title={
+              filtering
+                ? t('{n} de {total}', {
+                    n: filtered.length,
+                    total: exercises.length,
+                  })
+                : t('{n} ejercicios', { n: exercises.length })
+            }
+            right={
+              <View ref={sortAnchorRef} collapsable={false}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.sortButton,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => setSortMenuOpen(true)}
+                  hitSlop={6}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Ordenar: {sort}', {
+                    sort: activeSort.menuLabel,
+                  })}
+                >
+                  <MaterialCommunityIcons
+                    name="sort"
+                    size={16}
+                    color={theme.colors.textSecondary}
+                  />
+                  <Text style={styles.sortButtonText}>{activeSort.label}</Text>
+                  <MaterialCommunityIcons
+                    name="chevron-down"
+                    size={16}
+                    color={theme.colors.textSecondary}
+                  />
+                </Pressable>
+              </View>
+            }
           />
         )}
 
         {!selected && filtering && filtered.length === 0 && (
-          <Text style={styles.emptyText}>{t('Sin resultados')}</Text>
+          <View style={styles.noResults}>
+            <Text style={styles.emptyText}>{t('Sin resultados')}</Text>
+            <Button
+              title={t('Quitar filtros')}
+              onPress={clearFilters}
+              variant="secondary"
+              size="small"
+            />
+          </View>
         )}
 
         {!selected &&
@@ -534,7 +665,6 @@ export function ExerciseProgressScreen({
             <ExerciseRow
               key={exercise.key}
               exercise={exercise}
-              catalogId={exercise.catalogId}
               onPress={() => {
                 animateLayout();
                 onSelectExercise(exercise.key);
@@ -573,13 +703,23 @@ export function ExerciseProgressScreen({
                 <Text style={styles.cardTitle} numberOfLines={2}>
                   {selected.name}
                 </Text>
+                {/* La respuesta a "¿cómo voy?" escrita: cuánto ha cambiado la
+                    medida elegida desde su primera sesión. El mismo dato de
+                    cabecera que "Progreso / semana" de Inicio. Las sesiones y
+                    la última fecha van en la barra superior. */}
+                {!!headline && (
+                  <ChartCardStat
+                    trend={{
+                      value: headline.delta,
+                      suffix: metric.unit,
+                      decimals: Number.isInteger(headline.delta) ? 0 : 1,
+                    }}
+                    caption={t('desde el {date}', {
+                      date: shortDayMonth(headline.since),
+                    })}
+                  />
+                )}
               </View>
-              <Text style={styles.cardHint}>
-                {t('{n} sesiones · última el {date}', {
-                  n: selected.sessionCount,
-                  date: shortDayMonth(selected.lastDate),
-                })}
-              </Text>
               {/* Un ejercicio, varios nombres: los otros con los que aparece
                   en tus rutinas y tu historial. */}
               {selectedOtherNames.length > 0 && (
@@ -621,6 +761,23 @@ export function ExerciseProgressScreen({
                     setMetricId(id);
                   }}
                 />
+
+                {/* Qué dicen los colores: sin ella, un rojo se leía como "lo
+                    estás haciendo mal" y no como una sesión contra la
+                    anterior. */}
+                {!!chart && (
+                  <View style={[styles.chartLegend, { width: chartWidth }]}>
+                    <LegendDot
+                      color={theme.colors.success}
+                      label={t('Mejor que la anterior')}
+                    />
+                    <LegendDot color={theme.colors.error} label={t('Peor')} />
+                    <LegendDot
+                      color={theme.colors.primaryFill}
+                      label={t('Última')}
+                    />
+                  </View>
+                )}
               </ChartArea>
             </View>
 
@@ -629,14 +786,23 @@ export function ExerciseProgressScreen({
         )}
       </StretchScrollView>
 
+      {/* Un solo nombre, "Progreso", en lista y en ficha: lo que cambia es el
+          subtítulo. En la ficha el nombre del ejercicio ya titula la tarjeta,
+          así que aquí van sus sesiones; en la lista, el total, salvo cuando
+          ya lo dice la cabecera de la lista (entonces, qué es la pantalla:
+          sin subtítulo la barra encoge y el nivel sube respecto a las demás). */}
       <GlassTopBar
-        title={selected ? t('Tu evolución') : t('Progreso')}
+        title={t('Progreso')}
         icon="chart-line"
         subtitle={
           selected
-            ? selected.name
-            : exercises.length === 0
-            ? undefined
+            ? t('{n} sesiones · última el {date}', {
+                n: selected.sessionCount,
+                date: shortDayMonth(selected.lastDate),
+              })
+            : exercises.length === 0 ||
+              exercises.length >= MIN_EXERCISES_FOR_SORT
+            ? t('Tu evolución por ejercicio')
             : exercises.length === 1
             ? t('1 ejercicio')
             : t('{n} ejercicios', { n: exercises.length })
@@ -673,6 +839,25 @@ export function ExerciseProgressScreen({
               ]
             : undefined
         }
+      />
+
+      <AnchorMenu
+        visible={sortMenuOpen}
+        onClose={() => setSortMenuOpen(false)}
+        anchorRef={sortAnchorRef}
+        items={SORT_CHOICES.map((choice) => ({
+          icon: choice.icon,
+          label: choice.menuLabel,
+          selected: choice.id === sort,
+          onPress: () => {
+            if (choice.id === sort) return;
+            animateLayout();
+            setSort(choice.id);
+            // La página vuelve al principio: el orden nuevo trae otras filas
+            // arriba y quedarse en la página 3 no significa nada.
+            setVisibleCount(PAGE_SIZE);
+          },
+        }))}
       />
 
       <FloatingBackButton
@@ -819,30 +1004,42 @@ function MergeExerciseModal({
   );
 }
 
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <View style={styles.legendItem}>
+      <View style={[styles.legendDot, { backgroundColor: color }]} />
+      <Text style={styles.legendText} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
 function ExerciseRow({
   exercise,
-  catalogId,
   onPress,
 }: {
   exercise: ExerciseSummary;
-  catalogId?: string;
   onPress: () => void;
 }) {
   return (
     <Pressable
       style={({ pressed }) => [styles.exerciseRow, pressed && styles.pressed]}
       onPress={onPress}
+      accessibilityRole="button"
+      accessibilityLabel={exercise.name}
     >
       <GradientFill accent={theme.colors.accentLine} />
-      {/* El mismo elemento que en el registro y en el Detalle: con GIF asignado
-          el botón ES el GIF en miniatura (a un vistazo se reconoce el ejercicio
-          antes por el dibujo que por el nombre, que es lo que se busca en una
-          lista de 30-40); sin él, la lupa abre el catálogo buscando por su
-          nombre. Va fuera del `Pressable` de texto para que su toque no arrastre
-          a abrir la ficha. */}
+      {/* La miniatura del GIF identifica la fila de un vistazo (antes por el
+          dibujo que por el nombre en una lista de 30-40), pero es solo imagen:
+          toda la fila abre la ficha. Cuando era un botón propio, un toque en
+          ella abría el GIF a pantalla completa, y sin GIF era una lupa debajo
+          del buscador. El visor (y buscar un GIF si falta) vive en la cabecera
+          de la ficha. */}
       <ExerciseGifButton
+        decorative
         name={exercise.name}
-        catalogId={catalogId}
+        catalogId={exercise.catalogId}
         size={20}
         style={styles.exerciseGif}
       />
@@ -1003,6 +1200,52 @@ const makeStyles = () =>
       color: theme.colors.textSecondary,
       textAlign: 'center',
       lineHeight: 20,
+    },
+    noResults: {
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: theme.spacing.md,
+    },
+    // El orden activo en la cabecera de la lista: píldora neutra (no un chip
+    // de oro, que es de filtrar) con el chevron de "despliega".
+    sortButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      minHeight: 36,
+      paddingHorizontal: 10,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      backgroundColor: theme.colors.surface,
+    },
+    sortButtonText: {
+      fontSize: 13,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    chartLegend: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      columnGap: 14,
+      rowGap: 4,
+      marginTop: 10,
+    },
+    legendItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+    },
+    legendDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+    },
+    legendText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
     },
     exerciseRow: {
       flexDirection: 'row',

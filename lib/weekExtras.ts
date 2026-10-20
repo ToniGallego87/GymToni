@@ -7,7 +7,14 @@
 // ese día. Los retos superados se guardan como `id@periodo` (lib/level.ts): el
 // periodo es la semana ISO ("2026-W39", los de cardio) o `rutina:bloque` (los
 // de fuerza), que aquí se traduce a la fecha del último entreno del bloque.
-import { WorkoutLog, WorkoutRoutine } from '../types';
+//
+// Los números de bloque son posicionales: repetir un día, borrar un entreno o
+// forzar semana nueva renumera los bloques, y un reto apuntado como `r:9` puede
+// apuntar a un bloque que ya no existe. Ese reto se ganó, como muy tarde, en el
+// último bloque de su rutina, y se data ahí. Si ni eso se puede (rutina sin
+// entrenos), no hay fecha; pero si el póster es de la semana más reciente, todo
+// lo ganado ya había pasado, y su nivel es el de ahora tal cual.
+import { WorkoutLog } from '../types';
 import { Badge } from './badges';
 import { isoWeekKey } from './cardio';
 import { challengeMeta } from './challenges';
@@ -37,7 +44,6 @@ export function computeWeekExtras({
   block,
   weekLogs,
   logs,
-  routines,
   wins,
   badges,
 }: {
@@ -46,7 +52,6 @@ export function computeWeekExtras({
   block: number;
   weekLogs: WorkoutLog[];
   logs: WorkoutLog[];
-  routines: WorkoutRoutine[];
   /** Retos superados, `id@periodo` (lib/level.ts). */
   wins: string[];
   badges: Badge[];
@@ -55,18 +60,41 @@ export function computeWeekExtras({
   const weekStart = dates[0] ?? '';
   const weekEnd = dates[dates.length - 1] ?? '';
 
-  // Último día de cada bloque de cada rutina: hasta cuándo duró su periodo.
+  // Último día de cada bloque de cada rutina: hasta cuándo duró su periodo. Se
+  // agrupa por el `routineId` de los logs, no por las rutinas que quedan: los
+  // retos de una rutina borrada también cuentan para el nivel.
   const blockEnd = new Map<string, string>();
-  for (const routine of routines) {
+  const lastBlock = new Map<string, { number: number; end: string }>();
+  const routineIds = new Set(
+    logs.filter((log) => !log.cardioOnly).map((log) => log.routineId)
+  );
+  for (const routineId of routineIds) {
     const routineLogs = logs.filter(
-      (log) => log.routineId === routine.id && !log.cardioOnly
+      (log) => log.routineId === routineId && !log.cardioOnly
     );
     const blocks = groupLogsIntoWeekBlocks(routineLogs, (log) => log.dayId);
-    for (const [number, blockLogs] of Object.entries(blocks)) {
+    for (const [key, blockLogs] of Object.entries(blocks)) {
       const last = blockLogs.map(logDateKey).sort().pop();
-      if (last) blockEnd.set(`${routine.id}:${number}`, last);
+      if (!last) continue;
+      const number = Number(key);
+      blockEnd.set(`${routineId}:${number}`, last);
+      const prev = lastBlock.get(routineId);
+      if (!prev || number > prev.number) {
+        lastBlock.set(routineId, { number, end: last });
+      }
     }
   }
+  // Fin del periodo de un reto de fuerza (`rutina:bloque`); un bloque que ya no
+  // existe por renumeración se data en el último de su rutina.
+  const periodEnd = (period: string): string | undefined => {
+    const exact = blockEnd.get(period);
+    if (exact) return exact;
+    const sep = period.lastIndexOf(':');
+    return sep < 0 ? undefined : lastBlock.get(period.slice(0, sep))?.end;
+  };
+  // Nada se entrenó después: es la semana más reciente.
+  const isLatestWeek =
+    !!weekEnd && logs.every((log) => logDateKey(log) <= weekEnd);
 
   const thisBlock = `${routineId}:${block}`;
   // Semanas ISO que toca la semana de rutina (puede cruzar un lunes).
@@ -85,10 +113,10 @@ export function computeWeekExtras({
     const inThisWeek = isCalendar ? isoWeeks.has(period) : period === thisBlock;
     if (inThisWeek) challenges.push({ id, ...challengeMeta(id) });
 
-    const end = isCalendar ? null : blockEnd.get(period);
-    const doneByThen = isCalendar
-      ? period <= endIsoWeek
-      : !!end && end <= weekEnd;
+    const end = isCalendar ? null : periodEnd(period);
+    const doneByThen =
+      isLatestWeek ||
+      (isCalendar ? period <= endIsoWeek : !!end && end <= weekEnd);
     if (doneByThen) winsByThen += 1;
   }
 
@@ -100,7 +128,8 @@ export function computeWeekExtras({
       b.unlockedAt <= weekEnd
   );
   const badgesByThen = badges.filter(
-    (b) => b.unlocked && !!b.unlockedAt && b.unlockedAt <= weekEnd
+    (b) =>
+      b.unlocked && (isLatestWeek || (!!b.unlockedAt && b.unlockedAt <= weekEnd))
   ).length;
 
   return {

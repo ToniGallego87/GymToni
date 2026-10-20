@@ -12,6 +12,11 @@ interface SectionLegendProps {
   title?: string;
   /** Qué miden sus cifras ("% frente a la vez anterior"), a la derecha. */
   hint?: string;
+  /**
+   * Un control propio en lugar del `hint` (el orden de la lista en Progreso):
+   * la cabecera dice cuántos hay y cómo están, en la misma línea.
+   */
+  right?: React.ReactNode;
 }
 
 /**
@@ -19,11 +24,11 @@ interface SectionLegendProps {
  * línea para toda la lista en vez de repetirlo en cada tarjeta. La comparten
  * los historiales de semanas de Inicio y de Cardio.
  */
-export function SectionLegend({ title, hint }: SectionLegendProps) {
+export function SectionLegend({ title, hint, right }: SectionLegendProps) {
   return (
-    <View style={styles.legend}>
+    <View style={[styles.legend, !!right && styles.legendWithControl]}>
       {!!title && <Text style={styles.title}>{title}</Text>}
-      {!!hint && <Text style={styles.hint}>{hint}</Text>}
+      {right ?? (!!hint && <Text style={styles.hint}>{hint}</Text>)}
     </View>
   );
 }
@@ -36,6 +41,12 @@ const makeStyles = () =>
       justifyContent: 'space-between',
       marginBottom: 8,
       paddingHorizontal: 2,
+    },
+    // Con un control a la derecha la línea se alinea al centro: la línea base
+    // de un botón con icono no es la de un texto.
+    legendWithControl: {
+      alignItems: 'center',
+      marginBottom: 0,
     },
     title: {
       fontSize: 13,
