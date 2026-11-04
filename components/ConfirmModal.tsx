@@ -28,6 +28,8 @@ interface ConfirmModalProps {
   checkLabel?: string;
   checked?: boolean;
   onToggleCheck?: () => void;
+  /** Contenido extra entre el mensaje y la casilla (ej: pedir la contraseña). */
+  children?: React.ReactNode;
 }
 
 /**
@@ -48,6 +50,7 @@ export function ConfirmModal({
   checkLabel,
   checked = false,
   onToggleCheck,
+  children,
 }: ConfirmModalProps) {
   return (
     <AppModal
@@ -76,6 +79,7 @@ export function ConfirmModal({
         </View>
       }
     >
+      {children}
       {!!checkLabel && (
         <Pressable style={styles.checkRow} onPress={onToggleCheck}>
           <View style={[styles.checkbox, checked && styles.checkboxChecked]}>

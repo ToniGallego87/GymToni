@@ -130,6 +130,7 @@ GymToni/
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina
 │   ├── GymIcon.tsx / DayAccentIcon.tsx ← Iconos de grupo muscular por día
 │   ├── Avatar.tsx            ← Foto de perfil (fuente única de las pantallas sociales)
+│   ├── PasswordField.tsx     ← Campo de contraseña con ojo
 │   ├── AchievementPoster.tsx ← Póster SVG de hitos semanales (imagen/vídeo)
 │   ├── ChallengesModal.tsx / AwardModal.tsx / LevelPill.tsx ← Retos de la semana, popup de premio y píldora de nivel
 │   ├── ProgressRing.tsx      ← Anillo de progreso (SVG): casillas de Logros y retos de la hero

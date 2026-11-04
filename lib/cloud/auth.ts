@@ -1,7 +1,9 @@
 import { useSyncExternalStore } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase';
+import { SUPABASE_URL } from '../supabaseConfig';
 import { t } from '../i18n';
 
 // Sesión de Supabase reactiva, en un store de módulo con UNA sola suscripción al
@@ -127,6 +129,21 @@ export function verifyRecoveryCode(email: string, code: string) {
   });
 }
 
+/**
+ * ¿Es esta la contraseña de la cuenta? Para confirmar lo delicado (cambiarla,
+ * borrar la cuenta) con el móvil desbloqueado en otras manos. Comprueba
+ * iniciando sesión otra vez: si acierta renueva la sesión, con el mismo usuario.
+ */
+export async function verifyCurrentPassword(
+  email: string,
+  password: string
+): Promise<boolean> {
+  const { error } = await signIn(email, password);
+  if (!error) return true;
+  if (error.code === 'invalid_credentials') return false;
+  throw error;
+}
+
 export function updatePassword(password: string) {
   return supabase.auth.updateUser({ password });
 }
@@ -182,6 +199,21 @@ export async function getAccountDeletionRequest(
     .deletion_requested_at;
 }
 
+// Clave con la que supabase-js guarda la sesión (su valor por defecto).
+const SESSION_STORAGE_KEY = `sb-${
+  SUPABASE_URL.replace('https://', '').split('.')[0]
+}-auth-token`;
+
+/**
+ * ¿Sigue la sesión guardada en el móvil? Distingue "no hay sesión" de "aún no se
+ * ha podido recuperar": al arrancar sin red con el token caducado, supabase-js
+ * da una sesión null pero conserva la guardada, y volverá en cuanto haya red.
+ * Una salida de verdad siempre borra esta clave antes de avisar.
+ */
+export async function hasStoredSession(): Promise<boolean> {
+  return (await AsyncStorage.getItem(SESSION_STORAGE_KEY)) !== null;
+}
+
 // Errores de Supabase Auth que el usuario ve a menudo, traducidos por su
 // código estable. El mensaje de Supabase va en inglés y quien lo lee, en el
 // login o recuperando la contraseña, suele estar ya atascado. Si el código no
@@ -202,9 +234,17 @@ const AUTH_ERROR_KEYS: Record<string, string> = {
   user_already_exists: 'Ese email ya tiene cuenta. Inicia sesión.',
 };
 
-export function authErrorMessage(error: unknown): string {
-  const code = (error as { code?: unknown } | null)?.code;
+/**
+ * Texto para enseñar un error de Auth. Sin traducción conocida usa `fallback`
+ * o, si no se pasa, el mensaje original.
+ */
+export function authErrorMessage(error: unknown, fallback?: string): string {
+  const { code, name } = (error ?? {}) as { code?: unknown; name?: unknown };
   const key = typeof code === 'string' ? AUTH_ERROR_KEYS[code] : undefined;
   if (key) return t(key);
+  if (name === 'AuthRetryableFetchError') {
+    return t('Sin conexión. Compruébala e inténtalo de nuevo.');
+  }
+  if (fallback) return fallback;
   return error instanceof Error ? error.message : String(error);
 }

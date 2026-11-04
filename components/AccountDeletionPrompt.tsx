@@ -6,7 +6,6 @@ import {
   signOut,
   useSession,
 } from '@lib/cloud/auth';
-import { forgetAccountOnDevice } from '@hooks/useMyProfile';
 import { t } from '@lib/i18n';
 import { accountPurgeDateKey, longDate } from '@lib/utils';
 import { AppModal } from './AppModal';
@@ -62,12 +61,9 @@ export function AccountDeletionPrompt() {
   };
 
   const handleSignOut = async () => {
-    if (!userId) return;
     setAction('signout');
     try {
       await signOut();
-      // Entrar ha vuelto a guardar su perfil y sus marcas en el móvil.
-      await forgetAccountOnDevice(userId);
     } finally {
       setAction(null);
     }

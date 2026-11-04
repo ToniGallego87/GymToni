@@ -502,6 +502,16 @@ register({
   'Cambiar contraseña': 'Change password',
   'Contraseña cambiada': 'Password changed',
   'Volver a iniciar sesión': 'Back to sign in',
+  'Contraseña actual': 'Current password',
+  'Contraseña cambiada, pero no se pudo cerrar la sesión en tus otros dispositivos.':
+    'Password changed, but your other devices could not be signed out.',
+  'Sin conexión. Compruébala e inténtalo de nuevo.':
+    'No connection. Check it and try again.',
+  'La contraseña actual no es correcta.':
+    'The current password is not correct.',
+  'La contraseña no es correcta.': 'The password is not correct.',
+  'Al cambiarla se cerrará la sesión en tus otros dispositivos.':
+    'Changing it will sign you out on your other devices.',
   // Eliminar la cuenta (Datos y nube)
   'Eliminar la cuenta': 'Delete account',
   'Eliminando…': 'Deleting…',

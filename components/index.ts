@@ -10,6 +10,7 @@ export { AnchorMenu } from './AnchorMenu';
 export type { AnchorMenuItem } from './AnchorMenu';
 export { AccountDeletionPrompt } from './AccountDeletionPrompt';
 export { AwardModal } from './AwardModal';
+export { PasswordField } from './PasswordField';
 export { HeroWeightCard } from './HeroWeightCard';
 export {
   AchievementPoster,

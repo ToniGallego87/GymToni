@@ -97,12 +97,7 @@ function useLevelData() {
     ? state.selectedRoutineId
     : state.activeRoutineId;
 
-  const challenges = sharedChallenges(
-    logs,
-    state.routines,
-    routineId,
-    weight
-  );
+  const challenges = sharedChallenges(logs, state.routines, routineId, weight);
   const { all: badges, unlocked: unlockedBadges } = sharedBadges(
     logs,
     state.routines
@@ -270,7 +265,7 @@ export function useRecordAccountLevel(enabled: boolean): void {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     enabled,
-    user,
+    user?.id,
     profile?.share_activity,
     wins.length,
     unlockedBadges.length,

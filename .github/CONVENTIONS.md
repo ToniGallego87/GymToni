@@ -89,6 +89,8 @@ Las dependencias van solo hacia abajo: `app/` → `features/workout/` →
 - Botones de acción → `components/Button.tsx` (variants `primary`/`secondary`/`danger`)
 - Foto de perfil de un usuario → `components/Avatar.tsx` (solo se le pasa `uri` y
   `size`); no volver a pintar `Image` + marcador a mano en cada pantalla social
+- Campo de contraseña → `components/PasswordField.tsx` (con ojo para verla y
+  etiqueta de accesibilidad)
 
 ## Formato de entrada (parsers)
 

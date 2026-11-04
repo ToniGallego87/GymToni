@@ -103,14 +103,27 @@
 
 ### Nuevas funcionalidades
 
+- **Cambiar la contraseña con la sesión iniciada.** En Datos y nube, popup con
+  la actual y la nueva (`PasswordField`, con ojo). Comprueba la actual
+  (`verifyCurrentPassword`) y al terminar cierra las demás sesiones. Los dos
+  popups de contraseña ofrecen "¿Has olvidado la contraseña?": código por
+  correo sin cerrar sesión. Errores de red traducidos en `authErrorMessage`.
+- **Contraseña para eliminar la cuenta.** El popup de eliminar la pide además de
+  la casilla (`ConfirmModal` admite contenido extra): protege una acción
+  irreversible si alguien coge el móvil desbloqueado.
+- **Limpieza al quedarse sin sesión.** `useForgetSignedOutAccount` (en la raíz)
+  recuerda en disco la última cuenta y, si ya no hay sesión por el motivo que
+  sea (cerrarla, pedir el borrado, token caducado, cuenta borrada desde otro
+  móvil, también con la app cerrada), olvida su perfil, las copias sociales y
+  la marca de Actividad publicada. Sustituye a las limpiezas sueltas. Arrancar
+  sin red con el token caducado no cuenta: la sesión sigue guardada
+  (`hasStoredSession`) y vuelve sola.
 - **Eliminar la cuenta, con plazo de gracia y rutinas anónimas.** En Datos y
   nube, con sesión, "Eliminar la cuenta" (botón rojo bajo "Cerrar sesión") abre
   una confirmación con casilla obligatoria que explica lo que pasa. Pedirlo no
   borra nada: `request_account_deletion` marca la cuenta con la hora del
   servidor (`profiles.deletion_requested_at`), la oculta y cierra la sesión en
-  todos los dispositivos; en el móvil se olvidan copias sociales, perfil
-  (`forgetMyProfile`) y la marca de Actividad publicada, y rutinas y entrenos
-  se quedan. Durante 30 días, al iniciar sesión sale `AccountDeletionPrompt`
+  todos los dispositivos; rutinas y entrenos del móvil se quedan. Durante 30 días, al iniciar sesión sale `AccountDeletionPrompt`
   (en la raíz): recuperar la cuenta o cerrar sesión. Pasado el plazo, la Edge
   Function `purge-deleted-accounts` (tarea diaria, la única pieza con
   `service_role`, protegida con `PURGE_SECRET`) traspasa lo público a la cuenta
@@ -132,9 +145,7 @@
     adelantaba la purga) y solo la tocan las dos funciones `security definer`.
   - **Copias enlazadas de otros:** al pasar la rutina a la cuenta reservada,
     `anonymizeLinkedRoutine` les quita el nombre y el id del autor.
-  - La limpieza local (`forgetAccountOnDevice`) va aparte de la petición y
-    también corre al cerrar sesión desde el aviso. "Cancelar" no cierra el popup
-    con la petición en marcha.
+  - "Cancelar" no cierra el popup con la petición en marcha.
     **Ya en Supabase** (2026-11-04): SQL ejecutado, función desplegada y tarea
     diaria programada. Falta la prueba completa con una cuenta de prueba
     (SETUP.md → "Panel de Supabase", paso 5).

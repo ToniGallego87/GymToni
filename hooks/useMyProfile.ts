@@ -2,7 +2,7 @@ import { useEffect, useReducer } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setStoredPublishedActivity } from '@lib/appSettings';
-import { useSession } from '@lib/cloud/auth';
+import { hasStoredSession, useSession } from '@lib/cloud/auth';
 import { clearSocialCache } from '@lib/socialCache';
 import {
   getProfile,
@@ -155,13 +155,13 @@ function migrateAvatarOnce(
 }
 
 /**
- * Olvida en este móvil lo de una cuenta que se va a borrar: su nombre, bio y
- * foto no deben quedarse en el dispositivo. También las copias sociales y la
+ * Olvida en este móvil lo de una cuenta sin sesión: su nombre, bio y foto no
+ * deben quedarse en el dispositivo. También las copias sociales y la
  * marca de Actividad publicada, que no va por usuario: con otra cuenta en el
  * móvil, esos hitos no se publicarían. Rutinas y entrenos no se tocan. Nunca
  * falla: quien la llama ya ha hecho lo importante.
  */
-export async function forgetAccountOnDevice(userId: string): Promise<void> {
+async function forgetAccountOnDevice(userId: string): Promise<void> {
   if (state.userId === userId) {
     setState({ userId: null, profile: null, loading: false });
   }
@@ -172,6 +172,46 @@ export async function forgetAccountOnDevice(userId: string): Promise<void> {
   } catch {
     // Un ajuste local sin guardar no cambia nada de lo importante.
   }
+}
+
+// Última cuenta con sesión en este móvil, para saber de quién limpiar. En disco
+// porque la sesión puede caducar con la app cerrada: al arrancar no hay ningún
+// cambio de usuario que ver, solo que ya no hay nadie.
+const LAST_ACCOUNT_KEY = 'gymbro_last_account';
+
+/**
+ * Olvida en el móvil lo de una cuenta cuando se queda sin sesión, por el motivo
+ * que sea: "Cerrar sesión", pedir el borrado, token caducado o cuenta borrada
+ * desde otro dispositivo. Una sola vez, en la raíz.
+ */
+export function useForgetSignedOutAccount(): void {
+  const { user, loading } = useSession();
+  const userId = user?.id ?? null;
+
+  useEffect(() => {
+    if (loading) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const last = await AsyncStorage.getItem(LAST_ACCOUNT_KEY);
+        if (cancelled) return;
+        // Sin usuario no siempre es sin sesión: arrancando sin red con el token
+        // caducado la sesión sigue guardada y volverá sola. La marca se queda:
+        // si era una salida de verdad, se limpia en el próximo arranque.
+        if (!userId && (await hasStoredSession())) return;
+        if (cancelled) return;
+        if (last && last !== userId) await forgetAccountOnDevice(last);
+        if (cancelled) return;
+        if (userId) await AsyncStorage.setItem(LAST_ACCOUNT_KEY, userId);
+        else await AsyncStorage.removeItem(LAST_ACCOUNT_KEY);
+      } catch {
+        // Sin storage no hay nada que limpiar; se reintenta en el arranque.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, loading]);
 }
 
 export function useMyProfile(): { profile: Profile | null; loading: boolean } {

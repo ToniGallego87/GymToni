@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
   ConfirmModal,
+  PasswordField,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
@@ -14,14 +15,7 @@ import {
   Toast,
   StretchScrollView,
 } from '@components';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Platform,
-  Pressable,
-} from 'react-native';
+import { View, Text, StyleSheet, TextInput, Platform } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -32,7 +26,6 @@ import {
   setAutoBackupEnabled,
   getLastAutoBackupAt,
 } from '@lib/appSettings';
-import { forgetAccountOnDevice } from '@hooks/useMyProfile';
 import { canWriteLocalBackup } from '@lib/fileIO';
 import { AutoBackupFile, listAutoBackups } from '@lib/backup';
 import { ACCOUNT_DELETION_GRACE_DAYS, weekdayDayMonth } from '@lib/utils';
@@ -48,9 +41,9 @@ import {
   updatePassword,
   authErrorMessage,
   signOutOtherDevices,
+  verifyCurrentPassword,
   requestAccountDeletion,
 } from '@lib/cloud/auth';
-import { clearSocialCache } from '@lib/socialCache';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
 import { syncNow, markSynced, getLastSync } from '@lib/cloud/sync';
 import { clearOutbox } from '@lib/db';
@@ -93,6 +86,7 @@ type BusyAction =
   | 'resend'
   | 'recover'
   | 'delete-account'
+  | 'change-password'
   | 'signout'
   | 'sync'
   | 'cloud-backup'
@@ -150,7 +144,12 @@ export function DataScreen({
   const [pending, setPending] = useState<PendingCode | null>(null);
   const [code, setCode] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [showNewPassword, setShowNewPassword] = useState(false);
+  // Popups de cambiar la contraseña y de borrar la cuenta: la actual (para
+  // confirmar que eres tú) y el error, dentro del popup porque el toast queda
+  // debajo de él.
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
   // Segundos hasta poder reenviar el código: Supabase no deja pedir otro antes
   // de 60 s, y sin cuenta atrás el usuario solo se encontraba el error.
   const [resendIn, setResendIn] = useState(0);
@@ -169,6 +168,18 @@ export function DataScreen({
 
   const notify = (message: string, type: 'success' | 'error') =>
     setToast({ message, type });
+
+  // Tras cambiar la contraseña se cierran las demás sesiones; si eso falla
+  // hay que decirlo, porque quien la cambia puede hacerlo por una intrusión.
+  const notifyPasswordChanged = (othersClosed: boolean) =>
+    othersClosed
+      ? notify(t('Contraseña cambiada'), 'success')
+      : notify(
+          t(
+            'Contraseña cambiada, pero no se pudo cerrar la sesión en tus otros dispositivos.'
+          ),
+          'error'
+        );
 
   // ── Cuenta y sincronización ──────────────────────────────────────────────
 
@@ -260,7 +271,6 @@ export function DataScreen({
     setPending(null);
     setCode('');
     setNewPassword('');
-    setShowNewPassword(false);
   };
 
   const handleVerifyCode = async () => {
@@ -314,10 +324,10 @@ export function DataScreen({
         notify(authErrorMessage(updateError), 'error');
         return;
       }
-      await signOutOtherDevices().catch(() => undefined);
+      const { error: othersError } = await signOutOtherDevices();
       leavePendingCode();
       setPassword('');
-      notify(t('Contraseña cambiada'), 'success');
+      notifyPasswordChanged(!othersError);
     } catch (e) {
       notify(authErrorMessage(e), 'error');
     } finally {
@@ -380,6 +390,7 @@ export function DataScreen({
   useEffect(() => {
     if (!user) {
       setLastSync(null);
+      closeAccountModals();
       return;
     }
     let active = true;
@@ -399,41 +410,129 @@ export function DataScreen({
   const handleSignOut = async () => {
     setBusyAction('signout');
     try {
+      // Lo de esta cuenta en el móvil lo olvida useForgetSignedOutAccount.
       await signOut();
-      // Las copias de las pantallas sociales son de lo que vio esta cuenta: no
-      // se quedan en el dispositivo tras salir (lib/socialCache.ts).
-      await clearSocialCache();
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const closeAccountModals = () => {
+    setShowChangePassword(false);
+    setShowDeleteAccount(false);
+    setDeleteAck(false);
+    setCurrentPassword('');
+    setNewPassword('');
+    setModalError(null);
+  };
+
+  // Salida de los dos popups para quien no sabe su contraseña (la olvidó, o
+  // dejó la recuperación "para luego"): el código por correo, sin cerrar sesión.
+  const handleForgotFromModal = async () => {
+    if (!user?.email) return;
+    const accountEmail = user.email;
+    setBusyAction('recover');
+    setModalError(null);
+    try {
+      const { error } = await requestPasswordReset(accountEmail);
+      if (error) {
+        setModalError(authErrorMessage(error));
+        return;
+      }
+      closeAccountModals();
+      setPending({ kind: 'recovery', email: accountEmail, verified: false });
+      setCode('');
+      setResendIn(RESEND_COOLDOWN_S);
+    } catch (e) {
+      setModalError(authErrorMessage(e));
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  const forgotButton = (
+    <Button
+      title={
+        busyAction === 'recover'
+          ? t('Enviando…')
+          : t('¿Has olvidado la contraseña?')
+      }
+      variant="secondary"
+      onPress={handleForgotFromModal}
+      disabled={busy}
+    />
+  );
+
+  // Cambiar la contraseña con la sesión iniciada. Pide la actual y, como al
+  // recuperarla, cierra las demás sesiones: si se cambia porque alguien entró,
+  // que no siga dentro.
+  const handleChangePassword = async () => {
+    if (!user?.email) return;
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
+      setModalError(
+        t('La contraseña necesita al menos {n} caracteres', {
+          n: PASSWORD_MIN_LENGTH,
+        })
+      );
+      return;
+    }
+    if (newPassword === currentPassword) {
+      setModalError(
+        t('La contraseña nueva tiene que ser distinta de la anterior.')
+      );
+      return;
+    }
+    setBusyAction('change-password');
+    setModalError(null);
+    try {
+      if (!(await verifyCurrentPassword(user.email, currentPassword))) {
+        setModalError(t('La contraseña actual no es correcta.'));
+        return;
+      }
+      const { error } = await updatePassword(newPassword);
+      if (error) {
+        setModalError(authErrorMessage(error));
+        return;
+      }
+      const { error: othersError } = await signOutOtherDevices();
+      closeAccountModals();
+      notifyPasswordChanged(!othersError);
+    } catch (e) {
+      setModalError(authErrorMessage(e));
     } finally {
       setBusyAction(null);
     }
   };
 
   // Pide borrar la cuenta (lib/cloud/auth.ts → requestAccountDeletion: la
-  // oculta y cierra la sesión; el borrado real llega pasado el plazo de gracia)
-  // y olvida lo que de ella quedaba en el móvil.
+  // oculta y cierra la sesión; el borrado real llega pasado el plazo de gracia).
+  // Con la contraseña delante: es irreversible y el móvil puede estar en otras
+  // manos. Lo de la cuenta en el móvil lo olvida useForgetSignedOutAccount.
   const handleDeleteAccount = async () => {
-    if (!user) return;
-    const userId = user.id;
+    if (!user?.email) return;
     setBusyAction('delete-account');
+    setModalError(null);
     try {
+      if (!(await verifyCurrentPassword(user.email, currentPassword))) {
+        setModalError(t('La contraseña no es correcta.'));
+        return;
+      }
       await requestAccountDeletion();
-    } catch {
+    } catch (e) {
       // Reintentar es seguro: pedirlo dos veces no alarga el plazo.
-      notify(
-        t(
-          'No se pudo eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.'
-        ),
-        'error'
+      setModalError(
+        authErrorMessage(
+          e,
+          t(
+            'No se pudo eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.'
+          )
+        )
       );
-      setBusyAction(null);
       return;
+    } finally {
+      setBusyAction(null);
     }
-    // El borrado ya está pedido: la limpieza local es aparte, y si algo de
-    // ella falla no se dice "no se pudo eliminar".
-    await forgetAccountOnDevice(userId);
-    setShowDeleteAccount(false);
-    setDeleteAck(false);
-    setBusyAction(null);
+    closeAccountModals();
     notify(
       t(
         'Se eliminará en {n} días. Si cambias de idea, inicia sesión antes. Tus datos siguen en este móvil.',
@@ -654,39 +753,12 @@ export function DataScreen({
                 />
               )}
               {recovering && (
-                <View style={styles.passwordRow}>
-                  <TextInput
-                    style={[styles.input, styles.passwordInput]}
-                    placeholder={t('Nueva contraseña')}
-                    placeholderTextColor={theme.colors.textMuted}
-                    value={newPassword}
-                    onChangeText={setNewPassword}
-                    secureTextEntry={!showNewPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="newPassword"
-                    autoComplete="new-password"
-                  />
-                  {/* Se escribe una sola vez: con el ojo se comprueba antes de
-                      fijar una contraseña con una errata. */}
-                  <Pressable
-                    style={styles.passwordToggle}
-                    onPress={() => setShowNewPassword((v) => !v)}
-                    hitSlop={8}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      showNewPassword
-                        ? t('Ocultar contraseña')
-                        : t('Mostrar contraseña')
-                    }
-                  >
-                    <MaterialCommunityIcons
-                      name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
-                      size={22}
-                      color={theme.colors.textMuted}
-                    />
-                  </Pressable>
-                </View>
+                <PasswordField
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  placeholder={t('Nueva contraseña')}
+                  isNew
+                />
               )}
               <Button
                 title={
@@ -719,7 +791,9 @@ export function DataScreen({
                   pending.kind === 'recovery' && pending.verified
                     ? t('Dejarlo para luego')
                     : recovering
-                    ? t('Volver a iniciar sesión')
+                    ? session
+                      ? t('Cancelar')
+                      : t('Volver a iniciar sesión')
                     : t('Cambiar email')
                 }
                 variant="secondary"
@@ -756,6 +830,12 @@ export function DataScreen({
                 title={t('Cerrar sesión')}
                 variant="secondary"
                 onPress={handleSignOut}
+                disabled={busy}
+              />
+              <Button
+                title={t('Cambiar contraseña')}
+                variant="secondary"
+                onPress={() => setShowChangePassword(true)}
                 disabled={busy}
               />
               <Button
@@ -1114,16 +1194,70 @@ export function DataScreen({
         checkLabel={t('Entiendo que pasado el plazo no se puede deshacer')}
         checked={deleteAck}
         onToggleCheck={() => setDeleteAck((v) => !v)}
-        busy={busyAction === 'delete-account' || !deleteAck}
+        busy={busyAction === 'delete-account' || !deleteAck || !currentPassword}
         onConfirm={handleDeleteAccount}
         onCancel={() => {
           // Con el borrado ya en marcha, cerrar el popup no lo para: mejor no
           // cerrarlo que hacer creer que se ha cancelado.
-          if (busyAction === 'delete-account') return;
-          setShowDeleteAccount(false);
-          setDeleteAck(false);
+          if (busyAction !== 'delete-account') closeAccountModals();
         }}
-      />
+      >
+        <View style={styles.modalFields}>
+          <PasswordField
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder={t('Contraseña')}
+          />
+          {forgotButton}
+          {!!modalError && (
+            <Text style={styles.modalError} accessibilityLiveRegion="polite">
+              {modalError}
+            </Text>
+          )}
+        </View>
+      </ConfirmModal>
+
+      <ConfirmModal
+        visible={showChangePassword}
+        icon="lock-reset"
+        title={t('Cambiar contraseña')}
+        message={t(
+          'Al cambiarla se cerrará la sesión en tus otros dispositivos.'
+        )}
+        confirmLabel={
+          busyAction === 'change-password'
+            ? t('Confirmando…')
+            : t('Cambiar contraseña')
+        }
+        confirmVariant="primary"
+        busy={
+          busyAction === 'change-password' || !currentPassword || !newPassword
+        }
+        onConfirm={handleChangePassword}
+        onCancel={() => {
+          if (busyAction !== 'change-password') closeAccountModals();
+        }}
+      >
+        <View style={styles.modalFields}>
+          <PasswordField
+            value={currentPassword}
+            onChangeText={setCurrentPassword}
+            placeholder={t('Contraseña actual')}
+          />
+          <PasswordField
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder={t('Nueva contraseña')}
+            isNew
+          />
+          {forgotButton}
+          {!!modalError && (
+            <Text style={styles.modalError} accessibilityLiveRegion="polite">
+              {modalError}
+            </Text>
+          )}
+        </View>
+      </ConfirmModal>
 
       <ConfirmModal
         visible={showRestoreConfirm}
@@ -1263,17 +1397,8 @@ const makeStyles = () =>
       color: theme.colors.text,
       fontSize: 16,
     },
-    // Contraseña nueva con el ojo de mostrar dentro, a la derecha.
-    passwordRow: { justifyContent: 'center' },
-    passwordInput: { paddingRight: 48 },
-    passwordToggle: {
-      position: 'absolute',
-      right: 0,
-      width: 48,
-      height: '100%',
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
+    modalFields: { gap: 10, marginTop: 14 },
+    modalError: { color: theme.colors.error, fontSize: 13 },
     codeInput: {
       textAlign: 'center',
       fontSize: 24,

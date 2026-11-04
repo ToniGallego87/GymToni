@@ -335,7 +335,8 @@ primero porque sin ellas no se publica.
       cerrada o borrada no deben seguir en un móvil.
       **Archivos:** `lib/cloud/auth.ts:48` (`onAuthStateChange`),
       `lib/socialCache.ts` (`clearSocialCache`), `hooks/useMyProfile.ts`
-      (`forgetMyProfile`), `features/workout/DataScreen.tsx` (`handleSignOut`).
+      (`useForgetSignedOutAccount`).
+      **Estado (2026-11-04):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** bajo.
 - [ ] **Pedir la contraseña antes de borrar la cuenta** — en el popup de
       "Eliminar la cuenta", además de la casilla, pedir la contraseña y
@@ -344,18 +345,52 @@ primero porque sin ellas no se publica.
       desbloqueado.
       **Archivos:** `features/workout/DataScreen.tsx` (`handleDeleteAccount`,
       popup de borrar), `lib/cloud/auth.ts` (`signIn`).
+      **Estado (2026-11-04):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** bajo.
 - [ ] **Cambiar la contraseña con la sesión iniciada** — hoy solo se cambia
       cerrando sesión y usando "¿Has olvidado la contraseña?". Un "Cambiar
       contraseña" en el bloque de sesión de Datos y nube, con la misma
       contraseña nueva con ojo que la recuperación (`updatePassword` ya
       existe) y cerrando las demás sesiones al terminar
-      (`signOutOtherDevices`). También es la salida de quien deja la
-      recuperación "para luego" con el código ya verificado.
+      (`signOutOtherDevices`).
       **Por qué:** cambiar la contraseña sin olvidarla (porque se filtró, o
       era débil) no debería exigir salir de la cuenta.
       **Archivos:** `features/workout/DataScreen.tsx` (rama `session && user`
-      del bloque de cuenta; reutilizar `passwordRow`), `lib/cloud/auth.ts`.
+      del bloque de cuenta), `components/PasswordField.tsx`, `lib/cloud/auth.ts`.
+      **Estado (2026-11-04):** hecho en código; falta probarlo en el móvil.
+      **Esfuerzo:** bajo.
+- [ ] **Sesión guardada al arrancar sin red** — al abrir la app sin conexión y
+      con el token caducado, Supabase da una sesión vacía aunque siga guardada:
+      la app se pinta como si no hubiera cuenta y el sync se para hasta que
+      vuelve la red. Distinguir "sin sesión" de "sesión guardada pendiente de
+      renovar" (`hasStoredSession` ya lo sabe) y usarlo en la pantalla de
+      cuenta y en el sync.
+      **Por qué:** quien entrena sin cobertura no debería ver que ha perdido la
+      cuenta; la sesión vuelve sola y el aviso es falso.
+      **Archivos:** `lib/cloud/auth.ts:48` (`onAuthStateChange`), `:73`
+      (`useSession`), `hooks/useCloudSync.ts:33`,
+      `features/workout/DataScreen.tsx`.
+      **Esfuerzo:** medio.
+- [ ] **"Cerrar sesión" sin red y con el token caducado** — `signOut()` devuelve
+      el error sin lanzarlo y `handleSignOut` no lo mira: el botón termina y la
+      sesión sigue abierta, sin ningún aviso. Leer `{error}` y, sin red, cerrar
+      al menos en este móvil (`scope: 'local'`) o decir qué ha pasado.
+      **Por qué:** quien pulsa "Cerrar sesión" da por hecho que ha salido, y en
+      un móvil prestado o vendido eso importa.
+      **Archivos:** `features/workout/DataScreen.tsx` (`handleSignOut`),
+      `lib/cloud/auth.ts:94` (`signOut`).
+      **Esfuerzo:** bajo.
+- [ ] **Copias de Comunidad en memoria al cambiar de cuenta** — por comprobar:
+      `useForgetSignedOutAccount` limpia las copias en disco, pero las pantallas
+      sociales guardan otras en variables de módulo, que podrían sobrevivir a
+      un cambio de cuenta sin cerrar la app. Si es así, vaciarlas al cambiar de
+      usuario.
+      **Por qué:** la cuenta nueva no debe ver lo que cargó la anterior, ni un
+      instante.
+      **Archivos:** `features/workout/CommunityScreen.tsx:111` (`boardCache`),
+      `features/workout/FollowingScreen.tsx:51` (`listCache`),
+      `features/workout/UserProfileScreen.tsx:80` (`profileCache`),
+      `hooks/useMyProfile.ts` (`useForgetSignedOutAccount`).
       **Esfuerzo:** bajo.
 - [ ] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
       rutina deja renombrar, cambiar el icono, reordenar y quitar días, y

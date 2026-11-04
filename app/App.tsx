@@ -90,7 +90,7 @@ import {
   setLastSeenVersion,
   setLastUpdatePromptVersion,
 } from '@lib/storage';
-import { useMyProfile } from '@hooks/useMyProfile';
+import { useForgetSignedOutAccount, useMyProfile } from '@hooks/useMyProfile';
 import { useRecordAccountLevel } from '@hooks/useAccountLevel';
 import { TabFocusContext } from '@hooks/useTabFocus';
 import { shiftAward, useAwards } from '@lib/awards';
@@ -1870,6 +1870,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
 function CloudSync({ enabled }: { enabled: boolean }) {
   const { dispatch, state } = useWorkout();
   useCloudSync(dispatch, state.routines, enabled);
+  useForgetSignedOutAccount();
   return null;
 }
 
