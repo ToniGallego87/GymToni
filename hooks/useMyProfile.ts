@@ -1,7 +1,9 @@
 import { useEffect, useReducer } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { setStoredPublishedActivity } from '@lib/appSettings';
 import { useSession } from '@lib/cloud/auth';
+import { clearSocialCache } from '@lib/socialCache';
 import {
   getProfile,
   isLegacyAvatarUrl,
@@ -153,15 +155,23 @@ function migrateAvatarOnce(
 }
 
 /**
- * Olvida el perfil de una cuenta en este móvil: la copia en memoria y la de
- * disco. Lo usa borrar la cuenta: su nombre, bio y foto no deben quedarse en
- * el dispositivo de una cuenta que ya no existe.
+ * Olvida en este móvil lo de una cuenta que se va a borrar: su nombre, bio y
+ * foto no deben quedarse en el dispositivo. También las copias sociales y la
+ * marca de Actividad publicada, que no va por usuario: con otra cuenta en el
+ * móvil, esos hitos no se publicarían. Rutinas y entrenos no se tocan. Nunca
+ * falla: quien la llama ya ha hecho lo importante.
  */
-export async function forgetMyProfile(userId: string): Promise<void> {
+export async function forgetAccountOnDevice(userId: string): Promise<void> {
   if (state.userId === userId) {
     setState({ userId: null, profile: null, loading: false });
   }
   await AsyncStorage.removeItem(cacheKey(userId)).catch(() => {});
+  await clearSocialCache().catch(() => {});
+  try {
+    setStoredPublishedActivity([]);
+  } catch {
+    // Un ajuste local sin guardar no cambia nada de lo importante.
+  }
 }
 
 export function useMyProfile(): { profile: Profile | null; loading: boolean } {

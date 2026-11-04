@@ -156,6 +156,25 @@ export function routinePlanFingerprint(routine: WorkoutRoutine): string {
 }
 
 /**
+ * Quita de la copia local de una rutina ENLAZADA el rastro de un autor que ha
+ * borrado su cuenta: su rutina ya cuelga de la cuenta reservada `ownerId`.
+ * Devuelve la rutina anónima, o `null` si ya lo era. Sin esto seguiría saliendo
+ * "De {autor}" para siempre, y su perfil se abriría vacío.
+ */
+export function anonymizeLinkedRoutine(
+  local: WorkoutRoutine,
+  ownerId: string
+): WorkoutRoutine | null {
+  if (local.linkedOwnerId === ownerId) return null;
+  return {
+    ...local,
+    linkedOwnerId: ownerId,
+    sourceOwnerId: ownerId,
+    sourceAuthor: t('Cuenta eliminada'),
+  };
+}
+
+/**
  * Aplica a la copia local de una rutina ENLAZADA la versión pública actual de
  * su autor. Devuelve la rutina refrescada, o `null` si no hay nada nuevo.
  *

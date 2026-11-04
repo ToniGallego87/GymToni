@@ -103,31 +103,41 @@
 
 ### Nuevas funcionalidades
 
-- **Eliminar la cuenta.** En Datos y nube, con sesión, "Eliminar la cuenta"
-  (botón rojo bajo "Cerrar sesión") abre una confirmación con casilla
-  obligatoria ("Entiendo que no se puede deshacer"). Llama a la Edge Function
-  nueva `supabase/functions/delete-account` (la única pieza con
-  `service_role`): borra solo a quien llama (usuario del JWT), primero sus
-  fotos de `avatars` (Storage guarda al dueño y con archivos Auth no deja
-  borrar) y luego el usuario de Auth; todas las tablas caen en cascada
-  (comprobado: todas las FKs a `auth.users` son `on delete cascade`). En el
-  móvil cierra la sesión solo en local y olvida copias sociales, perfil
-  (`forgetMyProfile`) y la marca de Actividad publicada; rutinas y entrenos
-  del móvil se quedan. `tsconfig.json` excluye `supabase/functions` (es Deno),
-  conservando los `exclude` de la base de Expo. Tras `/revisar-codigo`:
-  - **Ids que quedan libres:** la cascada borra de verdad las rutinas, y otro
-    usuario podía reutilizar el id de una pública y colarse en las copias
-    enlazadas de quienes la tenían. `fetchPublicRoutine(id, expectedOwnerId)`
-    exige el autor esperado en el refresco de enlazadas, al enlazar y en la
-    vista de una rutina pública.
-  - La función es **idempotente** (un JWT de usuario ya borrado responde ok:
-    el reintento tras perder la respuesta no se atasca), quita la foto del
-    perfil antes de borrar los archivos y fija `supabase-js@2.112.3`.
-  - En la app, la limpieza local va aparte del borrado (un fallo al limpiar ya
-    no dice "no se pudo eliminar" de una cuenta borrada) y "Cancelar" no
-    cierra el popup con el borrado en marcha.
-    **Pendiente en Supabase:** desplegar la función (SETUP.md → "Panel de
-    Supabase").
+- **Eliminar la cuenta, con plazo de gracia y rutinas anónimas.** En Datos y
+  nube, con sesión, "Eliminar la cuenta" (botón rojo bajo "Cerrar sesión") abre
+  una confirmación con casilla obligatoria que explica lo que pasa. Pedirlo no
+  borra nada: `request_account_deletion` marca la cuenta con la hora del
+  servidor (`profiles.deletion_requested_at`), la oculta y cierra la sesión en
+  todos los dispositivos; en el móvil se olvidan copias sociales, perfil
+  (`forgetMyProfile`) y la marca de Actividad publicada, y rutinas y entrenos
+  se quedan. Durante 30 días, al iniciar sesión sale `AccountDeletionPrompt`
+  (en la raíz): recuperar la cuenta o cerrar sesión. Pasado el plazo, la Edge
+  Function `purge-deleted-accounts` (tarea diaria, la única pieza con
+  `service_role`, protegida con `PURGE_SECRET`) traspasa lo público a la cuenta
+  reservada "Cuenta eliminada" (`anonymize_account`: rutinas públicas con sus
+  días y ejercicios, y comentarios), borra las fotos y borra el usuario: lo
+  privado cae en cascada. La cuenta reservada no se busca, no se sigue y su
+  perfil no se abre, y su nombre se pinta en el idioma de la app. Un borrado
+  lógico para siempre no valía: Play no acepta desactivar como borrar, y
+  entrenos y peso pueden ser datos de salud. `tsconfig.json` excluye
+  `supabase/functions` (es Deno).
+  - **Ids que quedan libres:** las rutinas privadas sí se borran de verdad, y
+    otro podría reutilizar su id. `fetchPublicRoutine(id, expectedOwnerId)`
+    exige el autor esperado (o la cuenta reservada) al refrescar enlazadas, al
+    enlazar y en la vista de una rutina pública.
+  - **Recuperar y purgar no se pisan:** los 30 días son un corte exacto.
+    `cancel_account_deletion` solo vale antes y `anonymize_account` solo
+    después, comprobándolo con la fila bloqueada.
+  - **La marca no se escribe a mano:** un trigger la protege (con un PATCH se
+    adelantaba la purga) y solo la tocan las dos funciones `security definer`.
+  - **Copias enlazadas de otros:** al pasar la rutina a la cuenta reservada,
+    `anonymizeLinkedRoutine` les quita el nombre y el id del autor.
+  - La limpieza local (`forgetAccountOnDevice`) va aparte de la petición y
+    también corre al cerrar sesión desde el aviso. "Cancelar" no cierra el popup
+    con la petición en marcha.
+    **Ya en Supabase** (2026-11-04): SQL ejecutado, función desplegada y tarea
+    diaria programada. Falta la prueba completa con una cuenta de prueba
+    (SETUP.md → "Panel de Supabase", paso 5).
 - **Recuperar la contraseña.** En Datos y nube, "¿Has olvidado la
   contraseña?" bajo el login manda un código de 6 dígitos al email escrito
   (`requestPasswordReset`) y pasa al mismo bloque del código del registro, con

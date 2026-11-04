@@ -48,6 +48,7 @@ import {
   likeRoutine,
   unlikeRoutine,
   linkablePublicRoutine,
+  DELETED_ACCOUNT_ID,
   getRoutineSetTotals,
   getCommentCounts,
   getSaveCounts,
@@ -635,9 +636,10 @@ export function CommunityScreen({
       author={{
         name: authorName(item),
         avatarUrl: avatars.get(item.owner_id)?.avatar_url ?? null,
-        onPress: onOpenProfile
-          ? () => onOpenProfile(item.owner_id, authorName(item))
-          : undefined,
+        onPress:
+          onOpenProfile && item.owner_id !== DELETED_ACCOUNT_ID
+            ? () => onOpenProfile(item.owner_id, authorName(item))
+            : undefined,
       }}
       onPress={
         onOpenRoutine

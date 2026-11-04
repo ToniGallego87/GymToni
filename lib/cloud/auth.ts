@@ -139,20 +139,47 @@ export function signOutOtherDevices() {
 }
 
 /**
- * Borra la cuenta y TODO lo suyo en la nube (Edge Function `delete-account`,
- * supabase/functions/: es la única con `service_role`). Después cierra la
- * sesión solo en este móvil: el usuario ya no existe, así que la de los demás
- * dispositivos caduca sola, y `signOut` global fallaría.
+ * Pide borrar la cuenta: no borra nada aún. La marca (con la hora del servidor)
+ * y la oculta; pasados `ACCOUNT_DELETION_GRACE_DAYS` días la borra de verdad la
+ * Edge Function `purge-deleted-accounts`, y hasta entonces se recupera
+ * iniciando sesión (`AccountDeletionPrompt`). Diseño en
+ * supabase/social-schema.sql, sección "Borrado de cuenta".
  *
- * Lo que hay en el móvil (rutinas, entrenos) no se toca: la app funciona sin
+ * Cierra la sesión en todos los dispositivos: la cuenta deja de usarse ya. Lo
+ * que hay en el móvil (rutinas, entrenos) no se toca: la app funciona sin
  * cuenta, y eso lo borra "Borrar todos los datos" si se quiere.
  */
-export async function deleteAccount(): Promise<void> {
-  const { error } = await supabase.functions.invoke('delete-account', {
-    method: 'POST',
-  });
+export async function requestAccountDeletion(): Promise<void> {
+  const { data, error } = await supabase.rpc('request_account_deletion');
   if (error) throw error;
-  await supabase.auth.signOut({ scope: 'local' });
+  // Sin perfil no hay nada que marcar: la purga nunca encontraría la cuenta.
+  if (!data) throw new Error('profile_not_found');
+  await supabase.auth.signOut();
+}
+
+/** Recupera la cuenta. false: el plazo ya ha terminado y no se puede. */
+export async function cancelAccountDeletion(): Promise<boolean> {
+  const { data, error } = await supabase.rpc('cancel_account_deletion');
+  if (error) throw error;
+  return !!data;
+}
+
+/**
+ * Cuándo se pidió borrar esta cuenta, o null si no. Aparte de `getProfile` a
+ * propósito: si la columna aún no existe en la nube o falla la red, no debe
+ * tumbar la carga del perfil; simplemente no se avisa.
+ */
+export async function getAccountDeletionRequest(
+  userId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('deletion_requested_at')
+    .eq('id', userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data as { deletion_requested_at: string | null })
+    .deletion_requested_at;
 }
 
 // Errores de Supabase Auth que el usuario ve a menudo, traducidos por su

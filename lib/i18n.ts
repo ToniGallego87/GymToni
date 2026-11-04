@@ -505,11 +505,25 @@ register({
   // Eliminar la cuenta (Datos y nube)
   'Eliminar la cuenta': 'Delete account',
   'Eliminando…': 'Deleting…',
-  'Se borrarán tu cuenta y todo lo que tienes en la nube: rutinas, entrenos, perfil, foto, actividad, comentarios, likes y seguidores. Lo que hay en este móvil se queda y la app seguirá funcionando sin cuenta.':
-    'Your account and everything you have in the cloud will be deleted: routines, workouts, profile, photo, activity, comments, likes and followers. What is on this phone stays, and the app keeps working without an account.',
-  'Entiendo que no se puede deshacer': 'I understand this cannot be undone',
-  'Cuenta eliminada. Tus datos siguen en este móvil.':
-    'Account deleted. Your data is still on this phone.',
+  'Tu cuenta se oculta ahora y se borrará en {n} días; hasta entonces puedes recuperarla iniciando sesión. Se borrarán tu email, perfil, foto, entrenos, rutinas privadas, actividad, likes y seguidores. Tus rutinas públicas y tus comentarios se quedan en Comunidad sin tu nombre, como «Cuenta eliminada»: revisa que no incluyan datos personales. Lo que hay en este móvil se queda.':
+    'Your account is hidden now and will be deleted in {n} days; until then you can recover it by signing in. Your email, profile, photo, workouts, private routines, activity, likes and followers will be deleted. Your public routines and comments stay in Community without your name, as “Deleted account”: check they contain no personal data. What is on this phone stays.',
+  'Entiendo que pasado el plazo no se puede deshacer':
+    'I understand that after this period it cannot be undone',
+  'Se eliminará en {n} días. Si cambias de idea, inicia sesión antes. Tus datos siguen en este móvil.':
+    'It will be deleted in {n} days. If you change your mind, sign in before then. Your data is still on this phone.',
+  'Cuenta eliminada': 'Deleted account',
+  'Cuenta pendiente de eliminar': 'Account pending deletion',
+  'Pediste eliminar esta cuenta. Se borrará el {date}, salvo que la recuperes ahora.':
+    'You asked to delete this account. It will be deleted on {date} unless you recover it now.',
+  'Recuperar mi cuenta': 'Recover my account',
+  'Recuperando…': 'Recovering…',
+  'No se pudo recuperar la cuenta. Comprueba la conexión.':
+    'The account could not be recovered. Check your connection.',
+  'El plazo para recuperar esta cuenta ha terminado.':
+    'The period to recover this account has ended.',
+  'Esta cuenta ya no existe': 'This account no longer exists',
+  'Algunos datos de este móvil pertenecen a otra cuenta y no se pueden subir a esta.':
+    'Some data on this phone belongs to another account and cannot be uploaded to this one.',
   'No se pudo eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.':
     'The account could not be deleted. Check your connection and try again.',
   'Código correcto. Elige la contraseña nueva para':

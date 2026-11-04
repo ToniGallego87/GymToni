@@ -118,30 +118,6 @@ requisito previo de anuncios, suscripción e iOS.
 Candidatas (compatibles con las restricciones). Las **[Lanzamiento]** van
 primero porque sin ellas no se publica.
 
-- [x] **[Lanzamiento] Blindar la RLS social: plan ajeno, perfiles privados,
-      tamaños y avatares** — cuatro agujeros de la nube, arreglados en SQL
-      más un filtro en el cliente. **Plan ajeno**: cualquiera colaba días y
-      ejercicios en la rutina pública de otro (las policies solo miraban el
-      `user_id`) y el refresco de enlazadas los repartía; ahora solo se leen
-      filas del dueño de la rutina. **Perfil privado**: "yo le sigo" abría
-      perfil y Actividad, y seguir es unilateral; queda solo "él me sigue".
-      **Topes**: `CHECK` de longitud, máximo de días por rutina, ejercicios
-      por día y rutinas públicas, bucket `avatars` limitado, likes solo a
-      públicas y `popular_routines` acotado. **Avatar**: solo la URL del
-      bucket propio, sin caída a base64.
-      **Por qué:** hoy un usuario malintencionado puede ensuciar la rutina más
-      popular para todos, leer la actividad de un perfil privado o tumbar la
-      base de datos.
-      **Estado (2026-10-20):** hecho en código y SQL ejecutado en Supabase
-      (ver UPDATES "Sin publicar"); se borra al cerrar la versión. Fuera de
-      esta ficha queda el tope de filas del historial privado (logs y series):
-      lo frenan el captcha y el plan Pro de "Supabase listo para producción".
-      **Archivos:** `supabase/social-schema.sql` (policies "read public …" y
-      sección "Blindaje"), `supabase/storage-avatars.sql`,
-      `lib/cloud/social.ts` (`fetchPublicRoutine`, `getRoutineSetTotals`,
-      `uploadAvatar`, `pruneAvatars`), `lib/cloud/cloudRows.ts`,
-      `lib/exerciseForm.ts` (límites), `hooks/useAvatarPicker.ts`.
-      **Esfuerzo:** bajo.
 - [ ] **[Lanzamiento] Subir a Expo SDK 54 (páginas de 16 KB, requisito de
       iOS)** — las 49 `.so` de arm64 de la release están alineadas a 4 KB
       (comprobado 2026-10-20 en `app-release.apk`); Play exige 16 KB a apps
@@ -156,24 +132,53 @@ primero porque sin ellas no se publica.
       `patches/`, `.github/docs/backend-design.md` §14 (lo aprendido en el
       intento anterior).
       **Esfuerzo:** alto.
-- [ ] **[Lanzamiento] Borrar la cuenta desde la app (y desde una web)** —
-      obligatorio en Play y App Store para apps con cuentas. Botón en Datos y
-      nube con confirmación que llama a una Edge Function (con
-      `service_role`) que borra el usuario de Auth (las tablas ya caen en
-      cascada por `on delete cascade`) y su carpeta de `avatars`; más una URL
-      pública para pedirlo sin la app, que va en la ficha de Play.
-      **Por qué:** sin ello la ficha no pasa revisión, y es un derecho del
-      usuario (RGPD).
-      **Archivos:** `supabase/functions/delete-account/index.ts`,
-      `lib/cloud/auth.ts` (`deleteAccount`), `features/workout/DataScreen.tsx`
-      (`handleDeleteAccount`), `hooks/useMyProfile.ts` (`forgetMyProfile`).
-      **Estado (2026-10-29):** hecha la parte de la app. **Pendiente:**
-      desplegar la Edge Function en Supabase y probarlo en el móvil con una
-      cuenta de prueba; y la URL web para la ficha de Play. Esa puede ser una
-      página sencilla ("escribe a … desde el email de tu cuenta y la borramos
-      en X días") en el dominio propio o, mientras no lo haya, en GitHub
-      Pages.
-      **Esfuerzo:** medio.
+- [ ] **[Lanzamiento] Borrar la cuenta: plazo de gracia y rutinas anónimas** —
+      obligatorio en Play y App Store para apps con cuentas. Al
+      pedirlo, la cuenta se oculta y durante **30 días** se puede recuperar
+      iniciando sesión; pasado el plazo, una tarea programada de Supabase la
+      borra de verdad. Entonces **lo público se conserva anónimo**: sus
+      rutinas públicas (con días y ejercicios) y sus comentarios en rutinas de
+      otros pasan a un usuario reservado "Cuenta eliminada", con sus likes,
+      guardados y sitio en el tablón, y los ids no quedan libres. **Lo privado
+      se borra siempre**: email, perfil, foto, entrenos, ajustes, actividad y
+      seguidores. Lo que hay en el móvil no se toca. La confirmación y la
+      política de privacidad lo explican, avisando de que el nombre y la
+      descripción de una rutina pública pueden contener datos personales.
+      Más una URL pública para pedirlo sin la app, que va en la ficha de Play:
+      basta una página sencilla en el dominio propio o, mientras no lo haya,
+      en GitHub Pages.
+      **Estado (2026-11-04):** hecho en código; SQL ejecutado, función
+      desplegada (comprobado: rechaza llamadas sin secreto) y tarea diaria
+      programada. **Pendiente:** comprobar las cascadas reales
+      (`pg_constraint`), la prueba completa con una cuenta de prueba (SETUP.md,
+      paso 5: es la que crea la cuenta reservada) y publicar la URL web.
+      **Por qué:** sin borrado real la ficha no pasa revisión y es un derecho
+      del usuario (RGPD). Un borrado lógico puro no vale: Play no acepta
+      desactivar o congelar como borrar, y entrenos y peso pueden ser datos de
+      salud. Así se puede dar marcha atrás y quien usa esas rutinas no pierde
+      la traza.
+      **Archivos:** `supabase/functions/purge-deleted-accounts/index.ts`,
+      `supabase/social-schema.sql` (sección "Borrado de cuenta"),
+      `lib/cloud/auth.ts` (`requestAccountDeletion`), `lib/cloud/social.ts`
+      (`DELETED_ACCOUNT_ID`), `components/AccountDeletionPrompt.tsx`,
+      `features/workout/DataScreen.tsx` (`handleDeleteAccount`).
+      **Esfuerzo:** alto.
+- [ ] **[Lanzamiento] Otra cuenta en el mismo móvil** — los datos del móvil
+      conservan sus ids, y esos ids siguen ocupados en la nube por la cuenta
+      anterior (durante los 30 días de gracia, o por "Cuenta eliminada" en sus
+      rutinas públicas). Al entrar con otra cuenta, "Subir copia" falla (ya con
+      un aviso claro), el sync descarta esos cambios tras 5 intentos y publicar
+      una de esas rutinas no hace nada. Pasa igual al cambiar de cuenta sin
+      borrar ninguna. **Decisión pendiente:** propuesta, detectar que cambia el
+      dueño de los datos locales y darles ids nuevos, manteniendo las
+      referencias del historial; toca todos los entrenos, así que necesita
+      tests y copia previa.
+      **Por qué:** quien borra su cuenta y crea otra se queda sin copia en la
+      nube, aunque la app le diga que sus datos siguen en el móvil.
+      **Archivos:** `lib/cloud/backup.ts` (`upsertAll`), `lib/cloud/sync.ts`
+      (`cloudUpsert`, descarte del outbox), `lib/cloud/social.ts`
+      (`setRoutinePublic`), `lib/db/mappers.ts` (`appDataToRows`).
+      **Esfuerzo:** alto.
 - [ ] **[Lanzamiento] Política de privacidad real y Data Safety** — la actual
       dice "GymBro no recopila ningún dato, no tiene servidores": ya es falso
       (email, entrenos, peso, fotos, contenido social en Supabase). Reescribirla
@@ -181,10 +186,11 @@ primero porque sin ellas no se publica.
       enlazarla desde Ajustes y rellenar Data Safety y la declaración de apps
       de salud de Play de acuerdo con ella. Peso y entrenos pueden ser datos
       de salud en el RGPD: consentimiento explícito al crear cuenta. Al
-      explicar el borrado de cuenta, contar también lo que no desaparece: las
-      rutinas públicas que otros ya añadieron siguen en sus móviles, los
-      reportes de terceros se conservan y Supabase guarda copias de seguridad
-      unos días.
+      explicar el borrado de cuenta, contar el plazo de 30 días y lo que no
+      desaparece: rutinas públicas y comentarios se quedan anónimos como
+      "Cuenta eliminada", las rutinas que otros ya añadieron siguen en sus
+      móviles, los reportes de terceros se conservan y Supabase guarda copias
+      de seguridad unos días.
       **Por qué:** una política que contradice lo que hace la app es motivo
       de retirada y de sanción.
       **Archivos:** `privacy-policy.html`, `features/workout/SettingsScreen.tsx:266`
@@ -244,10 +250,11 @@ primero porque sin ellas no se publica.
       pasar a Pro (propuesta: justo antes de abrir al público) y si el
       captcha va desde el inicio o solo si aparecen bots (propuesta: después).
       Dominio y SMTP van primero: los necesitan "Política de privacidad" y
-      "Borrar la cuenta".
+      "Borrar la cuenta: plazo de gracia y rutinas anónimas".
       **Por qué:** con usuarios reales, sin esto el registro falla, no hay
       dónde publicar la política ni el borrado, o la base se llena de cuentas
-      falsas.
+      falsas (el historial privado, entrenos y series, no tiene tope de filas:
+      lo frenan el captcha y el plan Pro).
       **Archivos:** `lib/cloud/auth.ts` (`signUp` y `requestPasswordReset`
       recibirían el `captchaToken`), `features/workout/DataScreen.tsx`
       (`handleAuth`, `handleForgotPassword`), `privacy-policy.html`,

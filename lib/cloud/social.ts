@@ -5,6 +5,7 @@ import { t } from '../i18n';
 import { generateId } from '../utils';
 import {
   isLinkedRoutine,
+  anonymizeLinkedRoutine,
   linkPublicRoutine,
   refreshLinkedRoutine,
 } from '../routines';
@@ -59,6 +60,17 @@ export interface ProfileLite {
   private?: boolean;
 }
 
+/**
+ * Cuenta reservada "Cuenta eliminada": de ella pasan a colgar las rutinas
+ * públicas y los comentarios de quien borra su cuenta (supabase/social-schema.sql,
+ * "Borrado de cuenta"). Mismo id en la Edge Function `purge-deleted-accounts`.
+ * No es una persona: no se busca, no se sigue y su perfil no se abre.
+ */
+export const DELETED_ACCOUNT_ID = 'd31e7ed0-0000-4000-8000-000000000000';
+
+// El nombre guardado en la nube va en español: se pinta en el idioma de la app.
+const deletedAccountName = (): string => t('Cuenta eliminada');
+
 // Perfiles de una lista de ids, RESPETANDO el orden y sin perder a nadie: los
 // ids que la RLS no devuelve (perfil privado) vuelven como `private: true`.
 async function profilesByIds(ids: string[]): Promise<ProfileLite[]> {
@@ -96,6 +108,7 @@ export async function searchProfiles(
     .from('profiles')
     .select('id, display_name, avatar_url')
     .eq('is_public', true)
+    .neq('id', DELETED_ACCOUNT_ID)
     .ilike('display_name', `%${q}%`)
     .limit(limit);
   if (error) throw new Error(`profiles: ${error.message}`);
@@ -117,7 +130,12 @@ export async function getProfilesByIds(
   if (error) throw new Error(`profiles: ${error.message}`);
   for (const r of data ?? []) {
     const p = r as ProfileLite;
-    map.set(p.id, p);
+    map.set(
+      p.id,
+      p.id === DELETED_ACCOUNT_ID
+        ? { ...p, display_name: deletedAccountName() }
+        : p
+    );
   }
   return map;
 }
@@ -131,7 +149,10 @@ export async function getProfile(userId: string): Promise<Profile | null> {
     .eq('id', userId)
     .maybeSingle();
   if (error) throw new Error(`profiles: ${error.message}`);
-  return (data as Profile | null) ?? null;
+  const profile = (data as Profile | null) ?? null;
+  return profile?.id === DELETED_ACCOUNT_ID
+    ? { ...profile, display_name: deletedAccountName() }
+    : profile;
 }
 
 export async function updateProfile(
@@ -296,6 +317,8 @@ export async function followUser(
     following_id: targetId,
     created_at: Date.now(),
   });
+  // FK rota: esa cuenta ya no existe (se ha borrado).
+  if (error?.code === '23503') throw new Error(t('Esta cuenta ya no existe'));
   if (error) throw new Error(`follows: ${error.message}`);
 }
 
@@ -474,7 +497,10 @@ export async function getPopularRoutines(
     name: r.name as string,
     description: (r.description as string | null) ?? null,
     owner_id: r.owner_id as string,
-    author_name: (r.author_name as string | null) ?? null,
+    author_name:
+      r.owner_id === DELETED_ACCOUNT_ID
+        ? deletedAccountName()
+        : (r.author_name as string | null) ?? null,
     likes: Number(r.likes ?? 0),
     liked_by_me: !!r.liked_by_me,
   }));
@@ -690,15 +716,26 @@ export async function recordOwnedRoutineSaves(
 // (PublicRoutineScreen), que muestra el plan sin adoptarlo, y
 // linkablePublicRoutine, que la marca con su dueño antes de guardarla.
 //
-// `expectedOwnerId`: el autor que se espera. Un id de rutina puede cambiar de
-// dueño: borrar una cuenta borra sus rutinas de verdad (cascada) y deja su id
-// libre para que otro lo reutilice. Con el autor fijado, una rutina "nueva"
-// con el id de la de siempre devuelve null en vez de colarse en las copias
-// enlazadas de quien tenía la original.
+// `expectedOwnerId`: el autor que se espera. Borrar una cuenta borra de verdad
+// sus rutinas privadas y deja su id libre: otro podría reutilizarlo y publicarlo.
+// Con el autor fijado, esa rutina "nueva" devuelve null en vez de colarse en
+// las copias enlazadas de quien tenía la original. También vale la cuenta
+// "Cuenta eliminada", que es adonde pasan las públicas de quien se va: esas
+// siguen siendo la misma rutina.
 export async function fetchPublicRoutine(
   routineId: string,
   expectedOwnerId?: string
 ): Promise<WorkoutRoutine | null> {
+  const found = await fetchPublicRoutineWithOwner(routineId, expectedOwnerId);
+  return found?.routine ?? null;
+}
+
+// Lo mismo, con su dueño actual: lo necesita el refresco de enlazadas para
+// saber si el autor ha borrado su cuenta.
+async function fetchPublicRoutineWithOwner(
+  routineId: string,
+  expectedOwnerId?: string
+): Promise<{ routine: WorkoutRoutine; ownerId: string } | null> {
   const coerce = (r: Record<string, unknown>): Record<string, unknown> => ({
     ...r,
     ...(r.created_at != null ? { created_at: Number(r.created_at) } : {}),
@@ -711,7 +748,10 @@ export async function fetchPublicRoutine(
     .eq('is_public', true)
     .eq('deleted', false);
   if (expectedOwnerId)
-    routineQuery = routineQuery.eq('user_id', expectedOwnerId);
+    routineQuery = routineQuery.in('user_id', [
+      expectedOwnerId,
+      DELETED_ACCOUNT_ID,
+    ]);
   const { data: routineRow, error: rErr } = await routineQuery.maybeSingle();
   if (rErr) throw new Error(`routines: ${rErr.message}`);
   if (!routineRow) return null;
@@ -753,7 +793,8 @@ export async function fetchPublicRoutine(
     logSets: [],
     cardioLogs: [],
   };
-  return rowsToAppData(rows).routines[0] ?? null;
+  const routine = rowsToAppData(rows).routines[0];
+  return routine ? { routine, ownerId } : null;
 }
 
 // Baja una rutina pública y la devuelve YA enlazada (ids originales + dueño),
@@ -791,8 +832,15 @@ export async function refreshLinkedRoutines(
   const refreshed = await Promise.all(
     linked.map(async (local) => {
       try {
-        const fresh = await fetchPublicRoutine(local.id, local.linkedOwnerId);
-        return fresh ? refreshLinkedRoutine(local, fresh) : null;
+        const fresh = await fetchPublicRoutineWithOwner(
+          local.id,
+          local.linkedOwnerId
+        );
+        if (!fresh) return null;
+        const updated = refreshLinkedRoutine(local, fresh.routine);
+        // El autor borró su cuenta: la copia deja de llevar su nombre.
+        if (fresh.ownerId !== DELETED_ACCOUNT_ID) return updated;
+        return anonymizeLinkedRoutine(updated ?? local, DELETED_ACCOUNT_ID);
       } catch {
         return null;
       }

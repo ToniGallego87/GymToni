@@ -54,14 +54,26 @@ alter table public.routine_likes enable row level security;
 -- que aceptar) y los ids de cualquiera salen de likes, guardados y comentarios,
 -- así que "le sigues" dejaba a cualquiera abrir un perfil privado con solo
 -- seguirlo. Que él te siga sí es decisión suya.
+--
+-- Una cuenta con el borrado pedido (`deletion_requested_at`, ver "Borrado de
+-- cuenta" al final) solo la ve su dueño: de paso desaparece su Actividad, cuya
+-- policy pasa por aquí, y sus rutinas salen sin autor, como las de un perfil
+-- privado.
+alter table public.profiles
+  add column if not exists deletion_requested_at timestamptz;
+
 drop policy if exists "read public profiles" on public.profiles;
 create policy "read public profiles" on public.profiles
   for select using (
-    is_public = true
-    or id = auth.uid()
-    or exists (
-      select 1 from public.follows f
-      where f.follower_id = profiles.id and f.following_id = auth.uid()
+    id = auth.uid()
+    or (
+      deletion_requested_at is null and (
+        is_public = true
+        or exists (
+          select 1 from public.follows f
+          where f.follower_id = profiles.id and f.following_id = auth.uid()
+        )
+      )
     )
   );
 
@@ -122,9 +134,14 @@ create index if not exists idx_exercises_day
 
 -- Follows: cada quien gestiona SOLO sus propias aristas (follower_id = yo);
 -- puede leer las que le implican (a quién sigo / quién me sigue).
+-- A la cuenta reservada "Cuenta eliminada" no se la sigue (ver "Borrado de cuenta").
 drop policy if exists "manage own follows" on public.follows;
 create policy "manage own follows" on public.follows
-  for all using (follower_id = auth.uid()) with check (follower_id = auth.uid());
+  for all using (follower_id = auth.uid())
+  with check (
+    follower_id = auth.uid()
+    and following_id <> 'd31e7ed0-0000-4000-8000-000000000000'::uuid
+  );
 
 drop policy if exists "read involving follows" on public.follows;
 create policy "read involving follows" on public.follows
@@ -556,3 +573,128 @@ drop trigger if exists limit_reports_per_day on public.reports;
 create trigger limit_reports_per_day
   before insert on public.reports
   for each row execute function public.limit_reports_per_day();
+
+-- ─────────────────────────── Borrado de cuenta ───────────────────────────
+-- Pedir el borrado NO borra nada: marca la cuenta (`deletion_requested_at`) y
+-- la oculta (policy "read public profiles"). Durante 30 días se recupera
+-- iniciando sesión. Pasado el plazo, la Edge Function
+-- `purge-deleted-accounts` (tarea diaria) la borra de verdad:
+--   · Lo PÚBLICO se conserva anónimo: `anonymize_account` traspasa sus rutinas
+--     públicas y sus comentarios a la cuenta reservada "Cuenta eliminada".
+--     Mantienen likes, guardados y sitio en el tablón, y sus ids no quedan
+--     libres para que otro los reutilice.
+--   · Lo PRIVADO cae en cascada al borrar el usuario de Auth: perfil, ajustes,
+--     entrenos, rutinas privadas, actividad, seguimientos, sus likes y reportes.
+--
+-- Un borrado lógico para siempre no valdría: Google Play no acepta desactivar o
+-- congelar como borrar, y entrenos y peso pueden ser datos de salud (RGPD).
+--
+-- La cuenta reservada la crea la propia Edge Function, con este id fijo (mismo
+-- valor en lib/cloud/social.ts → DELETED_ACCOUNT_ID).
+
+-- La marca solo la tocan las funciones de abajo. La policy "own profile" deja
+-- editar el perfil propio, y un PATCH a mano adelantaría la purga (fecha
+-- antigua: una sesión robada borraría la cuenta sin los 30 días), la impediría
+-- (fecha futura) o se saltaría el corte de recuperar (null).
+create or replace function public.protect_deletion_request()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if current_user in ('anon', 'authenticated')
+    and new.deletion_requested_at is distinct from (
+      case when tg_op = 'UPDATE' then old.deletion_requested_at end
+    )
+  then
+    raise exception 'deletion_requested_at no se escribe directamente'
+      using errcode = 'insufficient_privilege';
+  end if;
+  return new;
+end;
+$$;
+drop trigger if exists protect_deletion_request on public.profiles;
+create trigger protect_deletion_request
+  before insert or update of deletion_requested_at on public.profiles
+  for each row execute function public.protect_deletion_request();
+
+-- Hora del SERVIDOR, no la del móvil: un reloj mal puesto no debe adelantar el
+-- borrado. `coalesce`: repetirlo no alarga el plazo. `security definer` para
+-- pasar el trigger de arriba, siempre sobre `auth.uid()`. Devuelve si había
+-- fila: la purga sale de `profiles`, y sin perfil nunca encontraría la cuenta.
+create or replace function public.request_account_deletion()
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update public.profiles
+    set deletion_requested_at = coalesce(deletion_requested_at, now())
+    where id = auth.uid();
+  return found;
+end;
+$$;
+revoke execute on function public.request_account_deletion() from public, anon;
+grant execute on function public.request_account_deletion() to authenticated;
+
+-- Recuperar solo vale DENTRO del plazo: es el corte exacto en el que empieza
+-- `anonymize_account`, así que las dos nunca pueden pisarse. Devuelve false si
+-- ya no se puede.
+create or replace function public.cancel_account_deletion()
+returns boolean language plpgsql security definer set search_path = public as $$
+begin
+  update public.profiles
+    set deletion_requested_at = null
+    where id = auth.uid()
+      and deletion_requested_at > now() - interval '30 days';
+  return found;
+end;
+$$;
+revoke execute on function public.cancel_account_deletion() from public, anon;
+grant execute on function public.cancel_account_deletion() to authenticated;
+
+-- Traspasa lo público de una cuenta a la reservada. Idempotente: si la purga
+-- falla a medias, se repite al día siguiente. Hijos antes que padres, porque
+-- cada paso busca el dueño en el siguiente. Cambiar solo `user_id` no dispara
+-- los topes (saltan con `is_public`, `deleted`, `routines_id`…).
+--
+-- Con `security definer` salta la RLS, así que solo la puede llamar el servidor.
+-- Comprueba otra vez el plazo con la fila bloqueada: la lista de la purga se
+-- lee antes, y quien recupera su cuenta mientras corre no debe perderla.
+create or replace function public.anonymize_account(target uuid)
+returns void language plpgsql security definer set search_path = public as $$
+declare
+  deleted_account constant uuid := 'd31e7ed0-0000-4000-8000-000000000000';
+begin
+  if target = deleted_account then return; end if;
+
+  perform 1 from public.profiles
+    where id = target
+      and deletion_requested_at <= now() - interval '30 days'
+    for update;
+  if not found then
+    raise exception 'La cuenta % no tiene el borrado vencido', target;
+  end if;
+
+  update public.exercises e
+    set user_id = deleted_account
+    from public.workout_days d
+    join public.routines r on r.id = d.routines_id
+    where e.workout_days_id = d.id
+      and e.user_id = target and e.deleted = false
+      and d.user_id = target and d.deleted = false
+      and r.user_id = target and r.is_public = true and r.deleted = false;
+
+  update public.workout_days d
+    set user_id = deleted_account
+    from public.routines r
+    where d.routines_id = r.id
+      and d.user_id = target and d.deleted = false
+      and r.user_id = target and r.is_public = true and r.deleted = false;
+
+  update public.routines
+    set user_id = deleted_account
+    where user_id = target and is_public = true and deleted = false;
+
+  update public.routine_comments
+    set user_id = deleted_account
+    where user_id = target;
+end;
+$$;
+revoke execute on function public.anonymize_account(uuid)
+  from public, anon, authenticated;
+grant execute on function public.anonymize_account(uuid) to service_role;

@@ -31,12 +31,11 @@ import {
   getAutoBackupEnabled,
   setAutoBackupEnabled,
   getLastAutoBackupAt,
-  setStoredPublishedActivity,
 } from '@lib/appSettings';
-import { forgetMyProfile } from '@hooks/useMyProfile';
+import { forgetAccountOnDevice } from '@hooks/useMyProfile';
 import { canWriteLocalBackup } from '@lib/fileIO';
 import { AutoBackupFile, listAutoBackups } from '@lib/backup';
-import { weekdayDayMonth } from '@lib/utils';
+import { ACCOUNT_DELETION_GRACE_DAYS, weekdayDayMonth } from '@lib/utils';
 import {
   useSession,
   signUp,
@@ -49,7 +48,7 @@ import {
   updatePassword,
   authErrorMessage,
   signOutOtherDevices,
-  deleteAccount,
+  requestAccountDeletion,
 } from '@lib/cloud/auth';
 import { clearSocialCache } from '@lib/socialCache';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
@@ -409,21 +408,17 @@ export function DataScreen({
     }
   };
 
-  // Borra la cuenta en la nube (lib/cloud/auth.ts → deleteAccount) y lo que
-  // de ella quedaba en el móvil: copias sociales, perfil y la marca de
-  // Actividad publicada (con una cuenta nueva, todo se volvería a publicar).
-  // Rutinas y entrenos del móvil no se tocan.
+  // Pide borrar la cuenta (lib/cloud/auth.ts → requestAccountDeletion: la
+  // oculta y cierra la sesión; el borrado real llega pasado el plazo de gracia)
+  // y olvida lo que de ella quedaba en el móvil.
   const handleDeleteAccount = async () => {
     if (!user) return;
     const userId = user.id;
     setBusyAction('delete-account');
     try {
-      await deleteAccount();
+      await requestAccountDeletion();
     } catch {
-      // El error de la Edge Function llega genérico y en inglés ("non-2xx
-      // status code"): no le dice nada al usuario. Reintentar es seguro: si
-      // el borrado se hizo y solo se perdió la respuesta, la función responde
-      // ok la segunda vez.
+      // Reintentar es seguro: pedirlo dos veces no alarga el plazo.
       notify(
         t(
           'No se pudo eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.'
@@ -433,19 +428,19 @@ export function DataScreen({
       setBusyAction(null);
       return;
     }
-    // La cuenta ya no existe: la limpieza local es aparte, y si algo de ella
-    // falla no se dice "no se pudo eliminar" de una cuenta ya borrada.
-    await clearSocialCache().catch(() => undefined);
-    try {
-      setStoredPublishedActivity([]);
-    } catch {
-      // Un ajuste local sin guardar no cambia nada de lo importante.
-    }
-    await forgetMyProfile(userId);
+    // El borrado ya está pedido: la limpieza local es aparte, y si algo de
+    // ella falla no se dice "no se pudo eliminar".
+    await forgetAccountOnDevice(userId);
     setShowDeleteAccount(false);
     setDeleteAck(false);
     setBusyAction(null);
-    notify(t('Cuenta eliminada. Tus datos siguen en este móvil.'), 'success');
+    notify(
+      t(
+        'Se eliminará en {n} días. Si cambias de idea, inicia sesión antes. Tus datos siguen en este móvil.',
+        { n: ACCOUNT_DELETION_GRACE_DAYS }
+      ),
+      'success'
+    );
   };
 
   // ── Copia en este móvil ──────────────────────────────────────────────────
@@ -1100,21 +1095,23 @@ export function DataScreen({
         onCancel={() => setShowImportModal(false)}
       />
 
-      {/* Borrar la cuenta: irreversible, así que además de confirmar hay que
-          marcar que se entiende. Lo del móvil se queda (la app va sin cuenta). */}
+      {/* Borrar la cuenta: al acabar el plazo es irreversible, así que además
+          de confirmar hay que marcar que se entiende. Lo del móvil se queda
+          (la app va sin cuenta). */}
       <ConfirmModal
         visible={showDeleteAccount}
         icon="account-remove-outline"
         title={t('Eliminar la cuenta')}
         message={t(
-          'Se borrarán tu cuenta y todo lo que tienes en la nube: rutinas, entrenos, perfil, foto, actividad, comentarios, likes y seguidores. Lo que hay en este móvil se queda y la app seguirá funcionando sin cuenta.'
+          'Tu cuenta se oculta ahora y se borrará en {n} días; hasta entonces puedes recuperarla iniciando sesión. Se borrarán tu email, perfil, foto, entrenos, rutinas privadas, actividad, likes y seguidores. Tus rutinas públicas y tus comentarios se quedan en Comunidad sin tu nombre, como «Cuenta eliminada»: revisa que no incluyan datos personales. Lo que hay en este móvil se queda.',
+          { n: ACCOUNT_DELETION_GRACE_DAYS }
         )}
         confirmLabel={
           busyAction === 'delete-account'
             ? t('Eliminando…')
             : t('Eliminar la cuenta')
         }
-        checkLabel={t('Entiendo que no se puede deshacer')}
+        checkLabel={t('Entiendo que pasado el plazo no se puede deshacer')}
         checked={deleteAck}
         onToggleCheck={() => setDeleteAck((v) => !v)}
         busy={busyAction === 'delete-account' || !deleteAck}

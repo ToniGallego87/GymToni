@@ -61,6 +61,7 @@ import {
   addRoutineComment,
   COMMENT_MAX_LENGTH,
   deleteRoutineComment,
+  DELETED_ACCOUNT_ID,
   fetchPublicRoutine,
   getLikeInfo,
   getProfile,
@@ -186,6 +187,9 @@ export function PublicRoutineScreen({
     insets.bottom
   );
   const backButtonSpace = FLOATING_BACK_BUTTON_HEIGHT + floatingBackBottom;
+  // "Cuenta eliminada" no es una persona: su perfil no se abre.
+  const canOpenAuthor =
+    !!ownerId && !!onOpenProfile && ownerId !== DELETED_ACCOUNT_ID;
 
   const load = useCallback(async () => {
     // La copia del último arranque, ya: entrar en una rutina del tablón volvía a
@@ -536,8 +540,10 @@ export function PublicRoutineScreen({
                 styles.authorRow,
                 pressed && styles.pressed,
               ]}
-              onPress={() => ownerId && onOpenProfile?.(ownerId, displayAuthor)}
-              disabled={!ownerId || !onOpenProfile}
+              onPress={() =>
+                canOpenAuthor && onOpenProfile?.(ownerId, displayAuthor)
+              }
+              disabled={!canOpenAuthor}
               hitSlop={6}
               accessibilityRole="button"
               accessibilityLabel={t('Ver perfil de {name}', {
@@ -548,7 +554,7 @@ export function PublicRoutineScreen({
               <Text style={styles.author} numberOfLines={1}>
                 {t('por {name}', { name: displayAuthor })}
               </Text>
-              {!!ownerId && !!onOpenProfile && (
+              {canOpenAuthor && (
                 <MaterialCommunityIcons
                   name="chevron-right"
                   size={18}
@@ -792,7 +798,9 @@ export function PublicRoutineScreen({
                         commentAuthorName(comment.user_id)
                       )
                     }
-                    disabled={!onOpenProfile}
+                    disabled={
+                      !onOpenProfile || comment.user_id === DELETED_ACCOUNT_ID
+                    }
                     hitSlop={4}
                     accessibilityRole="button"
                     accessibilityLabel={t('Ver perfil de {name}', {

@@ -8,6 +8,7 @@ export { ChallengesStrip } from './ChallengesStrip';
 export { ChallengesModal } from './ChallengesModal';
 export { AnchorMenu } from './AnchorMenu';
 export type { AnchorMenuItem } from './AnchorMenu';
+export { AccountDeletionPrompt } from './AccountDeletionPrompt';
 export { AwardModal } from './AwardModal';
 export { HeroWeightCard } from './HeroWeightCard';
 export {

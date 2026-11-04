@@ -203,6 +203,19 @@ export function logDateKey(log: WorkoutLog): string {
 }
 
 /**
+ * Días desde que se pide borrar la cuenta hasta el borrado definitivo. El mismo
+ * plazo usa supabase/functions/purge-deleted-accounts.
+ */
+export const ACCOUNT_DELETION_GRACE_DAYS = 30;
+
+/** Día (`YYYY-MM-DD`, huso del móvil) en que se borrará una cuenta. */
+export function accountPurgeDateKey(requestedAt: string): string {
+  const purge = new Date(requestedAt);
+  purge.setDate(purge.getDate() + ACCOUNT_DELETION_GRACE_DAYS);
+  return dateKey(purge);
+}
+
+/**
  * Recorta un texto a `max` caracteres de verdad (puntos de código), no a
  * unidades UTF-16 como `slice`: un `slice` puede partir un emoji por la mitad y
  * dejar un carácter suelto que Postgres rechaza, tumbando el lote entero al

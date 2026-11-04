@@ -54,6 +54,7 @@ import {
   useWorkout,
 } from '@features/workout';
 import {
+  AccountDeletionPrompt,
   AwardModal,
   WhatsNewModal,
   UpdateAvailableModal,
@@ -116,6 +117,7 @@ import { t, useLanguageVersion } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import { useCloudSync } from '@hooks/useCloudSync';
 import { startSession } from '@lib/cloud/auth';
+import { DELETED_ACCOUNT_ID } from '@lib/cloud/social';
 import {
   getStoredCardioSplitDone,
   setStoredCardioSplitDone,
@@ -1128,6 +1130,17 @@ function AppContent({ onReady }: { onReady: () => void }) {
     return () => subscription.remove();
   }, []);
 
+  // Abrir un perfil ajeno. "Cuenta eliminada" no es una persona: no tiene perfil
+  // (una copia vieja o un enlace aún pueden apuntar a ella).
+  const openProfile = (
+    userId: string,
+    name: string,
+    back?: Extract<Screen, { type: 'user-profile' }>['back']
+  ) => {
+    if (userId === DELETED_ACCOUNT_ID) return;
+    setScreen({ type: 'user-profile', userId, name, back });
+  };
+
   const handleCreateRoutine = (routine: WorkoutRoutine) => {
     dispatch({ type: 'ADD_ROUTINE', payload: routine });
     setScreen({ type: 'home' });
@@ -1342,9 +1355,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
     () => (
       <CommunityScreen
         active={communityActive}
-        onOpenProfile={(userId, name) =>
-          setScreen({ type: 'user-profile', userId, name })
-        }
+        onOpenProfile={(userId, name) => openProfile(userId, name)}
         onOpenRoutine={(routineId, name, authorName, ownerId) =>
           setScreen({
             type: 'public-routine',
@@ -1442,6 +1453,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
       <CloudSync enabled={background} />
       <AccountLevelRecorder />
       <View ref={themeCaptureRef} style={styles.container} collapsable={false}>
+        <AccountDeletionPrompt />
         <WhatsNewModal
           visible={whatsNewEntry !== null}
           entry={whatsNewEntry}
@@ -1520,11 +1532,9 @@ function AppContent({ onReady }: { onReady: () => void }) {
             // Perfil del autor de una rutina traída de la comunidad. Se vuelve
             // aquí, no al tablón: a Rutinas no se llega desde Comunidad.
             onOpenProfile={(userId, name) =>
-              setScreen({
-                type: 'user-profile',
-                userId,
-                name,
-                back: { type: 'routine-selector', origin: screen.origin },
+              openProfile(userId, name, {
+                type: 'routine-selector',
+                origin: screen.origin,
               })
             }
             // Volver a la vista desde la que se abrió Rutinas (Fuerza o Perfil).
@@ -1722,9 +1732,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
             authorName={screen.authorName}
             ownerId={screen.ownerId}
             onBack={() => setScreen(screen.back)}
-            onOpenProfile={(userId, name) =>
-              setScreen({ type: 'user-profile', userId, name, back: screen })
-            }
+            onOpenProfile={(userId, name) => openProfile(userId, name, screen)}
             onOpenAccount={() => setScreen({ type: 'data', back: screen })}
           />
         )}
@@ -1801,9 +1809,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
             onOpenAccount={() => setScreen({ type: 'data', back: screen })}
             // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
             // vuelve a esta misma ficha (tal cual: con su propio camino de vuelta).
-            onOpenProfile={(userId, name) =>
-              setScreen({ type: 'user-profile', userId, name, back: screen })
-            }
+            onOpenProfile={(userId, name) => openProfile(userId, name, screen)}
           />
         )}
 

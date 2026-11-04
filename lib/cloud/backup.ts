@@ -1,5 +1,6 @@
 import type { WorkoutAppData } from '../../types';
 import { supabase } from '../supabase';
+import { t } from '../i18n';
 import { upsertTolerant } from './optionalColumns';
 import {
   cloudDayRow,
@@ -45,6 +46,15 @@ async function upsertAll(
       rows.slice(i, i + CHUNK),
       (chunk) => supabase.from(table).upsert(chunk)
     );
+    // RLS: alguna fila ya existe en la nube y es de otra cuenta (datos del móvil
+    // que se subieron con una cuenta anterior).
+    if (error?.code === '42501') {
+      throw new Error(
+        t(
+          'Algunos datos de este móvil pertenecen a otra cuenta y no se pueden subir a esta.'
+        )
+      );
+    }
     if (error) throw new Error(`${table}: ${error.message}`);
   }
 }

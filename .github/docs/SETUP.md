@@ -58,10 +58,37 @@ dejan de funcionar sin ningún error en la app:
   **código**, no el enlace (el enlace abriría el navegador, no la app):
   - "Confirm signup": `Tu código es: <strong>{{ .Token }}</strong>`
   - "Reset Password": `Tu código es: <strong>{{ .Token }}</strong>`
-- **Edge Functions → `delete-account`**: desplegar
-  `supabase/functions/delete-account/index.ts` (editor del panel: nombre
-  `delete-account`, pegar el archivo, "Verify JWT" activado). Sin ella,
-  "Eliminar la cuenta" de Datos y nube falla.
+- **Borrado definitivo de cuentas**: sin esto, una cuenta con el borrado pedido
+  se queda oculta para siempre y no se cumple lo que promete la app. 0. SQL Editor: ejecutar entero `supabase/social-schema.sql` (la columna y las
+  policies no están solo en la sección "Borrado de cuenta").
+  1. Edge Functions → Secrets: crear `PURGE_SECRET` con un valor aleatorio largo.
+  2. Edge Functions → desplegar `supabase/functions/purge-deleted-accounts/index.ts`
+     (editor del panel, con ese mismo nombre) con **"Verify JWT" desactivado**:
+     la protege el secreto, no hay usuario que la llame.
+  3. Database → Extensions: activar `pg_cron` y `pg_net`.
+  4. SQL Editor: programar la tarea diaria, sustituyendo `<PURGE_SECRET>`. El
+     secreto va solo en la base, nunca en git:
+     ```sql
+     select cron.schedule('purge-deleted-accounts', '17 3 * * *', $$
+       select net.http_post(
+         url := 'https://ccckuubzyixlbbjmrjak.supabase.co/functions/v1/purge-deleted-accounts',
+         headers := jsonb_build_object(
+           'Content-Type', 'application/json',
+           'x-purge-secret', '<PURGE_SECRET>'
+         ),
+         body := '{}'::jsonb,
+         timeout_milliseconds := 60000
+       );
+     $);
+     ```
+  5. Probarla al desplegar, sin esperar 30 días: crear una cuenta de prueba, pedir
+     el borrado desde la app, retrasar la marca en el SQL Editor
+     (`update profiles set deletion_requested_at = now() - interval '31 days'
+where id = '<id de la cuenta de prueba>';`) y lanzar la función a mano. La
+     primera purga crea la cuenta reservada.
+  6. Vigilarla: pg_cron no lee la respuesta, así que un fallo no avisa. Esta
+     consulta debe dar siempre 0; si no, leer `net._http_response`:
+     `select count(*) from profiles where deletion_requested_at < now() - interval '32 days';`
 - **Authentication → Emails → SMTP Settings**: SMTP propio para producción (el
   de Supabase tiene un cupo mínimo de envíos). Ver ROADMAP "Supabase y dominio".
 - **Si se activa captcha** (Authentication → Attack Protection), lo exigen
@@ -157,7 +184,7 @@ GymToni/
 │   ├── social-schema.sql     ← Esquema social (is_public, follows, likes, comentarios, reports, RLS pública)
 │   ├── storage-avatars.sql   ← Bucket de fotos de perfil (Storage) y sus políticas
 │   └── functions/            ← Edge Functions (Deno, con service_role; fuera del type-check)
-│       └── delete-account/   ← Borrar la cuenta de quien llama y, en cascada, todo lo suyo
+│       └── purge-deleted-accounts/ ← Borrado definitivo de las cuentas con el plazo vencido (tarea diaria)
 ├── modules/                  ← Módulos nativos locales (autolinked por Expo)
 │   ├── pip-timer/            ← Ventana flotante del descanso (PiP de Android)
 │   ├── glass-blur/           ← Cristal esmerilado de las barras (UNA captura desenfocada por frame, compartida)

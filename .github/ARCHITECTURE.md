@@ -436,13 +436,18 @@ auth.uid()` en lectura y en `with check`).
   (`lib/moderation.ts`) y deja el parte en `reports`.
 - **Edge Functions** (`supabase/functions/`, Deno, desplegadas a mano desde el
   panel): las ÚNICAS piezas con `service_role`, para lo que la RLS no puede
-  hacer. Hoy solo `delete-account` (borrar la cuenta y, en cascada, todo lo
-  suyo). El usuario sale siempre del JWT de la petición (`getUser`), nunca de
-  un parámetro, y la versión de sus dependencias va fijada.
-- **Ids que quedan libres**: borrar una cuenta borra de verdad sus filas
-  (cascada), y un id de rutina pública podría reutilizarlo otra persona. Lo que
-  se abre o refresca por un id guardado junto a su autor comprueba que el autor
-  sigue siendo ese (`fetchPublicRoutine(id, expectedOwnerId)`).
+  hacer. Hoy solo `purge-deleted-accounts`, que lanza una tarea diaria con
+  un secreto propio (`PURGE_SECRET`), nunca la app. La versión de sus
+  dependencias va fijada.
+- **Borrado de cuenta**: pedirlo solo marca y oculta la cuenta
+  (`deletion_requested_at`) y durante 30 días se recupera iniciando sesión
+  (`AccountDeletionPrompt`). Pasado el plazo, la purga traspasa lo público a la
+  cuenta reservada "Cuenta eliminada" (`DELETED_ACCOUNT_ID`) y borra el usuario:
+  lo privado cae en cascada. Detalle en `supabase/social-schema.sql`.
+- **Ids que quedan libres**: las rutinas privadas de una cuenta borrada se
+  borran de verdad y otro podría reutilizar su id. Lo que se abre o refresca
+  por un id guardado junto a su autor comprueba que el autor sigue siendo ese,
+  o la cuenta reservada (`fetchPublicRoutine(id, expectedOwnerId)`).
 
 Las reglas para código nuevo están en [CONVENTIONS.md](CONVENTIONS.md#nube-y-seguridad)
 y se comprueban con `/revisar-codigo`.
