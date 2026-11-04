@@ -312,7 +312,8 @@ register({
   'Añadir {ord} serie': 'Add {ord} set',
   'Añadir última serie': 'Add last set',
   'Serie extra': 'Extra set',
-  'Primera vez: hoy marcas la referencia': 'First time: today sets the mark',
+  'Sin datos previos: hoy marcas la referencia':
+    'No previous data: today sets the mark',
   '{a} de {b} series hechas': '{a} of {b} sets done',
   'Saltar resto': 'Skip remaining',
   'Saltar ejercicio': 'Skip exercise',
@@ -487,6 +488,52 @@ register({
   'Reenviar código': 'Resend code',
   'Reenviando…': 'Resending…',
   'Cambiar email': 'Change email',
+  // Recuperar la contraseña (Datos y nube)
+  '¿Has olvidado la contraseña?': 'Forgot your password?',
+  'Escribe tu email para recuperar la contraseña':
+    'Enter your email to reset your password',
+  'Si hay una cuenta con ese email, te llegará un código':
+    'If there is an account with that email, you will get a code',
+  'Para cambiar la contraseña, escribe el código enviado a':
+    'To change your password, enter the code sent to',
+  'Nueva contraseña': 'New password',
+  'La contraseña necesita al menos {n} caracteres':
+    'Your password needs at least {n} characters',
+  'Cambiar contraseña': 'Change password',
+  'Contraseña cambiada': 'Password changed',
+  'Volver a iniciar sesión': 'Back to sign in',
+  // Eliminar la cuenta (Datos y nube)
+  'Eliminar la cuenta': 'Delete account',
+  'Eliminando…': 'Deleting…',
+  'Se borrarán tu cuenta y todo lo que tienes en la nube: rutinas, entrenos, perfil, foto, actividad, comentarios, likes y seguidores. Lo que hay en este móvil se queda y la app seguirá funcionando sin cuenta.':
+    'Your account and everything you have in the cloud will be deleted: routines, workouts, profile, photo, activity, comments, likes and followers. What is on this phone stays, and the app keeps working without an account.',
+  'Entiendo que no se puede deshacer': 'I understand this cannot be undone',
+  'Cuenta eliminada. Tus datos siguen en este móvil.':
+    'Account deleted. Your data is still on this phone.',
+  'No se pudo eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.':
+    'The account could not be deleted. Check your connection and try again.',
+  'Código correcto. Elige la contraseña nueva para':
+    'Code accepted. Choose the new password for',
+  'Dejarlo para luego': 'Do it later',
+  'Mostrar contraseña': 'Show password',
+  'Ocultar contraseña': 'Hide password',
+  'Reenviar código en {n} s': 'Resend code in {n} s',
+  // Errores de Supabase Auth (lib/cloud/auth.ts → authErrorMessage)
+  'Hemos enviado demasiados correos. Espera un poco y vuelve a intentarlo.':
+    'We have sent too many emails. Wait a little and try again.',
+  'Demasiados intentos seguidos. Espera un minuto y vuelve a intentarlo.':
+    'Too many attempts in a row. Wait a minute and try again.',
+  'El código ha caducado o no es correcto. Pide otro.':
+    'The code has expired or is wrong. Ask for a new one.',
+  'La contraseña nueva tiene que ser distinta de la anterior.':
+    'The new password must be different from the old one.',
+  'Esa contraseña es demasiado débil. Prueba con otra más larga.':
+    'That password is too weak. Try a longer one.',
+  'Revisa el email: no parece válido.':
+    'Check the email: it does not look valid.',
+  'Email o contraseña incorrectos.': 'Wrong email or password.',
+  'Confirma la cuenta con el código que te enviamos.':
+    'Confirm your account with the code we sent you.',
   'Crea una cuenta para guardar tus datos en la nube y usarlos en varios dispositivos. La app funciona igual sin cuenta.':
     'Create an account to store your data in the cloud and use it on several devices. The app works the same without one.',
   'Tus cambios se sincronizan solos con la nube y con tus otros dispositivos.':
@@ -1102,7 +1149,7 @@ register({
   Veterano: 'Veteran',
   'Completa 200 sesiones de fuerza.': 'Complete 200 strength sessions.',
   Leyenda: 'Legend',
-  'Completa 500 sesiones de fuerza.': 'Complete 500 strength sessions.',
+  'Completa 365 sesiones de fuerza.': 'Complete 365 strength sessions.',
   'Corazón en marcha': 'Heart pumping',
   'Completa 10 sesiones de cardio.': 'Complete 10 cardio sessions.',
   Fondista: 'Long-distance',
@@ -1112,7 +1159,7 @@ register({
   'Pulmones de acero': 'Lungs of steel',
   'Completa 200 sesiones de cardio.': 'Complete 200 cardio sessions.',
   Incansable: 'Tireless',
-  'Completa 500 sesiones de cardio.': 'Complete 500 cardio sessions.',
+  'Completa 365 sesiones de cardio.': 'Complete 365 cardio sessions.',
   Semanas: 'Weeks',
   'Completado el {date}': 'Completed on {date}',
   'Aún sin conseguir': 'Not unlocked yet',
@@ -1228,4 +1275,15 @@ register({
   'Cualquier músculo': 'Any muscle',
   'Cualquier equipo': 'Any equipment',
   'Sin clasificar': 'Unclassified',
+});
+
+// Historial: el día que toca, sin empezar, se arranca desde su semana.
+register({
+  Empezar: 'Start',
+  'Empezar {day}': 'Start {day}',
+});
+
+// Póster de la semana: lo que no cabe en la columna de retos o logros.
+register({
+  'y {n} más': 'and {n} more',
 });

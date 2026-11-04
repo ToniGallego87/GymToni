@@ -164,9 +164,15 @@ primero porque sin ellas no se publica.
       pública para pedirlo sin la app, que va en la ficha de Play.
       **Por qué:** sin ello la ficha no pasa revisión, y es un derecho del
       usuario (RGPD).
-      **Archivos:** `features/workout/DataScreen.tsx:263` (`handleSignOut`,
-      junto a donde iría), `lib/cloud/auth.ts:91`, `supabase/schema.sql`
-      (FKs `on delete cascade`).
+      **Archivos:** `supabase/functions/delete-account/index.ts`,
+      `lib/cloud/auth.ts` (`deleteAccount`), `features/workout/DataScreen.tsx`
+      (`handleDeleteAccount`), `hooks/useMyProfile.ts` (`forgetMyProfile`).
+      **Estado (2026-10-29):** hecha la parte de la app. **Pendiente:**
+      desplegar la Edge Function en Supabase y probarlo en el móvil con una
+      cuenta de prueba; y la URL web para la ficha de Play. Esa puede ser una
+      página sencilla ("escribe a … desde el email de tu cuenta y la borramos
+      en X días") en el dominio propio o, mientras no lo haya, en GitHub
+      Pages.
       **Esfuerzo:** medio.
 - [ ] **[Lanzamiento] Política de privacidad real y Data Safety** — la actual
       dice "GymBro no recopila ningún dato, no tiene servidores": ya es falso
@@ -174,7 +180,11 @@ primero porque sin ellas no se publica.
       (qué se guarda, dónde —Supabase, región—, para qué, borrado, contacto),
       enlazarla desde Ajustes y rellenar Data Safety y la declaración de apps
       de salud de Play de acuerdo con ella. Peso y entrenos pueden ser datos
-      de salud en el RGPD: consentimiento explícito al crear cuenta.
+      de salud en el RGPD: consentimiento explícito al crear cuenta. Al
+      explicar el borrado de cuenta, contar también lo que no desaparece: las
+      rutinas públicas que otros ya añadieron siguen en sus móviles, los
+      reportes de terceros se conservan y Supabase guarda copias de seguridad
+      unos días.
       **Por qué:** una política que contradice lo que hace la app es motivo
       de retirada y de sanción.
       **Archivos:** `privacy-policy.html`, `features/workout/SettingsScreen.tsx:266`
@@ -198,9 +208,14 @@ primero porque sin ellas no se publica.
       en el login con el mismo patrón de código de 6 dígitos que el registro
       (`resetPasswordForEmail` + `verifyOtp` tipo `recovery` + `updateUser`).
       **Por qué:** con usuarios reales es la petición de soporte número uno.
-      **Archivos:** `lib/cloud/auth.ts:83` (junto a `signUp` y
-      `verifySignUpCode`), `features/workout/DataScreen.tsx:145` y `:182`
-      (flujo de código ya existente).
+      **Archivos:** `lib/cloud/auth.ts` (`requestPasswordReset`,
+      `verifyRecoveryCode`, `updatePassword`),
+      `features/workout/DataScreen.tsx` (`handleForgotPassword`,
+      `handleVerifyCode`).
+      **Estado (2026-10-29):** hecho en código y revisado; la plantilla "Reset
+      Password" de Supabase ya envía `{{ .Token }}`. **Pendiente: probarlo en
+      el móvil** (pedir código, cambiar la contraseña, entrar con la nueva);
+      entonces se marca `[x]`.
       **Esfuerzo:** bajo.
 - [ ] **[Lanzamiento] Licencia de los GIFs de ejercicios** — los GIFs vienen
       de un repo de GitHub de un tercero vía jsDelivr (`@main`) y la
@@ -222,7 +237,8 @@ primero porque sin ellas no se publica.
       de registro dejarían de llegar; mirar antes si ya hay uno en
       Authentication → Emails → SMTP Settings); **plan Pro** (~25 $/mes:
       backups, sin pausa) con tope de gasto activado; y **captcha** en el
-      registro (Turnstile o hCaptcha, gratis; exige añadir
+      registro y en recuperar la contraseña (Supabase lo exige en los dos
+      si se activa; Turnstile o hCaptcha, gratis; exige añadir
       `react-native-webview`, a justificar según CONVENTIONS).
       **Decisiones pendientes:** nombre del dominio, proveedor de SMTP, cuándo
       pasar a Pro (propuesta: justo antes de abrir al público) y si el
@@ -232,10 +248,11 @@ primero porque sin ellas no se publica.
       **Por qué:** con usuarios reales, sin esto el registro falla, no hay
       dónde publicar la política ni el borrado, o la base se llena de cuentas
       falsas.
-      **Archivos:** `lib/cloud/auth.ts:83` (`signUp`, recibiría el
-      `captchaToken`), `features/workout/DataScreen.tsx:154`,
-      `privacy-policy.html`; el resto es configuración del panel de Supabase y
-      del registrador del dominio.
+      **Archivos:** `lib/cloud/auth.ts` (`signUp` y `requestPasswordReset`
+      recibirían el `captchaToken`), `features/workout/DataScreen.tsx`
+      (`handleAuth`, `handleForgotPassword`), `privacy-policy.html`,
+      `.github/docs/SETUP.md` ("Panel de Supabase"); el resto es
+      configuración del panel de Supabase y del registrador del dominio.
       **Esfuerzo:** medio.
 - [ ] **[Lanzamiento] Avisos de cuelgues (Sentry o Crashlytics)** — hoy no
       hay reporte de errores: si la app se cae en móviles que no son los
@@ -302,6 +319,37 @@ primero porque sin ellas no se publica.
       `modules/video-encoder/ios/VideoEncoderModule.swift`,
       `lib/textStyles.ts:26`.
       **Esfuerzo:** alto.
+- [ ] **Limpiar el móvil cuando la sesión se cierra sola** — si la sesión se
+      pierde sin pedirlo (token caducado, o cuenta borrada desde otro móvil),
+      la copia del perfil y las de las pantallas sociales se quedan en ese
+      dispositivo; solo se limpian al pulsar "Cerrar sesión". Hacer la misma
+      limpieza al recibir un `SIGNED_OUT` que no inició el usuario.
+      **Por qué:** el nombre, la foto y lo visto en Comunidad de una cuenta
+      cerrada o borrada no deben seguir en un móvil.
+      **Archivos:** `lib/cloud/auth.ts:48` (`onAuthStateChange`),
+      `lib/socialCache.ts` (`clearSocialCache`), `hooks/useMyProfile.ts`
+      (`forgetMyProfile`), `features/workout/DataScreen.tsx` (`handleSignOut`).
+      **Esfuerzo:** bajo.
+- [ ] **Pedir la contraseña antes de borrar la cuenta** — en el popup de
+      "Eliminar la cuenta", además de la casilla, pedir la contraseña y
+      comprobarla antes de llamar a la función. Las tiendas no lo exigen.
+      **Por qué:** protege una acción irreversible si alguien coge el móvil
+      desbloqueado.
+      **Archivos:** `features/workout/DataScreen.tsx` (`handleDeleteAccount`,
+      popup de borrar), `lib/cloud/auth.ts` (`signIn`).
+      **Esfuerzo:** bajo.
+- [ ] **Cambiar la contraseña con la sesión iniciada** — hoy solo se cambia
+      cerrando sesión y usando "¿Has olvidado la contraseña?". Un "Cambiar
+      contraseña" en el bloque de sesión de Datos y nube, con la misma
+      contraseña nueva con ojo que la recuperación (`updatePassword` ya
+      existe) y cerrando las demás sesiones al terminar
+      (`signOutOtherDevices`). También es la salida de quien deja la
+      recuperación "para luego" con el código ya verificado.
+      **Por qué:** cambiar la contraseña sin olvidarla (porque se filtró, o
+      era débil) no debería exigir salir de la cuenta.
+      **Archivos:** `features/workout/DataScreen.tsx` (rama `session && user`
+      del bloque de cuenta; reutilizar `passwordRow`), `lib/cloud/auth.ts`.
+      **Esfuerzo:** bajo.
 - [ ] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
       rutina deja renombrar, cambiar el icono, reordenar y quitar días, y
       editar sus ejercicios, pero no añadir uno nuevo: Nueva rutina sí tiene

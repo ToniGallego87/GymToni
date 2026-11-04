@@ -434,6 +434,15 @@ auth.uid()` en lectura y en `with check`).
   enseñan, pero no dan nada con valor.
 - **Contenido de terceros** solo como texto; reportar oculta en local
   (`lib/moderation.ts`) y deja el parte en `reports`.
+- **Edge Functions** (`supabase/functions/`, Deno, desplegadas a mano desde el
+  panel): las ÚNICAS piezas con `service_role`, para lo que la RLS no puede
+  hacer. Hoy solo `delete-account` (borrar la cuenta y, en cascada, todo lo
+  suyo). El usuario sale siempre del JWT de la petición (`getUser`), nunca de
+  un parámetro, y la versión de sus dependencias va fijada.
+- **Ids que quedan libres**: borrar una cuenta borra de verdad sus filas
+  (cascada), y un id de rutina pública podría reutilizarlo otra persona. Lo que
+  se abre o refresca por un id guardado junto a su autor comprueba que el autor
+  sigue siendo ese (`fetchPublicRoutine(id, expectedOwnerId)`).
 
 Las reglas para código nuevo están en [CONVENTIONS.md](CONVENTIONS.md#nube-y-seguridad)
 y se comprueban con `/revisar-codigo`.

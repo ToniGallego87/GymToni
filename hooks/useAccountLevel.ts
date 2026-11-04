@@ -87,11 +87,20 @@ function useLevelData() {
   // terminarlo o acabar el día (ver `lib/openWorkout`): retos e insignias se
   // calculan sin él.
   const logs = logsForAwards(state.logs, useOpenWorkoutLog(), state.routines);
+  // Los retos de fuerza son de la rutina que pinta Inicio: la SELECCIONADA (o
+  // la activa si ya no existe), como `displayedRoutineId` de HomeScreen. Con la
+  // activa, una rutina recién creada (seleccionada, aún no activa hasta su
+  // primer entreno) enseñaba los retos de la anterior.
+  const routineId = state.routines.some(
+    (routine) => routine.id === state.selectedRoutineId
+  )
+    ? state.selectedRoutineId
+    : state.activeRoutineId;
 
   const challenges = sharedChallenges(
     logs,
     state.routines,
-    state.activeRoutineId,
+    routineId,
     weight
   );
   const { all: badges, unlocked: unlockedBadges } = sharedBadges(

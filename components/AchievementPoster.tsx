@@ -284,8 +284,31 @@ function ExtrasColumn({
   items: { key: string; name: string; icon: string }[];
   wide?: boolean;
 }) {
-  const shown = items.slice(0, 2);
-  const more = items.length - shown.length;
+  // El mismo reto puede ganarse dos veces en una semana de rutina (la de
+  // cardio es por semana de calendario y la de rutina puede cruzar un lunes):
+  // una línea por reto con "×2", no el nombre repetido.
+  const groups: { key: string; name: string; icon: string; times: number }[] =
+    [];
+  items.forEach((item) => {
+    const same = groups.find((g) => g.name === item.name);
+    if (same) same.times += 1;
+    else groups.push({ ...item, times: 1 });
+  });
+  // Dos líneas: con más de dos retos distintos, la segunda dice cuántos
+  // quedan ("y 3 más"). Antes era "+3" pegado al segundo nombre y no se
+  // entendía.
+  const named = groups.length > 2 ? groups.slice(0, 1) : groups;
+  const more = items.length - named.reduce((n, g) => n + g.times, 0);
+  const lines = [
+    ...named.map((g) => ({
+      key: g.key,
+      icon: g.icon,
+      text: g.times > 1 ? `${g.name} ×${g.times}` : g.name,
+    })),
+    ...(more > 0
+      ? [{ key: 'more', icon: 'plus', text: t('y {n} más', { n: more }) }]
+      : []),
+  ];
   return (
     <G>
       <SvgText
@@ -307,8 +330,8 @@ function ExtrasColumn({
       >
         {String(items.length)}
       </SvgText>
-      {shown.map((item, i) => (
-        <G key={item.key}>
+      {lines.map((line, i) => (
+        <G key={line.key}>
           <SvgText
             x={x + 84}
             y={1670 + i * 44}
@@ -316,7 +339,7 @@ function ExtrasColumn({
             fontSize={30}
             fontFamily={ICON_FONT}
           >
-            {glyph(item.icon)}
+            {glyph(line.icon)}
           </SvgText>
           <SvgText
             x={x + 124}
@@ -325,12 +348,7 @@ function ExtrasColumn({
             fontSize={30}
             fontWeight="700"
           >
-            {clip(
-              i === shown.length - 1 && more > 0
-                ? `${item.name} +${more}`
-                : item.name,
-              wide ? 40 : 16
-            )}
+            {clip(line.text, wide ? 40 : 16)}
           </SvgText>
         </G>
       ))}

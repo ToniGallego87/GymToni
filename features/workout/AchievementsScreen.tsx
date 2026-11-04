@@ -125,9 +125,18 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
             el siguiente, las dos cifras que lo forman y la regla de puntos. */}
         <View style={styles.summaryCard}>
           <GradientFill accent={theme.colors.primaryLine} />
-          <Text style={styles.summaryValue}>
-            {t('Nivel {n}', { n: level.level })}
-          </Text>
+          {/* Misma letra y estrella que la píldora de nivel (LevelPill) de
+              fuera, a tamaño de titular: antes iba en la display y no casaba. */}
+          <View style={styles.summaryValueRow}>
+            <MaterialCommunityIcons
+              name="star-four-points"
+              size={22}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.summaryValue}>
+              {t('Nivel {n}', { n: level.level })}
+            </Text>
+          </View>
           <View style={styles.levelTrack}>
             <View
               style={[
@@ -403,10 +412,15 @@ const makeStyles = () =>
       overflow: 'hidden',
       ...theme.shadow.soft,
     },
+    summaryValueRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
     summaryValue: {
       fontSize: 28,
-      fontFamily: theme.fonts.display,
-      letterSpacing: 0.5,
+      fontWeight: '800',
+      letterSpacing: 0.4,
       color: theme.colors.primary,
       lineHeight: 38,
     },

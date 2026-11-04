@@ -29,13 +29,13 @@ export type BadgeId =
   | 'workouts-50'
   | 'workouts-100'
   | 'workouts-200'
-  | 'workouts-500'
+  | 'workouts-365'
   | 'first-cardio'
   | 'cardio-10'
   | 'cardio-50'
   | 'cardio-100'
   | 'cardio-200'
-  | 'cardio-500'
+  | 'cardio-365'
   | 'full-week'
   | 'streak-4'
   | 'streak-8'
@@ -270,13 +270,13 @@ export function computeBadges(
       200
     ),
     badge(
-      'workouts-500',
+      'workouts-365',
       'strength',
       'crown-outline',
       t('Leyenda'),
-      t('Completa 500 sesiones de fuerza.'),
+      t('Completa 365 sesiones de fuerza.'),
       dates.workouts,
-      500
+      365
     ),
     // --- Cardio ---
     badge(
@@ -325,13 +325,13 @@ export function computeBadges(
       200
     ),
     badge(
-      'cardio-500',
+      'cardio-365',
       'cardio',
       'infinity',
       t('Incansable'),
-      t('Completa 500 sesiones de cardio.'),
+      t('Completa 365 sesiones de cardio.'),
       dates.cardioSessions,
-      500
+      365
     ),
     // --- Semanas ---
     badge(

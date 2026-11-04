@@ -101,6 +101,15 @@ interface HomeScreenProps {
   ) => void;
 }
 
+// Una tarjeta del cuerpo de una semana: un entreno (`log`), un día que no se
+// hizo (sin `log`) o el que toca, aún sin empezar (`upNext`).
+interface WeekEntry {
+  key: string;
+  day: WorkoutDay;
+  log?: WorkoutLog;
+  upNext?: boolean;
+}
+
 // Traduce las semanas a barras: color y etiquetas del progreso semanal. El
 // dibujo lo hace <BarChart/> (compartido con la gráfica de Cardio).
 function buildProgressChart(points: WeekProgressPoint[]): {
@@ -437,25 +446,36 @@ export function HomeScreen({
    */
   const buildWeekEntries = (
     weekLogs: WorkoutLog[],
-    skipMissing: boolean
-  ): { key: string; day: WorkoutDay; log?: WorkoutLog }[] => {
-    const entries: { key: string; day: WorkoutDay; log?: WorkoutLog }[] =
-      weekLogs.flatMap((log) => {
-        const day = getDay(log.dayId);
-        return day ? [{ key: log.id, day, log }] : [];
+    skipMissing: boolean,
+    upNextDay?: WorkoutDay
+  ): WeekEntry[] => {
+    const entries: WeekEntry[] = weekLogs.flatMap((log) => {
+      const day = getDay(log.dayId);
+      return day ? [{ key: log.id, day, log }] : [];
+    });
+    // Mismo hueco que le tocaría por número de día.
+    const insertByDayNumber = (entry: WeekEntry) => {
+      const at = entries.findIndex(
+        (e) => (e.day.dayNumber ?? 0) > (entry.day.dayNumber ?? 0)
+      );
+      if (at < 0) entries.push(entry);
+      else entries.splice(at, 0, entry);
+    };
+    if (!skipMissing) {
+      activeDays
+        .filter((day) => !weekLogs.some((log) => log.dayId === day.id))
+        .forEach((day) => insertByDayNumber({ key: `missing-${day.id}`, day }));
+    }
+    // Semana en curso: el día que toca, aún sin empezar, para arrancarlo desde
+    // aquí sin volver a la hero. Va el PRIMERO, encima de los días hechos: es
+    // la acción de la semana, no un día más en su hueco.
+    if (upNextDay && !weekLogs.some((log) => log.dayId === upNextDay.id)) {
+      entries.unshift({
+        key: `next-${upNextDay.id}`,
+        day: upNextDay,
+        upNext: true,
       });
-    if (skipMissing) return entries;
-
-    activeDays
-      .filter((day) => !weekLogs.some((log) => log.dayId === day.id))
-      .forEach((day) => {
-        const entry = { key: `missing-${day.id}`, day };
-        const at = entries.findIndex(
-          (e) => (e.day.dayNumber ?? 0) > (day.dayNumber ?? 0)
-        );
-        if (at < 0) entries.push(entry);
-        else entries.splice(at, 0, entry);
-      });
+    }
     return entries;
   };
 
@@ -1348,8 +1368,68 @@ export function HomeScreen({
                       )}
                       {buildWeekEntries(
                         weekLogs,
-                        isCurrentWeek || weekCompleted
-                      ).map(({ key, day, log }) => {
+                        isCurrentWeek || weekCompleted,
+                        // Mismo criterio que el aro dorado de la cabecera: el
+                        // día que toca, mientras hoy no haya entreno.
+                        isCurrentWeek &&
+                          !weekCompleted &&
+                          todayWorkoutStatus === 'none'
+                          ? suggestedDay ?? undefined
+                          : undefined
+                      ).map(({ key, day, log, upNext }) => {
+                        // El día que toca, sin empezar: en oro y a trazos (aún
+                        // no es un entreno) y, donde iría el %, "Empezar →".
+                        // Un toque abre su registro, como la hero.
+                        if (upNext) {
+                          return (
+                            <Pressable
+                              key={key}
+                              style={({ pressed }: { pressed: boolean }) => [
+                                styles.historyLogCard,
+                                styles.historyLogCardUpNext,
+                                pressed && styles.historyLogCardPressed,
+                              ]}
+                              onPress={() => onSelectDay(day)}
+                              accessibilityRole="button"
+                              accessibilityLabel={t('Empezar {day}', {
+                                day: getDisplayDayName(day.name),
+                              })}
+                            >
+                              <View style={styles.historyLogHeader}>
+                                <View style={styles.historyLogLeft}>
+                                  <View style={styles.historyLogAccent}>
+                                    <DayAccentIcon
+                                      emoji={day.emoji}
+                                      name={day.name}
+                                      size={36}
+                                    />
+                                  </View>
+                                  <View style={styles.historyLogInfo}>
+                                    <Text
+                                      style={styles.historyLogDayName}
+                                      numberOfLines={1}
+                                    >
+                                      {getDisplayDayName(day.name)}
+                                    </Text>
+                                    <Text style={styles.historyLogUpNextText}>
+                                      {t('Te toca')}
+                                    </Text>
+                                  </View>
+                                </View>
+                                <View style={styles.historyLogStart}>
+                                  <Text style={styles.historyLogStartText}>
+                                    {t('Empezar')}
+                                  </Text>
+                                  <MaterialCommunityIcons
+                                    name="arrow-right"
+                                    size={18}
+                                    color={theme.colors.primary}
+                                  />
+                                </View>
+                              </View>
+                            </Pressable>
+                          );
+                        }
                         // Día que no se hizo: tarjeta apagada en el hueco que
                         // le tocaba, con un toque que lo explica. Antes la
                         // semana solo tenía menos tarjetas y no se veía CUÁL
@@ -1885,6 +1965,33 @@ const makeStyles = () =>
       // la da `elevation`, así que no basta con shadowOpacity).
       shadowOpacity: 0,
       elevation: 0,
+    },
+    // El día que toca, sin empezar: la caja del hueco (a trazos, sin sombra)
+    // pero en oro, el color de "lo siguiente" (como el aro de la cabecera).
+    historyLogCardUpNext: {
+      backgroundColor: theme.colors.primaryMuted,
+      borderStyle: 'dashed',
+      borderWidth: 2,
+      borderColor: theme.colors.primaryLine,
+      shadowOpacity: 0,
+      elevation: 0,
+    },
+    historyLogUpNextText: {
+      fontSize: 14,
+      color: theme.colors.primary,
+      marginTop: 2,
+      lineHeight: 16,
+      fontWeight: '700',
+    },
+    historyLogStart: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+    },
+    historyLogStartText: {
+      color: theme.colors.primary,
+      fontSize: 15,
+      fontWeight: '800',
     },
     historyLogAccentMissing: {
       opacity: 0.55,

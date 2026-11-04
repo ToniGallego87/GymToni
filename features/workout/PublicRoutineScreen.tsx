@@ -202,7 +202,9 @@ export function PublicRoutineScreen({
     }
     setError(null);
     try {
-      const fetched = await fetchPublicRoutine(routineId);
+      // Con el autor fijado (si se sabe): un id reutilizado tras borrar una
+      // cuenta no enseña la rutina de otra persona como si fuera la de esta.
+      const fetched = await fetchPublicRoutine(routineId, ownerId);
       if (!fetched) {
         setError(t('Esta rutina ya no está disponible'));
         return;
@@ -214,7 +216,7 @@ export function PublicRoutineScreen({
     } finally {
       setLoading(false);
     }
-  }, [routineId]);
+  }, [routineId, ownerId]);
 
   useEffect(() => {
     load();

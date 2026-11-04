@@ -107,6 +107,9 @@ interface ExerciseInputFieldProps {
   onNotesChange: (text: string) => void;
   notes?: string;
   previousLog?: ExerciseLog | null;
+  // `previousLog` no es de este día (otra rutina, otro día): se ve de
+  // referencia, pero las reps sugeridas son el tope del objetivo de ahora.
+  suggestTargetReps?: boolean;
   improvement?: { isImproved: boolean; percent: number } | null;
   accent?: string;
   // Entrada del CONTENIDO (no del marco) al montarse: el registro la usa al
@@ -121,6 +124,17 @@ interface ExerciseInputFieldProps {
   deload?: boolean;
   // Salto de las flechas del peso (`weightStepFromHistory`); 1 kg por defecto.
   weightStep?: number;
+  // Lo tecleado en las casillas y aún sin añadir. El panel se monta de nuevo
+  // al cambiar de ejercicio: el registro lo guarda por ejercicio y lo devuelve
+  // al volver, para no perder el peso ajustado para la siguiente serie.
+  draft?: ExerciseInputDraft;
+  onDraftChange?: (draft: ExerciseInputDraft) => void;
+}
+
+/** Casillas del panel sin añadir; null = sin tocar (enseña lo sugerido). */
+export interface ExerciseInputDraft {
+  weight: string | null;
+  reps: string | null;
 }
 
 /**
@@ -140,18 +154,31 @@ export function ExerciseInputField({
   onNotesChange,
   notes,
   previousLog,
+  suggestTargetReps = false,
   improvement,
   accent = theme.colors.primary,
   contentEntering,
   extra = false,
   deload = false,
   weightStep = 1,
+  draft,
+  onDraftChange,
 }: ExerciseInputFieldProps) {
   // Lo TECLEADO en cada casilla; null = sin tocar, y entonces la casilla enseña
   // el valor sugerido como texto de verdad (no como pista gris): lo que se ve es
-  // lo que se guarda. Vaciarla a mano ('') es distinto de no tocarla.
-  const [weightValue, setWeightValue] = useState<string | null>(null);
-  const [repsValue, setRepsValue] = useState<string | null>(null);
+  // lo que se guarda. Vaciarla a mano ('') es distinto de no tocarla. Arranca
+  // en lo que se dejó al salir de este ejercicio (`draft`).
+  const [weightValue, setWeightValue] = useState<string | null>(
+    draft?.weight ?? null
+  );
+  const [repsValue, setRepsValue] = useState<string | null>(
+    draft?.reps ?? null
+  );
+  const onDraftChangeRef = useRef(onDraftChange);
+  onDraftChangeRef.current = onDraftChange;
+  useEffect(() => {
+    onDraftChangeRef.current?.({ weight: weightValue, reps: repsValue });
+  }, [weightValue, repsValue]);
   // "Siguiente" en el teclado del peso salta a las reps.
   const repsInputRef = useRef<TextInput>(null);
 
@@ -337,6 +364,9 @@ export function ExerciseInputField({
       ? t('Añadir última serie')
       : t('Añadir {ord} serie', { ord: ordinal(nextSet) });
 
+  // Puntos de progreso (●●○): solo en curso y con objetivo de varias series.
+  const showSetDots = !isMaxSetsReached && !!target?.sets && target.sets > 1;
+
   // Al completarse (todas las series hechas) la tarjeta se tiñe de verde para
   // marcarla como terminada.
   const cardAccent = isMaxSetsReached ? theme.colors.success : accent;
@@ -384,6 +414,8 @@ export function ExerciseInputField({
   const getRepPlaceholder = () => {
     if (addedSets.length > 0)
       return String(addedSets[addedSets.length - 1].reps);
+    const targetMaxRep = getTargetMaxRep();
+    if (suggestTargetReps && targetMaxRep) return targetMaxRep;
     if (previousLog?.parsedSets?.length)
       return String(previousLog.parsedSets[0].reps);
     if (
@@ -396,7 +428,7 @@ export function ExerciseInputField({
     }
     // Sin historial: sugerir el tope del rango objetivo del ejercicio. Sin
     // rango tampoco, nada: la casilla queda vacía y pide el dato.
-    return getTargetMaxRep() ?? '';
+    return targetMaxRep ?? '';
   };
 
   // Lo que enseña cada casilla: lo tecleado o, sin tocar, lo sugerido.
@@ -472,14 +504,9 @@ export function ExerciseInputField({
     if (!improvement || !isMaxSetsReached || addedSets.length === 0)
       return null;
     // El indicador es `TrendDelta` (el mismo que Inicio y Cardio); la píldora
-    // solo aporta el fondo tintado y la animación de entrada/salida.
-    const tint = getImprovementColor(
-      improvement.percent === 0
-        ? 'neutral'
-        : improvement.isImproved
-        ? 'up'
-        : 'down'
-    );
+    // solo aporta el fondo tintado y la animación de entrada/salida. Solo lleva
+    // cifra lo que sube: igual o por debajo es "Sin mejora", sin porcentaje.
+    const tint = getImprovementColor(improvement.isImproved ? 'up' : 'neutral');
     return (
       <Animated.View
         entering={fadeIn}
@@ -487,17 +514,20 @@ export function ExerciseInputField({
         layout={layoutTransition}
         style={[styles.improvementBadge, { backgroundColor: tint + '22' }]}
       >
-        <TrendDelta
-          value={improvement.percent}
-          improved={improvement.isImproved}
-        />
+        {improvement.isImproved ? (
+          <TrendDelta value={improvement.percent} improved />
+        ) : (
+          <Text style={[styles.noImprovementText, { color: tint }]}>
+            {t('Sin mejora')}
+          </Text>
+        )}
       </Animated.View>
     );
   };
 
-  // Las burbujas de las series metidas, cada una con su × de borrar. El
-  // recuento (●●○) que iba detrás ya no está: lo dice la casilla de la ruleta.
-  // La extra, con contorno discontinuo y "+": está apuntada pero no puntúa.
+  // Las burbujas de las series metidas, cada una con su × de borrar, y detrás
+  // el recuento (●●○) sobre el objetivo. La extra, con contorno discontinuo y
+  // "+": está apuntada pero no puntúa.
   const renderSeriesRow = () => {
     if (!hasAddedSets) return null;
     return (
@@ -595,6 +625,27 @@ export function ExerciseInputField({
             </Animated.View>
           );
         })}
+        {showSetDots && target?.sets && (
+          <View
+            style={styles.setDots}
+            accessible
+            accessibilityLabel={t('{a} de {b} series hechas', {
+              a: planSetCount,
+              b: target.sets,
+            })}
+          >
+            {Array.from({ length: target.sets }, (_, i) => (
+              <View
+                key={i}
+                style={[
+                  styles.setDot,
+                  { borderColor: cardAccent },
+                  i < planSetCount && { backgroundColor: cardAccent },
+                ]}
+              />
+            ))}
+          </View>
+        )}
         {renderImprovementBadge()}
       </View>
     );
@@ -664,8 +715,8 @@ export function ExerciseInputField({
           </Text>
         </View>
       ) : (
-        // Primera vez con este ejercicio: se dice como lo que es, el día que
-        // se marca la referencia, y no como un hueco ("Sin datos").
+        // Nada previo de este ejercicio: se dice como lo que es, el día que
+        // se marca la referencia, y no se deja un hueco.
         <View style={styles.contextItem}>
           <MaterialCommunityIcons
             name="flag-variant-outline"
@@ -673,7 +724,7 @@ export function ExerciseInputField({
             color={theme.colors.primary}
           />
           <Text style={styles.contextFirstTime} numberOfLines={2}>
-            {t('Primera vez: hoy marcas la referencia')}
+            {t('Sin datos previos: hoy marcas la referencia')}
           </Text>
         </View>
       )}
@@ -1175,6 +1226,19 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: 6,
     },
+    // Recuento de series hechas sobre el objetivo, tras las burbujas.
+    setDots: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 5,
+      marginLeft: 6,
+    },
+    setDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      borderWidth: 1.5,
+    },
     // Envoltorio de cada burbuja: solo da el marco de posición a la ×, que va
     // absoluta DENTRO de sus límites (fuera, con offsets negativos, Android la
     // recorta).
@@ -1227,6 +1291,11 @@ const makeStyles = () =>
       paddingVertical: 7,
       borderRadius: theme.borderRadius.pill,
       alignSelf: 'center',
+    },
+    noImprovementText: {
+      fontSize: 15,
+      fontWeight: '800',
+      lineHeight: 18,
     },
 
     // Contexto (anterior o aviso de descarga): texto suelto, sin caja. Alto

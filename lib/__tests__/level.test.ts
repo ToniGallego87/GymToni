@@ -10,10 +10,11 @@ import {
 describe('nivel de la cuenta', () => {
   it('cada nivel cuesta más que el anterior', () => {
     expect(xpForLevel(1)).toBe(0);
-    expect(xpForLevel(2)).toBe(13);
-    expect(xpForLevel(3)).toBe(38);
-    expect(xpForLevel(4)).toBe(75);
-    expect(xpForLevel(5)).toBe(125);
+    expect(xpForLevel(2)).toBe(20);
+    expect(xpForLevel(3)).toBe(42);
+    expect(xpForLevel(4)).toBe(66);
+    expect(xpForLevel(5)).toBe(92);
+    expect(xpForLevel(25)).toBe(1032);
   });
 
   it('el nivel es el inverso de los puntos que exige', () => {
@@ -27,9 +28,9 @@ describe('nivel de la cuenta', () => {
   it('el resumen da el progreso dentro del nivel', () => {
     const s = summarizeLevel(50);
     expect(s.level).toBe(3);
-    expect(s.levelStart).toBe(38);
-    expect(s.nextLevelAt).toBe(75);
-    expect(s.progress).toBeCloseTo(12 / 37);
+    expect(s.levelStart).toBe(42);
+    expect(s.nextLevelAt).toBe(66);
+    expect(s.progress).toBeCloseTo(8 / 24);
   });
 
   it('retos y logros suman puntos distintos', () => {

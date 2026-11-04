@@ -103,6 +103,52 @@
 
 ### Nuevas funcionalidades
 
+- **Eliminar la cuenta.** En Datos y nube, con sesión, "Eliminar la cuenta"
+  (botón rojo bajo "Cerrar sesión") abre una confirmación con casilla
+  obligatoria ("Entiendo que no se puede deshacer"). Llama a la Edge Function
+  nueva `supabase/functions/delete-account` (la única pieza con
+  `service_role`): borra solo a quien llama (usuario del JWT), primero sus
+  fotos de `avatars` (Storage guarda al dueño y con archivos Auth no deja
+  borrar) y luego el usuario de Auth; todas las tablas caen en cascada
+  (comprobado: todas las FKs a `auth.users` son `on delete cascade`). En el
+  móvil cierra la sesión solo en local y olvida copias sociales, perfil
+  (`forgetMyProfile`) y la marca de Actividad publicada; rutinas y entrenos
+  del móvil se quedan. `tsconfig.json` excluye `supabase/functions` (es Deno),
+  conservando los `exclude` de la base de Expo. Tras `/revisar-codigo`:
+  - **Ids que quedan libres:** la cascada borra de verdad las rutinas, y otro
+    usuario podía reutilizar el id de una pública y colarse en las copias
+    enlazadas de quienes la tenían. `fetchPublicRoutine(id, expectedOwnerId)`
+    exige el autor esperado en el refresco de enlazadas, al enlazar y en la
+    vista de una rutina pública.
+  - La función es **idempotente** (un JWT de usuario ya borrado responde ok:
+    el reintento tras perder la respuesta no se atasca), quita la foto del
+    perfil antes de borrar los archivos y fija `supabase-js@2.112.3`.
+  - En la app, la limpieza local va aparte del borrado (un fallo al limpiar ya
+    no dice "no se pudo eliminar" de una cuenta borrada) y "Cancelar" no
+    cierra el popup con el borrado en marcha.
+    **Pendiente en Supabase:** desplegar la función (SETUP.md → "Panel de
+    Supabase").
+- **Recuperar la contraseña.** En Datos y nube, "¿Has olvidado la
+  contraseña?" bajo el login manda un código de 6 dígitos al email escrito
+  (`requestPasswordReset`) y pasa al mismo bloque del código del registro, con
+  un campo de contraseña nueva (con ojo para verla): el código abre sesión
+  (`verifyRecoveryCode`) y con ella se fija la contraseña (`updatePassword`).
+  Antes de gastar el código se comprueba el mínimo de 6 caracteres. Si la nube
+  rechaza la contraseña (p. ej. igual a la anterior), la sesión se queda y se
+  reintenta solo la contraseña, sin pedir otro código; al cambiarla bien se
+  cierran las sesiones de los DEMÁS dispositivos (`signOutOtherDevices`). El
+  bloque de recuperación manda sobre la sesión al pintar (antes saltaba a
+  "Sincronización" a mitad). El estado del código pasa a unión discriminada
+  (`PendingCode`), "Reenviar código" lleva cuenta atrás de 60 s y los errores
+  frecuentes de Supabase Auth salen traducidos (`authErrorMessage`, también en
+  el login y el registro). **Pendiente en Supabase:** la plantilla "Reset
+  Password" tiene que enviar `{{ .Token }}` (ver SETUP.md → "Panel de
+  Supabase"); con el enlace por defecto no llega ningún código.
+- **Empezar el día que toca desde el historial.** Al desplegar la semana en
+  curso aparece el día siguiente, aún sin empezar, en oro y a trazos, con
+  "Empezar →" donde iría el %; un toque abre su registro. Mismo criterio que
+  el aro dorado de la cabecera (solo si hoy no hay entreno).
+
 - **Récords personales en la Actividad.** Cada sesión en la que un ejercicio
   levanta más peso que en todas las anteriores es un hito (trofeo y marca en
   naranja `emoji_orange`, para no confundirlo con el oro de los logros) que
@@ -132,6 +178,36 @@
 
 ### Cambios
 
+- **"Te toca" arriba en la semana.** La tarjeta del día que toca va la primera
+  del cuerpo de la semana en curso (`buildWeekEntries` la pone delante en vez
+  de en su hueco por número de día). Sigue siendo pulsable entera.
+- **"Volver" en el mismo sitio que la barra de pestañas.**
+  `getFloatingBackButtonMetrics` devuelve las de `getFloatingPrimaryNavMetrics`
+  y el botón toma alto (58 → 70), márgenes (16 → 12) y radio de la barra: al
+  pasar de pestaña a subpantalla ya no salta de altura.
+- **Nivel en Logros con la letra de la píldora.** "Nivel N" de la cabecera de
+  Logros pasa de la display (Anton) a la sans en 800 con la estrella, como
+  `LevelPill`.
+- **Curva de nivel nueva** (`lib/level.ts`): el salto al nivel 2 cuesta 20 y
+  cada salto siguiente 2 más (`xpForLevel(n) = (n-1)(n+18)`, sin redondeo):
+  el nivel 25 pide 1032 puntos en vez de 3750. Se recalcula desde los puntos,
+  así que todos suben de golpe; `useRecordAccountLevel` fija la referencia en
+  el primer render, así que no salta el popup de subida de nivel.
+  Los perfiles ajenos ya salen con la curva nueva: se calculan desde
+  `profiles.xp` (`levelForXp`), no desde el `level` guardado.
+- **Logros de 500 sesiones → 365** (fuerza "Leyenda" y cardio "Incansable"):
+  ids `workouts-365` / `cardio-365`. Los ids no se guardan en ningún sitio
+  (todo se deriva del historial), así que no hay migración.
+- **Hitos de la semana sin récord repetido.** Si el récord personal de más
+  margen es el mismo ejercicio que "Mayor progreso", el póster usa el segundo
+  récord; solo repite ejercicio si no hay otro (`findPersonalRecord` con
+  `avoidExerciseId`).
+- **Panel "Retos superados" del póster legible.** Un reto ganado dos veces en
+  la semana (el de cardio va por semana de calendario y la de rutina puede
+  cruzar un lunes) sale una vez con "×2", no repetido; y con más de dos retos
+  distintos la segunda línea dice "y N más" en vez de un "+N" pegado al
+  nombre. Igual en "Logros nuevos".
+
 - **Casillas con el valor de verdad.** Peso y reps llegan rellenos con lo
   sugerido (la serie anterior, la vez pasada, el 75% en descarga o el tope
   del rango) en tinta normal, no como pista gris; tocarlas selecciona la cifra
@@ -153,9 +229,9 @@
   paso de − / + da un roce apenas perceptible (6 ms), también al mantener.
 - **Mantener pulsado − / + avanza a ritmo fijo** (un paso cada 120 ms, cada
   uno con su roce del vibrador) en vez de acelerar hasta 45 ms.
-- **Una sola señal de progreso en el panel.** Fuera los puntos ●●○ y la línea
-  "Completado · 3/3 series": el recuento lo lleva la casilla de la ruleta y la
-  serie que entra, el botón.
+- **Panel con menos señales de progreso.** Fuera la línea "Completado · 3/3
+  series": el recuento lo llevan la casilla de la ruleta y los puntos ●●○ tras
+  las burbujas, y la serie que entra, el botón.
 - **Nota de la sesión en el ⋯ de la barra (fuerza).** Sin nada escrito ya no
   ocupa el pie del registro con un botón dorado; "Nota de la sesión" en el ⋯
   abre la tarjeta, baja hasta ella y pone el foco. En cardio (sin ⋯) sigue el
@@ -235,8 +311,45 @@
   que cierra el teclado: al ser multilínea, Intro salta de línea y no había
   forma de terminar salvo tocar fuera. La nota del ejercicio ya no lleva
   texto de ejemplo dentro.
+- **Registro: solo se compara con la vez anterior de ESE día.** Lo hecho en
+  otra rutina o en otro día sigue saliendo en "Anterior" y en el peso
+  sugerido, pero ya no da porcentaje, aviso ni "Sin mejora"
+  (`getComparableExerciseLog`). Las reps sugeridas de la primera serie son
+  entonces el tope del rango de la rutina actual (`suggestTargetReps`), no
+  las de aquella vez. La base de un día es su primera ejecución, sea la semana
+  que sea. Si el ejercicio se saltó en este día, "Anterior" cae también a lo
+  hecho en otro sitio. Los récords siguen atravesando rutinas.
+- **Registro sin porcentajes negativos ni 0 %.** Panel y casilla dicen "Sin
+  mejora", como ya hacía el aviso. Lo que a un decimal se leería "0,0 %"
+  también (`MIN_SHOWN_IMPROVEMENT_PERCENT`).
+- **"Primera vez:" pasa a "Sin datos previos:"** en el panel del ejercicio.
 
 ### Correcciones
+
+- **Retos de la semana de la rutina que se ve.** `useAccountLevel` calculaba
+  los retos de fuerza con la rutina activa; una rutina recién creada queda
+  seleccionada (la pinta Inicio) pero no activa hasta su primer entreno, así
+  que enseñaba los retos de la anterior. Ahora usa la seleccionada, como Inicio.
+- **Editor de ejercicio: borrar el nombre ya no suelta el del catálogo.**
+  Vaciar el campo para reescribirlo dejaba la casilla sin `catalogId` (y,
+  cerrando así, se descartaba). Ahora el vínculo solo lo quita la ✕; con el
+  campo vacío se guarda el nombre del catálogo, que se ve como pista.
+- **"Buscar en el catálogo" arranca con lo escrito.** El buscador recibe el
+  nombre tecleado como `initialQuery`: si no estaba entre las tres
+  propuestas, no hay que volver a escribirlo.
+- **El aviso "Descanso finalizado" ya no se queda en la bandeja.**
+  `stopRestTimer` quita también el aviso ya mostrado (antes solo cancelaba el
+  programado), así que meter la última serie del día lo retira; y saltar el
+  último ejercicio pendiente corta el descanso aunque lo lanzara otro.
+  `dismissPresentedRestNotification` borra además por su id fijo.
+- **La ruleta del registro ya no se queda entre dos ejercicios.** Al volver a
+  primer plano se recoloca en la elegida (y suelta un arrastre que se cortó al
+  salir); y un asentamiento fuera de sitio sobre la misma casilla la reencaja.
+- **El peso ajustado no se pierde al cambiar de ejercicio.** Lo tecleado y sin
+  añadir en peso/reps se guarda por ejercicio (`ExerciseInputField.draft`) y
+  vuelve al regresar a él.
+- **Tocar la tarjeta de récord / mejora solo la cierra.** La capa centrada de
+  `Toast` se queda el toque en vez de dejarlo pasar a lo de debajo.
 
 - **"Subir copia" a la nube fallaba con cualquier rutina.** `backupToCloud`
   subía la fila de rutina con las columnas de procedencia que solo existen en

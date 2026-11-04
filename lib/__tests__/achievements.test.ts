@@ -70,6 +70,38 @@ describe('computeWeekAchievements', () => {
     });
     expect(result.weekImprovementPercent).not.toBeNull();
     expect(result.weekImprovementPercent!).toBeGreaterThan(0);
+    // Curl también es el récord de más margen, pero ya sale como "Mayor
+    // progreso": el récord personal pasa al segundo (press a 110).
+    const record = result.slots.find((slot) => slot.id === 'personal-record');
+    expect(record?.subLabel).toBe('Press banca');
+    expect(record?.centerMain).toBe('110');
+  });
+
+  it('si el único récord es el del mayor progreso, sale igual en los dos', () => {
+    const previousWeekLogs = [
+      makeLog('d1', [
+        makeExercise('e1', 'Press banca', [{ weight: 100, reps: 5 }]),
+        makeExercise('e2', 'Curl', [{ weight: 50, reps: 10 }]),
+      ]),
+    ];
+    const weekLogs = [
+      makeLog('d1', [
+        makeExercise('e1', 'Press banca', [{ weight: 100, reps: 5 }]),
+        makeExercise('e2', 'Curl', [{ weight: 60, reps: 10 }]),
+      ]),
+    ];
+
+    const result = computeWeekAchievements({
+      weekLogs,
+      previousWeekLogs,
+      weekNumber: 3,
+      streakDays: 5,
+      streakIsPerfect: true,
+    });
+
+    expect(result.topImprovement?.exerciseName).toBe('Curl');
+    const record = result.slots.find((slot) => slot.id === 'personal-record');
+    expect(record?.subLabel).toBe('Curl');
   });
 
   it('sin semana previa no hay mejora pero sí récord de peso', () => {

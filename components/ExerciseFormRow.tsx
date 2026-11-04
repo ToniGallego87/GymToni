@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Image,
@@ -69,6 +69,19 @@ export function ExerciseEditorModal({
 
   const linked = getCatalogExercise(exercise?.catalogId);
   const typedName = exercise?.name ?? '';
+  const linkedName = linked ? exerciseName(linked) : '';
+  // Lo que se ve en el campo del nombre. Con ejercicio del catálogo, vaciarlo
+  // para reescribirlo NO lo desvincula: mientras está vacío se guarda el nombre
+  // del catálogo (y se ve como pista), así que cerrar así no pierde la casilla.
+  const [nameField, setNameField] = useState(typedName);
+  const storedNameFor = (value: string) =>
+    value.trim() || !linkedName ? value : linkedName;
+  // Si el nombre cambia desde fuera (propuesta, buscador, otra casilla), el
+  // campo lo sigue.
+  useEffect(() => {
+    if (storedNameFor(nameField) !== typedName) setNameField(typedName);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typedName, exercise?.id]);
   // Los otros nombres con los que ya aparece este ejercicio en tus rutinas y tu
   // historial (sin el escrito aquí ni el del catálogo, que ya se ven).
   const { resolve, namesByKey } = useExerciseNames();
@@ -132,9 +145,9 @@ export function ExerciseEditorModal({
       <View style={styles.headerNameWrap}>
         <TextInput
           style={styles.headerName}
-          placeholder={t('Nombre del ejercicio')}
+          placeholder={linkedName || t('Nombre del ejercicio')}
           placeholderTextColor={theme.colors.textSecondary}
-          value={typedName}
+          value={nameField}
           autoFocus={!typedName}
           multiline
           // Multilínea para que un nombre largo se lea entero, pero sin saltos
@@ -144,15 +157,12 @@ export function ExerciseEditorModal({
           maxLength={EXERCISE_NAME_MAX_LENGTH}
           // El nombre es solo la etiqueta: cambiarlo NO rompe el vínculo con
           // el catálogo (llamarlo "Banca" sigue siendo el press de banca, con
-          // su GIF y su historial). Vaciarlo sí: es empezar otro ejercicio.
+          // su GIF y su historial), ni siquiera vaciarlo para reescribirlo.
           // Para decir "no es este", la ✕ de la línea del catálogo.
           onChangeText={(raw) => {
             const value = raw.replace(/\n/g, ' ');
-            onChange(
-              value.trim()
-                ? { name: value }
-                : { name: value, catalogId: undefined }
-            );
+            setNameField(value);
+            onChange({ name: storedNameFor(value) });
           }}
           accessibilityLabel={t('Nombre')}
         />
@@ -378,8 +388,11 @@ export function ExerciseEditorModal({
         </View>
       </AppModal>
 
+      {/* El buscador arranca con lo ya escrito: si no estaba entre las
+          propuestas, no hay que volver a teclearlo. */}
       <ExercisePickerModal
         visible={showPicker}
+        initialQuery={nameField.trim()}
         onRequestClose={() => setShowPicker(false)}
         onSelect={(picked) => {
           onChange({ name: exerciseName(picked), catalogId: picked.id });

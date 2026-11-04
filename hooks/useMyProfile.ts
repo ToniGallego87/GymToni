@@ -152,6 +152,18 @@ function migrateAvatarOnce(
     .catch(() => {});
 }
 
+/**
+ * Olvida el perfil de una cuenta en este móvil: la copia en memoria y la de
+ * disco. Lo usa borrar la cuenta: su nombre, bio y foto no deben quedarse en
+ * el dispositivo de una cuenta que ya no existe.
+ */
+export async function forgetMyProfile(userId: string): Promise<void> {
+  if (state.userId === userId) {
+    setState({ userId: null, profile: null, loading: false });
+  }
+  await AsyncStorage.removeItem(cacheKey(userId)).catch(() => {});
+}
+
 export function useMyProfile(): { profile: Profile | null; loading: boolean } {
   const { user } = useSession();
   const [, rerender] = useReducer((n: number) => n + 1, 0);

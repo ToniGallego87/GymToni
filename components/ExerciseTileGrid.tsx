@@ -6,7 +6,14 @@ import React, {
   useRef,
   useState,
 } from 'react';
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  AppState,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Animated, {
   interpolate,
   runOnJS,
@@ -64,6 +71,9 @@ const WHEEL_SHADOW_ROOM = 5;
 const WHEEL_HEIGHT = WHEEL_BIG_HEIGHT + WHEEL_SHADOW_ROOM * 2;
 // Soltar sin inercia: espera antes de elegir (ver `endDrag`).
 const SETTLE_FALLBACK_MS = 150;
+// Al volver a la app: espera a que la ventana recupere su tamaño antes de
+// recolocar la ruleta en la elegida.
+const WHEEL_RESUME_SETTLE_MS = 300;
 // Lo que hay que arrastrar la ruleta para que gire (~30% del paso entre
 // casillas). Android, con `snapToInterval`, salta a la casilla siguiente con
 // CUALQUIER impulso al soltar, por pequeño que sea el arrastre: un roce sin
@@ -436,7 +446,16 @@ function ExerciseWheel({
         Math.max(0, Math.round(x / WHEEL_STEP))
       );
       const id = list[index]?.id;
-      if (id && id !== current) onSelect(id);
+      if (id && id !== current) {
+        onSelect(id);
+        return;
+      }
+      // Misma casilla pero parada fuera de su sitio (la vuelta a la app cortó
+      // el encaje a medias): se recoloca, que si no se quedaba entre dos.
+      const home = index * WHEEL_STEP;
+      if (Math.abs(x - home) > 1) {
+        scrollRef.current?.scrollTo({ x: home, animated: true });
+      }
     },
     [cancelSettle]
   );
@@ -503,6 +522,37 @@ function ExerciseWheel({
     if (!placedRef.current) scrollX.value = x;
     placedRef.current = true;
   }, [selectedIndex, viewportWidth, scrollX]);
+
+  // Al volver a la app (de la ventanita del descanso o de otra app) la ruleta
+  // podía quedarse entre dos casillas: el encaje en curso se corta al salir y
+  // Android no lo retoma. Se recoloca en la elegida, sin animar, cuando la
+  // vista ya ha recuperado su tamaño.
+  const selectedIndexRef = useRef(selectedIndex);
+  selectedIndexRef.current = selectedIndex;
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        timer = null;
+        // Saliendo a medio arrastre no llega el fin del gesto: volver es que
+        // el dedo ya no está.
+        draggingRef.current = false;
+        const index = selectedIndexRef.current;
+        if (index < 0) return;
+        cancelSettle();
+        returningRef.current = false;
+        const x = index * WHEEL_STEP;
+        scrollRef.current?.scrollTo({ x, animated: false });
+        scrollX.value = x;
+      }, WHEEL_RESUME_SETTLE_MS);
+    });
+    return () => {
+      sub.remove();
+      if (timer) clearTimeout(timer);
+    };
+  }, [cancelSettle, scrollX]);
 
   // Aire a los lados para que el primero y el último también lleguen al marco.
   const sidePadding = Math.max(0, (viewportWidth - WHEEL_STEP) / 2);
@@ -753,12 +803,19 @@ function SelectableTile({
           />
         )}
         {showTrend && trend ? (
-          <TrendDelta
-            value={trend.percent}
-            improved={trend.isImproved}
-            iconSize={12}
-            textStyle={styles.progressTrend}
-          />
+          // Solo lleva cifra lo que sube: igual o por debajo, "Sin mejora".
+          trend.isImproved ? (
+            <TrendDelta
+              value={trend.percent}
+              improved
+              iconSize={12}
+              textStyle={styles.progressTrend}
+            />
+          ) : (
+            <Text style={styles.noImprovement} numberOfLines={1}>
+              {t('Sin mejora')}
+            </Text>
+          )
         ) : target > 0 ? (
           // Mismo dibujo que el recuento de retos de Inicio (ChallengesStrip):
           // las hechas grandes y en color —oro; azul si es adicional; verde
@@ -1055,6 +1112,13 @@ const makeStyles = () =>
     progressTrend: {
       fontSize: 13,
       lineHeight: COMPACT_FOOT_HEIGHT,
+    },
+    noImprovement: {
+      flexShrink: 1,
+      fontSize: 13,
+      fontWeight: '800',
+      lineHeight: COMPACT_FOOT_HEIGHT,
+      color: theme.colors.warning,
     },
     // En edición el asa y las acciones van a ras de los bordes de la casilla.
     tileEditing: {

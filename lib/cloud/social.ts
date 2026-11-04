@@ -689,21 +689,30 @@ export async function recordOwnedRoutineSaves(
 // rutinas no la copia, apunta a la del autor. La consume la vista de consulta
 // (PublicRoutineScreen), que muestra el plan sin adoptarlo, y
 // linkablePublicRoutine, que la marca con su dueño antes de guardarla.
+//
+// `expectedOwnerId`: el autor que se espera. Un id de rutina puede cambiar de
+// dueño: borrar una cuenta borra sus rutinas de verdad (cascada) y deja su id
+// libre para que otro lo reutilice. Con el autor fijado, una rutina "nueva"
+// con el id de la de siempre devuelve null en vez de colarse en las copias
+// enlazadas de quien tenía la original.
 export async function fetchPublicRoutine(
-  routineId: string
+  routineId: string,
+  expectedOwnerId?: string
 ): Promise<WorkoutRoutine | null> {
   const coerce = (r: Record<string, unknown>): Record<string, unknown> => ({
     ...r,
     ...(r.created_at != null ? { created_at: Number(r.created_at) } : {}),
   });
 
-  const { data: routineRow, error: rErr } = await supabase
+  let routineQuery = supabase
     .from('routines')
     .select('*')
     .eq('id', routineId)
     .eq('is_public', true)
-    .eq('deleted', false)
-    .maybeSingle();
+    .eq('deleted', false);
+  if (expectedOwnerId)
+    routineQuery = routineQuery.eq('user_id', expectedOwnerId);
+  const { data: routineRow, error: rErr } = await routineQuery.maybeSingle();
   if (rErr) throw new Error(`routines: ${rErr.message}`);
   if (!routineRow) return null;
 
@@ -756,7 +765,7 @@ export async function linkablePublicRoutine(
   ownerId: string,
   authorName?: string
 ): Promise<WorkoutRoutine | null> {
-  const routine = await fetchPublicRoutine(routineId);
+  const routine = await fetchPublicRoutine(routineId, ownerId);
   return routine ? linkPublicRoutine(routine, ownerId, authorName) : null;
 }
 
@@ -769,9 +778,10 @@ export async function linkablePublicRoutine(
 // useCloudSync tras cada sync; suelen ser 0–3 rutinas, así que bajarlas
 // enteras cada vez sale más barato que llevar un cursor por rutina.
 //
-// Si el autor la despublicó o la borró, `fetchPublicRoutine` devuelve null y
-// la copia local se deja en paz: sigue siendo entrenable. Un fallo de red en
-// una no tumba las demás (se reintenta en el siguiente sync).
+// Si el autor la despublicó o la borró, o el id ya es de otra persona (cuenta
+// borrada, id reutilizado), `fetchPublicRoutine` devuelve null y la copia
+// local se deja en paz: sigue siendo entrenable. Un fallo de red en una no
+// tumba las demás (se reintenta en el siguiente sync).
 export async function refreshLinkedRoutines(
   routines: WorkoutRoutine[]
 ): Promise<WorkoutRoutine[]> {
@@ -781,7 +791,7 @@ export async function refreshLinkedRoutines(
   const refreshed = await Promise.all(
     linked.map(async (local) => {
       try {
-        const fresh = await fetchPublicRoutine(local.id);
+        const fresh = await fetchPublicRoutine(local.id, local.linkedOwnerId);
         return fresh ? refreshLinkedRoutine(local, fresh) : null;
       } catch {
         return null;

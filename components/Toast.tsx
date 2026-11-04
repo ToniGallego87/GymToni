@@ -88,21 +88,32 @@ export function Toast({
   const onDismissRef = React.useRef(onDismiss);
   onDismissRef.current = onDismiss;
 
-  useEffect(() => {
-    opacity.setValue(1);
-    const timer = setTimeout(() => {
+  // Fundido de salida y aviso al padre, una sola vez (el toque en la tarjeta
+  // centrada lo adelanta; la cuenta normal ya no lo repite).
+  const dismissingRef = React.useRef(false);
+  const fadeOut = React.useCallback(
+    (duration: number) => {
+      if (dismissingRef.current) return;
+      dismissingRef.current = true;
       Animated.timing(opacity, {
         toValue: 0,
-        duration: 300,
+        duration,
         easing: Easing.ease,
         useNativeDriver: true,
       }).start(() => {
         onDismissRef.current?.();
       });
-    }, resolvedDuration);
+    },
+    [opacity]
+  );
+
+  useEffect(() => {
+    opacity.setValue(1);
+    dismissingRef.current = false;
+    const timer = setTimeout(() => fadeOut(300), resolvedDuration);
 
     return () => clearTimeout(timer);
-  }, [resolvedDuration, opacity, message]);
+  }, [resolvedDuration, opacity, message, fadeOut]);
 
   // El cartel al pie es cristal oscuro (el del descanso flotante, que vive en
   // el mismo rincón del registro), no un bloque de color: el estado lo dice el
@@ -122,8 +133,8 @@ export function Toast({
       ? 'alert-circle'
       : 'information';
 
-  // Flota por encima del control inferior más alto (barra de navegación 70 o
-  // botón "Volver" 58, ambos con su margen). Así no queda tapado.
+  // Flota por encima del control inferior (barra de navegación o botón
+  // "Volver", los dos de 70 con su margen). Así no queda tapado.
   const resolvedBottom = bottom ?? Math.max(insets.bottom, 10) + 94;
 
   if (centered) {
@@ -146,11 +157,17 @@ export function Toast({
         : theme.colors.surfaceAlt;
     const title = headline ?? message;
     const detail = headline ? message : '';
+    // La capa entera se queda el toque: tocar la pantalla con la tarjeta
+    // encima solo la quita, y no pulsa lo que hay debajo (la casilla de otro
+    // ejercicio, "Añadir serie"…).
     return (
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.centerLayer, { opacity }]}
-      >
+      <Animated.View style={[styles.centerLayer, { opacity }]}>
+        <Pressable
+          style={StyleSheet.absoluteFill}
+          onPress={() => fadeOut(150)}
+          accessibilityRole="button"
+          accessibilityLabel={title}
+        />
         {celebrate && <ConfettiBurst />}
         <View style={[styles.centerCard, { borderColor: toneColor }]}>
           <View style={[styles.centerIcon, { backgroundColor: toneTint }]}>

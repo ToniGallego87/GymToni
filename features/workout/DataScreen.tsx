@@ -14,7 +14,14 @@ import {
   Toast,
   StretchScrollView,
 } from '@components';
-import { View, Text, StyleSheet, TextInput, Platform } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TextInput,
+  Platform,
+  Pressable,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -24,7 +31,9 @@ import {
   getAutoBackupEnabled,
   setAutoBackupEnabled,
   getLastAutoBackupAt,
+  setStoredPublishedActivity,
 } from '@lib/appSettings';
+import { forgetMyProfile } from '@hooks/useMyProfile';
 import { canWriteLocalBackup } from '@lib/fileIO';
 import { AutoBackupFile, listAutoBackups } from '@lib/backup';
 import { weekdayDayMonth } from '@lib/utils';
@@ -35,6 +44,12 @@ import {
   signOut,
   verifySignUpCode,
   resendSignUpCode,
+  requestPasswordReset,
+  verifyRecoveryCode,
+  updatePassword,
+  authErrorMessage,
+  signOutOtherDevices,
+  deleteAccount,
 } from '@lib/cloud/auth';
 import { clearSocialCache } from '@lib/socialCache';
 import { backupToCloud, restoreFromCloud } from '@lib/cloud/backup';
@@ -57,6 +72,16 @@ interface DataScreenProps {
 // para que cambiar ese ajuste no deje la app sin poder confirmar.
 const OTP_MIN_LENGTH = 6;
 const OTP_MAX_LENGTH = 10;
+// Mínimo de Supabase Auth por defecto. Se comprueba antes de gastar el código
+// de recuperación: si la nube rechazara la contraseña después, habría que
+// pedir otro código.
+const PASSWORD_MIN_LENGTH = 6;
+// Espera mínima de Supabase Auth entre dos códigos al mismo email.
+const RESEND_COOLDOWN_S = 60;
+
+type PendingCode =
+  | { kind: 'signup'; email: string }
+  | { kind: 'recovery'; email: string; verified: boolean };
 
 // Toda acción con espera propia, para deshabilitar el resto mientras corre.
 type BusyAction =
@@ -67,6 +92,8 @@ type BusyAction =
   | 'signup'
   | 'verify'
   | 'resend'
+  | 'recover'
+  | 'delete-account'
   | 'signout'
   | 'sync'
   | 'cloud-backup'
@@ -100,6 +127,9 @@ export function DataScreen({
   const [showImportModal, setShowImportModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
+  const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  // Casilla "Entiendo que no se puede deshacer" del popup de borrar la cuenta.
+  const [deleteAck, setDeleteAck] = useState(false);
   const [autoBackups, setAutoBackups] = useState<AutoBackupFile[]>([]);
   // Copia automática elegida para restaurar, pendiente de confirmar.
   const [pendingBackup, setPendingBackup] = useState<AutoBackupFile | null>(
@@ -113,10 +143,18 @@ export function DataScreen({
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  // Email pendiente de confirmar por código. Mientras no sea null, el bloque de
-  // cuenta muestra el campo del código en vez del formulario de login.
-  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+  // Código por correo en curso. Mientras no sea null, el bloque de cuenta
+  // muestra el del código en vez del login: del registro, o de recuperar la
+  // contraseña, que además pide la nueva. `verified`: el código de recuperación
+  // ya abrió sesión y solo falta fijar la contraseña (un fallo ahí se reintenta
+  // sin pedir otro código).
+  const [pending, setPending] = useState<PendingCode | null>(null);
   const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  // Segundos hasta poder reenviar el código: Supabase no deja pedir otro antes
+  // de 60 s, y sin cuenta atrás el usuario solo se encontraba el error.
+  const [resendIn, setResendIn] = useState(0);
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -154,7 +192,7 @@ export function DataScreen({
           ? await signUp(email, password)
           : await signIn(email, password);
       if (error) {
-        notify(error.message, 'error');
+        notify(authErrorMessage(error), 'error');
       } else if (
         mode === 'signup' &&
         !data.session &&
@@ -165,8 +203,9 @@ export function DataScreen({
         // ningún correo, así que no hay que mandar al usuario a esperar un código.
         notify(t('Ese email ya tiene cuenta. Inicia sesión.'), 'error');
       } else if (mode === 'signup' && !data.session) {
-        setPendingEmail(email.trim());
+        setPending({ kind: 'signup', email: email.trim() });
         setCode('');
+        setResendIn(RESEND_COOLDOWN_S);
         notify(t('Te hemos enviado un código a tu correo'), 'success');
       } else {
         setPassword('');
@@ -179,44 +218,139 @@ export function DataScreen({
     }
   };
 
+  // Cuenta atrás del reenvío: un tic por segundo mientras quede.
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const timer = setTimeout(() => setResendIn((s) => s - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [resendIn]);
+
+  // "¿Has olvidado la contraseña?": pide el código al email escrito arriba y
+  // pasa al bloque del código. El aviso no dice si la cuenta existe.
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      notify(t('Escribe tu email para recuperar la contraseña'), 'error');
+      return;
+    }
+    setBusyAction('recover');
+    try {
+      const { error } = await requestPasswordReset(email);
+      if (error) {
+        notify(authErrorMessage(error), 'error');
+      } else {
+        setPending({ kind: 'recovery', email: email.trim(), verified: false });
+        setCode('');
+        setNewPassword('');
+        setResendIn(RESEND_COOLDOWN_S);
+        notify(
+          t('Si hay una cuenta con ese email, te llegará un código'),
+          'success'
+        );
+      }
+    } catch (e) {
+      notify(authErrorMessage(e), 'error');
+    } finally {
+      setBusyAction(null);
+    }
+  };
+
+  // Sale del bloque del código. La contraseña del login se conserva: "Cambiar
+  // email" solo corrige el email. En una recuperación ya verificada la sesión
+  // queda abierta: el código demostró que la cuenta es suya.
+  const leavePendingCode = () => {
+    setPending(null);
+    setCode('');
+    setNewPassword('');
+    setShowNewPassword(false);
+  };
+
   const handleVerifyCode = async () => {
-    if (!pendingEmail) return;
-    if (code.trim().length < OTP_MIN_LENGTH) {
+    if (!pending) return;
+    const needsCode = !(pending.kind === 'recovery' && pending.verified);
+    if (needsCode && code.trim().length < OTP_MIN_LENGTH) {
       notify(t('Escribe el código del correo'), 'error');
+      return;
+    }
+    if (
+      pending.kind === 'recovery' &&
+      newPassword.length < PASSWORD_MIN_LENGTH
+    ) {
+      notify(
+        t('La contraseña necesita al menos {n} caracteres', {
+          n: PASSWORD_MIN_LENGTH,
+        }),
+        'error'
+      );
       return;
     }
     setBusyAction('verify');
     try {
-      const { error } = await verifySignUpCode(pendingEmail, code);
-      if (error) {
-        notify(error.message, 'error');
-      } else {
-        // verifyOtp devuelve sesión: useSession la recoge por onAuthStateChange.
-        setPendingEmail(null);
-        setCode('');
-        setPassword('');
-        notify(t('Cuenta confirmada'), 'success');
+      if (pending.kind === 'signup') {
+        const { error } = await verifySignUpCode(pending.email, code);
+        if (error) {
+          notify(authErrorMessage(error), 'error');
+        } else {
+          // verifyOtp devuelve sesión: useSession la recoge por onAuthStateChange.
+          leavePendingCode();
+          setPassword('');
+          notify(t('Cuenta confirmada'), 'success');
+        }
+        return;
       }
+
+      // Recuperación: el código abre sesión (una vez) y con ella se fija la
+      // contraseña. Si fijarla falla (igual que la anterior, rechazada…), la
+      // sesión se queda y se reintenta solo esto, sin gastar otro código.
+      if (!pending.verified) {
+        const { error } = await verifyRecoveryCode(pending.email, code);
+        if (error) {
+          notify(authErrorMessage(error), 'error');
+          return;
+        }
+        setPending({ ...pending, verified: true });
+        setCode('');
+      }
+      const { error: updateError } = await updatePassword(newPassword);
+      if (updateError) {
+        notify(authErrorMessage(updateError), 'error');
+        return;
+      }
+      await signOutOtherDevices().catch(() => undefined);
+      leavePendingCode();
+      setPassword('');
+      notify(t('Contraseña cambiada'), 'success');
     } catch (e) {
-      notify((e as Error).message, 'error');
+      notify(authErrorMessage(e), 'error');
     } finally {
       setBusyAction(null);
     }
   };
 
   const handleResendCode = async () => {
-    if (!pendingEmail) return;
+    if (!pending || resendIn > 0) return;
     setBusyAction('resend');
     try {
-      const { error } = await resendSignUpCode(pendingEmail);
-      if (error) notify(error.message, 'error');
-      else notify(t('Código reenviado'), 'success');
+      const { error } =
+        pending.kind === 'recovery'
+          ? await requestPasswordReset(pending.email)
+          : await resendSignUpCode(pending.email);
+      if (error) {
+        notify(authErrorMessage(error), 'error');
+      } else {
+        setResendIn(RESEND_COOLDOWN_S);
+        notify(t('Código reenviado'), 'success');
+      }
     } catch (e) {
-      notify((e as Error).message, 'error');
+      notify(authErrorMessage(e), 'error');
     } finally {
       setBusyAction(null);
     }
   };
+
+  // Recuperación en curso: manda sobre la sesión al pintar. El código abre
+  // sesión ANTES de fijar la contraseña, y sin esto el bloque saltaba a
+  // "Sincronización" a mitad del cambio.
+  const recovering = pending?.kind === 'recovery';
 
   // Aplica al estado en memoria lo que el sync haya bajado a la BD.
   const refreshFromDb = useCallback(async () => {
@@ -253,7 +387,10 @@ export function DataScreen({
     getLastSync(user.id).then((ts) => {
       if (active) setLastSync(ts);
     });
-    doSync(false);
+    // Sesión abierta por un código de recuperación: aquí aún se está fijando
+    // la contraseña y el botón ocupado es ese. El sync global (useCloudSync)
+    // ya corre al iniciar sesión.
+    if (!recovering) doSync(false);
     return () => {
       active = false;
     };
@@ -270,6 +407,45 @@ export function DataScreen({
     } finally {
       setBusyAction(null);
     }
+  };
+
+  // Borra la cuenta en la nube (lib/cloud/auth.ts → deleteAccount) y lo que
+  // de ella quedaba en el móvil: copias sociales, perfil y la marca de
+  // Actividad publicada (con una cuenta nueva, todo se volvería a publicar).
+  // Rutinas y entrenos del móvil no se tocan.
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    const userId = user.id;
+    setBusyAction('delete-account');
+    try {
+      await deleteAccount();
+    } catch {
+      // El error de la Edge Function llega genérico y en inglés ("non-2xx
+      // status code"): no le dice nada al usuario. Reintentar es seguro: si
+      // el borrado se hizo y solo se perdió la respuesta, la función responde
+      // ok la segunda vez.
+      notify(
+        t(
+          'No se pudo eliminar la cuenta. Comprueba la conexión e inténtalo de nuevo.'
+        ),
+        'error'
+      );
+      setBusyAction(null);
+      return;
+    }
+    // La cuenta ya no existe: la limpieza local es aparte, y si algo de ella
+    // falla no se dice "no se pudo eliminar" de una cuenta ya borrada.
+    await clearSocialCache().catch(() => undefined);
+    try {
+      setStoredPublishedActivity([]);
+    } catch {
+      // Un ajuste local sin guardar no cambia nada de lo importante.
+    }
+    await forgetMyProfile(userId);
+    setShowDeleteAccount(false);
+    setDeleteAck(false);
+    setBusyAction(null);
+    notify(t('Cuenta eliminada. Tus datos siguen en este móvil.'), 'success');
   };
 
   // ── Copia en este móvil ──────────────────────────────────────────────────
@@ -453,6 +629,109 @@ export function DataScreen({
 
           {sessionLoading ? (
             <Text style={styles.actionSubtitle}>{t('Cargando…')}</Text>
+          ) : pending ? (
+            // Antes que la sesión: el código de recuperación la abre antes de
+            // fijar la contraseña (ver `recovering`).
+            <>
+              <Text style={styles.actionSubtitle}>
+                {recovering
+                  ? pending.kind === 'recovery' && pending.verified
+                    ? t('Código correcto. Elige la contraseña nueva para')
+                    : t(
+                        'Para cambiar la contraseña, escribe el código enviado a'
+                      )
+                  : t('Te hemos enviado un código a')}{' '}
+                <Text style={styles.emailHighlight}>{pending.email}</Text>
+              </Text>
+              {!(pending.kind === 'recovery' && pending.verified) && (
+                <TextInput
+                  style={[styles.input, styles.codeInput]}
+                  placeholder="······"
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={code}
+                  onChangeText={(v) =>
+                    setCode(v.replace(/\D/g, '').slice(0, OTP_MAX_LENGTH))
+                  }
+                  keyboardType="number-pad"
+                  textContentType="oneTimeCode"
+                  autoComplete="one-time-code"
+                  maxLength={OTP_MAX_LENGTH}
+                />
+              )}
+              {recovering && (
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    style={[styles.input, styles.passwordInput]}
+                    placeholder={t('Nueva contraseña')}
+                    placeholderTextColor={theme.colors.textMuted}
+                    value={newPassword}
+                    onChangeText={setNewPassword}
+                    secureTextEntry={!showNewPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textContentType="newPassword"
+                    autoComplete="new-password"
+                  />
+                  {/* Se escribe una sola vez: con el ojo se comprueba antes de
+                      fijar una contraseña con una errata. */}
+                  <Pressable
+                    style={styles.passwordToggle}
+                    onPress={() => setShowNewPassword((v) => !v)}
+                    hitSlop={8}
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      showNewPassword
+                        ? t('Ocultar contraseña')
+                        : t('Mostrar contraseña')
+                    }
+                  >
+                    <MaterialCommunityIcons
+                      name={showNewPassword ? 'eye-off-outline' : 'eye-outline'}
+                      size={22}
+                      color={theme.colors.textMuted}
+                    />
+                  </Pressable>
+                </View>
+              )}
+              <Button
+                title={
+                  busyAction === 'verify'
+                    ? t('Confirmando…')
+                    : recovering
+                    ? t('Cambiar contraseña')
+                    : t('Confirmar')
+                }
+                onPress={handleVerifyCode}
+                disabled={busy}
+                size="large"
+              />
+              {!(pending.kind === 'recovery' && pending.verified) && (
+                <Button
+                  title={
+                    busyAction === 'resend'
+                      ? t('Reenviando…')
+                      : resendIn > 0
+                      ? t('Reenviar código en {n} s', { n: resendIn })
+                      : t('Reenviar código')
+                  }
+                  variant="secondary"
+                  onPress={handleResendCode}
+                  disabled={busy || resendIn > 0}
+                />
+              )}
+              <Button
+                title={
+                  pending.kind === 'recovery' && pending.verified
+                    ? t('Dejarlo para luego')
+                    : recovering
+                    ? t('Volver a iniciar sesión')
+                    : t('Cambiar email')
+                }
+                variant="secondary"
+                onPress={leavePendingCode}
+                disabled={busy}
+              />
+            </>
           ) : session && user ? (
             <>
               <Text style={styles.email}>{user.email}</Text>
@@ -484,51 +763,10 @@ export function DataScreen({
                 onPress={handleSignOut}
                 disabled={busy}
               />
-            </>
-          ) : pendingEmail ? (
-            <>
-              <Text style={styles.actionSubtitle}>
-                {t('Te hemos enviado un código a')}{' '}
-                <Text style={styles.emailHighlight}>{pendingEmail}</Text>
-              </Text>
-              <TextInput
-                style={[styles.input, styles.codeInput]}
-                placeholder="······"
-                placeholderTextColor={theme.colors.textMuted}
-                value={code}
-                onChangeText={(v) =>
-                  setCode(v.replace(/\D/g, '').slice(0, OTP_MAX_LENGTH))
-                }
-                keyboardType="number-pad"
-                textContentType="oneTimeCode"
-                autoComplete="one-time-code"
-                maxLength={OTP_MAX_LENGTH}
-              />
               <Button
-                title={
-                  busyAction === 'verify' ? t('Confirmando…') : t('Confirmar')
-                }
-                onPress={handleVerifyCode}
-                disabled={busy}
-                size="large"
-              />
-              <Button
-                title={
-                  busyAction === 'resend'
-                    ? t('Reenviando…')
-                    : t('Reenviar código')
-                }
-                variant="secondary"
-                onPress={handleResendCode}
-                disabled={busy}
-              />
-              <Button
-                title={t('Cambiar email')}
-                variant="secondary"
-                onPress={() => {
-                  setPendingEmail(null);
-                  setCode('');
-                }}
+                title={t('Eliminar la cuenta')}
+                variant="danger"
+                onPress={() => setShowDeleteAccount(true)}
                 disabled={busy}
               />
             </>
@@ -572,6 +810,16 @@ export function DataScreen({
                 }
                 variant="secondary"
                 onPress={() => handleAuth('signup')}
+                disabled={busy}
+              />
+              <Button
+                title={
+                  busyAction === 'recover'
+                    ? t('Enviando…')
+                    : t('¿Has olvidado la contraseña?')
+                }
+                variant="secondary"
+                onPress={handleForgotPassword}
                 disabled={busy}
               />
             </>
@@ -852,6 +1100,34 @@ export function DataScreen({
         onCancel={() => setShowImportModal(false)}
       />
 
+      {/* Borrar la cuenta: irreversible, así que además de confirmar hay que
+          marcar que se entiende. Lo del móvil se queda (la app va sin cuenta). */}
+      <ConfirmModal
+        visible={showDeleteAccount}
+        icon="account-remove-outline"
+        title={t('Eliminar la cuenta')}
+        message={t(
+          'Se borrarán tu cuenta y todo lo que tienes en la nube: rutinas, entrenos, perfil, foto, actividad, comentarios, likes y seguidores. Lo que hay en este móvil se queda y la app seguirá funcionando sin cuenta.'
+        )}
+        confirmLabel={
+          busyAction === 'delete-account'
+            ? t('Eliminando…')
+            : t('Eliminar la cuenta')
+        }
+        checkLabel={t('Entiendo que no se puede deshacer')}
+        checked={deleteAck}
+        onToggleCheck={() => setDeleteAck((v) => !v)}
+        busy={busyAction === 'delete-account' || !deleteAck}
+        onConfirm={handleDeleteAccount}
+        onCancel={() => {
+          // Con el borrado ya en marcha, cerrar el popup no lo para: mejor no
+          // cerrarlo que hacer creer que se ha cancelado.
+          if (busyAction === 'delete-account') return;
+          setShowDeleteAccount(false);
+          setDeleteAck(false);
+        }}
+      />
+
       <ConfirmModal
         visible={showRestoreConfirm}
         title={t('Restaurar desde la nube')}
@@ -989,6 +1265,17 @@ const makeStyles = () =>
       paddingVertical: 12,
       color: theme.colors.text,
       fontSize: 16,
+    },
+    // Contraseña nueva con el ojo de mostrar dentro, a la derecha.
+    passwordRow: { justifyContent: 'center' },
+    passwordInput: { paddingRight: 48 },
+    passwordToggle: {
+      position: 'absolute',
+      right: 0,
+      width: 48,
+      height: '100%',
+      alignItems: 'center',
+      justifyContent: 'center',
     },
     codeInput: {
       textAlign: 'center',

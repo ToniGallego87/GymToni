@@ -10,6 +10,7 @@ import type { WeekExtras } from './weekExtras';
 
 /** Ejercicio con mayor mejora respecto a la misma semana anterior. */
 export interface TopImprovement {
+  exerciseId: string;
   exerciseName: string;
   percent: number;
 }
@@ -142,7 +143,11 @@ function findTopImprovement(
     if (!improvement || !improvement.isImproved) return;
 
     if (!best || improvement.percent > best.percent) {
-      best = { exerciseName: aggregate.name, percent: improvement.percent };
+      best = {
+        exerciseId,
+        exerciseName: aggregate.name,
+        percent: improvement.percent,
+      };
     }
   });
 
@@ -198,34 +203,43 @@ function maxWeightByExercise(
 }
 
 export interface PersonalRecord {
+  exerciseId: string;
   exerciseName: string;
   weight: number;
 }
 
 // Récord personal: ejercicio cuyo peso de esta semana supera su máximo histórico.
-// Con varios récords gana el de mayor margen relativo.
+// Con varios récords gana el de mayor margen relativo. `avoidExerciseId`: si
+// hay otro récord, se prefiere uno que no sea ese ejercicio (el póster ya lo
+// enseña como "Mayor progreso" y repetirlo es redundante); si es el único,
+// sale igual.
 export function findPersonalRecord(
   currentLogs: WorkoutLog[],
-  historyLogs: WorkoutLog[]
+  historyLogs: WorkoutLog[],
+  avoidExerciseId?: string
 ): PersonalRecord | null {
   const historyMax = maxWeightByExercise(historyLogs);
   const currentMax = maxWeightByExercise(currentLogs);
 
-  let best: PersonalRecord | null = null;
-  let bestMargin = 0;
+  const records: { record: PersonalRecord; margin: number }[] = [];
   currentMax.forEach((current, exerciseId) => {
     const previous = historyMax.get(exerciseId);
     if (!previous || previous.weight <= 0) return; // Sin histórico no hay récord que batir.
     if (current.weight <= previous.weight) return;
 
-    const margin = (current.weight - previous.weight) / previous.weight;
-    if (!best || margin > bestMargin) {
-      best = { exerciseName: current.name, weight: current.weight };
-      bestMargin = margin;
-    }
+    records.push({
+      record: { exerciseId, exerciseName: current.name, weight: current.weight },
+      margin: (current.weight - previous.weight) / previous.weight,
+    });
   });
+  // Orden estable: a igual margen, el primero en aparecer (como antes).
+  records.sort((a, b) => b.margin - a.margin);
 
-  return best;
+  return (
+    records.find((r) => r.record.exerciseId !== avoidExerciseId)?.record ??
+    records[0]?.record ??
+    null
+  );
 }
 
 // Mejor sesión de cada ejercicio (clave: exerciseId) medida con la puntuación
@@ -414,7 +428,9 @@ export function computeWeekAchievements({
     });
   }
 
-  if (topImprovement && Math.round(topImprovement.percent) >= 1) {
+  const showsTopImprovement =
+    !!topImprovement && Math.round(topImprovement.percent) >= 1;
+  if (topImprovement && showsTopImprovement) {
     const text = `+${Math.round(topImprovement.percent)}%`;
     candidates.push({
       id: 'top-improvement',
@@ -429,7 +445,12 @@ export function computeWeekAchievements({
     });
   }
 
-  const personalRecord = findPersonalRecord(currentLatest, history);
+  // El récord, a ser posible de otro ejercicio que el de "Mayor progreso".
+  const personalRecord = findPersonalRecord(
+    currentLatest,
+    history,
+    showsTopImprovement ? topImprovement?.exerciseId : undefined
+  );
   if (personalRecord) {
     const text = formatWeightText(personalRecord.weight);
     candidates.push({

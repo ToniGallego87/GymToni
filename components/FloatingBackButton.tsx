@@ -10,32 +10,26 @@ import {
   GLASS_BACK_BUTTON_TEXT,
 } from './glassTokens';
 import { GlassBlur } from './GlassBlur';
+import {
+  FLOATING_GLASS_BAR_HEIGHT,
+  FLOATING_GLASS_BAR_MARGIN,
+  getFloatingPrimaryNavMetrics,
+} from './FloatingGlassBar';
 
-export const FLOATING_BACK_BUTTON_HEIGHT = 58;
-export const FLOATING_BACK_BUTTON_MARGIN = 16;
-// Suelo del inset inferior: en móviles sin barra de gestos `insets.bottom` es 0
-// y el botón quedaría pegado al canto.
-export const FLOATING_BACK_BUTTON_MIN_INSET = 10;
-// Aire entre el final del scroll y el botón, para que el último elemento de la
-// lista no quede debajo del cristal.
-export const FLOATING_BACK_BUTTON_SCROLL_EXTRA_PADDING = 28;
+// Mismo hueco exacto que la barra de pestañas (alto, márgenes y distancia al
+// canto): al ir de una pestaña a una subpantalla, "Volver" ocupa el sitio de
+// la barra sin saltar. Antes era más bajo (58), con otro margen y otro suelo
+// de inset, y quedaba a distinta altura.
+export const FLOATING_BACK_BUTTON_HEIGHT = FLOATING_GLASS_BAR_HEIGHT;
+export const FLOATING_BACK_BUTTON_MARGIN = FLOATING_GLASS_BAR_MARGIN;
 
 /**
  * Posición del botón "Volver" y padding inferior que necesita el scroll de la
- * pantalla que lo lleva. Espejo de `getFloatingPrimaryNavMetrics` (barra de
- * pestañas) para las pantallas que NO son pestaña: antes cada una repetía la
- * misma fórmula a mano.
+ * pantalla que lo lleva. Son las de la barra de pestañas
+ * (`getFloatingPrimaryNavMetrics`) para las pantallas que NO son pestaña.
  */
 export function getFloatingBackButtonMetrics(bottomInset: number) {
-  const bottom =
-    Math.max(bottomInset, FLOATING_BACK_BUTTON_MIN_INSET) +
-    FLOATING_BACK_BUTTON_MARGIN;
-  const scrollBottomPadding =
-    bottom +
-    FLOATING_BACK_BUTTON_HEIGHT +
-    FLOATING_BACK_BUTTON_SCROLL_EXTRA_PADDING;
-
-  return { bottom, scrollBottomPadding };
+  return getFloatingPrimaryNavMetrics(bottomInset);
 }
 
 interface FloatingBackButtonProps {
@@ -78,7 +72,7 @@ const makeStyles = () =>
     floatingBackButton: {
       position: 'absolute',
       zIndex: 30,
-      borderRadius: 22,
+      borderRadius: 24,
       justifyContent: 'center',
       alignItems: 'center',
       backgroundColor: GLASS_BACK_BUTTON_BG,

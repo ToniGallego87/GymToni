@@ -44,6 +44,30 @@ mklink /J .claude\agents GymToni\.claude\agents
 
 Abriendo directamente `GymToni/` no hace falta nada.
 
+### Panel de Supabase
+
+Lo que la app necesita configurado A MANO en el proyecto (no vive en ningún
+`.sql`). Revisarlo al montar un proyecto nuevo, o el registro y la recuperación
+dejan de funcionar sin ningún error en la app:
+
+- **SQL**: ejecutar enteros `supabase/schema.sql`, `supabase/social-schema.sql`
+  y `supabase/storage-avatars.sql` (idempotentes).
+- **Authentication → Providers → Email**: confirmación de email activada.
+  Longitud del OTP entre 6 y 10 (la app admite ese rango, `DataScreen`).
+- **Authentication → Emails → Templates**: las dos plantillas envían el
+  **código**, no el enlace (el enlace abriría el navegador, no la app):
+  - "Confirm signup": `Tu código es: <strong>{{ .Token }}</strong>`
+  - "Reset Password": `Tu código es: <strong>{{ .Token }}</strong>`
+- **Edge Functions → `delete-account`**: desplegar
+  `supabase/functions/delete-account/index.ts` (editor del panel: nombre
+  `delete-account`, pegar el archivo, "Verify JWT" activado). Sin ella,
+  "Eliminar la cuenta" de Datos y nube falla.
+- **Authentication → Emails → SMTP Settings**: SMTP propio para producción (el
+  de Supabase tiene un cupo mínimo de envíos). Ver ROADMAP "Supabase y dominio".
+- **Si se activa captcha** (Authentication → Attack Protection), lo exigen
+  `signUp` y también `resetPasswordForEmail`: los dos tendrían que mandar
+  `captchaToken` (`lib/cloud/auth.ts`).
+
 ## Estructura de archivos
 
 ```
@@ -131,7 +155,9 @@ GymToni/
 ├── supabase/
 │   ├── schema.sql            ← Esquema de la nube (tablas espejo + RLS)
 │   ├── social-schema.sql     ← Esquema social (is_public, follows, likes, comentarios, reports, RLS pública)
-│   └── storage-avatars.sql   ← Bucket de fotos de perfil (Storage) y sus políticas
+│   ├── storage-avatars.sql   ← Bucket de fotos de perfil (Storage) y sus políticas
+│   └── functions/            ← Edge Functions (Deno, con service_role; fuera del type-check)
+│       └── delete-account/   ← Borrar la cuenta de quien llama y, en cascada, todo lo suyo
 ├── modules/                  ← Módulos nativos locales (autolinked por Expo)
 │   ├── pip-timer/            ← Ventana flotante del descanso (PiP de Android)
 │   ├── glass-blur/           ← Cristal esmerilado de las barras (UNA captura desenfocada por frame, compartida)

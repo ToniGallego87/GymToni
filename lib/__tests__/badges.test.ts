@@ -104,9 +104,9 @@ describe('computeBadges', () => {
     });
     expect(byId['first-cardio'].unlocked).toBe(false);
     expect(byId['cardio-10']).toMatchObject({ current: 0, target: 10 });
-    expect(byId['workouts-500']).toMatchObject({ current: 12, target: 500 });
+    expect(byId['workouts-365']).toMatchObject({ current: 12, target: 365 });
     expect(byId['cardio-200']).toMatchObject({ current: 0, target: 200 });
-    expect(byId['cardio-500']).toMatchObject({ current: 0, target: 500 });
+    expect(byId['cardio-365']).toMatchObject({ current: 0, target: 365 });
   });
 
   it('la escalera de Progreso cuenta semanas mejoradas, no récords de peso', () => {

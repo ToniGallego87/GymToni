@@ -199,10 +199,15 @@ async function cancelNotification(): Promise<void> {
 const REST_NOTIFICATION_ID = 'rest-timer';
 
 // Quita de la bandeja el aviso de un descanso anterior que no se tocó: al
-// empezar otro descanso ya no dice nada útil.
+// empezar otro descanso, meter la serie o cerrar el día ya no dice nada útil.
 async function dismissPresentedRestNotification(): Promise<void> {
   if (!Notifications) return;
   try {
+    // Por su id fijo primero: si la bandeja no devuelve el `data` del aviso,
+    // el filtro de abajo no lo encontraría.
+    await Notifications.dismissNotificationAsync(REST_NOTIFICATION_ID).catch(
+      () => undefined
+    );
     const presented = await Notifications.getPresentedNotificationsAsync();
     await Promise.all(
       presented
@@ -329,6 +334,10 @@ export function stopRestTimer(): void {
   publish(null);
   setPipAutoEnter(false);
   void cancelNotification();
+  // Y el aviso que ya sonó y sigue en la bandeja: cortar el descanso es meter
+  // la última serie del día o saltarlo, y "Es hora de tu siguiente serie" se
+  // quedaba ahí con el día ya cerrado.
+  void dismissPresentedRestNotification();
 }
 
 /**

@@ -109,13 +109,13 @@ Tres piezas con roles distintos:
 
 - **Supabase** = el backend en la nube (base de datos central y cuentas).
 
-  | Pieza                        | Para qué                                                                                                                                     |
-  | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-  | **Postgres**                 | Base de datos central. El modelo de GymBro es muy relacional (rutina → días → ejercicios → series; follows, likes), encaja de forma natural. |
-  | **Auth**                     | Login email + Google + Apple. Perfiles.                                                                                                      |
-  | **Row Level Security (RLS)** | Reglas SQL de quién ve/escribe qué. Base de toda la parte social **sin servidor propio**.                                                    |
-  | **Storage**                  | Avatares e imágenes.                                                                                                                         |
-  | **Realtime**                 | Tablón de populares, notificaciones de seguidores.                                                                                           |
+  | Pieza                        | Para qué                                                                                                                                                                       |
+  | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+  | **Postgres**                 | Base de datos central. El modelo de GymBro es muy relacional (rutina → días → ejercicios → series; follows, likes), encaja de forma natural.                                   |
+  | **Auth**                     | Login email + Google + Apple. Perfiles.                                                                                                                                        |
+  | **Row Level Security (RLS)** | Reglas SQL de quién ve/escribe qué. Base de toda la parte social sin servidor propio; lo que la RLS no puede (borrar una cuenta) va en Edge Functions (`supabase/functions/`). |
+  | **Storage**                  | Avatares e imágenes.                                                                                                                                                           |
+  | **Realtime**                 | Tablón de populares, notificaciones de seguidores.                                                                                                                             |
 
 - **expo-sqlite** = la base local que YA usa la app (`lib/db`). No se sustituye.
   Se le añaden metadatos de sincronización (Fase 1).

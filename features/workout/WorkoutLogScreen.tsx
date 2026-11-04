@@ -36,6 +36,7 @@ import {
   DatePickerModal,
   DayAccentIcon,
   ExerciseEditorModal,
+  ExerciseInputDraft,
   ExerciseInputField,
   ExerciseTileGrid,
   InvalidAddReason,
@@ -205,6 +206,8 @@ const makePanelContentEntering = (dir: 1 | -1) => () => {
 };
 // Lo que dura el aviso "Serie borrada · Deshacer".
 const UNDO_TOAST_MS = 4500;
+// Mejora mínima que se enseña: por debajo, a un decimal se leería "0,0 %".
+const MIN_SHOWN_IMPROVEMENT_PERCENT = 0.05;
 
 export function WorkoutLogScreen({
   day,
@@ -796,6 +799,11 @@ export function WorkoutLogScreen({
   // `pickedExerciseId` es lo elegido a mano o por avance; null = el primero
   // sin hacer (ver `selectedExerciseId`, más abajo).
   const [pickedExerciseId, setPickedExerciseId] = useState<string | null>(null);
+  // Lo tecleado y sin añadir en el panel de cada ejercicio. El panel se monta
+  // de nuevo al cambiar de ejercicio (`key`); sin esto, el peso ajustado para
+  // la siguiente serie volvía a lo sugerido al ir a otro y regresar. En un ref:
+  // solo se lee al montar el panel.
+  const inputDraftsRef = useRef<Record<string, ExerciseInputDraft>>({});
   // Al cambiar de ejercicio la lista baja hasta el panel si no está a la vista
   // (o hasta "Entreno completado" al terminar el día).
   const listRef = useRef<Animated.ScrollView>(null);
@@ -865,7 +873,7 @@ export function WorkoutLogScreen({
       !updated[exerciseId].some((s) => s.weight === -1 || s.reps === -1)
         ? buildExerciseImprovement(
             updated[exerciseId],
-            getPreviousExerciseLog(exerciseId)
+            getComparableExerciseLog(exerciseId)
           )
         : null;
     const trendText = trend
@@ -1001,11 +1009,13 @@ export function WorkoutLogScreen({
   // semana normal tras una de descarga la referencia es la anterior al deload.
   //
   // Primero se busca en ESTE día de ESTA rutina (por `exerciseId`, que es
-  // distinto en cada rutina). Si no hay nada —la rutina se estrena—, se cae a
-  // la última vez que se hizo el mismo ejercicio en CUALQUIER log, por su
-  // identidad (lib/exerciseIdentity.ts, como Progreso por ejercicio une el
-  // histórico entre rutinas): cambiar de rutina o de nombre no borra la memoria
-  // de un press de banca que llevas meses haciendo.
+  // distinto en cada rutina). Si no hay nada hecho de verdad —la rutina se
+  // estrena, o el día aún no se ha entrenado—, se cae a la última vez que se
+  // hizo el mismo ejercicio en CUALQUIER log, por su identidad
+  // (lib/exerciseIdentity.ts, como Progreso por ejercicio une el histórico entre
+  // rutinas): cambiar de rutina o de nombre no borra la memoria de un press de
+  // banca que llevas meses haciendo. Eso se enseña de referencia, pero no se
+  // compara (ver `getComparableExerciseLog`).
   const getPreviousExerciseRuns = (exerciseId: string) => {
     const isExtra = isExtraExerciseId(exerciseId);
     // La sesión en curso nunca es su propia referencia (su id ya es estable,
@@ -1036,7 +1046,12 @@ export function WorkoutLogScreen({
             // Lo hecho como adicional no es referencia de los de la rutina; un
             // adicional sí ve todo su historial (ver abajo).
             .filter((ex) => (isExtra || !isExtraExerciseLog(ex)) && matches(ex))
-            .map((ex) => ({ ...ex, logDate: log.createdAt, logId: log.id }))
+            .map((ex) => ({
+              ...ex,
+              logDate: log.createdAt,
+              logId: log.id,
+              logDayId: log.dayId,
+            }))
         )
         .sort((a, b) => b.logDate - a.logDate);
 
@@ -1048,7 +1063,7 @@ export function WorkoutLogScreen({
           state.logs.filter((log) => log.dayId === selectedDay.id),
           (ex) => ex.exerciseId === exerciseId
         );
-    if (sameDayRuns.length > 0) return sameDayRuns;
+    if (sameDayRuns.some(hasLoggedSets)) return sameDayRuns;
 
     const exercise = sessionExercises.find((ex) => ex.id === exerciseId);
     if (!exercise) return sameDayRuns;
@@ -1077,6 +1092,14 @@ export function WorkoutLogScreen({
   // ya quedaron fuera en getPreviousExerciseRuns.
   const getPreviousExerciseLog = (exerciseId: string) =>
     getPreviousExerciseRuns(exerciseId).find(hasLoggedSets) || null;
+
+  // Con qué se mide la mejora: la vez anterior de ESTE día. La base de un día es
+  // su primera ejecución, sea la semana que sea; lo hecho en otra rutina o en
+  // otro día solo sirve de referencia (otro plan, otras series y otras reps).
+  const getComparableExerciseLog = (exerciseId: string) => {
+    const previous = getPreviousExerciseLog(exerciseId);
+    return previous?.logDayId === selectedDay.id ? previous : null;
+  };
 
   // ¿Tiene el log algún peso real (>0)? Las series a peso corporal (weight -1)
   // o vacías no sirven para calcular el peso de descarga.
@@ -1108,7 +1131,14 @@ export function WorkoutLogScreen({
     const previousScore = getTotalSetsStrengthScore(
       previousLog.parsedSets || []
     );
-    return buildImprovementFromStrengthScores(currentScore, previousScore);
+    const improvement = buildImprovementFromStrengthScores(
+      currentScore,
+      previousScore
+    );
+    // Lo que a un decimal se leería "0,0 %" no es mejora.
+    return improvement && improvement.percent < MIN_SHOWN_IMPROVEMENT_PERCENT
+      ? { ...improvement, isImproved: false }
+      : improvement;
   };
 
   const handleFinishExercise = (exerciseId: string) => {
@@ -1119,13 +1149,14 @@ export function WorkoutLogScreen({
       // Rellenar con guiones cada serie que falte para alcanzar el objetivo
       const currentSets = exerciseSets[exerciseId] || [];
       const setsToAdd = targetSets - planSetCount(currentSets);
+      let finalSets = exerciseSets;
 
       if (setsToAdd > 0) {
         const filledSets = [...currentSets];
         for (let i = 0; i < setsToAdd; i++) {
           filledSets.push({ weight: -1, reps: -1 });
         }
-        const finalSets = { ...exerciseSets, [exerciseId]: filledSets };
+        finalSets = { ...exerciseSets, [exerciseId]: filledSets };
         setExerciseSets(finalSets);
         autoSaveWorkout(finalSets);
         if (exerciseId === selectedExerciseId) {
@@ -1137,8 +1168,14 @@ export function WorkoutLogScreen({
       // (o no se va a terminar), así que no se lanza descanso ninguno y el que
       // estuviera corriendo por ESTE ejercicio se detiene. Antes, saltar un
       // ejercicio sin tocarlo dejaba 2:30 de cuenta atrás por un esfuerzo que
-      // nunca existió.
-      if (activeTimerId === exerciseId) {
+      // nunca existió. Si el salto cierra el día, se corta también el que
+      // viniera de otro ejercicio (y se quita el aviso que ya sonó): ya no hay
+      // siguiente serie que avisar. El descanso de OTRO día no se toca.
+      const closesDay = countIncompleteExercises(finalSets) === 0;
+      if (
+        activeTimerId === exerciseId ||
+        (closesDay && (!restTimer || !!activeTimerId))
+      ) {
         void stopTimer();
       }
     }
@@ -1264,8 +1301,10 @@ export function WorkoutLogScreen({
       : exerciseSets;
     if (clearData) {
       setExerciseSets(sets);
-      // Sin datos se vuelve a empezar por el primero.
+      // Sin datos se vuelve a empezar por el primero, con lo sugerido de
+      // descarga en las casillas (no lo tecleado antes).
       setPickedExerciseId(null);
+      inputDraftsRef.current = {};
     }
     setIsDeloadSession(next);
     // Persistir solo si ya existe un log (creado por el autoguardado o editado):
@@ -1775,7 +1814,7 @@ export function WorkoutLogScreen({
                           !isExtraExerciseId(id)
                             ? buildExerciseImprovement(
                                 sets,
-                                getPreviousExerciseLog(id)
+                                getComparableExerciseLog(id)
                               )
                             : null,
                       };
@@ -1803,10 +1842,11 @@ export function WorkoutLogScreen({
               (() => {
                 const exercise = selectedExercise;
                 const previousLog = getPreviousExerciseLog(exercise.id);
+                const comparableLog = getComparableExerciseLog(exercise.id);
                 const currentSets = exerciseSets[exercise.id] || [];
                 const improvement = buildExerciseImprovement(
                   currentSets,
-                  previousLog
+                  comparableLog
                 );
                 // En descarga el peso sugerido se calcula sobre la última
                 // semana con carga real: si la anterior no tiene peso en este
@@ -1871,7 +1911,14 @@ export function WorkoutLogScreen({
                           handleExerciseNoteChange(exercise.id, text)
                         }
                         notes={exerciseNotes[exercise.id]}
+                        draft={inputDraftsRef.current[exercise.id]}
+                        onDraftChange={(next) => {
+                          inputDraftsRef.current[exercise.id] = next;
+                        }}
                         previousLog={previousLogForField}
+                        suggestTargetReps={
+                          !comparableLog && !isExtraExerciseId(exercise.id)
+                        }
                         improvement={
                           isDeloadSession || isExtraExerciseId(exercise.id)
                             ? null

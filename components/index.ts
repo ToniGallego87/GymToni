@@ -38,7 +38,10 @@ export { GymIconGrid } from './GymIconGrid';
 export { GradientCtaButton } from './GradientCtaButton';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
-export type { InvalidAddReason } from './ExerciseInputField';
+export type {
+  ExerciseInputDraft,
+  InvalidAddReason,
+} from './ExerciseInputField';
 export { ExerciseEditorModal } from './ExerciseFormRow';
 export { SortableList } from './SortableList';
 export { WeightTrendChart } from './WeightTrendChart';

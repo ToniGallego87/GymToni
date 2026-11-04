@@ -31,18 +31,23 @@ export interface LevelSummary {
   progress: number;
 }
 
-/** Lo que cuesta subir del nivel 1 al 2; cada salto siguiente pide esto más. */
-const LEVEL_STEP_XP = 12.5;
+/** Lo que cuesta subir del nivel 1 al 2 (dos retos o un logro). */
+const LEVEL_FIRST_STEP_XP = 20;
+/** Lo que se encarece cada salto respecto al anterior. */
+const LEVEL_STEP_INCREMENT_XP = 2;
 
 /**
- * Puntos que exige el nivel `n` (1 → 0, 2 → 13, 3 → 38, 4 → 75, 5 → 125…):
- * subir de nivel cuesta 12,5 puntos más que el salto anterior, así que el total
- * es cuadrático pero suave. Redondeado hacia arriba para que sean enteros. (Era
- * el doble: con casi un año entrenando se rondaba el nivel 7, demasiado lento.)
+ * Puntos que exige el nivel `n` (1 → 0, 2 → 20, 3 → 42, 4 → 66… 25 → 1032):
+ * los saltos cuestan 20, 22, 24…, así que siempre hay un nivel a la vista y el
+ * 25 cae en torno a los 1000 puntos (unos 9-10 meses de uso normal). Con 20 y
+ * +2 queda `(n-1)(n+18)`, entero sin redondeos. (Antes cada salto costaba 12,5
+ * más que el anterior: el 25 pedía 3750 y a un año se rondaba el 14.)
  */
 export function xpForLevel(level: number): number {
   const n = Math.max(0, level - 1);
-  return Math.ceil((LEVEL_STEP_XP * n * (n + 1)) / 2);
+  return (
+    n * LEVEL_FIRST_STEP_XP + (LEVEL_STEP_INCREMENT_XP * n * (n - 1)) / 2
+  );
 }
 
 /** Nivel que dan `xp` puntos: el mayor cuyo umbral no supera `xp`. */
