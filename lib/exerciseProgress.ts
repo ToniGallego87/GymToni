@@ -5,7 +5,13 @@ import {
   exerciseKeyOf,
 } from './exerciseIdentity';
 import { isExtraExerciseLog } from './extraExercises';
-import { getEstimatedOneRepMax, isValidSet } from './progress';
+import { parseSeriesString } from './parsers';
+import {
+  getEstimatedOneRepMax,
+  getSetPerformanceScore,
+  getTotalSetsStrengthScore,
+  isValidSet,
+} from './progress';
 import { getLogTimestamp } from './utils';
 
 /**
@@ -265,6 +271,33 @@ export function getRecordSetIndexes(
     bestWeight = Math.max(bestWeight, set.weight);
   });
   return new Set(lastRecord === -1 ? [] : [lastRecord]);
+}
+
+/**
+ * La mejor sesión de entre las dadas: la de la mejor serie y, a igualdad, la de
+ * mejor total. No el total a secas: son sesiones de otros planes y ganaría la
+ * que tuviera más series, no la de más fuerza. A igualdad de todo, la primera.
+ * Sin ninguna serie válida, null.
+ */
+export function pickBestExerciseLog<T extends ExerciseLog>(
+  logs: T[]
+): T | null {
+  let best: T | null = null;
+  let bestSet = 0;
+  let bestTotal = 0;
+  for (const log of logs) {
+    const sets = log.parsedSets?.length
+      ? log.parsedSets
+      : parseSeriesString(log.rawInput || '');
+    const topSet = Math.max(0, ...sets.map(getSetPerformanceScore));
+    const total = getTotalSetsStrengthScore(sets);
+    if (topSet > bestSet || (topSet === bestSet && total > bestTotal)) {
+      best = log;
+      bestSet = topSet;
+      bestTotal = total;
+    }
+  }
+  return best;
 }
 
 /**

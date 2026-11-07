@@ -31,6 +31,7 @@ export const STALE_WEIGHT_DAYS = 14;
 const NOTIFY_EVERY_DAYS = 7;
 
 const NOTIFIED_AT_KEY = 'bodyWeightStaleNotifiedAt';
+export const STALE_WEIGHT_SOURCE = 'body-weight';
 const NOTIFICATION_ID_KEY = 'bodyWeightStaleNotificationId';
 
 // El aviso se programa unas horas por delante: saltar una notificación con la
@@ -186,7 +187,7 @@ export async function maybeNotifyStaleWeight(): Promise<void> {
         ),
         icon: 'notification_icon',
         color: theme.colors.primary,
-        data: { source: 'body-weight' },
+        data: { source: STALE_WEIGHT_SOURCE },
       } as any,
       trigger: {
         date: new Date(Date.now() + NOTIFY_DELAY_MS),

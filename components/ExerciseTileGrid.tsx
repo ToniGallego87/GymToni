@@ -29,6 +29,7 @@ import { getCatalogExercise, thumbUrl } from '@data/exerciseCatalog';
 import { buildTargetReps, ExerciseForm } from '@lib/exerciseForm';
 import { ConfirmModal } from './ConfirmModal';
 import { ExerciseGifButton, GifCornerBadge } from './ExerciseGifButton';
+import { FitText } from './FitText';
 import { SortableGrid } from './SortableGrid';
 import { TrendDelta } from './TrendDelta';
 
@@ -41,6 +42,7 @@ const GAP = 12;
 // `ExerciseWheel`). Todas las casillas se maquetan a WHEEL_BIG y se ESCALAN:
 // a tamaño completo en el marco y a WHEEL_SMALL fuera (textos incluidos).
 const COMPACT_NAME_LINES = 2;
+const COMPACT_NAME_FONT_SIZE = 13;
 const COMPACT_NAME_LINE_HEIGHT = 17;
 // Pie de la casilla (0/3): el cuerpo del nombre y, en la del marco, mayor (ver
 // `setsSelected`); el alto es el de la mayor.
@@ -82,6 +84,7 @@ const WHEEL_RESUME_SETTLE_MS = 300;
 const WHEEL_DRAG_THRESHOLD = WHEEL_STEP * 0.3;
 // Líneas que reserva el nombre (centrado en ese hueco si ocupa menos).
 const NAME_LINES = 3;
+const NAME_FONT_SIZE = 10.5;
 const NAME_LINE_HEIGHT = 13;
 // Alto de la fila de lápiz y papelera en edición (y del hueco que la iguala
 // en la casilla de añadir).
@@ -285,7 +288,7 @@ export function ExerciseTileGrid({
 
 // Hueco fijo de tres líneas (dos en compacto) con el nombre centrado en
 // vertical: así todos los GIF de una fila quedan a la misma altura tenga el
-// nombre una línea o tres.
+// nombre una línea o tres. El que no cabe baja de letra, nunca se corta.
 function TileName({
   name,
   lines = NAME_LINES,
@@ -298,18 +301,18 @@ function TileName({
 }) {
   const trimmed = name.trim();
   const lineHeight = compact ? COMPACT_NAME_LINE_HEIGHT : NAME_LINE_HEIGHT;
+  const height = lines * lineHeight;
   return (
-    <View style={[styles.nameBox, { height: lines * lineHeight }]}>
-      <Text
-        style={[
-          styles.name,
-          compact && styles.nameCompact,
-          !trimmed && styles.nameEmpty,
-        ]}
-        numberOfLines={lines}
+    <View style={[styles.nameBox, { height }]}>
+      <FitText
+        key={trimmed}
+        style={[styles.name, !trimmed && styles.nameEmpty]}
+        maxHeight={height}
+        fontSize={compact ? COMPACT_NAME_FONT_SIZE : NAME_FONT_SIZE}
+        lineHeight={lineHeight}
       >
         {trimmed || t('Sin nombre')}
-      </Text>
+      </FitText>
     </View>
   );
 }
@@ -480,7 +483,8 @@ function ExerciseWheel({
       draggingRef.current = false;
       cancelSettle();
       if (Math.abs(x - dragStartXRef.current) < WHEEL_DRAG_THRESHOLD) {
-        const home = Math.round(dragStartXRef.current / WHEEL_STEP) * WHEEL_STEP;
+        const home =
+          Math.round(dragStartXRef.current / WHEEL_STEP) * WHEEL_STEP;
         returningRef.current = true;
         scrollRef.current?.scrollTo({ x: home, animated: true });
         // Por si la vuelta no dispara fin de inercia: se da por asentada.
@@ -1181,14 +1185,14 @@ const makeStyles = () =>
       justifyContent: 'center',
     },
     name: {
-      fontSize: 10.5,
+      fontSize: NAME_FONT_SIZE,
       fontWeight: '800',
       lineHeight: NAME_LINE_HEIGHT,
       color: theme.colors.text,
       textAlign: 'center',
     },
     nameCompact: {
-      fontSize: 13,
+      fontSize: COMPACT_NAME_FONT_SIZE,
       lineHeight: COMPACT_NAME_LINE_HEIGHT,
     },
     nameEmpty: {

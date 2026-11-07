@@ -200,6 +200,11 @@ register({
   Claro: 'Light',
   Idioma: 'Language',
   Novedades: "What's new",
+  'de {name}': 'by {name}',
+  Añadida: 'Added',
+  'Resultados para «{q}»': 'Results for “{q}”',
+  'Nada para «{q}»': 'Nothing for “{q}”',
+  'Cerrar búsqueda': 'Close search',
   'Qué ha cambiado en la última versión': 'What changed in the latest version',
   'Novedades de la versión': "What's new in version",
 
@@ -325,7 +330,7 @@ register({
   'Usar {n}s': 'Use {n}s',
   'Borrar serie {n}': 'Delete set {n}',
   Corregir: 'Edit',
-  '¡Ánimo con tu nueva rutina!': 'Good luck with your new routine!',
+  '¡Ánimo con la rutina!': 'Enjoy the routine!',
 
   // Cardio
   'Añadir cardio': 'Add cardio',
@@ -343,8 +348,6 @@ register({
   '≈ {n} kcal': '≈ {n} kcal',
   'Sin velocidad no se calculan kcal': 'No speed, no kcal estimate',
   Deshacer: 'Undo',
-  'Hoy: {n} kcal': 'Today: {n} kcal',
-  'Hoy: {n} min': 'Today: {n} min',
   'Serie borrada': 'Set deleted',
   'Cardio borrado': 'Cardio deleted',
   Minutos: 'Minutes',
@@ -570,6 +573,10 @@ register({
   'Crear cuenta': 'Create account',
   'Creando…': 'Creating…',
   'Cerrar sesión': 'Sign out',
+  '¿Cerrar sesión?': 'Sign out?',
+  'Cerrando sesión…': 'Signing out…',
+  'Tus entrenos y rutinas se quedan en este móvil y en la nube. Para volver a sincronizar y usar Comunidad tendrás que iniciar sesión otra vez.':
+    'Your workouts and routines stay on this phone and in the cloud. To sync again and use Community you will need to sign in again.',
   Contraseña: 'Password',
   'Guardando…': 'Saving…',
   'Backup guardado en el dispositivo': 'Backup saved on the device',
@@ -814,6 +821,10 @@ register({
 
   // Intensidad de una rutina (nº total de series por semana)
   Intensidad: 'Intensity',
+  intensidad: 'intensity',
+  Enviar: 'Send',
+  Pública: 'Public',
+  Privada: 'Private',
   Todas: 'All',
   Suave: 'Easy',
   Media: 'Moderate',
@@ -1005,7 +1016,6 @@ register({
 
   // Compartir una rutina (QR y texto plano)
   'Copiar en texto plano': 'Copy as plain text',
-  'Por QR o copiando el texto': 'By QR or by copying the text',
   '¿Ya tienes la rutina en otro sitio?': 'Already have the routine elsewhere?',
   'o créala a mano': 'or create it by hand',
   'Escanea el QR con la cámara de otro móvil o copia la rutina como texto para pegarla en «Crear a partir de texto plano».':
@@ -1027,15 +1037,10 @@ register({
   'Me gusta': 'Like',
   Anónimo: 'Anonymous',
   'Rutinas públicas': 'Public routines',
-  Pública: 'Public',
-  Privada: 'Private',
-  'En la comunidad': 'In the community',
-  'Aparece en el tablón': 'Shows on the board',
-  'Aparece en el tablón firmada como «Anónimo»':
-    'Shows on the board signed as “Anonymous”',
-  'Solo tú la ves': 'Only you can see it',
-  'Rutina publicada en la comunidad': 'Routine shared with the community',
-  'Rutina retirada de la comunidad': 'Routine removed from the community',
+  'Rutina visible para la comunidad': 'Routine visible to the community',
+  'Rutina oculta para la comunidad': 'Routine hidden from the community',
+  'Ocultar de la comunidad': 'Hide from the community',
+  'Hacer visible para la comunidad': 'Make visible to the community',
   'Crea una cuenta para seguir': 'Create an account to follow',
   'Crea una cuenta para dar like': 'Create an account to like',
   'Crea una cuenta para añadir rutinas': 'Create an account to add routines',
@@ -1043,7 +1048,6 @@ register({
     'Create an account to add routines, like and follow people',
   'Crea una cuenta para seguir a gente y ver aquí sus rutinas.':
     'Create an account to follow people and see their routines here.',
-  'Inicia sesión para compartir': 'Sign in to share',
   '1 seguidor': '1 follower',
   '{n} seguidores': '{n} followers',
   'Aún no hay rutinas': 'No routines yet',
@@ -1112,7 +1116,6 @@ register({
   'Solo la ves tú': 'Only you can see it',
   'Cambiar quién ve tu actividad': 'Change who sees your activity',
   'Sin hitos': 'No milestones',
-  'Ninguna activa': 'None active',
   'Crea la primera': 'Create your first',
   'Sin anotar': 'Not logged',
   'Traer una de la comunidad': 'Get one from the community',
@@ -1241,7 +1244,6 @@ register({
   Actividad: 'Activity',
   '1 rutina': '1 routine',
   '{n} rutinas': '{n} routines',
-  'Rutinas y gente que entrena': 'Routines and people who train',
   '1 logro': '1 achievement',
   '{n} logros': '{n} achievements',
   '1 reto': '1 challenge',
@@ -1305,6 +1307,33 @@ register({
 register({
   Empezar: 'Start',
   'Empezar {day}': 'Start {day}',
+});
+
+// Primera semana de una rutina: lo que se recuerda de otra y la tarjeta de Inicio.
+register({
+  Mejor: 'Best',
+  'La próxima semana verás tu progreso': 'Your progress shows next week',
+  'Tu rutina': 'Your routine',
+  'Tienes avisos': 'You have notifications',
+});
+
+// Comentario automático al cambiar una rutina publicada (lib/routineChanges).
+register({
+  'Cambios en la rutina:': 'Routine changes:',
+  'Nombre: {a} → {b}': 'Name: {a} → {b}',
+  'Descripción: {text}': 'Description: {text}',
+  'Descripción quitada': 'Description removed',
+  'Día quitado: {day}': 'Day removed: {day}',
+  'Día añadido: {day}': 'Day added: {day}',
+  'Día renombrado: {a} → {b}': 'Day renamed: {a} → {b}',
+  'Días reordenados': 'Days reordered',
+  '{day}: quitado {name}': '{day}: removed {name}',
+  '{day}: añadido {name} {scheme}': '{day}: added {name} {scheme}',
+  '{day}: ejercicios reordenados': '{day}: exercises reordered',
+  '…y 1 cambio más': '…and 1 more change',
+  '…y {n} cambios más': '…and {n} more changes',
+  'No se pudo publicar el comentario con los cambios':
+    'Could not post the comment with the changes',
 });
 
 // Póster de la semana: lo que no cabe en la columna de retos o logros.

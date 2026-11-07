@@ -16,8 +16,8 @@ interface HistoryCardProps {
 /**
  * Marco de una tarjeta de historial (una sesión de un día): fondo, borde,
  * sombra y el resalte de "hoy". Compartido por la tarjeta de día de Inicio
- * (fuerza, un `HistoryCardRow`) y la de Cardio (fecha + kcal arriba, un
- * `HistoryCardRow` por disciplina debajo si hay más de una) para que dejen
+ * (fuerza, un `HistoryCardRow`) y la de Cardio (un `HistoryCardRow` por
+ * disciplina y, si hay más de una, `HistoryCardHeader` encima) para que dejen
  * de divergir en tamaño y trato visual.
  */
 export function HistoryCard({
@@ -42,12 +42,33 @@ export function HistoryCard({
   );
 }
 
+/** Cabecera de un día con varias filas: la fecha es del día entero, no de una
+ * de ellas (bajo la primera se leía como suya), y a la derecha lo que suman. */
+export function HistoryCardHeader({
+  date,
+  total,
+}: {
+  date: string;
+  total: string;
+}) {
+  return (
+    <View style={styles.header}>
+      <Text style={styles.headerDate} numberOfLines={1}>
+        {date}
+      </Text>
+      <Text style={styles.headerTotal} numberOfLines={1}>
+        {total}
+      </Text>
+    </View>
+  );
+}
+
 interface HistoryCardRowProps {
   icon: ReactNode;
   title: string;
   /** Mismo formato en Inicio y Cardio: `weekdayDayMonth` ("Dom 4 oct"). Se
    * omite en las filas de disciplina de un día de Cardio con varias, donde
-   * la fecha ya la lleva la cabecera del día. */
+   * la fecha ya la lleva `HistoryCardHeader`. */
   date?: string;
   right?: ReactNode;
   /** Separación con la fila anterior: solo la llevan las filas de
@@ -108,6 +129,29 @@ const makeStyles = () =>
     },
     cardPressed: {
       opacity: 0.8,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 10,
+      paddingBottom: 8,
+      marginBottom: 10,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: theme.colors.border,
+    },
+    headerDate: {
+      flexShrink: 1,
+      fontSize: 14,
+      fontWeight: '600',
+      lineHeight: 18,
+      color: theme.colors.textSecondary,
+    },
+    headerTotal: {
+      fontSize: 15,
+      fontWeight: '800',
+      lineHeight: 18,
+      color: theme.colors.primary,
     },
     row: {
       flexDirection: 'row',

@@ -4,6 +4,10 @@
 
 ### Arquitectura
 
+- **Tabla `comment_reads`** (`supabase/social-schema.sql`): hasta dónde ha leído
+  cada persona cada hilo, con RLS de dueño. Va fuera del sync: solo sirve con red,
+  igual que los comentarios. Sin ella la app sigue funcionando, pero los
+  comentarios no avisan ni salen en amarillo. **SQL ya ejecutado en Supabase** (2026-11-05, verificado con curl).
 - **`log_sets.is_extra`** (SQLite v11, `ParsedSet.extra`): marca la serie de
   más sobre el objetivo. Anulable, como `catalog_id`: NULL se lee como "no es
   extra". En el texto (`rawInput`) la extra lleva un `*` final ("55x10\*"), con
@@ -103,6 +107,24 @@
 
 ### Nuevas funcionalidades
 
+- **Los avisos llevan a lo que anuncian.** En Comunidad hay un aviso por rutina
+  con novedades, que abre la rutina (en el primer comentario sin leer si los
+  hay), y otro de seguidores, que abre la lista; antes uno solo llevaba a tu
+  perfil. La notificación del peso abre Peso (antes dejaba en Inicio).
+- **Comentarios sin leer en amarillo.** Lo escrito por otras personas sale en
+  amarillo la primera vez que abres el hilo. Se cuenta por lo leído en cada
+  rutina, en la nube (`comment_reads`), no comparando totales: vale en todos tus
+  móviles, el aviso sigue hasta que abres el hilo y tus comentarios no cuentan.
+  Una rutina ajena abierta por primera vez no resalta nada.
+- **Punto dorado en Comunidad.** Con avisos pendientes, su pestaña lleva un punto
+  (`useCommunityNews`), sin haber entrado: se mira al abrir la app y al volver.
+  Cada aviso sigue pendiente hasta que se toca.
+- **Los cambios de una rutina publicada se cuentan en su hilo.** Al terminar de
+  editarla ("Hecho", "Volver" o atrás), un comentario de su autor resume lo
+  cambiado: ejercicio por ejercicio, series×reps, añadidos, quitados, días y
+  orden (`lib/routineChanges.ts`, hasta 500 caracteres y "…y N cambios más").
+  Sin cambios no se escribe nada. Sin red no se reintenta: si falla al enviarlo
+  sale un aviso, y si la pantalla se abrió sin red no sabe que es pública y calla.
 - **Cambiar la contraseña con la sesión iniciada.** En Datos y nube, popup con
   la actual y la nueva (`PasswordField`, con ojo). Comprueba la actual
   (`verifyCurrentPassword`) y al terminar cierra las demás sesiones. Los dos
@@ -199,6 +221,52 @@
 
 ### Cambios
 
+- **Comunidad más clara** (revisión de la vista, 5 cambios):
+  - **Tarjeta del tablón:** "de {autor}" bajo el nombre (con la foto, lleva a
+    su perfil); burbuja de **días** en vez de la de series (la intensidad ya
+    sale de ellas; siguen en la ficha pública); "Añadir" con rótulo y
+    contorno de oro, al final del pie. `getRoutineSetTotals` pasa a
+    `getRoutinePlanStats` (series y días en el mismo lote).
+  - **Cabecera:** las novedades de tus rutinas en una sola tarjeta
+    "Novedades" (antes un banner de oro por rutina); los seguidores nuevos,
+    un "+N" sobre su contador; subtítulo con dato vivo ("Populares · 50
+    rutinas") en vez del eslogan; un solo "Crear cuenta" sin sesión.
+  - **Filtro de intensidad** con el rayo y el color de cada tramo, como la
+    píldora de las tarjetas; chips de 36 px.
+  - **Búsqueda:** el campo justo bajo el raíl y los resultados en un panel
+    propio ("Resultados para «…»", con su ×); un solo "Nada para «…»".
+  - **Primera carga** con tarjetas fantasma (`PublicRoutineCardSkeleton`).
+- **Cerrar sesión desde Perfil, y siempre con confirmación.** Una X roja junto
+  al lápiz de la tarjeta de perfil cierra la sesión; ahí y en Datos y nube pasa
+  antes por el mismo popup "¿Cerrar sesión?" (`SignOutConfirmModal`).
+- **Hero de Cardio con sesión hoy.** "Hoy" pasa a rótulo pequeño delante de la
+  cifra ("HOY 211 kcal") y una píldora "+ Añadir" deja claro que tocarla suma
+  otra sesión (`HeroCard`: `titleLabel` y `addHint`).
+- **Ficha de rutina rediseñada.** Nombre a todo el ancho, descripción en gris,
+  ejercicios / series por semana / intensidad en tres casillas iguales y, al
+  pie, dos botones con rótulo: "Enviar" (tres puntos unidos, QR o texto) y el
+  candado "Privada"/"Pública" (en oro si está en Comunidad), con el aviso
+  "Rutina visible/oculta para la comunidad". Sustituyen a las dos filas del pie.
+- **Ficha de rutina: la barra dice "Rutina".** El nombre baja a la tarjeta de
+  información, como en edición; en la barra un nombre normal salía cortado.
+- **Comentarios del más nuevo al más antiguo**, con la caja de escribir arriba:
+  lo que envías aparece el primero. `getRoutineComments` trae los 100 últimos.
+- **Perfil → Rutinas dice cuántas hay guardadas** ("3 rutinas"; sin ninguna,
+  "Crea la primera"), en vez de la semana de la activa.
+- **"Mejor" en lo que se recuerda de otra rutina.** Lo hecho en otra rutina u
+  otro día (primera semana, ejercicio nuevo) ya no sale como "Anterior" con la
+  última sesión, sino como "Mejor" con la de mejor serie
+  (`pickBestExerciseLog`). El peso sugerido sigue saliendo de la última.
+- **Primera semana en Inicio.** La tarjeta de gráfica lleva el ánimo como título
+  y a la derecha, en pequeño, cuándo empieza a medir, sin crecer de alto; antes
+  "Progreso / sem…" y el ánimo se cortaban.
+- **Subtítulo de Rutinas en Perfil.** La semana de la rutina activa en vez de
+  su nombre, que no cabía.
+- **Nombres enteros en las casillas de ejercicio.** Bajan de letra hasta caber
+  (`FitText`, `lib/textFit.ts`) en vez de cortarse con "…". No se usa
+  `adjustsFontSizeToFit`: en Android encoge de más.
+- **Cardio con varias disciplinas.** La fecha y la suma de kcal van en una
+  cabecera del día (`HistoryCardHeader`), no bajo la primera disciplina.
 - **"Te toca" arriba en la semana.** La tarjeta del día que toca va la primera
   del cuerpo de la semana en curso (`buildWeekEntries` la pone delante en vez
   de en su hueco por número de día). Sigue siendo pulsable entera.

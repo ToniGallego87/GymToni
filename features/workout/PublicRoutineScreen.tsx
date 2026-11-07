@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -59,6 +59,8 @@ import { readSocialCache, writeSocialCache } from '@lib/socialCache';
 import { useMyProfile } from '@hooks/useMyProfile';
 import {
   addRoutineComment,
+  getCommentReads,
+  markCommentsRead,
   COMMENT_MAX_LENGTH,
   deleteRoutineComment,
   DELETED_ACCOUNT_ID,
@@ -77,6 +79,7 @@ import {
   RoutineComment,
 } from '@lib/cloud/social';
 import { hideId, loadHiddenIds } from '@lib/moderation';
+import { readCommentThread } from '@lib/communityNews';
 
 // Mismos tiempos que la ficha de una rutina propia: el pliegue de un día se ve
 // igual venga de donde venga.
@@ -99,6 +102,8 @@ interface PublicRoutineScreenProps {
   // Dueño de la rutina: hace falta para enlazarla (marcar de quién es) y para
   // poder abrir su perfil desde aquí.
   ownerId?: string;
+  // Se viene de un aviso de comentarios: abre en el primero sin leer.
+  focusNewComments?: boolean;
   onBack: () => void;
   onOpenProfile?: (userId: string, name: string) => void;
   // Pantalla de cuenta (Datos y nube): destino del aviso de "inicia sesión"
@@ -122,6 +127,7 @@ export function PublicRoutineScreen({
   name,
   authorName,
   ownerId,
+  focusNewComments,
   onBack,
   onOpenProfile,
   onOpenAccount,
@@ -161,6 +167,10 @@ export function PublicRoutineScreen({
     Map<string, ProfileLite>
   >(() => new Map());
   const [loadingComments, setLoadingComments] = useState(true);
+  // Sin leer al abrir: salen en amarillo esta vez y ya quedan leídos.
+  const [newCommentIds, setNewCommentIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [commentText, setCommentText] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
   const [commentToDeleteId, setCommentToDeleteId] = useState<string | null>(
@@ -354,12 +364,38 @@ export function PublicRoutineScreen({
     }
   };
 
+  // Qué sale en amarillo y hasta dónde queda leído. Sin resaltar no pasa nada:
+  // que falle no puede dejar el hilo sin pintar.
+  const noteCommentsRead = useCallback(
+    async (rows: RoutineComment[]) => {
+      if (!user) return;
+      try {
+        const reads = await getCommentReads(user.id, [routineId]);
+        const { fresh, readAt } = readCommentThread(
+          rows,
+          user.id,
+          reads.get(routineId),
+          user.id === ownerId,
+          Date.now()
+        );
+        setNewCommentIds(new Set(fresh.map((c) => c.id)));
+        if (readAt !== null) {
+          await markCommentsRead(user.id, routineId, readAt);
+        }
+      } catch {
+        // Sin red: se resaltará la próxima vez.
+      }
+    },
+    [routineId, user?.id, ownerId]
+  );
+
   // Comentarios y las fichas de quienes los escribieron (una consulta por lote
   // para todo el hilo, no una por comentario).
   const loadComments = useCallback(async () => {
     setLoadingComments(true);
     try {
       const rows = await getRoutineComments(routineId);
+      await noteCommentsRead(rows);
       setComments(rows);
       const authors = await getProfilesByIds(rows.map((c) => c.user_id));
       setCommentAuthors(authors);
@@ -370,7 +406,7 @@ export function PublicRoutineScreen({
     } finally {
       setLoadingComments(false);
     }
-  }, [routineId]);
+  }, [routineId, noteCommentsRead]);
 
   useEffect(() => {
     loadComments();
@@ -437,7 +473,7 @@ export function PublicRoutineScreen({
     setSendingComment(true);
     try {
       const created = await addRoutineComment(routineId, user.id, text);
-      setComments((previous) => [...previous, created]);
+      setComments((previous) => [created, ...previous]);
       setCommentText('');
       // Mi propia ficha, para que el comentario recién enviado salga con mi
       // nombre y mi foto sin volver a pedir los perfiles del hilo.
@@ -486,6 +522,37 @@ export function PublicRoutineScreen({
     (comment) => !hiddenIds.has(comment.id)
   );
 
+  // Abrir en los comentarios nuevos: al primero sin leer o, si ya no queda
+  // ninguno, al hilo. Con el plan aún cargando la posición no es la buena.
+  const firstNewCommentId = visibleComments.find((c) => newCommentIds.has(c.id))
+    ?.id;
+  const scrollRef = useRef<Animated.ScrollView>(null);
+  const commentsTopRef = useRef<number | null>(null);
+  const firstNewTopRef = useRef<number | null>(null);
+  const focusPendingRef = useRef(!!focusNewComments);
+  const scrollToNewComments = () => {
+    const blockTop = commentsTopRef.current;
+    const rowTop = firstNewCommentId ? firstNewTopRef.current : 0;
+    if (
+      !focusPendingRef.current ||
+      loading ||
+      loadingComments ||
+      blockTop === null ||
+      rowTop === null
+    ) {
+      return;
+    }
+    focusPendingRef.current = false;
+    scrollRef.current?.scrollTo({
+      y: Math.max(
+        0,
+        blockTop + rowTop - topBarHeight - GLASS_TOP_BAR_CONTENT_GAP
+      ),
+      animated: true,
+    });
+  };
+  useEffect(scrollToNewComments, [loading, loadingComments, firstNewCommentId]);
+
   const savedRoutine = findSavedRoutine(state.routines, routineId);
   const saved = !!savedRoutine;
   // Quitarla solo si es el ENLACE (no una copia tuya, que ya es otra rutina) y
@@ -513,6 +580,7 @@ export function PublicRoutineScreen({
       />
 
       <StretchScrollView
+        ref={scrollRef}
         style={styles.scroll}
         contentContainerStyle={[
           styles.content,
@@ -764,7 +832,13 @@ export function PublicRoutineScreen({
             rutina que se acaba de leer, así que primero el plan y luego la
             conversación sobre él. */}
         {!error && (
-          <View style={styles.commentsBlock}>
+          <View
+            style={styles.commentsBlock}
+            onLayout={(e) => {
+              commentsTopRef.current = e.nativeEvent.layout.y;
+              scrollToNewComments();
+            }}
+          >
             <View style={styles.commentsHeader}>
               <MaterialCommunityIcons
                 name="comment-multiple-outline"
@@ -778,6 +852,49 @@ export function PublicRoutineScreen({
               </Text>
             </View>
 
+            {/* Escribir, arriba: el hilo va del más nuevo al más antiguo y lo
+                que envías aparece justo debajo. Sin sesión no se esconde la
+                caja: se dice qué falta y se lleva a arreglarlo, como el resto
+                de avisos de Comunidad. */}
+            {user ? (
+              <View style={styles.commentInputRow}>
+                <TextInput
+                  style={styles.commentInput}
+                  placeholder={t('Escribe un comentario')}
+                  placeholderTextColor={theme.colors.textMuted}
+                  value={commentText}
+                  onChangeText={setCommentText}
+                  multiline
+                  maxLength={COMMENT_MAX_LENGTH}
+                />
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.commentSend,
+                    (!commentText.trim() || sendingComment) &&
+                      styles.commentSendDisabled,
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={handleSendComment}
+                  disabled={!commentText.trim() || sendingComment}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Enviar comentario')}
+                >
+                  <MaterialCommunityIcons
+                    name="send"
+                    size={20}
+                    color={theme.colors.onGold}
+                  />
+                </Pressable>
+              </View>
+            ) : (
+              <Button
+                title={t('Crea una cuenta para comentar')}
+                variant="secondary"
+                size="medium"
+                onPress={() => onOpenAccount?.()}
+              />
+            )}
+
             {loadingComments ? (
               <Text style={styles.muted}>{t('Cargando…')}</Text>
             ) : visibleComments.length === 0 ? (
@@ -786,7 +903,18 @@ export function PublicRoutineScreen({
               </Text>
             ) : (
               visibleComments.map((comment) => (
-                <View key={comment.id} style={styles.commentRow}>
+                <View
+                  key={comment.id}
+                  style={styles.commentRow}
+                  onLayout={
+                    comment.id === firstNewCommentId
+                      ? (e) => {
+                          firstNewTopRef.current = e.nativeEvent.layout.y;
+                          scrollToNewComments();
+                        }
+                      : undefined
+                  }
+                >
                   <Pressable
                     style={({ pressed }) => [
                       styles.commentWho,
@@ -823,7 +951,14 @@ export function PublicRoutineScreen({
                         {formatAgo(comment.created_at)}
                       </Text>
                     </View>
-                    <Text style={styles.commentText}>{comment.body}</Text>
+                    <Text
+                      style={[
+                        styles.commentText,
+                        newCommentIds.has(comment.id) && styles.commentTextNew,
+                      ]}
+                    >
+                      {comment.body}
+                    </Text>
                   </View>
                   {/* Una sola acción por comentario: si puedes borrarlo (es tuyo
                       o es tu rutina), la papelera; si no, reportarlo. */}
@@ -870,47 +1005,6 @@ export function PublicRoutineScreen({
                   )}
                 </View>
               ))
-            )}
-
-            {/* Escribir. Sin sesión no se esconde la caja: se dice qué falta y
-                se lleva a arreglarlo, como el resto de avisos de Comunidad. */}
-            {user ? (
-              <View style={styles.commentInputRow}>
-                <TextInput
-                  style={styles.commentInput}
-                  placeholder={t('Escribe un comentario')}
-                  placeholderTextColor={theme.colors.textMuted}
-                  value={commentText}
-                  onChangeText={setCommentText}
-                  multiline
-                  maxLength={COMMENT_MAX_LENGTH}
-                />
-                <Pressable
-                  style={({ pressed }) => [
-                    styles.commentSend,
-                    (!commentText.trim() || sendingComment) &&
-                      styles.commentSendDisabled,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={handleSendComment}
-                  disabled={!commentText.trim() || sendingComment}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('Enviar comentario')}
-                >
-                  <MaterialCommunityIcons
-                    name="send"
-                    size={20}
-                    color={theme.colors.onGold}
-                  />
-                </Pressable>
-              </View>
-            ) : (
-              <Button
-                title={t('Crea una cuenta para comentar')}
-                variant="secondary"
-                size="medium"
-                onPress={() => onOpenAccount?.()}
-              />
             )}
           </View>
         )}
@@ -1199,6 +1293,7 @@ const makeStyles = () =>
       lineHeight: 21,
       color: theme.colors.textSecondary,
     },
+    commentTextNew: { color: theme.colors.primary },
     commentDelete: { paddingTop: 4 },
     commentInputRow: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
     commentInput: {

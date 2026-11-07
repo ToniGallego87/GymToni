@@ -98,7 +98,11 @@ import { requestLevelPulse } from '@lib/levelPulse';
 import { setAchievementsOpener } from '@lib/achievementsLink';
 import { readJsonFromFile, downloadJsonFile } from '@lib/fileIO';
 import { isAutoBackupDue, readAutoBackup, runAutoBackup } from '@lib/backup';
-import { loadBodyWeight, maybeNotifyStaleWeight } from '@lib/bodyWeight';
+import {
+  loadBodyWeight,
+  maybeNotifyStaleWeight,
+  STALE_WEIGHT_SOURCE,
+} from '@lib/bodyWeight';
 import {
   rescheduleWorkoutReminders,
   WORKOUT_REMINDER_SOURCE,
@@ -116,6 +120,11 @@ import { subscribeTheme } from '@lib/themeStore';
 import { t, useLanguageVersion } from '@lib/i18n';
 import { CHANGELOG, ChangelogEntry } from '@data/changelog';
 import { useCloudSync } from '@hooks/useCloudSync';
+import {
+  useCommunityNews,
+  useCommunityNewsRefresh,
+} from '@hooks/useCommunityNews';
+import { hasCommunityNews } from '@lib/communityNews';
 import { startSession } from '@lib/cloud/auth';
 import { DELETED_ACCOUNT_ID } from '@lib/cloud/social';
 import {
@@ -202,6 +211,8 @@ type Screen =
       authorName?: string;
       // Dueño de la rutina: hace falta para enlazarla y para abrir su perfil.
       ownerId?: string;
+      // Se viene del aviso de comentarios nuevos: abre en ellos.
+      focusNewComments?: boolean;
       // Vista desde la que se abrió, para volver a ella y no siempre al tablón.
       back:
         | { type: 'community' }
@@ -990,6 +1001,10 @@ function AppContent({ onReady }: { onReady: () => void }) {
       openSuggestedWorkout();
       return;
     }
+    if (data?.source === STALE_WEIGHT_SOURCE) {
+      setScreen({ type: 'body-weight' });
+      return;
+    }
     if (!data || data.source !== 'rest-timer') return;
 
     const dayId = typeof data.dayId === 'string' ? data.dayId : undefined;
@@ -1356,13 +1371,20 @@ function AppContent({ onReady }: { onReady: () => void }) {
       <CommunityScreen
         active={communityActive}
         onOpenProfile={(userId, name) => openProfile(userId, name)}
-        onOpenRoutine={(routineId, name, authorName, ownerId) =>
+        onOpenRoutine={(
+          routineId,
+          name,
+          authorName,
+          ownerId,
+          focusNewComments
+        ) =>
           setScreen({
             type: 'public-routine',
             routineId,
             name,
             authorName,
             ownerId,
+            focusNewComments,
             back: { type: 'community' },
           })
         }
@@ -1731,6 +1753,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
             name={screen.name}
             authorName={screen.authorName}
             ownerId={screen.ownerId}
+            focusNewComments={screen.focusNewComments}
             onBack={() => setScreen(screen.back)}
             onOpenProfile={(userId, name) => openProfile(userId, name, screen)}
             onOpenAccount={() => setScreen({ type: 'data', back: screen })}
@@ -1870,6 +1893,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
 function CloudSync({ enabled }: { enabled: boolean }) {
   const { dispatch, state } = useWorkout();
   useCloudSync(dispatch, state.routines, enabled);
+  useCommunityNewsRefresh(enabled);
   useForgetSignedOutAccount();
   return null;
 }
@@ -1894,12 +1918,17 @@ function AccountLevelRecorder() {
 function PrimaryNav(
   props: Omit<
     React.ComponentProps<typeof FloatingPrimaryNav>,
-    'profileAvatarUri'
+    'profileAvatarUri' | 'communityNews'
   >
 ) {
   const { profile } = useMyProfile();
+  const news = useCommunityNews();
   return (
-    <FloatingPrimaryNav {...props} profileAvatarUri={profile?.avatar_url} />
+    <FloatingPrimaryNav
+      {...props}
+      profileAvatarUri={profile?.avatar_url}
+      communityNews={hasCommunityNews(news)}
+    />
   );
 }
 

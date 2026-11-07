@@ -975,8 +975,10 @@ export function HomeScreen({
           filteredWeeklyProgress.length > 0 &&
           (() => {
             // Primera semana de la rutina: no hay semana previa con la que
-            // comparar, así que la tarjeta no se despliega (no hay gráfico útil),
-            // sin flecha ni porcentaje, solo un mensaje de ánimo.
+            // comparar, así que la tarjeta no se despliega (no hay gráfico útil)
+            // y no mide nada: el ánimo es su título y a la derecha se dice
+            // cuándo empieza a medir, en una columna de ancho fijo para que no
+            // le quite sitio al título ni crezca la tarjeta.
             const isFirstWeek = filteredWeeklyProgress.length <= 1;
             // El borde de la tarjeta de la gráfica es siempre el acento
             // estructural. El verde/rojo solo aparece en el dato de
@@ -989,8 +991,12 @@ export function HomeScreen({
               <ChartCard
                 style={styles.progressCard}
                 accent={progressAccent}
-                icon="chart-bar"
-                title={t('Progreso / semana')}
+                icon={isFirstWeek ? 'flag-variant-outline' : 'chart-bar'}
+                title={
+                  isFirstWeek
+                    ? t('¡Ánimo con la rutina!')
+                    : t('Progreso / semana')
+                }
                 expandable={canOpenProgressChart}
                 expanded={showWeeklyProgressChart}
                 onToggle={() => {
@@ -999,8 +1005,8 @@ export function HomeScreen({
                 }}
                 right={
                   isFirstWeek ? (
-                    <Text style={styles.progressEncourage} numberOfLines={2}>
-                      {t('¡Ánimo con tu nueva rutina!')}
+                    <Text style={styles.progressFirstWeek} numberOfLines={2}>
+                      {t('La próxima semana verás tu progreso')}
                     </Text>
                   ) : latestPoint ? (
                     // Este % es ACUMULADO: lo subido desde la primera semana de
@@ -1810,15 +1816,15 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: 2,
     },
-    // Dos líneas de 16 = 32, el alto de `ChartCardStat`: la tarjeta colapsada
-    // no crece en la primera semana.
-    progressEncourage: {
-      flexShrink: 1,
+    // Dos líneas de 14 caben en el alto de `ChartCardStat`: la tarjeta mide lo
+    // mismo que el resto de semanas.
+    progressFirstWeek: {
+      width: 104,
       marginLeft: 12,
-      fontSize: 13,
-      fontWeight: '700',
-      color: theme.colors.primary,
-      lineHeight: 16,
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.colors.textSecondary,
+      lineHeight: 14,
       textAlign: 'right',
     },
     weeksSection: {

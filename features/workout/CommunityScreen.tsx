@@ -5,14 +5,12 @@ import {
   StyleSheet,
   Pressable,
   TextInput,
-  ActivityIndicator,
   InteractionManager,
   FlatList,
   RefreshControl,
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
@@ -24,6 +22,8 @@ import {
   GradientFill,
   SegmentedFilter,
   PublicRoutineCard,
+  PublicRoutineCardSkeleton,
+  intensityColor,
   Toast,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
@@ -49,7 +49,7 @@ import {
   unlikeRoutine,
   linkablePublicRoutine,
   DELETED_ACCOUNT_ID,
-  getRoutineSetTotals,
+  getRoutinePlanStats,
   getCommentCounts,
   getSaveCounts,
   recordRoutineSave,
@@ -60,6 +60,13 @@ import {
 } from '@lib/cloud/social';
 import { hasProfileFilled, useMyProfile } from '@hooks/useMyProfile';
 import { loadHiddenIds } from '@lib/moderation';
+import { RoutineNews } from '@lib/communityNews';
+import {
+  dismissFollowersNews,
+  dismissRoutineNews,
+  refreshCommunityNews,
+  useCommunityNews,
+} from '@hooks/useCommunityNews';
 
 interface CommunityScreenProps {
   // La pantalla se mantiene montada (keep-alive) aunque no se vea; `active` dice
@@ -71,7 +78,9 @@ interface CommunityScreenProps {
     routineId: string,
     name: string,
     authorName: string,
-    ownerId: string
+    ownerId: string,
+    // Abrirla en sus comentarios nuevos (viene de un aviso).
+    focusNewComments?: boolean
   ) => void;
   onOpenFollowing?: () => void;
   onOpenFollowers?: () => void;
@@ -95,6 +104,8 @@ interface RoutineItem {
   // por lote para todo el tablón), así que puede faltar en el primer pintado:
   // mientras falta, la tarjeta simplemente no lleva distintivo de intensidad.
   total_sets?: number;
+  // Días de la rutina: mismo lote que las series (burbuja de la tarjeta).
+  total_days?: number;
   // Comentarios del hilo de la rutina. Llega con el mismo lote que las series y
   // es solo informativo: el hilo vive en la ficha de la rutina.
   comments?: number;
@@ -163,7 +174,7 @@ export function CommunityScreen({
     followers: number;
     following: number;
   } | null>(null);
-  const [news, setNews] = useState({ followers: 0, likes: 0, comments: 0 });
+  const news = useCommunityNews();
   // Rutinas y perfiles que TÚ has reportado: no vuelven a aparecerte aquí.
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
@@ -256,6 +267,7 @@ export function CommunityScreen({
                 ? {
                     ...r,
                     total_sets: r.total_sets ?? old.total_sets,
+                    total_days: r.total_days ?? old.total_days,
                     comments: r.comments ?? old.comments,
                     saves: r.saves ?? old.saves,
                   }
@@ -276,13 +288,14 @@ export function CommunityScreen({
         try {
           const ids = rows.map((r) => r.id);
           const [totals, commentCounts, saveCounts] = await Promise.all([
-            getRoutineSetTotals(rows),
+            getRoutinePlanStats(rows),
             getCommentCounts(ids).catch(() => new Map<string, number>()),
             getSaveCounts(ids).catch(() => new Map<string, number>()),
           ]);
           const withMeta = rows.map((r) => ({
             ...r,
-            total_sets: totals.get(r.id),
+            total_sets: totals.get(r.id)?.sets,
+            total_days: totals.get(r.id)?.days,
             comments: commentCounts.get(r.id),
             saves: saveCounts.get(r.id),
           }));
@@ -396,15 +409,6 @@ export function CommunityScreen({
     };
   }, [query]);
 
-  // Qué ha pasado desde la última visita a Comunidad: seguidores nuevos y, en
-  // TUS rutinas publicadas, me gusta y comentarios nuevos. Comparamos los
-  // recuentos actuales con los guardados (por usuario) en AsyncStorage. No es
-  // una notificación push (eso exigiría servidor): es un aviso al abrir la
-  // pantalla. La primera vez se siembra con los valores actuales, para no
-  // anunciar como "nuevo" todo el histórico.
-  //
-  // De paso deja los contadores de seguidores/siguiendo para tu tarjeta de
-  // arriba: es la misma consulta.
   // Los contadores guardados, para pintar la tarjeta ya hecha mientras se
   // confirman con la nube.
   useEffect(() => {
@@ -420,10 +424,10 @@ export function CommunityScreen({
     };
   }, [user?.id]);
 
+  // Contadores de tu tarjeta y, al entrar, los avisos al día.
   useEffect(() => {
     if (!user || !active) return;
     let alive = true;
-    const key = `gymbro_social_seen_${user.id}`;
     // Tras el primer render, para no sumar red al abrir la pantalla.
     const task = InteractionManager.runAfterInteractions(async () => {
       try {
@@ -435,40 +439,7 @@ export function CommunityScreen({
         setSocialCounts({ followers, following });
         writeSocialCache(`counts_${user.id}`, { followers, following });
 
-        // Actividad de lo tuyo: me gusta y comentarios de tus rutinas públicas.
-        let likes = 0;
-        let comments = 0;
-        const mine = await getPublicRoutineIds(user.id);
-        if (mine.length) {
-          const [likeInfo, commentCounts] = await Promise.all([
-            getLikeInfo(mine, user.id),
-            getCommentCounts(mine).catch(() => new Map<string, number>()),
-          ]);
-          for (const id of mine) {
-            likes += likeInfo.get(id)?.likes ?? 0;
-            comments += commentCounts.get(id) ?? 0;
-          }
-        }
-
-        const raw = await AsyncStorage.getItem(key);
-        const seen = raw
-          ? (JSON.parse(raw) as {
-              followers: number;
-              likes: number;
-              comments: number;
-            })
-          : { followers, likes, comments };
-        if (alive) {
-          setNews({
-            followers: Math.max(0, followers - (seen.followers ?? 0)),
-            likes: Math.max(0, likes - (seen.likes ?? 0)),
-            comments: Math.max(0, comments - (seen.comments ?? 0)),
-          });
-        }
-        await AsyncStorage.setItem(
-          key,
-          JSON.stringify({ followers, likes, comments })
-        );
+        await refreshCommunityNews(user.id);
       } catch {
         // Sin red: no se avisa esta vez.
       }
@@ -578,33 +549,53 @@ export function CommunityScreen({
   const followersLabel =
     socialCounts?.followers === 1 ? t('Seguidor') : t('Seguidores');
 
-  // Aviso de novedades: una sola frase con lo que haya (seguidores, me gusta y
-  // comentarios). Si no hay nada nuevo, no hay aviso.
-  const newsLabel = (() => {
+  // Novedades de tus rutinas (comentarios y me gusta), una fila por rutina en
+  // UNA tarjeta: antes cada una era un banner de oro macizo y, con varias, el
+  // tablón empezaba a media pantalla. Los seguidores nuevos no van aquí: son
+  // un "+N" sobre su contador, que ya lleva a esa misma lista.
+  const routineNewsLabel = (routine: RoutineNews) => {
     const parts: string[] = [];
-    if (news.followers > 0) {
+    if (routine.comments > 0) {
       parts.push(
-        news.followers === 1
-          ? t('1 nuevo seguidor')
-          : t('{n} nuevos seguidores', { n: news.followers })
-      );
-    }
-    if (news.likes > 0) {
-      parts.push(
-        news.likes === 1
-          ? t('1 me gusta nuevo')
-          : t('{n} me gusta nuevos', { n: news.likes })
-      );
-    }
-    if (news.comments > 0) {
-      parts.push(
-        news.comments === 1
+        routine.comments === 1
           ? t('1 comentario nuevo')
-          : t('{n} comentarios nuevos', { n: news.comments })
+          : t('{n} comentarios nuevos', { n: routine.comments })
+      );
+    }
+    if (routine.likes > 0) {
+      parts.push(
+        routine.likes === 1
+          ? t('1 me gusta nuevo')
+          : t('{n} me gusta nuevos', { n: routine.likes })
       );
     }
     return parts.join(' · ');
-  })();
+  };
+  const newsItems = news.routines.map((routine) => {
+    const name =
+      state.routines.find((r) => r.id === routine.id)?.name ?? t('Tu rutina');
+    return {
+      key: routine.id,
+      name,
+      detail: routineNewsLabel(routine),
+      onPress: () => {
+        if (!user) return;
+        dismissRoutineNews(user.id, routine.id);
+        onOpenRoutine?.(
+          routine.id,
+          name,
+          myName,
+          user.id,
+          routine.comments > 0
+        );
+      },
+    };
+  });
+  // Abrir Seguidores descarta su aviso (como hacía el banner).
+  const openFollowers = () => {
+    if (user && news.followers > 0) dismissFollowersNews(user.id);
+    onOpenFollowers?.();
+  };
 
   const renderUserRow = (p: ProfileLite) => (
     <Pressable
@@ -652,16 +643,14 @@ export function CommunityScreen({
     />
   );
 
-  // Las cuatro intensidades. Ya no son un SegmentedFilter: ver `filterChip`.
-  const intensityOptions: {
-    id: IntensityFilter;
-    label: string;
-    icon?: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
-  }[] = [
+  // Las cuatro intensidades, con el rayo y el color de cada tramo: lo mismo que
+  // la píldora de las tarjetas, para que al filtrar "Intensa" se reconozca la
+  // píldora roja de lo que queda. Antes eran velocímetros en oro.
+  const intensityOptions: { id: IntensityFilter; label: string }[] = [
     { id: 'all', label: t('Todas') },
-    { id: 'soft', label: t('Suave'), icon: 'speedometer-slow' },
-    { id: 'medium', label: t('Media'), icon: 'speedometer-medium' },
-    { id: 'hard', label: t('Intensa'), icon: 'speedometer' },
+    { id: 'soft', label: t('Suave') },
+    { id: 'medium', label: t('Media') },
+    { id: 'hard', label: t('Intensa') },
   ];
 
   // Cabecera fija de la lista (aviso + buscador + personas + pestañas). Va como
@@ -695,16 +684,31 @@ export function CommunityScreen({
               llegaba a "Seguidores" por el aviso, y solo cuando subía. */}
           <Pressable
             style={({ pressed }) => [styles.meCount, pressed && styles.pressed]}
-            onPress={onOpenFollowers}
+            onPress={openFollowers}
             disabled={!onOpenFollowers}
             hitSlop={6}
             accessibilityRole="button"
-            accessibilityLabel={followersLabel}
+            accessibilityLabel={
+              news.followers > 0
+                ? `${followersLabel}. ${
+                    news.followers === 1
+                      ? t('1 nuevo seguidor')
+                      : t('{n} nuevos seguidores', { n: news.followers })
+                  }`
+                : followersLabel
+            }
           >
             <Text style={styles.meCountValue}>
               {socialCounts?.followers ?? '—'}
             </Text>
             <Text style={styles.meCountLabel}>{followersLabel}</Text>
+            {/* Seguidores nuevos desde la última visita: antes un banner de
+                oro aparte que llevaba a esta misma lista. */}
+            {news.followers > 0 && (
+              <View style={styles.newBadge}>
+                <Text style={styles.newBadgeText}>+{news.followers}</Text>
+              </View>
+            )}
           </Pressable>
           <Pressable
             style={({ pressed }) => [styles.meCount, pressed && styles.pressed]}
@@ -750,39 +754,54 @@ export function CommunityScreen({
         </View>
       )}
 
-      {/* Qué ha pasado desde la última visita. Un solo aviso para las tres
-          cosas: seguidores, me gusta y comentarios en tus rutinas. Publicar
-          dejaba de tener respuesta en cuanto cerrabas la app. */}
-      {!!newsLabel && (
-        <Pressable
-          style={({ pressed }) => [
-            styles.newFollowersBanner,
-            pressed && styles.pressed,
-          ]}
-          onPress={() => {
-            setNews({ followers: 0, likes: 0, comments: 0 });
-            if (user) onOpenProfile?.(user.id, myName);
-          }}
-        >
-          <MaterialCommunityIcons
-            name="bell-ring-outline"
-            size={20}
-            color={theme.colors.onGold}
-          />
-          <Text style={styles.newFollowersText}>{newsLabel}</Text>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={20}
-            color={theme.colors.onGold}
-          />
-        </Pressable>
+      {/* Qué ha pasado en tus rutinas desde la última visita (comentarios y
+          me gusta), en UNA tarjeta: una fila por rutina, que la abre (en los
+          comentarios nuevos si los hay) y descarta su aviso. */}
+      {newsItems.length > 0 && (
+        <View style={styles.newsCard}>
+          <GradientFill accent={theme.colors.primaryLine} />
+          <View style={styles.newsHead}>
+            <MaterialCommunityIcons
+              name="bell-ring-outline"
+              size={16}
+              color={theme.colors.primary}
+            />
+            <Text style={styles.newsTitle}>{t('Novedades')}</Text>
+          </View>
+          {newsItems.map((item, index) => (
+            <Pressable
+              key={item.key}
+              style={({ pressed }) => [
+                styles.newsRow,
+                index > 0 && styles.newsRowDivided,
+                pressed && styles.pressed,
+              ]}
+              onPress={item.onPress}
+              accessibilityRole="button"
+              accessibilityLabel={`${item.name}: ${item.detail}`}
+            >
+              <View style={styles.newsRowText}>
+                <Text style={styles.newsRowName} numberOfLines={1}>
+                  {item.name}
+                </Text>
+                <Text style={styles.newsRowDetail} numberOfLines={1}>
+                  {item.detail}
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={theme.colors.textSecondary}
+              />
+            </Pressable>
+          ))}
+        </View>
       )}
 
-      {/* Un solo raíl por defecto: de dónde salen las rutinas. La intensidad
-          es un segundo eje que casi nadie toca, así que vive tras su botón
-          (visible, con su icono y su estado) y solo baja cuando se abre —o
-          cuando hay un filtro puesto, para que nunca quede un filtro activo
-          escondido. */}
+      {/* Un solo raíl por defecto: de dónde salen las rutinas. Buscar y la
+          intensidad son puntuales y viven tras sus botones (visibles, con su
+          icono y su estado); lo suyo baja al abrirlos —o mientras haya algo
+          puesto, para que nunca quede un filtro activo escondido—. */}
       <View style={styles.railRow}>
         <SegmentedFilter
           style={styles.railFilter}
@@ -793,19 +812,15 @@ export function CommunityScreen({
           value={tab}
           onChange={(id) => setTab(id as Tab)}
         />
-        {/* Buscar personas es puntual, así que se pliega tras su lupa en vez de
-            ocupar una caja de 46 px permanente encima del tablón. Mismo patrón
-            que el botón de intensidad, con el que comparte fila: control
-            visible con su icono y su estado, contenido que baja al abrirlo. */}
         <Pressable
           style={({ pressed }) => [
-            styles.intensityButton,
-            (searchOpen || showingSearch) && styles.intensityButtonActive,
+            styles.railButton,
+            (searchOpen || showingSearch) && styles.railButtonActive,
             pressed && styles.pressed,
           ]}
           onPress={() => {
-            // Al cerrar se vacía la búsqueda: si no, el tablón se quedaría
-            // filtrado por un texto que ya no se ve en ninguna parte.
+            // Al cerrar se vacía la búsqueda: si no, quedaría un filtro puesto
+            // que ya no se ve en ninguna parte.
             if (searchOpen) setQuery('');
             setSearchOpen((open) => !open);
           }}
@@ -821,8 +836,8 @@ export function CommunityScreen({
         </Pressable>
         <Pressable
           style={({ pressed }) => [
-            styles.intensityButton,
-            intensityOpen && styles.intensityButtonActive,
+            styles.railButton,
+            intensityOpen && styles.railButtonActive,
             pressed && styles.pressed,
           ]}
           onPress={() => setIntensityOpen((open) => !open)}
@@ -831,66 +846,28 @@ export function CommunityScreen({
           accessibilityLabel={t('Filtrar por intensidad')}
         >
           <MaterialCommunityIcons
-            name="speedometer"
+            name="lightning-bolt"
             size={20}
             color={
-              intensity === 'all' ? theme.colors.text : theme.colors.primary
+              intensity === 'all'
+                ? theme.colors.text
+                : intensityColor(intensity)
             }
           />
-          {intensity !== 'all' && <View style={styles.intensityDot} />}
+          {intensity !== 'all' && (
+            <View
+              style={[
+                styles.railDot,
+                { backgroundColor: intensityColor(intensity) },
+              ]}
+            />
+          )}
         </Pressable>
       </View>
 
-      {/* La intensidad NO es otro raíl segmentado: eran dos controles gemelos
-          apilados (mismo alto, mismos chips, activo relleno de oro) para dos
-          ejes distintos, y ninguno decía qué filtraba. Aquí va rotulada y en
-          chips de filtro —más pequeños, a la izquierda, con su velocímetro y
-          el activo en oro apagado—, que se leen como lo que son: un filtro
-          sobre la lista que manda el raíl de arriba. */}
-      {(intensityOpen || intensity !== 'all') && (
-        <View style={styles.filterGroup}>
-          <Text style={styles.sectionEyebrow}>{t('Intensidad')}</Text>
-          <View style={styles.filterChips}>
-            {intensityOptions.map((option) => {
-              const activeChip = option.id === intensity;
-              const color = activeChip
-                ? theme.colors.primary
-                : theme.colors.textSecondary;
-              return (
-                <Pressable
-                  key={option.id}
-                  style={({ pressed }) => [
-                    styles.filterChip,
-                    activeChip && styles.filterChipActive,
-                    pressed && styles.pressed,
-                  ]}
-                  onPress={() => setIntensity(option.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected: activeChip }}
-                >
-                  {!!option.icon && (
-                    <MaterialCommunityIcons
-                      name={option.icon}
-                      size={14}
-                      color={color}
-                    />
-                  )}
-                  <Text style={[styles.filterChipText, { color }]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      )}
-
-      {/* El campo de buscar personas, desplegado BAJO los filtros. Antes era una
-          caja permanente encima del tablón para algo puntual; ahora cuelga de su
-          lupa, junto al filtro de intensidad. Sigue montado mientras haya texto
-          aunque se pliegue: un filtro activo no puede quedar escondido (misma
-          regla que la intensidad y su punto). */}
+      {/* El campo de búsqueda, el PRIMERO bajo el raíl: pegado a su lupa.
+          Sigue montado mientras haya texto aunque se pliegue (un filtro activo
+          no puede quedar escondido). */}
       {(searchOpen || showingSearch) && (
         <View style={styles.searchBox}>
           <MaterialCommunityIcons
@@ -925,37 +902,130 @@ export function CommunityScreen({
         </View>
       )}
 
-      {/* Los resultados, pegados a su campo: una sección rotulada con su cierre,
-          y el tablón sigue debajo. Buscar es un filtro temporal, no un modo que
-          sustituya la pantalla. */}
+      {/* La intensidad: rótulo y chips de filtro (no un segundo raíl), cada uno
+          con el rayo y el color de su tramo. */}
+      {(intensityOpen || intensity !== 'all') && (
+        <View style={styles.filterGroup}>
+          <Text style={styles.sectionEyebrow}>{t('Intensidad')}</Text>
+          <View style={styles.filterChips}>
+            {intensityOptions.map((option) => {
+              const activeChip = option.id === intensity;
+              const tone =
+                option.id === 'all'
+                  ? theme.colors.primaryLine
+                  : intensityColor(option.id);
+              return (
+                <Pressable
+                  key={option.id}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    activeChip && {
+                      borderColor: tone,
+                      backgroundColor:
+                        option.id === 'all'
+                          ? theme.colors.primaryMuted
+                          : `${tone}22`,
+                    },
+                    pressed && styles.pressed,
+                  ]}
+                  onPress={() => setIntensity(option.id)}
+                  hitSlop={4}
+                  accessibilityRole="button"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: activeChip }}
+                >
+                  {option.id !== 'all' && (
+                    <MaterialCommunityIcons
+                      name="lightning-bolt"
+                      size={14}
+                      color={tone}
+                    />
+                  )}
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      {
+                        color: activeChip
+                          ? option.id === 'all'
+                            ? theme.colors.primary
+                            : tone
+                          : theme.colors.textSecondary,
+                      },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      )}
+
+      {/* Resultados en un panel propio, con título y su cierre: antes iban con
+          la misma tarjeta justo encima del tablón entero y no se veía dónde
+          acababan. Sigue siendo un filtro temporal: el tablón sigue debajo. */}
       {showingSearch && (
-        <View style={styles.peopleSection}>
-          <Text style={styles.sectionEyebrow}>{t('Personas')}</Text>
-          {searchResults.length > 0 ? (
-            searchResults.map(renderUserRow)
-          ) : (
-            <Text style={styles.muted}>
-              {searching ? t('Buscando…') : t('Sin resultados')}
+        <View style={styles.resultsPanel}>
+          <View style={styles.resultsHead}>
+            <Text style={styles.resultsTitle} numberOfLines={1}>
+              {t('Resultados para «{q}»', { q: query.trim() })}
             </Text>
-          )}
-          <Text style={[styles.sectionEyebrow, styles.sectionEyebrowNext]}>
-            {t('Rutinas')}
-          </Text>
-          {visibleRoutineResults.length > 0 ? (
-            <View style={styles.routineResults}>
-              {visibleRoutineResults.map((item) => (
-                <React.Fragment key={item.id}>
-                  {renderRoutineCard(item)}
-                </React.Fragment>
-              ))}
-            </View>
-          ) : (
+            <Pressable
+              style={({ pressed }) => [
+                styles.resultsClose,
+                pressed && styles.pressed,
+              ]}
+              onPress={() => {
+                setQuery('');
+                setSearchOpen(false);
+              }}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel={t('Cerrar búsqueda')}
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={18}
+                color={theme.colors.textSecondary}
+              />
+            </Pressable>
+          </View>
+          {searchResults.length === 0 && visibleRoutineResults.length === 0 ? (
             <Text style={styles.muted}>
-              {searching ? t('Buscando…') : t('Sin resultados')}
+              {searching
+                ? t('Buscando…')
+                : t('Nada para «{q}»', { q: query.trim() })}
             </Text>
+          ) : (
+            <>
+              {searchResults.length > 0 && (
+                <>
+                  <Text style={styles.sectionEyebrow}>{t('Personas')}</Text>
+                  {searchResults.map(renderUserRow)}
+                </>
+              )}
+              {visibleRoutineResults.length > 0 && (
+                <>
+                  <Text
+                    style={[
+                      styles.sectionEyebrow,
+                      searchResults.length > 0 && styles.sectionEyebrowNext,
+                    ]}
+                  >
+                    {t('Rutinas')}
+                  </Text>
+                  <View style={styles.routineResults}>
+                    {visibleRoutineResults.map((item) => (
+                      <React.Fragment key={item.id}>
+                        {renderRoutineCard(item)}
+                      </React.Fragment>
+                    ))}
+                  </View>
+                </>
+              )}
+            </>
           )}
-          {/* Cierre de la sección: debajo vuelve a empezar el tablón. */}
-          <View style={styles.sectionEnd} />
         </View>
       )}
     </View>
@@ -963,9 +1033,10 @@ export function CommunityScreen({
 
   // Estado vacío de la lista (según buscando / cargando / error / sin datos).
   const listEmpty = loading ? (
-    <View style={styles.loadingBox}>
-      <ActivityIndicator color={theme.colors.primary} />
-      <Text style={styles.muted}>{t('Cargando…')}</Text>
+    <View style={styles.skeletonList}>
+      <PublicRoutineCardSkeleton />
+      <PublicRoutineCardSkeleton />
+      <PublicRoutineCardSkeleton />
     </View>
   ) : error ? (
     <View style={styles.card}>
@@ -1006,15 +1077,8 @@ export function CommunityScreen({
           ? t('Sigue a alguien para ver aquí sus rutinas públicas.')
           : t('Crea una cuenta para seguir a gente y ver aquí sus rutinas.')}
       </Text>
-      {/* Sin sesión, "Siguiendo" no puede llenarse: la salida es la cuenta. */}
-      {tab === 'following' && !user && !!onOpenAccount && (
-        <Button
-          title={t('Crear cuenta')}
-          onPress={onOpenAccount}
-          variant="primary"
-          size="medium"
-        />
-      )}
+      {/* Sin sesión, "Siguiendo" no puede llenarse: la salida es la cuenta,
+          y su botón ya está arriba, en la tarjeta de invitación. */}
     </View>
   );
 
@@ -1031,6 +1095,19 @@ export function CommunityScreen({
             r.total_sets == null || routineIntensity(r.total_sets) === intensity
         )
   ).filter((r) => !hiddenIds.has(r.id) && !hiddenIds.has(r.owner_id));
+
+  // Subtítulo de la barra: un dato vivo, como el resto de pantallas
+  // principales (antes, el eslogan "Rutinas y gente que entrena"). Siempre hay
+  // texto, para que la barra no cambie de alto al llegar el tablón.
+  const tabLabel = tab === 'popular' ? t('Populares') : t('Siguiendo');
+  const boardSubtitle =
+    loading && visibleItems.length === 0
+      ? tabLabel
+      : `${tabLabel} · ${
+          visibleItems.length === 1
+            ? t('1 rutina')
+            : t('{n} rutinas', { n: visibleItems.length })
+        }`;
 
   return (
     <View style={styles.container}>
@@ -1086,7 +1163,7 @@ export function CommunityScreen({
       <GlassTopBar
         title={t('Comunidad')}
         icon="account-group-outline"
-        subtitle={t('Rutinas y gente que entrena')}
+        subtitle={boardSubtitle}
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
@@ -1150,6 +1227,24 @@ const makeStyles = () =>
       marginTop: 2,
     },
     meCount: { alignItems: 'center', minWidth: 54 },
+    // "+N" de seguidores nuevos, en la esquina del contador.
+    newBadge: {
+      position: 'absolute',
+      top: -6,
+      right: -4,
+      minWidth: 22,
+      paddingHorizontal: 5,
+      height: 18,
+      borderRadius: 9,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.primaryFill,
+    },
+    newBadgeText: {
+      color: theme.colors.onGold,
+      fontSize: 11,
+      fontWeight: '800',
+    },
     meCountValue: {
       color: theme.colors.primary,
       fontSize: 17,
@@ -1157,20 +1252,53 @@ const makeStyles = () =>
       lineHeight: 21,
     },
     meCountLabel: { color: theme.colors.textMuted, fontSize: 11 },
-    newFollowersBanner: {
+    // Novedades: tarjeta neutra con borde de oro (no relleno: el oro macizo
+    // es de la acción primaria) y una fila por rutina.
+    newsCard: {
+      borderRadius: theme.borderRadius.md,
+      overflow: 'hidden',
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      paddingHorizontal: 14,
+      paddingTop: 10,
+      paddingBottom: 4,
+    },
+    newsHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginBottom: 2,
+    },
+    newsTitle: {
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      color: theme.colors.primary,
+      lineHeight: 14,
+    },
+    newsRow: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 10,
-      paddingHorizontal: 14,
-      paddingVertical: 12,
-      borderRadius: theme.borderRadius.md,
-      backgroundColor: theme.colors.primaryFill,
+      minHeight: 48,
+      paddingVertical: 6,
     },
-    newFollowersText: {
-      flex: 1,
-      color: theme.colors.onGold,
-      fontSize: 14,
+    newsRowDivided: {
+      borderTopWidth: 1,
+      borderTopColor: theme.colors.border,
+    },
+    newsRowText: { flex: 1, minWidth: 0 },
+    newsRowName: {
+      color: theme.colors.text,
+      fontSize: 15,
       fontWeight: '800',
+    },
+    newsRowDetail: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      marginTop: 1,
     },
     // Caja del buscador de personas, desplegada bajo los filtros. Ya no comparte
     // fila con nada (antes iba junto a un botón de "a quién sigo" que duplicaba
@@ -1192,17 +1320,38 @@ const makeStyles = () =>
       fontSize: 16,
       padding: 0,
     },
-    // Sección de resultados de personas: vive ENCIMA del tablón, no en su
-    // lugar. El separador de abajo es su cierre.
-    peopleSection: { gap: 8 },
-    // "Rutinas" va tras "Personas" en la misma sección: aire para separarlas.
+    // Resultados de la búsqueda: un panel propio (fondo distinto, título y
+    // cierre) encima del tablón, no en su lugar.
+    resultsPanel: {
+      gap: 8,
+      padding: 12,
+      borderRadius: theme.borderRadius.lg,
+      backgroundColor: theme.colors.surfaceAlt,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+    },
+    resultsHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    resultsTitle: {
+      flex: 1,
+      color: theme.colors.text,
+      fontSize: 15,
+      fontWeight: '800',
+    },
+    resultsClose: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: theme.colors.surface,
+    },
+    // "Rutinas" va tras "Personas" en el mismo panel: aire para separarlas.
     sectionEyebrowNext: { marginTop: 8 },
     routineResults: { gap: 10 },
-    sectionEnd: {
-      marginTop: 4,
-      height: 1,
-      backgroundColor: theme.colors.border,
-    },
     // Rótulo de sección/filtro: dice qué es lo que viene debajo. Mismo
     // tratamiento que la ceja "Día N" de la ficha de una rutina.
     sectionEyebrow: {
@@ -1214,27 +1363,22 @@ const makeStyles = () =>
       lineHeight: 14,
     },
     // Filtro de intensidad: rótulo + chips, no un segundo raíl segmentado.
+    // El activo toma el color de su tramo (contorno y velo), como la píldora.
     filterGroup: { gap: 8 },
     filterChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
     filterChip: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 5,
-      paddingHorizontal: 11,
-      paddingVertical: 6,
+      minHeight: 36,
+      paddingHorizontal: 13,
       borderRadius: theme.borderRadius.pill,
       borderWidth: 1,
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.surface,
     },
-    // Activo en oro APAGADO (contorno + fondo velado), no relleno macizo: el
-    // relleno de oro es del raíl de pestañas, que es el control que manda.
-    filterChipActive: {
-      borderColor: theme.colors.primaryLine,
-      backgroundColor: theme.colors.primaryMuted,
-    },
-    filterChipText: { fontSize: 12, fontWeight: '800', letterSpacing: 0.1 },
-    // Raíl de pestañas + botón de intensidad en la misma línea.
+    filterChipText: { fontSize: 13, fontWeight: '800', letterSpacing: 0.1 },
+    // Raíl de pestañas + botones de buscar e intensidad en la misma línea.
     railRow: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1243,7 +1387,7 @@ const makeStyles = () =>
     railFilter: {
       flex: 1,
     },
-    intensityButton: {
+    railButton: {
       width: 42,
       height: 42,
       borderRadius: theme.borderRadius.md,
@@ -1253,19 +1397,18 @@ const makeStyles = () =>
       borderWidth: 1,
       borderColor: theme.colors.border,
     },
-    intensityButtonActive: {
+    railButtonActive: {
       borderColor: theme.colors.primaryLine,
       backgroundColor: theme.colors.primaryMuted,
     },
-    // Punto de "hay un filtro puesto" sobre el icono.
-    intensityDot: {
+    // Punto de "hay un filtro puesto" sobre el icono, del color del tramo.
+    railDot: {
       position: 'absolute',
       top: 6,
       right: 6,
       width: 8,
       height: 8,
       borderRadius: 4,
-      backgroundColor: theme.colors.primaryFill,
     },
     card: {
       borderRadius: theme.borderRadius.lg,
@@ -1298,7 +1441,7 @@ const makeStyles = () =>
     emptyTitle: { color: theme.colors.text, fontSize: 18, fontWeight: '800' },
     hint: { color: theme.colors.textMuted, fontSize: 14, lineHeight: 20 },
     muted: { color: theme.colors.textMuted, fontSize: 14 },
-    loadingBox: { alignItems: 'center', gap: 10, paddingVertical: 28 },
+    skeletonList: { gap: 12 },
   });
 
 let styles = makeStyles();

@@ -439,6 +439,7 @@ export interface PublicRoutineSummary {
   // por las dos puertas (components/PublicRoutineCard.tsx). Llegan en una
   // segunda ronda de consultas, así que son opcionales.
   total_sets?: number;
+  total_days?: number;
   comments?: number;
   saves?: number;
   likes?: number;
@@ -857,17 +858,24 @@ export async function refreshLinkedRoutines(
 // de una rutina pública, así que no hace falta tocar el backend.
 //
 // El resultado alimenta el distintivo Suave/Medio/Intenso del tablón
-// (`routineIntensity` en lib/routines.ts). Se pide en segundo plano, después de
-// pintar la lista: es un adorno, no debe retrasar el tablón.
+// (`routineIntensity` en lib/routines.ts) y la burbuja de días de la tarjeta
+// (los días salen de la primera consulta, gratis). Se pide en segundo plano,
+// después de pintar la lista: es un adorno, no debe retrasar el tablón.
 //
 // Solo cuenta el plan del AUTOR de cada rutina, como `fetchPublicRoutine`: la
 // RLS ya no enseña filas ajenas colgadas de una rutina pública, pero sí las
 // propias de quien mira, y un día suyo con el `routines_id` de otro le sumaría
 // series a esa rutina.
-export async function getRoutineSetTotals(
+export interface RoutinePlanStats {
+  /** Suma de `target_sets`; sin ejercicios no hay dato (no hay intensidad). */
+  sets?: number;
+  days: number;
+}
+
+export async function getRoutinePlanStats(
   routines: { id: string; owner_id: string }[]
-): Promise<Map<string, number>> {
-  const totals = new Map<string, number>();
+): Promise<Map<string, RoutinePlanStats>> {
+  const totals = new Map<string, RoutinePlanStats>();
   const ownerOf = new Map<string, string>();
   for (const r of routines)
     if (r.id && r.owner_id) ownerOf.set(r.id, r.owner_id);
@@ -887,6 +895,8 @@ export async function getRoutineSetTotals(
     const d = row as { id: string; routines_id: string; user_id: string };
     if (ownerOf.get(d.routines_id) !== d.user_id) continue;
     dayInfo.set(d.id, { routineId: d.routines_id, ownerId: d.user_id });
+    const stats = totals.get(d.routines_id) ?? { days: 0 };
+    totals.set(d.routines_id, { ...stats, days: stats.days + 1 });
   }
   if (!dayInfo.size) return totals;
 
@@ -905,10 +915,11 @@ export async function getRoutineSetTotals(
     };
     const day = dayInfo.get(ex.workout_days_id);
     if (!day || day.ownerId !== ex.user_id) continue;
-    totals.set(
-      day.routineId,
-      (totals.get(day.routineId) ?? 0) + (ex.target_sets ?? 0)
-    );
+    const stats = totals.get(day.routineId) ?? { days: 0 };
+    totals.set(day.routineId, {
+      ...stats,
+      sets: (stats.sets ?? 0) + (ex.target_sets ?? 0),
+    });
   }
   return totals;
 }
@@ -942,7 +953,7 @@ const toComment = (row: Record<string, unknown>): RoutineComment => ({
   created_at: Number(row.created_at ?? 0),
 });
 
-/** Comentarios de una rutina, del más antiguo al más nuevo (orden de lectura). */
+/** Comentarios de una rutina, del más nuevo al más antiguo (los últimos `limit`). */
 export async function getRoutineComments(
   routineId: string,
   limit = 100
@@ -951,7 +962,7 @@ export async function getRoutineComments(
     .from('routine_comments')
     .select('id, routine_id, user_id, body, created_at')
     .eq('routine_id', routineId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit);
   if (error) throw new Error(`routine_comments: ${error.message}`);
   return (data ?? []).map((r) => toComment(r as Record<string, unknown>));
@@ -1006,6 +1017,72 @@ export async function getCommentCounts(
   for (const row of data ?? []) {
     const id = (row as { routine_id: string }).routine_id;
     counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  return counts;
+}
+
+/** Hasta dónde has leído el hilo de cada rutina (tabla `comment_reads`). */
+export async function getCommentReads(
+  userId: string,
+  routineIds: string[]
+): Promise<Map<string, number>> {
+  const reads = new Map<string, number>();
+  if (!routineIds.length) return reads;
+  const { data, error } = await supabase
+    .from('comment_reads')
+    .select('routine_id, read_at')
+    .eq('user_id', userId)
+    .in('routine_id', routineIds);
+  if (error) throw new Error(`comment_reads: ${error.message}`);
+  for (const row of data ?? []) {
+    const { routine_id: id, read_at: at } = row as {
+      routine_id: string;
+      read_at: number | string;
+    };
+    reads.set(id, Number(at));
+  }
+  return reads;
+}
+
+/** Deja leído el hilo de una rutina hasta `readAt`. */
+export async function markCommentsRead(
+  userId: string,
+  routineId: string,
+  readAt: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('comment_reads')
+    .upsert(
+      { user_id: userId, routine_id: routineId, read_at: readAt },
+      { onConflict: 'user_id,routine_id' }
+    );
+  if (error) throw new Error(`comment_reads: ${error.message}`);
+}
+
+/**
+ * Comentarios de otras personas posteriores a lo leído en cada rutina, en UNA
+ * consulta: se pide desde lo más antiguo leído y se afina aquí.
+ */
+export async function getNewCommentCounts(
+  routineIds: string[],
+  userId: string,
+  readAt: (routineId: string) => number
+): Promise<Map<string, number>> {
+  const counts = new Map<string, number>();
+  if (!routineIds.length) return counts;
+  const { data, error } = await supabase
+    .from('routine_comments')
+    .select('routine_id, created_at')
+    .in('routine_id', routineIds)
+    .neq('user_id', userId)
+    .gt('created_at', Math.min(...routineIds.map(readAt)));
+  if (error) throw new Error(`routine_comments: ${error.message}`);
+  for (const row of data ?? []) {
+    const { routine_id: id, created_at: at } = row as {
+      routine_id: string;
+      created_at: number | string;
+    };
+    if (Number(at) > readAt(id)) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return counts;
 }

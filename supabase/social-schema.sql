@@ -255,6 +255,41 @@ create policy "delete own or owned comments" on public.routine_comments
     )
   );
 
+-- ─────────────────────────── comment_reads ───────────────────────────
+-- Hasta qué comentario ha leído cada persona el hilo de una rutina (created_at
+-- del último). Es lo que hace que un comentario leído en un móvil no vuelva a
+-- salir como nuevo en otro. Solo lo ve su dueño y solo se marcan rutinas públicas,
+-- como los comentarios. Cae en cascada con la cuenta y con la rutina.
+create table if not exists public.comment_reads (
+  user_id    uuid not null references auth.users(id) on delete cascade,
+  routine_id text not null references public.routines(id) on delete cascade,
+  read_at    bigint not null default 0,
+  primary key (user_id, routine_id)
+);
+
+alter table public.comment_reads enable row level security;
+
+drop policy if exists "read own comment reads" on public.comment_reads;
+create policy "read own comment reads" on public.comment_reads
+  for select using (user_id = auth.uid());
+
+drop policy if exists "insert own comment reads" on public.comment_reads;
+create policy "insert own comment reads" on public.comment_reads
+  for insert with check (
+    user_id = auth.uid() and routine_id in (
+      select id from public.routines where is_public = true and deleted = false
+    )
+  );
+
+drop policy if exists "update own comment reads" on public.comment_reads;
+create policy "update own comment reads" on public.comment_reads
+  for update using (user_id = auth.uid())
+  with check (
+    user_id = auth.uid() and routine_id in (
+      select id from public.routines where is_public = true and deleted = false
+    )
+  );
+
 -- ─────────────────────────── reports ───────────────────────────
 -- Moderación mínima: cualquiera con sesión puede reportar una rutina pública,
 -- un perfil o un comentario. Los partes se revisan desde el panel de Supabase

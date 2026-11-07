@@ -280,6 +280,7 @@ Objetivo: perfiles públicos, seguir usuarios, rutinas públicas y tablón.
 | `follows`             | `follower_id` → `following_id`.                 |
 | Visibilidad de rutina | Flag `is_public` + `owner_id` sobre la rutina.  |
 | `routine_likes`       | Likes/guardados; alimentan el ranking.          |
+| `comment_reads`       | Hasta dónde ha leído cada persona cada hilo.    |
 | `reports`             | Moderación mínima (reportar contenido público). |
 
 - **Tablón de populares** = consulta/vista ordenada por likes recientes.

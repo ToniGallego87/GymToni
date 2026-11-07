@@ -19,6 +19,7 @@ import {
   useGlassTopBarHeight,
   GradientFill,
   LevelPill,
+  SignOutConfirmModal,
   getMenuTileWidth,
   MENU_TILE_GAP,
   MENU_TILE_INSET,
@@ -156,6 +157,7 @@ export function ProfileScreen({
 
   // El perfil público se edita en un popup sobre esta pantalla.
   const [showProfileEdit, setShowProfileEdit] = useState(false);
+  const [showSignOut, setShowSignOut] = useState(false);
 
   // Seis casillas, tres por fila: icono + nombre corto y, debajo, el estado
   // de lo que hay detrás cuando hay algo que contar (como "Datos y nube" en
@@ -167,7 +169,6 @@ export function ProfileScreen({
   // un modal con un número. Ese ajuste vive ahora en Configuración, con el tema
   // y el idioma (y se sigue tocando desde el ⋯ del registro, que es donde se
   // nota que el descanso se queda corto).
-  const activeRoutine = state.routines.find((routine) => routine.isActive);
   const bodyWeight = currentBodyWeight(weightSegments);
   const unlockedBadges = badges.filter((badge) => badge.unlocked).length;
   // Ejercicios con historial: los mismos que lista Progreso (por su identidad
@@ -197,11 +198,13 @@ export function ProfileScreen({
     {
       icon: 'book-open-variant',
       label: t('Rutinas'),
-      hint: activeRoutine
-        ? activeRoutine.name
-        : state.routines.length
-        ? t('Ninguna activa')
-        : t('Crea la primera'),
+      // Cuántas hay guardadas; sin ninguna, la invitación a crearla.
+      hint:
+        state.routines.length === 0
+          ? t('Crea la primera')
+          : state.routines.length === 1
+          ? t('1 rutina')
+          : t('{n} rutinas', { n: state.routines.length }),
       onPress: onOpenRoutines,
     },
     {
@@ -282,27 +285,48 @@ export function ProfileScreen({
           <GradientFill accent={theme.colors.primaryLine} />
           {/* Editar (o completar) el perfil público: solo con cuenta, que es
               donde vive. Arriba a la derecha de la tarjeta, junto al nombre.
-              Mientras no se sabe si hay perfil, espera desactivado. */}
+              Mientras no se sabe si hay perfil, espera desactivado. A su
+              derecha, la X roja de cerrar sesión (con confirmación): la
+              misma salida que en Datos y nube, sin tener que ir allí. */}
           {hasAccount && (
-            <Pressable
-              style={({ pressed }) => [
-                styles.editButton,
-                pressed && styles.menuTilePressed,
-              ]}
-              onPress={() => setShowProfileEdit(true)}
-              disabled={profileUnknown}
-              hitSlop={6}
-              accessibilityRole="button"
-              accessibilityLabel={
-                isProfileFilled ? t('Editar perfil') : t('Completar perfil')
-              }
-            >
-              <MaterialCommunityIcons
-                name={isProfileFilled ? 'pencil' : 'account-plus-outline'}
-                size={18}
-                color={theme.colors.primary}
-              />
-            </Pressable>
+            <View style={styles.cornerActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cornerButton,
+                  pressed && styles.menuTilePressed,
+                ]}
+                onPress={() => setShowProfileEdit(true)}
+                disabled={profileUnknown}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={
+                  isProfileFilled ? t('Editar perfil') : t('Completar perfil')
+                }
+              >
+                <MaterialCommunityIcons
+                  name={isProfileFilled ? 'pencil' : 'account-plus-outline'}
+                  size={18}
+                  color={theme.colors.primary}
+                />
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.cornerButton,
+                  styles.signOutButton,
+                  pressed && styles.menuTilePressed,
+                ]}
+                onPress={() => setShowSignOut(true)}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel={t('Cerrar sesión')}
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={18}
+                  color={theme.colors.error}
+                />
+              </Pressable>
+            </View>
           )}
           <View style={styles.identityRow}>
             {/* La foto se cambia desde la foto: un lápiz en su esquina, sin
@@ -455,6 +479,10 @@ export function ProfileScreen({
         visible={showProfileEdit}
         onClose={() => setShowProfileEdit(false)}
       />
+      <SignOutConfirmModal
+        visible={showSignOut}
+        onClose={() => setShowSignOut(false)}
+      />
 
       {/* Barra de navegación fija en app/App.tsx (fuera del pager). */}
     </View>
@@ -510,8 +538,8 @@ const makeStyles = () =>
     identityTextWrap: {
       flex: 1,
       gap: 3,
-      // Deja sitio al lápiz de la esquina.
-      paddingRight: 36,
+      // Deja sitio a la X y al lápiz de la esquina.
+      paddingRight: 80,
     },
     identityName: {
       fontSize: 22,
@@ -528,11 +556,16 @@ const makeStyles = () =>
 
     // Lápiz de la tarjeta: misma píldora que el "Editar" de la ficha de rutina,
     // en la esquina superior derecha, a la altura del nombre.
-    editButton: {
+    // La X de cerrar sesión y el lápiz, juntos en la esquina.
+    cornerActions: {
       position: 'absolute',
       top: 12,
       right: 12,
       zIndex: 1,
+      flexDirection: 'row',
+      gap: 8,
+    },
+    cornerButton: {
       width: 34,
       height: 34,
       borderRadius: theme.borderRadius.pill,
@@ -541,6 +574,11 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surface,
       borderWidth: 1,
       borderColor: theme.colors.primaryLine,
+    },
+    // Rojo de salida (el mismo velo que los avisos de error), no oro.
+    signOutButton: {
+      backgroundColor: theme.colors.errorMuted,
+      borderColor: theme.colors.error,
     },
 
     // Números. Sin título propio ni icono: los rótulos ya nombran cada cifra.

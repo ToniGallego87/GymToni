@@ -82,7 +82,12 @@ export function ChartCard({
               size={18}
               color={theme.colors.text}
             />
-            <Text style={styles.title} numberOfLines={1}>
+            <Text
+              style={styles.title}
+              numberOfLines={1}
+              adjustsFontSizeToFit
+              minimumFontScale={0.7}
+            >
               {title}
             </Text>
             {expandable && (

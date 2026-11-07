@@ -4,6 +4,7 @@ import {
   getExerciseRecords,
   getRecordSetIndexes,
   listExercises,
+  pickBestExerciseLog,
   sortExercises,
   weightStepFromHistory,
 } from '../exerciseProgress';
@@ -410,5 +411,56 @@ describe('weightStepFromHistory', () => {
   });
   it('ignora el peso corporal (-1) y el 0', () => {
     expect(weightStepFromHistory([-1, 0, 40, 45])).toBe(5);
+  });
+});
+
+describe('pickBestExerciseLog', () => {
+  const log = (rawInput: string, parsedSets: ParsedSet[] = []) => ({
+    id: 'l1',
+    order: 1,
+    timestamp: 0,
+    exerciseId: 'e1',
+    exerciseName: 'Press banca',
+    rawInput,
+    parsedSets,
+  });
+
+  it('gana la mejor serie, no la sesión con más series', () => {
+    const light = log('', [
+      { weight: 60, reps: 8 },
+      { weight: 60, reps: 8 },
+      { weight: 60, reps: 8 },
+      { weight: 60, reps: 8 },
+    ]);
+    const heavy = log('', [{ weight: 80, reps: 8 }]);
+    expect(pickBestExerciseLog([light, heavy])).toBe(heavy);
+  });
+
+  it('con la misma mejor serie, la de mejor total', () => {
+    const one = log('', [{ weight: 80, reps: 8 }]);
+    const two = log('', [
+      { weight: 80, reps: 8 },
+      { weight: 75, reps: 8 },
+    ]);
+    expect(pickBestExerciseLog([one, two])).toBe(two);
+  });
+
+  it('a igualdad de todo se queda la primera (la más reciente)', () => {
+    const recent = log('', [{ weight: 80, reps: 8 }]);
+    const old = log('', [{ weight: 80, reps: 8 }]);
+    expect(pickBestExerciseLog([recent, old])).toBe(recent);
+  });
+
+  it('lee los registros que solo tienen texto', () => {
+    const text = log('90x5');
+    const parsed = log('', [{ weight: 80, reps: 5 }]);
+    expect(pickBestExerciseLog([parsed, text])).toBe(text);
+  });
+
+  it('sin series válidas no hay mejor', () => {
+    expect(pickBestExerciseLog([])).toBeNull();
+    expect(
+      pickBestExerciseLog([log('-', [{ weight: -1, reps: -1 }])])
+    ).toBeNull();
   });
 });

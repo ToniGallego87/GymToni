@@ -26,6 +26,12 @@ interface SaveRoutineButtonProps {
    * recuento del "me gusta"). Sin dato (cargando, sin red) no se pinta.
    */
   count?: number;
+  /**
+   * Rótulo corto ("Añadir" / "Añadida") con contorno de oro: la tarjeta del
+   * tablón, donde añadir es la acción que importa y no debe pesar lo mismo
+   * que el "me gusta".
+   */
+  compactLabel?: boolean;
 }
 
 /**
@@ -44,6 +50,7 @@ export function SaveRoutineButton({
   style,
   withLabel = false,
   count,
+  compactLabel = false,
 }: SaveRoutineButtonProps) {
   const canUnsave = saved && !!onUnsave;
   const label = canUnsave
@@ -58,6 +65,7 @@ export function SaveRoutineButton({
     <Pressable
       style={({ pressed }) => [
         styles.button,
+        compactLabel && !saved && styles.buttonCta,
         saved && styles.buttonSaved,
         pressed && styles.pressed,
         style,
@@ -83,10 +91,25 @@ export function SaveRoutineButton({
       <MaterialCommunityIcons
         name={saved ? 'bookmark' : 'bookmark-plus-outline'}
         size={20}
-        color={saved ? theme.colors.primary : theme.colors.textSecondary}
+        color={
+          saved || compactLabel
+            ? theme.colors.primary
+            : theme.colors.textSecondary
+        }
       />
+      {compactLabel && (
+        <Text style={[styles.label, styles.labelSaved]}>
+          {saved ? t('Añadida') : busy ? t('Añadiendo…') : t('Añadir')}
+        </Text>
+      )}
       {count !== undefined && (
-        <Text style={[styles.likeCount, saved && styles.labelSaved]}>
+        <Text
+          style={[
+            styles.likeCount,
+            (saved || compactLabel) && styles.labelSaved,
+            compactLabel && styles.countAfterLabel,
+          ]}
+        >
           {count}
         </Text>
       )}
@@ -335,6 +358,18 @@ const makeStyles = () =>
       backgroundColor: theme.colors.surfaceAlt,
     },
     buttonSaved: { backgroundColor: theme.colors.primaryMuted },
+    // Sin añadir, en la tarjeta del tablón: contorno de oro (la acción), sin
+    // relleno; añadida pasa al velo de `buttonSaved`. El borde se resta del
+    // padding para que no cambie de alto entre los dos estados.
+    buttonCta: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+    },
+    // El recuento tras el rótulo, algo apagado: es contexto, no el botón.
+    countAfterLabel: { opacity: 0.75 },
     // Dato, no control: sin fondo de píldora y sin el padding que la dibuja.
     buttonFlat: { backgroundColor: 'transparent', paddingHorizontal: 2 },
     // Mismo alto que una burbuja con contenido (icono 20 + 6 arriba y abajo).

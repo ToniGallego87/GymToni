@@ -4,6 +4,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   Button,
   ConfirmModal,
+  SignOutConfirmModal,
   PasswordField,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
@@ -33,7 +34,6 @@ import {
   useSession,
   signUp,
   signIn,
-  signOut,
   verifySignUpCode,
   resendSignUpCode,
   requestPasswordReset,
@@ -87,7 +87,6 @@ type BusyAction =
   | 'recover'
   | 'delete-account'
   | 'change-password'
-  | 'signout'
   | 'sync'
   | 'cloud-backup'
   | 'restore'
@@ -121,6 +120,7 @@ export function DataScreen({
   const [showClearModal, setShowClearModal] = useState(false);
   const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
   const [showDeleteAccount, setShowDeleteAccount] = useState(false);
+  const [showSignOut, setShowSignOut] = useState(false);
   // Casilla "Entiendo que no se puede deshacer" del popup de borrar la cuenta.
   const [deleteAck, setDeleteAck] = useState(false);
   const [autoBackups, setAutoBackups] = useState<AutoBackupFile[]>([]);
@@ -406,16 +406,6 @@ export function DataScreen({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
-
-  const handleSignOut = async () => {
-    setBusyAction('signout');
-    try {
-      // Lo de esta cuenta en el móvil lo olvida useForgetSignedOutAccount.
-      await signOut();
-    } finally {
-      setBusyAction(null);
-    }
-  };
 
   const closeAccountModals = () => {
     setShowChangePassword(false);
@@ -829,7 +819,7 @@ export function DataScreen({
               <Button
                 title={t('Cerrar sesión')}
                 variant="secondary"
-                onPress={handleSignOut}
+                onPress={() => setShowSignOut(true)}
                 disabled={busy}
               />
               <Button
@@ -1161,6 +1151,11 @@ export function DataScreen({
       />
 
       <FloatingBackButton onPress={onBack} bottom={backBottom} />
+
+      <SignOutConfirmModal
+        visible={showSignOut}
+        onClose={() => setShowSignOut(false)}
+      />
 
       <ConfirmModal
         visible={showImportModal}

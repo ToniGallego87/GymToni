@@ -21,6 +21,52 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Mejoras visuales y de UX
 
+- [x] **Comunidad: tarjeta del tablón que diga de quién es, cuántos días tiene
+      y que "Añadir" se distinga** — tres cambios en `PublicRoutineCard`
+      (sale igual en el tablón y en el perfil del autor): (1) bajo el nombre,
+      una línea "de {autor}" en gris que, junto con la foto, lleva a su perfil;
+      hoy el autor es solo una foto de 28 px sin nombre, y con la foto por
+      defecto todas las rutinas parecen de la misma persona. (2) La burbuja de
+      series se cambia por la de **días** ("4 días"): las series ya las resume
+      la píldora de intensidad, que sale de ellas (dos señales para el mismo
+      dato), y los días son lo primero que se mira para elegir rutina. El dato
+      llega gratis en el mismo lote (`getRoutineSetTotals` ya lee los días).
+      Las series y su explicación siguen en la ficha pública, con la de días.
+      (3) "Añadir" pasa a píldora con rótulo ("Añadir" / "Añadida", con su
+      recuento) y el "me gusta" se queda en icono + número: hoy las cuatro
+      píldoras del pie pesan igual, y añadir es la única que cambia tus rutinas.
+      **Por qué:** la tarjeta ES la pantalla; decidir qué rutina abrir pide
+      autor, días e intensidad a la vista, y la acción importante tiene que
+      destacar.
+      **Archivos:** `components/PublicRoutineCard.tsx:103` (cabecera, autor
+      sin nombre), `:136` (pie: series, comentarios, añadir, me gusta),
+      `components/SaveRoutineButton.tsx:39` (`SaveRoutineButton`),
+      `lib/cloud/social.ts:867` (`getRoutineSetTotals`, días en `dayInfo`),
+      `features/workout/CommunityScreen.tsx:286` (lote de metadatos),
+      `features/workout/UserProfileScreen.tsx` (la otra puerta de la tarjeta).
+      **Esfuerzo:** medio.
+- [x] **Comunidad: cabecera más corta, con las novedades en una sola
+      tarjeta** — hoy, antes de la primera rutina, se apilan tu tarjeta, un
+      banner de oro macizo POR CADA rutina con novedades más otro de seguidores,
+      y el raíl: con tres avisos el tablón empieza a media pantalla, y el oro
+      de relleno (reservado a la acción primaria) compite con la pestaña activa.
+      Propuesta: (1) las novedades de tus rutinas en UNA tarjeta neutra
+      "Novedades" (campana y borde de oro, una fila por rutina con su chevron,
+      que abre y descarta igual que hoy). (2) Los seguidores nuevos dejan de
+      ser un banner y pasan a un "+N" en oro sobre el contador "Seguidores" de
+      tu tarjeta, que ya lleva a la misma lista (al abrirla se descarta, como
+      ahora). (3) El subtítulo de la barra deja el eslogan "Rutinas y gente que
+      entrena" por un dato vivo (p. ej. "{n} rutinas" de la pestaña): es la
+      única pantalla principal con eslogan. (4) Sin cuenta y en "Siguiendo",
+      el estado vacío deja de repetir el botón "Crear cuenta" que ya está
+      arriba, en la tarjeta de invitación.
+      **Por qué:** se llega a Comunidad a ver rutinas; los avisos importan,
+      pero agrupados se leen de un vistazo y dejan el tablón a la vista.
+      **Archivos:** `features/workout/CommunityScreen.tsx:670` (tu tarjeta),
+      `:692` (contador de seguidores), `:749` (banners de novedades),
+      `:588` (`newsItems`, aviso de seguidores), `:1083` (subtítulo),
+      `:740` y `:1004` (los dos "Crear cuenta"), `hooks/useCommunityNews.ts`.
+      **Esfuerzo:** bajo.
 - [ ] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
       una fila con el icono de cada día (verde hecho, aro dorado el que toca,
       anillo que se llena el de hoy) y Elige la sesión, un toque después, como
@@ -31,6 +77,31 @@ requisito previo de anuncios, suscripción e iOS.
       falta.
       **Archivos:** `features/workout/HomeScreen.tsx:1153` (`weekDaysRow`),
       `features/workout/DaySelectorScreen.tsx:151` (`weekBar`).
+      **Esfuerzo:** bajo.
+- [x] **Comunidad: el filtro de intensidad con el mismo dibujo que la
+      píldora** — el botón del filtro y sus chips usan velocímetros
+      (`speedometer`, `-slow`, `-medium`) y oro, mientras la píldora de cada
+      tarjeta usa el rayo y verde / ámbar / rojo: el mismo concepto con dos
+      iconos y dos colores. Botón con el rayo, y cada chip con el color de su
+      tramo (`intensityColor`) en contorno y velo. Los chips miden ~28 px de
+      alto: subirlos a 36 y darles `hitSlop`.
+      **Por qué:** al filtrar "Intensa" se debe reconocer al instante la
+      píldora roja de las tarjetas que quedan; y con el pulgar un chip de 28 px
+      se falla.
+      **Archivos:** `features/workout/CommunityScreen.tsx:651`
+      (`intensityOptions`), `:816` (botón), `:1213` (`filterChip`),
+      `components/RoutineIntensityPill.tsx:19` (`intensityColor`).
+      **Esfuerzo:** bajo.
+- [x] **Comunidad: cargar con tarjetas fantasma en vez de rueda** — la
+      primera carga (sin copia guardada) enseña una rueda con "Cargando…" en
+      medio, mientras el resto del tablón ya reserva el hueco de lo que llega
+      tarde (esqueletos de intensidad y series). Tres tarjetas fantasma con la
+      forma de `PublicRoutineCard`.
+      **Por qué:** la pantalla no salta cuando llegan las rutinas, y se ve qué
+      va a aparecer.
+      **Archivos:** `features/workout/CommunityScreen.tsx:959` (`listEmpty`),
+      `components/PublicRoutineCard.tsx`, `components/SaveRoutineButton.tsx:232`
+      (`StatBubbleSkeleton`, patrón a reutilizar).
       **Esfuerzo:** bajo.
 - [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
       duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
@@ -44,7 +115,7 @@ requisito previo de anuncios, suscripción e iOS.
       serie y no deja ver lo que escribes.
       **Archivos:** `components/ExerciseInputField.tsx:440`, `:573`, `:1094`,
       `lib/restTimerStore.ts:277`, `features/workout/DataScreen.tsx:549`
-      (login), `features/workout/CommunityScreen.tsx:1060` (comentarios),
+      (login), `features/workout/PublicRoutineScreen.tsx:860` (comentarios),
       `features/workout/WorkoutLogScreen.tsx:1722`,
       `features/workout/BodyWeightScreen.tsx`.
       **Esfuerzo:** medio.
@@ -78,6 +149,22 @@ requisito previo de anuncios, suscripción e iOS.
       **Archivos:** `android/app/src/main/AndroidManifest.xml:2-9` y `:17`
       (`allowBackup`), `android/app/build.gradle:98` y `:151-152`,
       `app.json` (`android.permissions`).
+      **Esfuerzo:** bajo.
+- [x] **Comunidad: buscar sin que los resultados se mezclen con el tablón** —
+      con los dos paneles abiertos, el campo de búsqueda sale DEBAJO de los
+      chips de intensidad (lejos de su lupa), y los resultados se pintan con
+      la misma tarjeta justo encima del tablón entero: tras la raya de cierre
+      siguen rutinas que parecen más resultados. Y si no hay nada salen dos
+      "Sin resultados". Propuesta: el campo, siempre el primero bajo el raíl;
+      los resultados en un panel propio (fondo `surfaceAlt`) titulado
+      "Resultados para «…»" con su × para cerrar la búsqueda; y un solo "Nada
+      para «…»" si no hay ni personas ni rutinas. Sigue siendo un filtro
+      temporal sobre la pantalla, no un modo aparte.
+      **Por qué:** se ve dónde acaban los resultados y cómo salir de ellos sin
+      buscar la lupa otra vez.
+      **Archivos:** `features/workout/CommunityScreen.tsx:888` (campo),
+      `:925` (sección de resultados), `:931` y `:947` (los dos "Sin
+      resultados"), `:1191` (`peopleSection`).
       **Esfuerzo:** bajo.
 - [ ] **Ordenar los días de una rutina sin plegarlos uno a uno** — en la
       edición de una ficha, los días solo se arrastran con todos plegados, y
@@ -209,20 +296,6 @@ primero porque sin ellas no se publica.
       perfil), `lib/moderation.ts`, `components/ReportModal.tsx`,
       `supabase/social-schema.sql` (follows y lecturas públicas).
       **Esfuerzo:** medio.
-- [ ] **[Lanzamiento] Recuperar la contraseña** — no existe: quien la olvida
-      pierde la cuenta y sus datos en la nube. "¿Has olvidado la contraseña?"
-      en el login con el mismo patrón de código de 6 dígitos que el registro
-      (`resetPasswordForEmail` + `verifyOtp` tipo `recovery` + `updateUser`).
-      **Por qué:** con usuarios reales es la petición de soporte número uno.
-      **Archivos:** `lib/cloud/auth.ts` (`requestPasswordReset`,
-      `verifyRecoveryCode`, `updatePassword`),
-      `features/workout/DataScreen.tsx` (`handleForgotPassword`,
-      `handleVerifyCode`).
-      **Estado (2026-10-29):** hecho en código y revisado; la plantilla "Reset
-      Password" de Supabase ya envía `{{ .Token }}`. **Pendiente: probarlo en
-      el móvil** (pedir código, cambiar la contraseña, entrar con la nueva);
-      entonces se marca `[x]`.
-      **Esfuerzo:** bajo.
 - [ ] **[Lanzamiento] Licencia de los GIFs de ejercicios** — los GIFs vienen
       de un repo de GitHub de un tercero vía jsDelivr (`@main`) y la
       atribución dice "© Gym Visual", que los vende con licencia. En una app
@@ -300,7 +373,7 @@ primero porque sin ellas no se publica.
       debajo.
       **Por qué:** ingreso con quien no paga sin estropear el uso entre
       series, que es el corazón de la app.
-      **Archivos:** `features/workout/CommunityScreen.tsx:379` (lista del
+      **Archivos:** `features/workout/CommunityScreen.tsx:1040` (lista del
       tablón), `features/workout/CalendarScreen.tsx`,
       `features/workout/DetailScreen.tsx`,
       `features/workout/ExerciseProgressScreen.tsx`,
@@ -372,13 +445,13 @@ primero porque sin ellas no se publica.
       `features/workout/DataScreen.tsx`.
       **Esfuerzo:** medio.
 - [ ] **"Cerrar sesión" sin red y con el token caducado** — `signOut()` devuelve
-      el error sin lanzarlo y `handleSignOut` no lo mira: el botón termina y la
+      el error sin lanzarlo y el popup de cerrar sesión no lo mira: el botón termina y la
       sesión sigue abierta, sin ningún aviso. Leer `{error}` y, sin red, cerrar
       al menos en este móvil (`scope: 'local'`) o decir qué ha pasado.
       **Por qué:** quien pulsa "Cerrar sesión" da por hecho que ha salido, y en
       un móvil prestado o vendido eso importa.
-      **Archivos:** `features/workout/DataScreen.tsx` (`handleSignOut`),
-      `lib/cloud/auth.ts:94` (`signOut`).
+      **Archivos:** `components/SignOutConfirmModal.tsx` (`handleConfirm`, el
+      mismo para Perfil y Datos y nube), `lib/cloud/auth.ts:94` (`signOut`).
       **Esfuerzo:** bajo.
 - [ ] **Copias de Comunidad en memoria al cambiar de cuenta** — por comprobar:
       `useForgetSignedOutAccount` limpia las copias en disco, pero las pantallas
@@ -387,7 +460,7 @@ primero porque sin ellas no se publica.
       usuario.
       **Por qué:** la cuenta nueva no debe ver lo que cargó la anterior, ni un
       instante.
-      **Archivos:** `features/workout/CommunityScreen.tsx:111` (`boardCache`),
+      **Archivos:** `features/workout/CommunityScreen.tsx:119` (`boardCache`),
       `features/workout/FollowingScreen.tsx:51` (`listCache`),
       `features/workout/UserProfileScreen.tsx:80` (`profileCache`),
       `hooks/useMyProfile.ts` (`useForgetSignedOutAccount`).

@@ -35,7 +35,8 @@ import {
   getProfile,
   getUserPublicRoutines,
   getFollowerCount,
-  getRoutineSetTotals,
+  getRoutinePlanStats,
+  RoutinePlanStats,
   getCommentCounts,
   getLikeInfo,
   getSaveCounts,
@@ -270,9 +271,9 @@ export function UserProfileScreen({
         const ids = routs.map((r) => r.id);
         const [totals, commentCounts, likes, saveCounts] = await Promise.all([
           // Todas son del perfil que se mira (getUserPublicRoutines).
-          getRoutineSetTotals(
+          getRoutinePlanStats(
             routs.map((r) => ({ id: r.id, owner_id: userId }))
-          ).catch(() => new Map<string, number>()),
+          ).catch(() => new Map<string, RoutinePlanStats>()),
           getCommentCounts(ids).catch(() => new Map<string, number>()),
           getLikeInfo(ids, user?.id ?? null).catch(
             () => new Map<string, { likes: number; liked: boolean }>()
@@ -281,7 +282,8 @@ export function UserProfileScreen({
         ]);
         const withMeta = routs.map((r) => ({
           ...r,
-          total_sets: totals.get(r.id),
+          total_sets: totals.get(r.id)?.sets,
+          total_days: totals.get(r.id)?.days,
           comments: commentCounts.get(r.id),
           saves: saveCounts.get(r.id),
           likes: likes.get(r.id)?.likes ?? 0,

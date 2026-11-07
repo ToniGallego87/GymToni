@@ -107,6 +107,10 @@ interface ExerciseInputFieldProps {
   onNotesChange: (text: string) => void;
   notes?: string;
   previousLog?: ExerciseLog | null;
+  // La mejor sesión de otra rutina u otro día: si llega, es lo que se recuerda
+  // ("Mejor") en lugar de `previousLog`, que sigue dando el peso sugerido (se
+  // arranca de lo último que se hizo, no de un máximo de hace meses).
+  bestLog?: ExerciseLog | null;
   // `previousLog` no es de este día (otra rutina, otro día): se ve de
   // referencia, pero las reps sugeridas son el tope del objetivo de ahora.
   suggestTargetReps?: boolean;
@@ -154,6 +158,7 @@ export function ExerciseInputField({
   onNotesChange,
   notes,
   previousLog,
+  bestLog,
   suggestTargetReps = false,
   improvement,
   accent = theme.colors.primary,
@@ -465,9 +470,7 @@ export function ExerciseInputField({
 
     // Con el objetivo ya cumplido, la serie es de MÁS: se marca para que no
     // puntúe en la mejora.
-    onAddSet(
-      isMaxSetsReached ? { ...pending.set, extra: true } : pending.set
-    );
+    onAddSet(isMaxSetsReached ? { ...pending.set, extra: true } : pending.set);
     // Confirmación que se nota sin mirar: un toque corto del vibrador.
     Vibration.vibrate(ADD_SET_VIBRATION_MS);
     // Las casillas vuelven a lo sugerido, que ahora es la serie recién metida.
@@ -478,10 +481,13 @@ export function ExerciseInputField({
     Keyboard.dismiss();
   };
 
-  const getPreviousSetsSummary = () => {
-    if (!previousLog) return '';
-    if (previousLog.parsedSets?.length) {
-      return previousLog.parsedSets
+  // La sesión que se recuerda en la línea de contexto.
+  const referenceLog = bestLog ?? previousLog;
+
+  const getReferenceSetsSummary = () => {
+    if (!referenceLog) return '';
+    if (referenceLog.parsedSets?.length) {
+      return referenceLog.parsedSets
         .map((s) =>
           s.weight === -1 || s.reps === -1
             ? '—'
@@ -489,11 +495,11 @@ export function ExerciseInputField({
         )
         .join(' · ');
     }
-    if (previousLog.rawInput?.trim() && previousLog.rawInput !== '-') {
-      const parsed = parseSeriesString(previousLog.rawInput);
+    if (referenceLog.rawInput?.trim() && referenceLog.rawInput !== '-') {
+      const parsed = parseSeriesString(referenceLog.rawInput);
       if (parsed.length > 0)
         return parsed.map((s) => `${s.weight}×${s.reps}`).join(' · ');
-      return previousLog.rawInput;
+      return referenceLog.rawInput;
     }
     return '';
   };
@@ -678,7 +684,7 @@ export function ExerciseInputField({
   // junto al ⋯, sin caja propia: es contexto, no una pieza que se toca. El
   // objetivo no va aquí: las series las dicen la casilla y el botón, y el rango
   // de repeticiones va en el rótulo de su campo.
-  const previousSummary = getPreviousSetsSummary();
+  const referenceSummary = getReferenceSetsSummary();
   const contextBlock = (
     <Animated.View
       entering={fadeIn}
@@ -702,16 +708,18 @@ export function ExerciseInputField({
             {t('Peso sugerido más ligero')}
           </Text>
         </View>
-      ) : previousSummary ? (
+      ) : referenceSummary ? (
         <View style={styles.contextItem}>
           <MaterialCommunityIcons
-            name="history"
+            name={bestLog ? 'trophy-outline' : 'history'}
             size={15}
             color={theme.colors.textSecondary}
           />
-          <Text style={styles.contextLabel}>{t('Anterior')}</Text>
+          <Text style={styles.contextLabel}>
+            {bestLog ? t('Mejor') : t('Anterior')}
+          </Text>
           <Text style={styles.contextValue} numberOfLines={1}>
-            {previousSummary}
+            {referenceSummary}
           </Text>
         </View>
       ) : (
@@ -728,8 +736,8 @@ export function ExerciseInputField({
           </Text>
         </View>
       )}
-      {!deload && previousLog?.notes ? (
-        <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
+      {!deload && referenceLog?.notes ? (
+        <Text style={styles.previousNoteText}>"{referenceLog.notes}"</Text>
       ) : null}
     </Animated.View>
   );
@@ -920,7 +928,9 @@ export function ExerciseInputField({
                       value={shownReps()}
                       placeholder="0"
                       placeholderTextColor={theme.colors.textMuted}
-                      onChangeText={(txt) => setRepsValue(sanitizeIntInput(txt))}
+                      onChangeText={(txt) =>
+                        setRepsValue(sanitizeIntInput(txt))
+                      }
                       selectTextOnFocus
                       keyboardType="number-pad"
                       returnKeyType="done"

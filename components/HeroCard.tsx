@@ -30,6 +30,17 @@ interface HeroCardProps {
   icon: string;
   title: string;
   titleIcon?: string;
+  /**
+   * Rótulo pequeño delante del título, en la misma fila (Cardio: "Hoy" delante
+   * de "211 kcal"). Con letra de texto, no display: es el rótulo, no el dato.
+   */
+  titleLabel?: string;
+  /**
+   * Píldora "+ texto" tras el título: dice que tocar la tarjeta AÑADE otra
+   * (Cardio con sesión hoy, donde el título ya no es una acción sino un dato).
+   * No es un botón aparte: hace lo mismo que la tarjeta.
+   */
+  addHint?: string;
   subtitle?: string;
   /**
    * Icono delante del subtítulo (p. ej. la flecha de "X % de mejora"). Un
@@ -70,6 +81,8 @@ export function HeroCard({
   icon,
   title,
   titleIcon,
+  titleLabel,
+  addHint,
   subtitle,
   subtitleIcon,
   onSubtitlePress,
@@ -110,7 +123,8 @@ export function HeroCard({
       }}
       accessibilityRole="button"
       accessibilityLabel={[
-        title,
+        [titleLabel, title].filter(Boolean).join(' '),
+        addHint,
         subtitle,
         ...(stats ?? []).map((s) =>
           [s.value, s.unit, s.label].filter(Boolean).join(' ')
@@ -149,7 +163,15 @@ export function HeroCard({
             />
           </View>
           <View style={styles.titleRow}>
-            <Text style={styles.title} numberOfLines={2}>
+            {!!titleLabel && (
+              <Text style={styles.titleLabel} numberOfLines={1}>
+                {titleLabel}
+              </Text>
+            )}
+            <Text
+              style={[styles.title, !!addHint && styles.titleShrink]}
+              numberOfLines={addHint ? 1 : 2}
+            >
               {title}
             </Text>
             {!!titleIcon && (
@@ -158,6 +180,16 @@ export function HeroCard({
                 size={26}
                 color={theme.colors.onGold}
               />
+            )}
+            {!!addHint && (
+              <View style={styles.addHint} pointerEvents="none">
+                <MaterialCommunityIcons
+                  name="plus"
+                  size={16}
+                  color={theme.colors.onGold}
+                />
+                <Text style={styles.addHintText}>{addHint}</Text>
+              </View>
             )}
           </View>
           {!!subtitle && (
@@ -298,6 +330,40 @@ const makeStyles = () =>
       transform: [{ translateY: 4 }],
       letterSpacing: 0.5,
       textAlign: 'center',
+    },
+    // El rótulo ("Hoy"): letra de texto en versalitas, más pequeño y algo
+    // velado, para que el dato de al lado sea lo que se lee.
+    titleLabel: {
+      color: theme.colors.onGold,
+      fontSize: 14,
+      fontWeight: '800',
+      letterSpacing: 1,
+      textTransform: 'uppercase',
+      opacity: 0.75,
+      // El mismo desplazamiento que el título: Anton baja su glifo 4 px para
+      // centrarse, y sin esto el rótulo quedaba más alto que la cifra.
+      includeFontPadding: false,
+      transform: [{ translateY: 4 }],
+    },
+    titleShrink: {
+      flexShrink: 1,
+    },
+    // "+ Añadir": la cápsula de "Cambiar" (velo de la hero, tinta onGold).
+    addHint: {
+      marginLeft: 4,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 3,
+      paddingLeft: 8,
+      paddingRight: 10,
+      paddingVertical: 5,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.onGoldVeil,
+    },
+    addHintText: {
+      color: theme.colors.onGold,
+      fontSize: 13,
+      fontWeight: '800',
     },
     iconCompact: {
       fontSize: 38,

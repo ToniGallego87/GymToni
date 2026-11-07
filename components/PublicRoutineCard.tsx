@@ -23,7 +23,7 @@ import {
   SaveRoutineButton,
   StatBubble,
   StatBubbleSkeleton,
-  seriesExplanation,
+  daysExplanation,
 } from './SaveRoutineButton';
 
 /** Lo que la tarjeta necesita saber de una rutina pública. */
@@ -33,6 +33,8 @@ export interface PublicRoutineCardItem {
   description: string | null;
   /** Series planificadas en toda la rutina: de aquí sale la intensidad. */
   total_sets?: number;
+  /** Días de entrenamiento de la rutina (llega en el mismo lote que las series). */
+  total_days?: number;
   comments?: number;
   /** Personas que la han añadido a sus rutinas (ver `getSaveCounts`). */
   saves?: number;
@@ -50,26 +52,30 @@ interface PublicRoutineCardProps {
   onSave: () => void;
   onToggleLike?: () => void;
   /**
-   * Los metadatos (series, comentarios) llegan en una consulta posterior: con
-   * esto puesto se reserva su hueco en vez de dejar que la tarjeta crezca bajo
-   * el dedo cuando aparezcan.
+   * Los metadatos (días, series, comentarios) llegan en una consulta posterior:
+   * con esto puesto se reserva su hueco en vez de dejar que la tarjeta crezca
+   * bajo el dedo cuando aparezcan.
    */
   loadingMeta?: boolean;
   /**
-   * Firma del autor a la izquierda del nombre, que lleva a su perfil. El tablón
-   * la pone (allí mezclan rutinas de todo el mundo); el perfil de su autor no,
-   * que ahí sobra: ya estás en él.
+   * Firma del autor: su foto delante del nombre y "de {autor}" debajo, las dos
+   * con camino a su perfil. El tablón la pone (allí mezclan rutinas de todo el
+   * mundo); el perfil de su autor no, que ahí sobra: ya estás en él.
    */
   author?: { name: string; avatarUrl?: string | null; onPress?: () => void };
   style?: StyleProp<ViewStyle>;
 }
 
 /**
- * Tarjeta de una rutina pública. Fuente ÚNICA de cómo se ve una rutina ajena:
- * la montaban por separado el tablón de Comunidad (con intensidad, series,
- * comentarios y "me gusta") y el perfil de su autor (solo nombre, descripción y
- * "añadir"), así que la misma rutina se veía distinta y solo se podía dar like
- * desde una de las dos puertas.
+ * Tarjeta de una rutina pública. Fuente ÚNICA de cómo se ve una rutina ajena
+ * (tablón de Comunidad y perfil de su autor), para que la misma rutina se vea
+ * igual por las dos puertas.
+ *
+ * Lo que se mira para elegir va a la vista: quién la hizo, cuántos días tiene y
+ * su intensidad. Las series no van aparte: la píldora de intensidad ya sale de
+ * ellas (eran dos señales para el mismo dato); siguen, con su explicación, en
+ * la ficha pública. En el pie, "Añadir" lleva rótulo y contorno de oro: es la
+ * única acción que cambia tus rutinas y pesaba lo mismo que el "me gusta".
  */
 export function PublicRoutineCard({
   item,
@@ -84,6 +90,7 @@ export function PublicRoutineCard({
 }: PublicRoutineCardProps) {
   const level =
     item.total_sets != null ? routineIntensity(item.total_sets) : null;
+  const days = item.total_days;
 
   return (
     <Pressable
@@ -95,11 +102,15 @@ export function PublicRoutineCard({
       onPress={onPress}
       disabled={!onPress}
       accessibilityRole="button"
-      accessibilityLabel={t('Ver rutina')}
+      accessibilityLabel={
+        author
+          ? `${item.name}. ${t('de {name}', { name: author.name })}`
+          : item.name
+      }
     >
       <GradientFill accent={theme.colors.primaryLine} />
-      {/* Una sola fila de cabecera: la foto del autor (su firma, y la diana que
-          lleva a su perfil) delante del nombre, y la intensidad a la derecha. */}
+      {/* Cabecera: la foto del autor, el nombre con su firma debajo y la
+          intensidad a la derecha. */}
       <View style={styles.cardHead}>
         {!!author && (
           <Pressable
@@ -112,12 +123,33 @@ export function PublicRoutineCard({
               name: author.name,
             })}
           >
-            <Avatar uri={author.avatarUrl ?? null} size={28} />
+            <Avatar uri={author.avatarUrl ?? null} size={34} />
           </Pressable>
         )}
-        <Text style={styles.routineName} numberOfLines={2}>
-          {item.name}
-        </Text>
+        <View style={styles.titleWrap}>
+          <Text style={styles.routineName} numberOfLines={2}>
+            {item.name}
+          </Text>
+          {!!author && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.authorLine,
+                pressed && styles.pressed,
+              ]}
+              onPress={author.onPress}
+              disabled={!author.onPress}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel={t('Ver perfil de {name}', {
+                name: author.name,
+              })}
+            >
+              <Text style={styles.authorText} numberOfLines={1}>
+                {t('de {name}', { name: author.name })}
+              </Text>
+            </Pressable>
+          )}
+        </View>
         {level ? (
           <RoutineIntensityPill level={level} />
         ) : loadingMeta ? (
@@ -131,19 +163,15 @@ export function PublicRoutineCard({
         </Text>
       )}
 
-      {/* Pie: a la izquierda los datos (series y comentarios) como burbujas, y a
-          la derecha las acciones, todas del mismo tamaño. */}
+      {/* Pie: a la izquierda los datos (días y comentarios), a la derecha las
+          acciones, con "Añadir" al final, bajo el pulgar. */}
       <View style={styles.footerRow}>
-        {level ? (
+        {days ? (
           <StatBubble
-            icon="repeat"
-            value={item.total_sets ?? 0}
-            label={
-              item.total_sets === 1
-                ? t('1 serie')
-                : t('{n} series', { n: item.total_sets ?? 0 })
-            }
-            explanation={seriesExplanation()}
+            icon="calendar-outline"
+            value={days}
+            label={days === 1 ? t('1 día') : t('{n} días', { n: days })}
+            explanation={daysExplanation()}
           />
         ) : loadingMeta ? (
           <StatBubbleSkeleton />
@@ -160,12 +188,6 @@ export function PublicRoutineCard({
           />
         )}
         <View style={styles.footerSpacer} />
-        <SaveRoutineButton
-          saved={saved}
-          busy={savingBusy}
-          onPress={onSave}
-          count={item.saves}
-        />
         {item.likes !== undefined && !!onToggleLike && (
           <LikeButton
             likes={item.likes}
@@ -173,8 +195,42 @@ export function PublicRoutineCard({
             onPress={onToggleLike}
           />
         )}
+        <SaveRoutineButton
+          saved={saved}
+          busy={savingBusy}
+          onPress={onSave}
+          count={item.saves}
+          compactLabel
+        />
       </View>
     </Pressable>
+  );
+}
+
+/**
+ * Tarjeta fantasma con la forma de `PublicRoutineCard`, para la primera carga
+ * del tablón: la lista no salta cuando llegan las rutinas y se ve qué va a
+ * aparecer (antes, una rueda con "Cargando…" en medio).
+ */
+export function PublicRoutineCardSkeleton() {
+  return (
+    <View style={styles.card} pointerEvents="none">
+      <View style={styles.cardHead}>
+        <View style={[styles.ghost, styles.ghostAvatar]} />
+        <View style={styles.titleWrap}>
+          <View style={[styles.ghost, styles.ghostTitle]} />
+          <View style={[styles.ghost, styles.ghostAuthor]} />
+        </View>
+        <RoutineIntensityPillSkeleton />
+      </View>
+      <View style={[styles.ghost, styles.ghostLine]} />
+      <View style={styles.footerRow}>
+        <StatBubbleSkeleton />
+        <View style={styles.footerSpacer} />
+        <StatBubbleSkeleton />
+        <StatBubbleSkeleton style={styles.ghostSave} />
+      </View>
+    </View>
   );
 }
 
@@ -198,20 +254,37 @@ const makeStyles = () =>
       alignItems: 'center',
       gap: 10,
     },
+    titleWrap: { flex: 1, minWidth: 0, gap: 1 },
     footerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     footerSpacer: { flex: 1 },
     routineName: {
-      flex: 1,
       color: theme.colors.text,
       fontSize: 18,
       fontWeight: '800',
       lineHeight: 24,
+    },
+    authorLine: { alignSelf: 'flex-start' },
+    authorText: {
+      color: theme.colors.textSecondary,
+      fontSize: 13,
+      fontWeight: '600',
     },
     description: {
       color: theme.colors.textSecondary,
       fontSize: 14,
       lineHeight: 19,
     },
+    // Fantasma: bloques del color de las píldoras, atenuados.
+    ghost: {
+      backgroundColor: theme.colors.surfaceAlt,
+      borderRadius: theme.borderRadius.sm,
+      opacity: 0.6,
+    },
+    ghostAvatar: { width: 34, height: 34, borderRadius: 17 },
+    ghostTitle: { height: 16, width: '70%' },
+    ghostAuthor: { height: 11, width: '35%', marginTop: 6 },
+    ghostLine: { height: 12, width: '85%' },
+    ghostSave: { width: 92 },
   });
 
 let styles = makeStyles();

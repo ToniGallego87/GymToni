@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { ReactNode, useEffect, useMemo, useState } from 'react';
+import React, { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import QRCode from 'react-native-qrcode-svg';
 import { View, Text, StyleSheet, Pressable, TextInput } from 'react-native';
@@ -28,7 +28,6 @@ import {
   useGlassTopBarHeight,
   GradientFill,
   GymIconGrid,
-  OptionToggle,
   resolveDayIcon,
   RoutineIntensityPill,
   RoutineOriginPill,
@@ -65,10 +64,13 @@ import {
 } from '@lib/routines';
 import { useSession } from '@lib/cloud/auth';
 import {
+  addRoutineComment,
+  COMMENT_MAX_LENGTH,
   setRoutinePublic,
   getPublicRoutineIds,
   updateProfile,
 } from '@lib/cloud/social';
+import { buildRoutineChangeComment } from '@lib/routineChanges';
 import {
   hasProfileFilled,
   loadMyProfile,
@@ -206,8 +208,8 @@ export function RoutineDetailScreen({
     (sum, day) => sum + day.exercises.length,
     0
   );
-  // El nombre de la ficha solo sale cuando es lo que se edita (fuera de
-  // edición ya es el título de la barra).
+  // El nombre va SIEMPRE en la ficha (la barra dice "Rutina": un nombre largo
+  // no cabía en ella); el lápiz junto a él, solo cuando es lo que se edita.
   const canEdit = !isLinked;
   const showsEditableName = isEditing && canEdit && !isClosed;
   // Se borra con la regla de la lista de Rutinas: solo sin entrenamientos.
@@ -273,11 +275,49 @@ export function RoutineDetailScreen({
     for (const [dayId, rows] of Object.entries(drafts)) commitDay(dayId, rows);
   };
 
+  // La rutina tal como queda al volcar los borradores: el `dispatch` de
+  // `commitDay` aún no se ha reflejado en `currentRoutine`.
+  const routineWithDrafts = (): WorkoutRoutine => ({
+    ...currentRoutine,
+    days: currentRoutine.days.map((day) => {
+      const exercises = buildWorkoutExercises(drafts[day.id] ?? []);
+      return exercises.length ? { ...day, exercises } : day;
+    }),
+  });
+
+  // Rutina publicada: lo cambiado en una tanda de edición se cuenta en su hilo
+  // de comentarios, en uno solo y al terminar (se guarda fila a fila). El plan
+  // de partida se toma al entrar en edición; a null, no hay nada que contar.
+  const editStartRef = useRef<WorkoutRoutine | null>(null);
+  const announceChanges = (edited: WorkoutRoutine) => {
+    const before = editStartRef.current;
+    editStartRef.current = null;
+    if (!before || !isPublic || !user) return;
+    const body = buildRoutineChangeComment(before, edited, COMMENT_MAX_LENGTH);
+    if (!body) return;
+    addRoutineComment(edited.id, user.id, body).catch(() =>
+      setToast({
+        message: t('No se pudo publicar el comentario con los cambios'),
+        type: 'error',
+      })
+    );
+  };
+
+  // El botón físico de atrás lo lleva App.tsx y no pasa por `handleBack`: al
+  // desmontar se cuenta lo guardado hasta ahí. Tras "Hecho" o "Volver" ya no
+  // queda nada que contar.
+  const announceOnLeaveRef = useRef(() => {});
+  announceOnLeaveRef.current = () => announceChanges(currentRoutine);
+  useEffect(() => () => announceOnLeaveRef.current(), []);
+
   const toggleEditing = () => {
     if (isEditing) {
       commitAllDrafts();
+      announceChanges(routineWithDrafts());
       setDrafts({});
       setEditingExerciseId(null);
+    } else {
+      editStartRef.current = currentRoutine;
     }
     // Entrar en edición respeta los días abiertos: lo habitual es cambiar un
     // ejercicio del día que estabas mirando. Ordenar días sigue pidiendo
@@ -288,7 +328,10 @@ export function RoutineDetailScreen({
   // Salir de la pantalla también guarda: el "Volver" no puede ser una vía de
   // escape que tire los cambios.
   const handleBack = () => {
-    if (isEditing) commitAllDrafts();
+    if (isEditing) {
+      commitAllDrafts();
+      announceChanges(routineWithDrafts());
+    }
     onBack();
   };
 
@@ -378,8 +421,8 @@ export function RoutineDetailScreen({
       await setRoutinePublic(routine.id, next);
       setToast({
         message: next
-          ? t('Rutina publicada en la comunidad')
-          : t('Rutina retirada de la comunidad'),
+          ? t('Rutina visible para la comunidad')
+          : t('Rutina oculta para la comunidad'),
         type: 'success',
       });
     } catch (e) {
@@ -829,19 +872,20 @@ export function RoutineDetailScreen({
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Ficha de la rutina: de qué va y cuánto pesa. Sin el nombre (ya es
-            el título de la barra; antes salía dos veces seguidas) salvo en
-            edición, que es lo que se cambia al pulsarla. Neutra: el oro de
-            borde y fondo es para llamar la atención y aquí no hay nada que
-            hacer. */}
+        {/* Ficha de la rutina, de arriba abajo: el nombre (a todo el ancho: la
+            barra solo dice "Rutina"), de quién es, de qué va, cuánto pesa la
+            semana en tres casillas y, al pie, lo que se hace con ella: enviarla
+            y su visibilidad en Comunidad, como dos botones con su rótulo. En
+            edición, tocarla abre el nombre y la descripción. */}
         <Pressable
           style={styles.infoBlock}
           onPress={handleOpenInfoModal}
           disabled={!showsEditableName}
         >
-          {showsEditableName && (
-            <View style={styles.infoHead}>
-              <Text style={styles.infoName}>{currentRoutine.name}</Text>
+          <GradientFill accent={theme.colors.primaryLine} />
+          <View style={styles.infoHead}>
+            <Text style={styles.infoName}>{currentRoutine.name}</Text>
+            {showsEditableName && (
               <View style={[styles.infoEditChip, styles.infoEditChipEditable]}>
                 <MaterialCommunityIcons
                   name="pencil"
@@ -849,13 +893,11 @@ export function RoutineDetailScreen({
                   color={theme.colors.onGold}
                 />
               </View>
-            </View>
-          )}
+            )}
+          </View>
           {/* De quién es la rutina, y con enlace a su perfil. La enlazada no es
               tuya (por eso no se edita) y la copia sí, pero el crédito se queda
-              escrito. Antes la enlazada lo decía en la ceja y la copia en la
-              marca: el mismo dato en dos sitios distintos, y ninguno llevaba a
-              ningún lado. */}
+              escrito. */}
           {(isLinked || !!currentRoutine.sourceAuthor) && (
             <RoutineOriginPill
               author={currentRoutine.sourceAuthor}
@@ -869,33 +911,91 @@ export function RoutineDetailScreen({
               {currentRoutine.description}
             </Text>
           )}
-          {/* Lo que pesa la semana: ejercicios, series e intensidad. */}
-          <View
-            style={[
-              styles.infoFacts,
-              (showsEditableName ||
-                !!currentRoutine.description ||
-                isLinked ||
-                !!currentRoutine.sourceAuthor) &&
-                styles.infoFactsDivided,
-            ]}
-          >
-            <View style={styles.infoFact}>
-              <Text style={styles.infoFactValue}>{totalExercises}</Text>
-              <Text style={styles.infoFactLabel}>{t('ejercicios')}</Text>
+
+          {/* Lo que pesa la semana, en casillas iguales: antes dos cifras a la
+              izquierda y la intensidad suelta a la derecha. La píldora de
+              intensidad explica sus tramos al tocarla. */}
+          <View style={styles.infoStats}>
+            <View style={styles.infoStat}>
+              <Text style={styles.infoStatValue}>{totalExercises}</Text>
+              <Text style={styles.infoStatLabel} numberOfLines={1}>
+                {t('ejercicios')}
+              </Text>
             </View>
-            <View style={styles.infoFactDivider} />
-            <View style={styles.infoFact}>
-              <Text style={styles.infoFactValue}>{totalSets}</Text>
-              <Text style={styles.infoFactLabel}>{t('series / semana')}</Text>
+            <View style={styles.infoStat}>
+              <Text style={styles.infoStatValue}>{totalSets}</Text>
+              <Text style={styles.infoStatLabel} numberOfLines={1}>
+                {t('series / semana')}
+              </Text>
             </View>
             {totalSets > 0 && (
-              <RoutineIntensityPill
-                level={routineIntensity(totalSets)}
-                style={styles.infoIntensity}
-              />
+              <View style={styles.infoStat}>
+                <View style={styles.infoStatPillWrap}>
+                  <RoutineIntensityPill level={routineIntensity(totalSets)} />
+                </View>
+                <Text style={styles.infoStatLabel} numberOfLines={1}>
+                  {t('intensidad')}
+                </Text>
+              </View>
             )}
           </View>
+
+          {/* Enviarla (QR o texto) y su visibilidad. El candado dice el estado
+              con palabras: cerrado = "Privada", abierto y en oro = "Pública";
+              tocarlo la cambia. Una rutina ajena no se republica: no es tuya. */}
+          <View style={styles.infoActions}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.infoAction,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={() => setShowShareModal(true)}
+              accessibilityRole="button"
+              accessibilityLabel={t('Enviar a alguien')}
+            >
+              <MaterialCommunityIcons
+                name="share-variant"
+                size={18}
+                color={theme.colors.text}
+              />
+              <Text style={styles.infoActionText}>{t('Enviar')}</Text>
+            </Pressable>
+            {!isLinked && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.infoAction,
+                  isPublic && styles.infoActionOn,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() => {
+                  if (!publishing) handleTogglePublic();
+                }}
+                disabled={publishing}
+                accessibilityRole="switch"
+                accessibilityLabel={
+                  isPublic
+                    ? t('Ocultar de la comunidad')
+                    : t('Hacer visible para la comunidad')
+                }
+                accessibilityState={{ checked: isPublic, busy: publishing }}
+              >
+                <MaterialCommunityIcons
+                  name={isPublic ? 'lock-open-variant' : 'lock'}
+                  size={18}
+                  color={isPublic ? theme.colors.onGold : theme.colors.text}
+                />
+                <Text
+                  style={[
+                    styles.infoActionText,
+                    isPublic && styles.infoActionTextOn,
+                  ]}
+                >
+                  {isPublic ? t('Pública') : t('Privada')}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+
           {/* Antes un candado sin explicar, mientras días y ejercicios se
               editaban igual: prometía más de lo que bloquea. */}
           {isEditing && canEdit && isClosed && (
@@ -942,74 +1042,6 @@ export function RoutineDetailScreen({
         {/* El descanso entre series ya no es de la rutina: es un ajuste de la
             persona y se toca desde Configuración (o desde el ⋯ del registro). */}
 
-        {/* Mandársela a alguien (QR o texto). Se llama por lo que hace: antes
-            era "Compartir rutina", con el mismo verbo que publicar en el tablón. */}
-        <Pressable
-          style={({ pressed }) => [
-            styles.settingRow,
-            pressed && styles.buttonPressed,
-          ]}
-          onPress={() => setShowShareModal(true)}
-          accessibilityRole="button"
-        >
-          <MaterialCommunityIcons
-            name="send-outline"
-            size={20}
-            color={theme.colors.text}
-          />
-          <View style={styles.settingRowTextWrap}>
-            <Text style={styles.settingRowLabel}>{t('Enviar a alguien')}</Text>
-            <Text style={styles.settingRowHint}>
-              {t('Por QR o copiando el texto')}
-            </Text>
-          </View>
-          <MaterialCommunityIcons
-            name="chevron-right"
-            size={22}
-            color={theme.colors.textSecondary}
-          />
-        </Pressable>
-
-        {/* Visibilidad en la comunidad: un ajuste de dos posiciones, así que es
-            `OptionToggle` (como Tema e Idioma) y no una fila que cambia al
-            tocarla. is_public vive en la nube y requiere sesión. Una rutina
-            ajena no se republica: no es tuya. */}
-        {!isLinked && (
-          <View style={[styles.settingRow, styles.visibilityBlock]}>
-            <View style={styles.visibilityHead}>
-              <MaterialCommunityIcons
-                name={isPublic ? 'earth' : 'earth-off'}
-                size={20}
-                color={theme.colors.text}
-              />
-              <View style={styles.settingRowTextWrap}>
-                <Text style={styles.settingRowLabel}>
-                  {t('En la comunidad')}
-                </Text>
-                <Text style={styles.settingRowHint}>
-                  {!user
-                    ? t('Inicia sesión para compartir')
-                    : isPublic
-                    ? profileVisible
-                      ? t('Aparece en el tablón')
-                      : t('Aparece en el tablón firmada como «Anónimo»')
-                    : t('Solo tú la ves')}
-                </Text>
-              </View>
-            </View>
-            <OptionToggle
-              options={[
-                { value: 'private', label: t('Privada'), icon: 'lock-outline' },
-                { value: 'public', label: t('Pública'), icon: 'earth' },
-              ]}
-              value={isPublic ? 'public' : 'private'}
-              onChange={() => {
-                if (!publishing) handleTogglePublic();
-              }}
-            />
-          </View>
-        )}
-
         {/* Rutina ajena: se dice qué se puede y qué no, con la salida al lado.
             Nada de un botón muerto sin explicación. */}
         {isLinked && (
@@ -1033,12 +1065,12 @@ export function RoutineDetailScreen({
         )}
       </StretchScrollView>
 
-      {/* La misma barra que el Detalle de una sesión: título = qué es (el
-          nombre, como la ficha de una rutina pública), subtítulo = un dato vivo
-          (su estado y sus días), la acción principal a la vista y lo raro en el
-          ⋮. Antes titulaba "Rutina" a secas con un eslogan debajo. */}
+      {/* Título = qué es ("Rutina"), subtítulo = un dato vivo (su estado y sus
+          días), la acción principal a la vista y lo raro en el ⋮. El nombre
+          baja a la ficha, como en edición: en la barra, junto al icono y los
+          botones, un nombre de rutina normal salía cortado. */}
       <GlassTopBar
-        title={currentRoutine.name}
+        title={t('Rutina')}
         icon="book-open-variant"
         subtitle={statusSubtitle}
         topInset={insets.top}
@@ -1370,42 +1402,77 @@ const makeStyles = () =>
       gap: 8,
       ...theme.shadow.soft,
     },
-    infoFacts: {
+    // Casillas de la semana: hundidas sobre la tarjeta (fondo de pantalla),
+    // iguales de ancho, cifra en display y rótulo pequeño debajo.
+    infoStats: {
       flexDirection: 'row',
+      gap: 8,
+      marginTop: 6,
+    },
+    infoStat: {
+      flex: 1,
+      minHeight: 64,
       alignItems: 'center',
-      gap: 14,
+      justifyContent: 'center',
+      gap: 2,
+      paddingVertical: 8,
+      paddingHorizontal: 4,
+      borderRadius: theme.borderRadius.md,
+      backgroundColor: theme.colors.background,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
-    // Con algo encima (nombre, autor o descripción), una raya los separa.
-    infoFactsDivided: {
-      marginTop: 4,
-      paddingTop: 12,
-      borderTopWidth: 1,
-      borderTopColor: theme.colors.border,
-    },
-    infoFact: {
-      gap: 1,
-    },
-    infoFactValue: {
-      fontSize: 18,
-      fontWeight: '800',
+    infoStatValue: {
+      fontSize: 22,
+      lineHeight: 30,
+      fontFamily: theme.fonts.display,
+      letterSpacing: 0.4,
       color: theme.colors.text,
       fontVariant: ['tabular-nums'],
     },
-    infoFactLabel: {
-      fontSize: 12,
-      fontWeight: '600',
+    // La píldora de intensidad ocupa el alto de una cifra.
+    infoStatPillWrap: {
+      height: 30,
+      justifyContent: 'center',
+    },
+    infoStatLabel: {
+      fontSize: 11,
+      fontWeight: '700',
       color: theme.colors.textSecondary,
     },
-    infoFactDivider: {
-      width: 1,
-      height: 28,
-      backgroundColor: theme.colors.border,
+    // Enviar y visibilidad: dos botones iguales con icono y rótulo. Neutros;
+    // "Pública" se enciende en oro (como el lápiz de edición).
+    infoActions: {
+      flexDirection: 'row',
+      gap: 8,
+      marginTop: 4,
     },
-    infoIntensity: {
-      marginLeft: 'auto',
+    infoAction: {
+      flex: 1,
+      height: 44,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.surface,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
     },
-    // Nombre + intensidad (+ lápiz en edición) arriba a la derecha. Alineados
-    // arriba para que, con un nombre a dos líneas, acompañen a la primera.
+    infoActionOn: {
+      backgroundColor: theme.colors.primaryFill,
+      borderColor: theme.colors.primaryFillDark,
+    },
+    infoActionText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.text,
+    },
+    infoActionTextOn: {
+      color: theme.colors.onGold,
+    },
+    // Nombre (+ lápiz en edición a la derecha), alineados arriba para que,
+    // con un nombre a dos líneas, el lápiz acompañe a la primera.
     infoHead: {
       flexDirection: 'row',
       alignItems: 'flex-start',
@@ -1413,11 +1480,11 @@ const makeStyles = () =>
     },
     infoName: {
       flex: 1,
-      fontSize: 22,
+      fontSize: 26,
       fontFamily: theme.fonts.display,
       letterSpacing: 0.3,
       color: theme.colors.text,
-      lineHeight: 31,
+      lineHeight: 36,
     },
     infoEditChip: {
       width: 34,
@@ -1448,7 +1515,7 @@ const makeStyles = () =>
     infoDescription: {
       fontSize: 15,
       lineHeight: 21,
-      color: theme.colors.text,
+      color: theme.colors.textSecondary,
     },
     // La lista arrastrable pinta ella el hueco entre días (gap): el bloque
     // deja su margen y el envoltorio pone el de después del último.
@@ -1609,20 +1676,7 @@ const makeStyles = () =>
     buttonPressed: {
       opacity: 0.8,
     },
-    // Fila de ajuste (temporizador, compartir): superficie con borde, discreta.
-    settingRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      backgroundColor: theme.colors.surface,
-      borderRadius: theme.borderRadius.md,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      padding: theme.spacing.md,
-      marginTop: theme.spacing.md,
-      ...theme.shadow.soft,
-    },
-    // Misma forma que una fila de ajuste, pero informativa: no se pulsa.
+    // Nota informativa al pie (rutina ajena): no se pulsa.
     linkedNote: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -1647,16 +1701,6 @@ const makeStyles = () =>
       fontSize: 13,
       color: theme.colors.textSecondary,
       lineHeight: 17,
-    },
-    // Bloque de visibilidad: cabecera (icono + estado) y el interruptor debajo.
-    visibilityBlock: {
-      flexDirection: 'column',
-      alignItems: 'stretch',
-    },
-    visibilityHead: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
     },
     shareModalFooter: {
       gap: 10,

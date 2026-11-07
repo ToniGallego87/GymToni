@@ -120,6 +120,7 @@ import {
 import {
   exerciseLogKey,
   getRecordSetIndexes,
+  pickBestExerciseLog,
   weightStepFromHistory,
 } from '@lib/exerciseProgress';
 import {
@@ -1101,6 +1102,14 @@ export function WorkoutLogScreen({
     return previous?.logDayId === selectedDay.id ? previous : null;
   };
 
+  // Lo hecho en otra rutina u otro día se recuerda por la mejor sesión, no por
+  // la última: es lo que hay que igualar en un plan que se estrena. Un adicional
+  // no entra: su referencia es la última vez, venga de donde venga.
+  const getBestReferenceLog = (exerciseId: string) =>
+    isExtraExerciseId(exerciseId) || getComparableExerciseLog(exerciseId)
+      ? null
+      : pickBestExerciseLog(getPreviousExerciseRuns(exerciseId));
+
   // ¿Tiene el log algún peso real (>0)? Las series a peso corporal (weight -1)
   // o vacías no sirven para calcular el peso de descarga.
   const hasUsableWeight = (log: ExerciseLog | null): boolean => {
@@ -1916,6 +1925,7 @@ export function WorkoutLogScreen({
                           inputDraftsRef.current[exercise.id] = next;
                         }}
                         previousLog={previousLogForField}
+                        bestLog={getBestReferenceLog(exercise.id)}
                         suggestTargetReps={
                           !comparableLog && !isExtraExerciseId(exercise.id)
                         }

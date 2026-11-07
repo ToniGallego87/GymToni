@@ -18,7 +18,7 @@ export {
   POSTER_HEIGHT,
 } from './AchievementPoster';
 export { GradientFill } from './GradientFill';
-export { HistoryCard, HistoryCardRow } from './HistoryCard';
+export { HistoryCard, HistoryCardHeader, HistoryCardRow } from './HistoryCard';
 export { Avatar } from './Avatar';
 // AnimatedCounter no se re-exporta: solo lo consume TrendDelta por ruta relativa.
 export { TrendDelta } from './TrendDelta';
@@ -71,8 +71,12 @@ export {
 export {
   RoutineIntensityPill,
   RoutineIntensityPillSkeleton,
+  intensityColor,
 } from './RoutineIntensityPill';
-export { PublicRoutineCard } from './PublicRoutineCard';
+export {
+  PublicRoutineCard,
+  PublicRoutineCardSkeleton,
+} from './PublicRoutineCard';
 export type { PublicRoutineCardItem } from './PublicRoutineCard';
 export { WhatsNewModal } from './WhatsNewModal';
 export { UpdateAvailableModal } from './UpdateAvailableModal';
@@ -86,6 +90,7 @@ export { ProgressRing } from './ProgressRing';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';
+export { SignOutConfirmModal } from './SignOutConfirmModal';
 export { RestTimerModal } from './RestTimerModal';
 export { ReportModal } from './ReportModal';
 export { TopBarActionButton } from './TopBarActionButton';

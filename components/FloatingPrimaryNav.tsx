@@ -28,6 +28,8 @@ interface FloatingPrimaryNavProps {
    * paso la barra dice de un vistazo con qué cuenta estás.
    */
   profileAvatarUri?: string | null;
+  /** Avisos pendientes en Comunidad: punto dorado sobre su icono. */
+  communityNews?: boolean;
   onPressHome?: () => void;
   onPressCardio?: () => void;
   onPressCalendar?: () => void;
@@ -46,6 +48,7 @@ export function FloatingPrimaryNav({
   bottom,
   activeTab,
   profileAvatarUri,
+  communityNews,
   onPressHome,
   onPressCardio,
   onPressCalendar,
@@ -92,6 +95,7 @@ export function FloatingPrimaryNav({
     <FloatingGlassBar bottom={bottom}>
       {items.map((item) => {
         const isActive = item.key === activeTab;
+        const showsDot = item.key === 'community' && !!communityNews;
 
         return (
           <TouchableOpacity
@@ -106,7 +110,9 @@ export function FloatingPrimaryNav({
             disabled={!item.onPress}
             activeOpacity={0.88}
             accessibilityRole="tab"
-            accessibilityLabel={item.label}
+            accessibilityLabel={
+              showsDot ? `${item.label}. ${t('Tienes avisos')}` : item.label
+            }
             accessibilityState={{ selected: isActive }}
           >
             {isActive && (
@@ -131,11 +137,14 @@ export function FloatingPrimaryNav({
                 <Avatar uri={profileAvatarUri} size={NAV_AVATAR_SIZE} />
               </View>
             ) : (
-              <MaterialCommunityIcons
-                name={item.icon}
-                size={22}
-                style={[styles.icon, isActive && styles.iconActive]}
-              />
+              <View>
+                <MaterialCommunityIcons
+                  name={item.icon}
+                  size={22}
+                  style={[styles.icon, isActive && styles.iconActive]}
+                />
+                {showsDot && <View style={styles.dot} />}
+              </View>
             )}
             <Text
               style={[styles.label, isActive && styles.labelActive]}
@@ -195,6 +204,17 @@ const makeStyles = () =>
     },
     iconActive: {
       color: theme.colors.white,
+    },
+    dot: {
+      position: 'absolute',
+      top: -2,
+      right: -5,
+      width: 11,
+      height: 11,
+      borderRadius: 6,
+      borderWidth: 1.5,
+      borderColor: theme.colors.surface,
+      backgroundColor: theme.colors.primary,
     },
     label: {
       color: theme.colors.textSecondary,

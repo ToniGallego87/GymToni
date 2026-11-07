@@ -57,6 +57,7 @@ import {
   GradientFill,
   HeroCard,
   HistoryCard,
+  HistoryCardHeader,
   HistoryCardRow,
   ChallengesStrip,
   HeroCardStat,
@@ -381,14 +382,15 @@ export function CardioScreen({
     () => buildCardioDays(state.logs, weightHistory),
     [state.logs, weightHistory]
   );
-  // Lo de hoy, si ya hay cardio: la hero lo dice en vez de "Insertar cardio".
-  // Sin kcal (entradas sin velocidad) se dicen los minutos.
+  // Lo de hoy, si ya hay cardio: la hero lo dice en vez de "Insertar cardio"
+  // ("Hoy" de rótulo, la cifra de titular y "+ Añadir" para que se vea que
+  // tocarla suma otra sesión). Sin kcal (entradas sin velocidad), los minutos.
   const todayCardio = days.find((d) => d.isToday);
   const heroTitle = !todayCardio
     ? t('Insertar cardio')
     : todayCardio.totalKcal > 0
-    ? t('Hoy: {n} kcal', { n: Math.round(todayCardio.totalKcal) })
-    : t('Hoy: {n} min', { n: Math.round(todayCardio.totalMinutes) });
+    ? `${Math.round(todayCardio.totalKcal)} kcal`
+    : `${Math.round(todayCardio.totalMinutes)} min`;
   // Compara lunes con lunes: el mismo día de la semana anterior (hoy - 7).
   const sameDayLastWeek = useMemo(() => {
     const d = new Date(`${todayKey}T00:00:00`);
@@ -483,8 +485,11 @@ export function CardioScreen({
           variant="start"
           icon="run-fast"
           // Con cardio hoy, el título es lo que llevas (el dato con el que se
-          // comparan las tres referencias de debajo); tocarla sigue sumando.
+          // comparan las tres referencias de debajo); tocarla sigue sumando, y
+          // la píldora "+ Añadir" lo dice.
           title={heroTitle}
+          titleLabel={todayCardio ? t('Hoy') : undefined}
+          addHint={todayCardio ? t('Añadir') : undefined}
           onPress={() => onInsertCardioOnly?.()}
           // Referencias diarias de kcal bajo la acción, en cuanto hay cardio.
           stats={days.length > 0 ? heroStats : undefined}
@@ -644,22 +649,35 @@ export function CardioScreen({
                   día de Inicio (icono grande a la izquierda, título y fecha
                   debajo, kcal y minutos/km-h a la derecha — `HistoryCard` /
                   `HistoryCardRow`, compartidos con Inicio): una fila por
-                  disciplina, la fecha solo en la primera (si hay más de una,
-                  las demás ya están bajo el mismo día). La altura la anima
-                  <Collapsible/>, el mismo motor que las semanas de Inicio
-                  (antes: FadeInDown escalonado por día + animateLayout). */}
+                  disciplina. Con más de una, la fecha y las kcal del día van
+                  en su cabecera, encima de todas: bajo la primera parecía
+                  solo suya. La altura la anima <Collapsible/>, el mismo motor
+                  que las semanas de Inicio (antes: FadeInDown escalonado por
+                  día + animateLayout). */}
                 <Collapsible open={isExpanded}>
                   {week.days
                     .slice()
                     .reverse()
                     .map((day) => {
                       const isToday = day.date === todayKey;
+                      const severalDisciplines = day.disciplines.length > 1;
                       return (
                         <HistoryCard
                           key={day.date}
                           isToday={isToday}
                           onPress={() => handleDayPress(day)}
                         >
+                          {severalDisciplines && (
+                            <HistoryCardHeader
+                              date={weekdayDayMonth(day.date)}
+                              // Suma de lo que se ve debajo, ya redondeado: con
+                              // `totalKcal` podía no cuadrar por una kcal.
+                              total={`${day.disciplines.reduce(
+                                (sum, entry) => sum + Math.round(entry.kcal),
+                                0
+                              )} kcal`}
+                            />
+                          )}
                           {day.disciplines.map((entry, eIdx) => (
                             <HistoryCardRow
                               key={`${day.date}-${eIdx}`}
@@ -676,9 +694,9 @@ export function CardioScreen({
                               }
                               title={entry.type}
                               date={
-                                eIdx === 0
-                                  ? weekdayDayMonth(day.date)
-                                  : undefined
+                                severalDisciplines
+                                  ? undefined
+                                  : weekdayDayMonth(day.date)
                               }
                               right={
                                 <>
