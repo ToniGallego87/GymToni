@@ -21,52 +21,6 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Mejoras visuales y de UX
 
-- [x] **Comunidad: tarjeta del tablón que diga de quién es, cuántos días tiene
-      y que "Añadir" se distinga** — tres cambios en `PublicRoutineCard`
-      (sale igual en el tablón y en el perfil del autor): (1) bajo el nombre,
-      una línea "de {autor}" en gris que, junto con la foto, lleva a su perfil;
-      hoy el autor es solo una foto de 28 px sin nombre, y con la foto por
-      defecto todas las rutinas parecen de la misma persona. (2) La burbuja de
-      series se cambia por la de **días** ("4 días"): las series ya las resume
-      la píldora de intensidad, que sale de ellas (dos señales para el mismo
-      dato), y los días son lo primero que se mira para elegir rutina. El dato
-      llega gratis en el mismo lote (`getRoutineSetTotals` ya lee los días).
-      Las series y su explicación siguen en la ficha pública, con la de días.
-      (3) "Añadir" pasa a píldora con rótulo ("Añadir" / "Añadida", con su
-      recuento) y el "me gusta" se queda en icono + número: hoy las cuatro
-      píldoras del pie pesan igual, y añadir es la única que cambia tus rutinas.
-      **Por qué:** la tarjeta ES la pantalla; decidir qué rutina abrir pide
-      autor, días e intensidad a la vista, y la acción importante tiene que
-      destacar.
-      **Archivos:** `components/PublicRoutineCard.tsx:103` (cabecera, autor
-      sin nombre), `:136` (pie: series, comentarios, añadir, me gusta),
-      `components/SaveRoutineButton.tsx:39` (`SaveRoutineButton`),
-      `lib/cloud/social.ts:867` (`getRoutineSetTotals`, días en `dayInfo`),
-      `features/workout/CommunityScreen.tsx:286` (lote de metadatos),
-      `features/workout/UserProfileScreen.tsx` (la otra puerta de la tarjeta).
-      **Esfuerzo:** medio.
-- [x] **Comunidad: cabecera más corta, con las novedades en una sola
-      tarjeta** — hoy, antes de la primera rutina, se apilan tu tarjeta, un
-      banner de oro macizo POR CADA rutina con novedades más otro de seguidores,
-      y el raíl: con tres avisos el tablón empieza a media pantalla, y el oro
-      de relleno (reservado a la acción primaria) compite con la pestaña activa.
-      Propuesta: (1) las novedades de tus rutinas en UNA tarjeta neutra
-      "Novedades" (campana y borde de oro, una fila por rutina con su chevron,
-      que abre y descarta igual que hoy). (2) Los seguidores nuevos dejan de
-      ser un banner y pasan a un "+N" en oro sobre el contador "Seguidores" de
-      tu tarjeta, que ya lleva a la misma lista (al abrirla se descarta, como
-      ahora). (3) El subtítulo de la barra deja el eslogan "Rutinas y gente que
-      entrena" por un dato vivo (p. ej. "{n} rutinas" de la pestaña): es la
-      única pantalla principal con eslogan. (4) Sin cuenta y en "Siguiendo",
-      el estado vacío deja de repetir el botón "Crear cuenta" que ya está
-      arriba, en la tarjeta de invitación.
-      **Por qué:** se llega a Comunidad a ver rutinas; los avisos importan,
-      pero agrupados se leen de un vistazo y dejan el tablón a la vista.
-      **Archivos:** `features/workout/CommunityScreen.tsx:670` (tu tarjeta),
-      `:692` (contador de seguidores), `:749` (banners de novedades),
-      `:588` (`newsItems`, aviso de seguidores), `:1083` (subtítulo),
-      `:740` y `:1004` (los dos "Crear cuenta"), `hooks/useCommunityNews.ts`.
-      **Esfuerzo:** bajo.
 - [ ] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
       una fila con el icono de cada día (verde hecho, aro dorado el que toca,
       anillo que se llena el de hoy) y Elige la sesión, un toque después, como
@@ -77,31 +31,6 @@ requisito previo de anuncios, suscripción e iOS.
       falta.
       **Archivos:** `features/workout/HomeScreen.tsx:1153` (`weekDaysRow`),
       `features/workout/DaySelectorScreen.tsx:151` (`weekBar`).
-      **Esfuerzo:** bajo.
-- [x] **Comunidad: el filtro de intensidad con el mismo dibujo que la
-      píldora** — el botón del filtro y sus chips usan velocímetros
-      (`speedometer`, `-slow`, `-medium`) y oro, mientras la píldora de cada
-      tarjeta usa el rayo y verde / ámbar / rojo: el mismo concepto con dos
-      iconos y dos colores. Botón con el rayo, y cada chip con el color de su
-      tramo (`intensityColor`) en contorno y velo. Los chips miden ~28 px de
-      alto: subirlos a 36 y darles `hitSlop`.
-      **Por qué:** al filtrar "Intensa" se debe reconocer al instante la
-      píldora roja de las tarjetas que quedan; y con el pulgar un chip de 28 px
-      se falla.
-      **Archivos:** `features/workout/CommunityScreen.tsx:651`
-      (`intensityOptions`), `:816` (botón), `:1213` (`filterChip`),
-      `components/RoutineIntensityPill.tsx:19` (`intensityColor`).
-      **Esfuerzo:** bajo.
-- [x] **Comunidad: cargar con tarjetas fantasma en vez de rueda** — la
-      primera carga (sin copia guardada) enseña una rueda con "Cargando…" en
-      medio, mientras el resto del tablón ya reserva el hueco de lo que llega
-      tarde (esqueletos de intensidad y series). Tres tarjetas fantasma con la
-      forma de `PublicRoutineCard`.
-      **Por qué:** la pantalla no salta cuando llegan las rutinas, y se ve qué
-      va a aparecer.
-      **Archivos:** `features/workout/CommunityScreen.tsx:959` (`listEmpty`),
-      `components/PublicRoutineCard.tsx`, `components/SaveRoutineButton.tsx:232`
-      (`StatBubbleSkeleton`, patrón a reutilizar).
       **Esfuerzo:** bajo.
 - [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
       duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
@@ -136,35 +65,32 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Funcionalidades a simplificar
 
-- [ ] **[Lanzamiento] Quitar permisos sobrantes y adelgazar la APK** — el
-      manifest pide `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW` (el PiP no lo
-      necesita) y `READ/WRITE_EXTERNAL_STORAGE`, que nada usa; y
-      `SCHEDULE_EXACT_ALARM` viene denegado por defecto en Android 14+.
-      Quitarlos (con `tools:node="remove"` si los mete una dependencia).
-      Activar R8 (`minifyEnabled` + `shrinkResources`): la APK release pesa
-      75 MB. Valorar `allowBackup=false` o excluir la sesión de Supabase del
-      backup de Android.
+- [ ] **[Lanzamiento] Quitar permisos sobrantes y adelgazar la APK** — fuera
+      `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW`, `READ/WRITE_EXTERNAL_STORAGE` y
+      `CAMERA` (estos dos últimos con `tools:node="remove"`, los meten
+      dependencias); R8 + `shrinkResources` en release y solo las ABIs de
+      móvil. Se quedan `SCHEDULE_EXACT_ALARM` (fin de descanso a su hora en
+      Android 12-13; Play no lo pide declarar) y `allowBackup` (la copia de
+      Google salva los entrenos de quien no tiene cuenta).
       **Por qué:** cada permiso de más es una pregunta en la revisión de Play
       y una línea más en Data Safety; una APK pequeña se instala más.
-      **Archivos:** `android/app/src/main/AndroidManifest.xml:2-9` y `:17`
-      (`allowBackup`), `android/app/build.gradle:98` y `:151-152`,
-      `app.json` (`android.permissions`).
-      **Esfuerzo:** bajo.
-- [x] **Comunidad: buscar sin que los resultados se mezclen con el tablón** —
-      con los dos paneles abiertos, el campo de búsqueda sale DEBAJO de los
-      chips de intensidad (lejos de su lupa), y los resultados se pintan con
-      la misma tarjeta justo encima del tablón entero: tras la raya de cierre
-      siguen rutinas que parecen más resultados. Y si no hay nada salen dos
-      "Sin resultados". Propuesta: el campo, siempre el primero bajo el raíl;
-      los resultados en un panel propio (fondo `surfaceAlt`) titulado
-      "Resultados para «…»" con su × para cerrar la búsqueda; y un solo "Nada
-      para «…»" si no hay ni personas ni rutinas. Sigue siendo un filtro
-      temporal sobre la pantalla, no un modo aparte.
-      **Por qué:** se ve dónde acaban los resultados y cómo salir de ellos sin
-      buscar la lupa otra vez.
-      **Archivos:** `features/workout/CommunityScreen.tsx:888` (campo),
-      `:925` (sección de resultados), `:931` y `:947` (los dos "Sin
-      resultados"), `:1191` (`peopleSection`).
+      **Archivos:** `android/app/src/main/AndroidManifest.xml:1-19`,
+      `android/app/proguard-rules.pro` (serialización de los avisos),
+      `android/app/build.gradle` (`abiFilters` en release),
+      `android/gradle.properties` (R8 y `shrinkResources`).
+      **Estado (2026-11-07):** hecho en código; APK de 75 a 40 MB, instalada en
+      el móvil 1 y arranca sin errores. **Falta probar en el móvil**, donde R8
+      podría romper algo:
+      - Descanso con la app minimizada: que suene el aviso al terminar (R8
+        quitaba la serialización de los avisos; arreglado en
+        `proguard-rules.pro`, falta confirmarlo).
+      - Recordatorio de entreno y aviso de peso: que sigan saliendo.
+      - Foto de perfil: elegir una y recortarla.
+      - Compartir: el póster y el vídeo de la semana.
+      - Datos y nube: exportar e importar la copia.
+      - PiP: minimizar con un descanso en marcha.
+      - Cerrar sesión en modo avión: que salga de verdad (ver "Cerrar sesión"
+        sin red y con el token caducado).
       **Esfuerzo:** bajo.
 - [ ] **Ordenar los días de una rutina sin plegarlos uno a uno** — en la
       edición de una ficha, los días solo se arrastran con todos plegados, y
@@ -411,6 +337,38 @@ primero porque sin ellas no se publica.
       (`useForgetSignedOutAccount`).
       **Estado (2026-11-04):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** bajo.
+- [ ] **Los avisos de Comunidad sobreviven a cerrar sesión** — lo ya visto
+      (seguidores y "me gusta" de tus rutinas) se guarda en
+      `gymbro_social_seen_<uid>`, que lleva el prefijo de las copias sociales:
+      al cerrar sesión `clearSocialCache` lo borra con ellas, y al volver a
+      entrar `refreshCommunityNews` siembra con lo actual y los avisos
+      pendientes desaparecen sin haberlos visto (los comentarios sin leer no,
+      van en la nube en `comment_reads`).
+      **Decisión (2026-11-07): lo visto va a la nube**, como `comment_reads`, y
+      no queda nada en el móvil. Tabla `community_seen` (una fila por cuenta:
+      `user_id` uuid PK con `on delete cascade` a `auth.users`, `followers`
+      int, `routine_likes` jsonb `{routineId: likes}` con CHECK de tamaño,
+      `updated_at`), RLS de dueño para leer, insertar y actualizar. Fuera del
+      sync, como `comment_reads`: solo sirve con red, y sin red ya no se mide.
+      `readSeen`/`writeSeen` pasan a leer y escribir esa fila; la primera vez,
+      si hay copia local de una versión anterior, se sube (para no perder lo
+      pendiente de ahora) y se borra del móvil. Sin la tabla (SQL sin
+      ejecutar) la app sigue funcionando y avisa como hoy. Vale además en
+      todos tus móviles: un aviso atendido en uno desaparece en los demás.
+      **Por qué:** cerrar sesión y volver a entrar no debería tragarse los
+      seguidores nuevos y los "me gusta" que aún no habías visto, y lo atendido
+      en un móvil no debería volver a avisar en otro.
+      **Archivos:** `hooks/useCommunityNews.ts:38` (`seenKey`, `readSeen`,
+      `writeSeen`), `:57` (`refreshCommunityNews`, siembra sin lo visto),
+      `lib/cloud/social.ts:1025` (`getCommentReads` / `markCommentsRead`, el
+      patrón a copiar), `supabase/social-schema.sql:258` (`comment_reads`, el
+      modelo de tabla y RLS), `lib/socialCache.ts:143` (`clearSocialCache`,
+      que hoy la borra por el prefijo). **Requiere ejecutar el SQL nuevo en
+      Supabase.**
+      **Estado (2026-11-07):** hecho en código y SQL ejecutado en Supabase
+      (verificado con curl). Falta probarlo en el móvil (aviso pendiente →
+      cerrar sesión → entrar: sigue ahí).
+      **Esfuerzo:** medio.
 - [ ] **Pedir la contraseña antes de borrar la cuenta** — en el popup de
       "Eliminar la cuenta", además de la casilla, pedir la contraseña y
       comprobarla antes de llamar a la función. Las tiendas no lo exigen.
@@ -440,30 +398,42 @@ primero porque sin ellas no se publica.
       cuenta y en el sync.
       **Por qué:** quien entrena sin cobertura no debería ver que ha perdido la
       cuenta; la sesión vuelve sola y el aviso es falso.
-      **Archivos:** `lib/cloud/auth.ts:48` (`onAuthStateChange`), `:73`
-      (`useSession`), `hooks/useCloudSync.ts:33`,
-      `features/workout/DataScreen.tsx`.
+      **Archivos:** `lib/cloud/auth.ts` (`onAuthChange`, `restoring` en
+      `useSession`), `lib/cloud/storedSession.ts` (`readStoredSession`),
+      `hooks/useCloudSync.ts` (no sincroniza mientras se renueva),
+      `features/workout/DataScreen.tsx` (texto y "Sincronizar ahora").
+      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil
+      (sesión de más de una hora → modo avión → cerrar y abrir la app: debe
+      seguir la cuenta; quitar el modo avión: a los ~30 s sincroniza sola).
       **Esfuerzo:** medio.
-- [ ] **"Cerrar sesión" sin red y con el token caducado** — `signOut()` devuelve
-      el error sin lanzarlo y el popup de cerrar sesión no lo mira: el botón termina y la
-      sesión sigue abierta, sin ningún aviso. Leer `{error}` y, sin red, cerrar
-      al menos en este móvil (`scope: 'local'`) o decir qué ha pasado.
+- [ ] **"Cerrar sesión" sin red y con el token caducado** — supabase-js, sin
+      red y con el token caducado, devuelve el error sin borrar la sesión
+      guardada: el popup terminaba y se seguía dentro. Ahora, si la sesión
+      sigue guardada, se borra de este móvil igualmente (los demás
+      dispositivos siguen dentro), y si ni así se puede, el popup lo dice.
       **Por qué:** quien pulsa "Cerrar sesión" da por hecho que ha salido, y en
       un móvil prestado o vendido eso importa.
-      **Archivos:** `components/SignOutConfirmModal.tsx` (`handleConfirm`, el
-      mismo para Perfil y Datos y nube), `lib/cloud/auth.ts:94` (`signOut`).
+      **Archivos:** `lib/cloud/auth.ts:108` (`signOut`, plan B con
+      `_removeSession`), `components/SignOutConfirmModal.tsx` (`handleConfirm`),
+      `components/AccountDeletionPrompt.tsx` (`handleSignOut`).
+      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil
+      (modo avión con la sesión de más de una hora → "Cerrar sesión").
       **Esfuerzo:** bajo.
-- [ ] **Copias de Comunidad en memoria al cambiar de cuenta** — por comprobar:
-      `useForgetSignedOutAccount` limpia las copias en disco, pero las pantallas
-      sociales guardan otras en variables de módulo, que podrían sobrevivir a
-      un cambio de cuenta sin cerrar la app. Si es así, vaciarlas al cambiar de
-      usuario.
+- [ ] **Copias de Comunidad por cuenta** — las copias sociales (tablón, listas
+      de seguir, perfiles ajenos, rutinas públicas) van marcadas con la cuenta
+      que las cargó: al cambiar de cuenta se vacían las de memoria antes de
+      repintar y las de disco de otra cuenta se ignoran; sin cuenta resuelta
+      (arranque sin red) valen las de la sesión guardada.
       **Por qué:** la cuenta nueva no debe ver lo que cargó la anterior, ni un
-      instante.
-      **Archivos:** `features/workout/CommunityScreen.tsx:119` (`boardCache`),
-      `features/workout/FollowingScreen.tsx:51` (`listCache`),
-      `features/workout/UserProfileScreen.tsx:80` (`profileCache`),
-      `hooks/useMyProfile.ts` (`useForgetSignedOutAccount`).
+      instante, y sin cobertura Comunidad sigue enseñando lo último visto.
+      **Archivos:** `lib/socialCache.ts` (`setSocialCacheOwner`,
+      `readSocialCache`), `lib/cloud/auth.ts:42` (`apply`),
+      `features/workout/CommunityScreen.tsx` (`boardCache`),
+      `features/workout/FollowingScreen.tsx` (`listCache`),
+      `features/workout/UserProfileScreen.tsx` (`profileCache`).
+      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil
+      (cerrar sesión y entrar con otra cuenta sin cerrar la app; abrir
+      Comunidad sin red).
       **Esfuerzo:** bajo.
 - [ ] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
       rutina deja renombrar, cambiar el icono, reordenar y quitar días, y

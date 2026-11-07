@@ -25,7 +25,12 @@ import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
-import { readSocialCache, writeSocialCache } from '@lib/socialCache';
+import {
+  isSocialCacheOwner,
+  readSocialCache,
+  registerSocialMemoryCache,
+  writeSocialCache,
+} from '@lib/socialCache';
 import {
   getFollowingProfiles,
   getFollowerProfiles,
@@ -49,6 +54,9 @@ interface FollowingScreenProps {
  * cada arranque volvía a esperar a la red para enseñar lo mismo.
  */
 const listCache = new Map<string, ProfileLite[]>();
+// Ya va por cuenta (la clave lleva su id), pero lo de una cuenta que se ha ido
+// no tiene por qué seguir en memoria (lib/socialCache.ts).
+registerSocialMemoryCache(() => listCache.clear());
 
 const cacheKey = (mode: string, userId: string) => `${mode}:${userId}`;
 
@@ -117,9 +125,11 @@ export function FollowingScreen({
         mode === 'followers'
           ? await getFollowerProfiles(user.id)
           : await getFollowingProfiles(user.id);
+      // Se cerró la sesión mientras tanto: la lista era de la cuenta anterior.
+      if (!isSocialCacheOwner(user.id)) return;
       setProfiles(rows);
       listCache.set(key, rows);
-      writeSocialCache(key, rows);
+      writeSocialCache(key, rows, user.id);
     } catch {
       // Silencioso: si falla se queda lo que hubiera (la copia de la última
       // visita, o la lista vacía en la primera).

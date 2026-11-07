@@ -1,4 +1,6 @@
 const signInWithPassword = jest.fn();
+const authSignOut = jest.fn();
+const removeSession = jest.fn();
 const getItem = jest.fn();
 
 jest.mock('react-native', () => ({
@@ -12,6 +14,8 @@ jest.mock('../supabase', () => ({
   supabase: {
     auth: {
       signInWithPassword: (args: unknown) => signInWithPassword(args),
+      signOut: (args: unknown) => authSignOut(args),
+      _removeSession: () => removeSession(),
     },
   },
 }));
@@ -19,11 +23,14 @@ jest.mock('../supabase', () => ({
 import {
   authErrorMessage,
   hasStoredSession,
+  signOut,
   verifyCurrentPassword,
 } from '../cloud/auth';
 
 beforeEach(() => {
   signInWithPassword.mockReset();
+  authSignOut.mockReset();
+  removeSession.mockReset();
   getItem.mockReset();
 });
 
@@ -77,5 +84,39 @@ describe('authErrorMessage', () => {
   it('reconoce la falta de red', () => {
     const message = authErrorMessage({ name: 'AuthRetryableFetchError' });
     expect(message).not.toBe('[object Object]');
+  });
+});
+
+describe('signOut', () => {
+  it('no toca nada más si supabase-js cierra bien', async () => {
+    authSignOut.mockResolvedValue({ error: null });
+    await signOut();
+    expect(removeSession).not.toHaveBeenCalled();
+  });
+
+  it('sin red y con el token caducado, cierra igualmente en este móvil', async () => {
+    // supabase-js devuelve el error de renovar sin borrar la sesión guardada.
+    authSignOut.mockResolvedValue({
+      error: { name: 'AuthRetryableFetchError' },
+    });
+    getItem.mockResolvedValue('{"access_token":"x"}');
+    await signOut();
+    expect(removeSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('con error pero la sesión ya borrada, no hace nada más', async () => {
+    authSignOut.mockResolvedValue({ error: { status: 500 } });
+    getItem.mockResolvedValue(null);
+    await signOut();
+    expect(removeSession).not.toHaveBeenCalled();
+  });
+});
+
+describe('signOut con el cliente instalado', () => {
+  it('el plan B (_removeSession, privado) sigue existiendo en auth-js', () => {
+    // Si una subida de supabase-js lo renombra, "Cerrar sesión" sin red vuelve
+    // a dejar dentro: este test lo dice antes de publicar.
+    const { GoTrueClient } = jest.requireActual('@supabase/auth-js');
+    expect(typeof GoTrueClient.prototype._removeSession).toBe('function');
   });
 });

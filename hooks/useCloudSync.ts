@@ -30,8 +30,12 @@ export function useCloudSync(
   routines: WorkoutRoutine[],
   enabled = true
 ): void {
-  const { user } = useSession();
-  const userId = user?.id ?? null;
+  const { user, restoring } = useSession();
+  // Con la sesión guardada esperando a renovarse no se sincroniza: sin token
+  // válido supabase-js pide como anónimo, la RLS lo rechaza y el outbox acaba
+  // descartando cambios tras sus reintentos. Lo hecho mientras tanto espera en
+  // el outbox y sube al renovarse (el efecto vuelve a correr con la cuenta).
+  const userId = restoring ? null : user?.id ?? null;
   // Evita relanzar mientras uno está en vuelo (el motor ya tiene su mutex, pero
   // así no encolamos recargas de estado innecesarias).
   const inFlight = useRef(false);

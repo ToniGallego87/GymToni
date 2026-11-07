@@ -23,8 +23,10 @@ type Action = 'recover' | 'signout' | null;
  * cuenta que se va a borrar sola.
  */
 export function AccountDeletionPrompt() {
-  const { user } = useSession();
-  const userId = user?.id ?? null;
+  const { user, restoring } = useSession();
+  // Con la sesión esperando a renovarse no se puede preguntar a la nube; al
+  // renovarse cambia la clave y se pregunta entonces.
+  const userId = restoring ? null : user?.id ?? null;
   const [requestedAt, setRequestedAt] = useState<string | null>(null);
   const [action, setAction] = useState<Action>(null);
   // Texto que sustituye al mensaje tras intentar recuperar sin éxito.
@@ -64,6 +66,8 @@ export function AccountDeletionPrompt() {
     setAction('signout');
     try {
       await signOut();
+    } catch {
+      setProblem(t('No se pudo cerrar la sesión. Inténtalo de nuevo.'));
     } finally {
       setAction(null);
     }

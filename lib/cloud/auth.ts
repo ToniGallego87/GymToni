@@ -1,10 +1,12 @@
 import { useSyncExternalStore } from 'react';
-import { unstable_batchedUpdates } from 'react-native';
+import { AppState, unstable_batchedUpdates } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../supabase';
-import { SUPABASE_URL } from '../supabaseConfig';
+import { setSocialCacheOwner } from '../socialCache';
 import { t } from '../i18n';
+import { hasStoredSession, readStoredSession } from './storedSession';
+
+export { hasStoredSession } from './storedSession';
 
 // Sesión de Supabase reactiva, en un store de módulo con UNA sola suscripción al
 // cliente (mismo patrón que `themeStore`). Persiste en AsyncStorage (ver
@@ -19,9 +21,15 @@ import { t } from '../i18n';
 // llegan desde una promesa no se agrupan: los primeros segundos eran una ristra
 // de repintados sueltos, la raíz de la app incluida.
 
-type SessionState = { session: Session | null; loading: boolean };
+// `restoring`: la sesión guardada en el móvil, con el token caducado y
+// esperando a la red para renovarlo (ver `onAuthChange`).
+type SessionState = {
+  session: Session | null;
+  loading: boolean;
+  restoring: boolean;
+};
 
-let current: SessionState = { session: null, loading: true };
+let current: SessionState = { session: null, loading: true, restoring: false };
 const listeners = new Set<() => void>();
 let started = false;
 
@@ -31,14 +39,50 @@ let started = false;
 const identity = (session: Session | null): string =>
   session ? JSON.stringify(session.user) : '';
 
-function apply(session: Session | null): void {
-  if (!current.loading && identity(session) === identity(current.session)) {
+function apply(session: Session | null, restoring: boolean): void {
+  if (
+    !current.loading &&
+    restoring === current.restoring &&
+    identity(session) === identity(current.session)
+  ) {
     return;
   }
-  current = { session, loading: false };
+  current = { session, loading: false, restoring };
+  // Antes de avisar: las copias sociales de otra cuenta se vacían aquí, y así
+  // ninguna pantalla repinta con lo de la anterior (ver lib/socialCache.ts).
+  setSocialCacheOwner(session?.user.id ?? null);
   // Un solo pase de render para todos los suscriptores (ver arriba).
   unstable_batchedUpdates(() => {
     for (const listener of Array.from(listeners)) listener();
+  });
+}
+
+// Orden de los avisos: el de una sesión null se resuelve tras leer el disco, y
+// si entretanto llega otro, manda el último.
+let changeSeq = 0;
+
+/**
+ * Sin sesión no siempre es sin cuenta. Al arrancar con el token caducado sin
+ * poder renovarlo (sin red, el servidor de Auth fallando o un portal cautivo:
+ * todo lo que supabase-js cuenta como reintentable), da la sesión por null
+ * aunque la conserve guardada, y la app se pintaba como si no hubiera cuenta.
+ * Entonces se usa la guardada, como si hubiera sesión y no hubiera red, que la
+ * app ya sabe llevar: lo que se pida a la nube falla (lib/supabase.ts corta lo
+ * que saldría como anónimo) y se reintenta, y las copias del móvil siguen
+ * valiendo. supabase-js reintenta solo (su ticker va cada 30 s, pero tras un
+ * fallo espera un minuto), y al conseguirlo avisa con la sesión buena: suele
+ * tardar uno o dos minutos desde que vuelve la red. Si el servidor la rechaza
+ * (revocada, cuenta borrada), la borra él mismo y entonces sí queda sin
+ * cuenta. Una salida de verdad siempre borra la guardada antes de avisar.
+ */
+function onAuthChange(next: Session | null): void {
+  const seq = ++changeSeq;
+  if (next) {
+    apply(next, false);
+    return;
+  }
+  void readStoredSession().then((stored) => {
+    if (seq === changeSeq) apply(stored, !!stored);
   });
 }
 
@@ -47,7 +91,15 @@ function start(): void {
   started = true;
   // INITIAL_SESSION trae la sesión guardada (o null) en cuanto el cliente se
   // inicializa, así que basta con suscribirse: no hace falta `getSession()`.
-  supabase.auth.onAuthStateChange((_event, next) => apply(next));
+  supabase.auth.onAuthStateChange((_event, next) => onAuthChange(next));
+  // Esperando a la red, al volver a la app se intenta renovar ya, sin esperar
+  // al ticker de supabase-js (si falló hace menos de un minuto no lo intenta
+  // aún). Si lo consigue, avisa él.
+  AppState.addEventListener('change', (state) => {
+    if (state === 'active' && current.restoring) {
+      void supabase.auth.getSession().catch(() => {});
+    }
+  });
 }
 
 /**
@@ -74,13 +126,15 @@ export function useSession(): {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  /** La sesión es la guardada y espera a la red para renovarse. */
+  restoring: boolean;
 } {
-  const { session, loading } = useSyncExternalStore(
+  const { session, loading, restoring } = useSyncExternalStore(
     subscribe,
     getSnapshot,
     getSnapshot
   );
-  return { session, user: session?.user ?? null, loading };
+  return { session, user: session?.user ?? null, loading, restoring };
 }
 
 export function signUp(email: string, password: string) {
@@ -91,8 +145,31 @@ export function signIn(email: string, password: string) {
   return supabase.auth.signInWithPassword({ email: email.trim(), password });
 }
 
-export function signOut() {
-  return supabase.auth.signOut();
+/**
+ * Cierra la sesión en todos los dispositivos y, pase lo que pase, en este.
+ *
+ * supabase-js no siempre la borra del móvil: sin red y con el token caducado
+ * intenta renovarlo antes de nada, falla y devuelve el error sin tocar la
+ * sesión guardada (`scope: 'local'` pasa por el mismo sitio). Quien pulsa
+ * "Cerrar sesión" da por hecho que ha salido, así que entonces se borra a mano.
+ * En ese caso solo sale ESTE móvil: no se ha podido avisar al servidor, y los
+ * demás dispositivos siguen dentro hasta que se cierre desde ellos.
+ *
+ * Lanza solo si no ha podido salir ni de este móvil.
+ */
+export async function signOut(): Promise<void> {
+  const { error } = await supabase.auth.signOut();
+  if (!error) return;
+  if (!(await hasStoredSession())) return;
+  // `_removeSession` es privado en los tipos, pero es lo mismo que hace
+  // `signOut` cuando funciona: borra la sesión guardada y avisa SIGNED_OUT a los
+  // suscriptores (`useSession` y la limpieza de `useForgetSignedOutAccount`).
+  // Un test comprueba que el cliente instalado lo sigue teniendo.
+  const auth = supabase.auth as unknown as {
+    _removeSession?: () => Promise<void>;
+  };
+  if (typeof auth._removeSession !== 'function') throw error;
+  await auth._removeSession();
 }
 
 // Confirmación de registro por código de 6 dígitos (la plantilla "Confirm
@@ -171,7 +248,7 @@ export async function requestAccountDeletion(): Promise<void> {
   if (error) throw error;
   // Sin perfil no hay nada que marcar: la purga nunca encontraría la cuenta.
   if (!data) throw new Error('profile_not_found');
-  await supabase.auth.signOut();
+  await signOut();
 }
 
 /** Recupera la cuenta. false: el plazo ya ha terminado y no se puede. */
@@ -197,21 +274,6 @@ export async function getAccountDeletionRequest(
   if (error || !data) return null;
   return (data as { deletion_requested_at: string | null })
     .deletion_requested_at;
-}
-
-// Clave con la que supabase-js guarda la sesión (su valor por defecto).
-const SESSION_STORAGE_KEY = `sb-${
-  SUPABASE_URL.replace('https://', '').split('.')[0]
-}-auth-token`;
-
-/**
- * ¿Sigue la sesión guardada en el móvil? Distingue "no hay sesión" de "aún no se
- * ha podido recuperar": al arrancar sin red con el token caducado, supabase-js
- * da una sesión null pero conserva la guardada, y volverá en cuanto haya red.
- * Una salida de verdad siempre borra esta clave antes de avisar.
- */
-export async function hasStoredSession(): Promise<boolean> {
-  return (await AsyncStorage.getItem(SESSION_STORAGE_KEY)) !== null;
 }
 
 // Errores de Supabase Auth que el usuario ve a menudo, traducidos por su

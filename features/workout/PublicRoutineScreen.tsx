@@ -201,6 +201,7 @@ export function PublicRoutineScreen({
   const canOpenAuthor =
     !!ownerId && !!onOpenProfile && ownerId !== DELETED_ACCOUNT_ID;
 
+  const viewerId = user?.id ?? null;
   const load = useCallback(async () => {
     // La copia del último arranque, ya: entrar en una rutina del tablón volvía a
     // esperar su plan entero cada vez, también la segunda y la tercera vez que
@@ -224,13 +225,15 @@ export function PublicRoutineScreen({
         return;
       }
       setRoutine(fetched);
-      writeSocialCache(`routine_${routineId}`, fetched);
+      // El plan es público y no depende de quién mira; la copia va igual
+      // marcada con la cuenta, como todas (lib/socialCache.ts).
+      writeSocialCache(`routine_${routineId}`, fetched, viewerId);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [routineId, ownerId]);
+  }, [routineId, ownerId, viewerId]);
 
   useEffect(() => {
     load();

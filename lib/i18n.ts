@@ -574,6 +574,12 @@ register({
   'Creando…': 'Creating…',
   'Cerrar sesión': 'Sign out',
   '¿Cerrar sesión?': 'Sign out?',
+  'No se pudo cerrar la sesión. Inténtalo de nuevo.':
+    'Could not sign out. Please try again.',
+  'La sesión aún no se ha renovado. Se sincronizará sola en cuanto lo haga.':
+    "Your session hasn't been renewed yet. Syncing will resume automatically once it is.",
+  'No se ha podido renovar la sesión (sin conexión o la nube no responde). Sigue abierta y se renovará sola; lo que hagas mientras tanto se subirá entonces.':
+    'Could not renew the session (no connection or the cloud is not responding). You are still signed in and it will renew by itself; anything you do meanwhile will be uploaded then.',
   'Cerrando sesión…': 'Signing out…',
   'Tus entrenos y rutinas se quedan en este móvil y en la nube. Para volver a sincronizar y usar Comunidad tendrás que iniciar sesión otra vez.':
     'Your workouts and routines stay on this phone and in the cloud. To sync again and use Community you will need to sign in again.',

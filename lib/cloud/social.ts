@@ -1060,6 +1060,49 @@ export async function markCommentsRead(
 }
 
 /**
+ * Lo último que viste de tu Comunidad (tabla `community_seen`): seguidores y
+ * "me gusta" por rutina. null si aún no hay nada guardado. Lanza sin red o si
+ * la tabla no existe todavía (SQL sin ejecutar).
+ */
+export async function getCommunitySeen(
+  userId: string
+): Promise<{ followers: number; routineLikes: Record<string, number> } | null> {
+  const { data, error } = await supabase
+    .from('community_seen')
+    .select('followers, routine_likes')
+    .eq('user_id', userId)
+    .maybeSingle();
+  if (error) throw new Error(`community_seen: ${error.message}`);
+  if (!data) return null;
+  const row = data as {
+    followers: number | null;
+    routine_likes: Record<string, unknown> | null;
+  };
+  const routineLikes: Record<string, number> = {};
+  for (const [id, likes] of Object.entries(row.routine_likes ?? {})) {
+    if (typeof likes === 'number' && likes >= 0) routineLikes[id] = likes;
+  }
+  return { followers: Math.max(0, row.followers ?? 0), routineLikes };
+}
+
+/** Guarda lo último que viste de tu Comunidad. */
+export async function saveCommunitySeen(
+  userId: string,
+  seen: { followers: number; routineLikes: Record<string, number> }
+): Promise<void> {
+  const { error } = await supabase.from('community_seen').upsert(
+    {
+      user_id: userId,
+      followers: seen.followers,
+      routine_likes: seen.routineLikes,
+      updated_at: Date.now(),
+    },
+    { onConflict: 'user_id' }
+  );
+  if (error) throw new Error(`community_seen: ${error.message}`);
+}
+
+/**
  * Comentarios de otras personas posteriores a lo leído en cada rutina, en UNA
  * consulta: se pide desde lo más antiguo leído y se afina aquí.
  */

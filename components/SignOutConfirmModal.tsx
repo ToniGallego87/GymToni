@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { signOut } from '@lib/cloud/auth';
 import { t } from '@lib/i18n';
 import { ConfirmModal } from './ConfirmModal';
@@ -18,14 +18,23 @@ export function SignOutConfirmModal({
   onClose,
 }: SignOutConfirmModalProps) {
   const [busy, setBusy] = useState(false);
+  // No se ha podido salir ni de este móvil: se dice en el popup, que se queda
+  // abierto, en vez de cerrarlo como si hubiera salido.
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (visible) setProblem(null);
+  }, [visible]);
 
   const handleConfirm = async () => {
     setBusy(true);
     try {
       await signOut();
+      onClose();
+    } catch {
+      setProblem(t('No se pudo cerrar la sesión. Inténtalo de nuevo.'));
     } finally {
       setBusy(false);
-      onClose();
     }
   };
 
@@ -34,9 +43,12 @@ export function SignOutConfirmModal({
       visible={visible}
       icon="logout"
       title={t('¿Cerrar sesión?')}
-      message={t(
-        'Tus entrenos y rutinas se quedan en este móvil y en la nube. Para volver a sincronizar y usar Comunidad tendrás que iniciar sesión otra vez.'
-      )}
+      message={
+        problem ??
+        t(
+          'Tus entrenos y rutinas se quedan en este móvil y en la nube. Para volver a sincronizar y usar Comunidad tendrás que iniciar sesión otra vez.'
+        )
+      }
       confirmLabel={busy ? t('Cerrando sesión…') : t('Cerrar sesión')}
       busy={busy}
       onConfirm={handleConfirm}

@@ -90,7 +90,11 @@ import {
   setLastSeenVersion,
   setLastUpdatePromptVersion,
 } from '@lib/storage';
-import { useForgetSignedOutAccount, useMyProfile } from '@hooks/useMyProfile';
+import {
+  useForgetSignedOutAccount,
+  useMyProfile,
+  useReloadProfileOnSessionRestore,
+} from '@hooks/useMyProfile';
 import { useRecordAccountLevel } from '@hooks/useAccountLevel';
 import { TabFocusContext } from '@hooks/useTabFocus';
 import { shiftAward, useAwards } from '@lib/awards';
@@ -1895,6 +1899,7 @@ function CloudSync({ enabled }: { enabled: boolean }) {
   useCloudSync(dispatch, state.routines, enabled);
   useCommunityNewsRefresh(enabled);
   useForgetSignedOutAccount();
+  useReloadProfileOnSessionRestore();
   return null;
 }
 

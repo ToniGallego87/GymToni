@@ -3,9 +3,12 @@ import {
   capSeenCounts,
   COMMENT_READS_EPOCH,
   hasCommunityNews,
+  mergeSeenCounts,
+  planSeenRefresh,
   NO_COMMUNITY_NEWS,
   pickNewComments,
   readCommentThread,
+  sameSeenCounts,
 } from '../communityNews';
 
 describe('buildCommunityNews', () => {
@@ -112,6 +115,90 @@ describe('readCommentThread', () => {
     expect(readCommentThread([], 'yo', undefined, false, now)).toEqual({
       fresh: [],
       readAt: now,
+    });
+  });
+});
+
+describe('mergeSeenCounts', () => {
+  it('se queda con lo más visto de la nube y de lo pendiente del móvil', () => {
+    const cloud = { followers: 5, routineLikes: { a: 3, b: 1 } };
+    const pending = { followers: 4, routineLikes: { a: 7, c: 2 } };
+    expect(mergeSeenCounts(cloud, pending)).toEqual({
+      followers: 5,
+      routineLikes: { a: 7, b: 1, c: 2 },
+    });
+  });
+
+  it('con una sola versión, esa; sin ninguna, null', () => {
+    const only = { followers: 1, routineLikes: {} };
+    expect(mergeSeenCounts(only, null)).toBe(only);
+    expect(mergeSeenCounts(null, only)).toBe(only);
+    expect(mergeSeenCounts(null, null)).toBeNull();
+  });
+});
+
+describe('sameSeenCounts', () => {
+  it('compara seguidores y cada rutina, sin mirar el orden', () => {
+    expect(
+      sameSeenCounts(
+        { followers: 2, routineLikes: { a: 1, b: 2 } },
+        { followers: 2, routineLikes: { b: 2, a: 1 } }
+      )
+    ).toBe(true);
+    expect(
+      sameSeenCounts(
+        { followers: 2, routineLikes: { a: 1 } },
+        { followers: 2, routineLikes: { a: 1, b: 0 } }
+      )
+    ).toBe(false);
+    expect(sameSeenCounts(null, { followers: 0, routineLikes: {} })).toBe(
+      false
+    );
+    expect(sameSeenCounts(null, null)).toBe(true);
+  });
+});
+
+describe('planSeenRefresh', () => {
+  const measured = { followers: 10, routineLikes: { a: 5 } };
+
+  it('sin poder leer la nube ni nada pendiente, no siembra ni sube', () => {
+    expect(planSeenRefresh(undefined, null, measured)).toEqual({
+      seen: null,
+      write: 'none',
+    });
+  });
+
+  it('sin poder leer la nube, no avisa ni escribe aunque haya algo pendiente', () => {
+    // Lo pendiente suele ser solo lo atendido: medir contra ello haría salir
+    // como nuevo todo lo demás (37 seguidores "nuevos").
+    const patch = { followers: 0, routineLikes: { a: 5 } };
+    expect(planSeenRefresh(undefined, patch, measured)).toEqual({
+      seen: null,
+      write: 'none',
+    });
+  });
+
+  it('la primera vez en la nube siembra con lo medido y lo sube', () => {
+    expect(planSeenRefresh(null, null, measured)).toEqual({
+      seen: measured,
+      write: 'cloud',
+    });
+  });
+
+  it('con la nube al día y nada pendiente, no escribe', () => {
+    const cloud = { followers: 7, routineLikes: { a: 2 } };
+    expect(planSeenRefresh(cloud, null, measured)).toEqual({
+      seen: cloud,
+      write: 'none',
+    });
+  });
+
+  it('funde lo pendiente con la nube y lo sube', () => {
+    const cloud = { followers: 7, routineLikes: { a: 2 } };
+    const pending = { followers: 9, routineLikes: {} };
+    expect(planSeenRefresh(cloud, pending, measured)).toEqual({
+      seen: { followers: 9, routineLikes: { a: 2 } },
+      write: 'cloud',
     });
   });
 });

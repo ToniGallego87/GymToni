@@ -4,6 +4,81 @@
 
 ### Arquitectura
 
+- **APK más ligera y con menos permisos** (ficha [Lanzamiento] del ROADMAP).
+  Fuera `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW` (el PiP no lo necesita; sigue en
+  el manifest de debug) y `READ/WRITE_EXTERNAL_STORAGE` y `CAMERA`, que meten
+  `expo-file-system` y `expo-image-picker` (`tools:node="remove"`): la foto de
+  perfil sale del selector de fotos del sistema, que no pide permisos. Se
+  quedan `SCHEDULE_EXACT_ALARM` (fin de descanso a su hora en Android 12-13,
+  sin declaración en Play) y `allowBackup` (la copia de Google salva los
+  entrenos de quien no tiene cuenta). Release con R8 y `shrinkResources`
+  (`gradle.properties`) y solo las ABIs de móvil (`abiFilters` en release,
+  desde `reactNativeArchitectures`): las librerías precompiladas de RN traían
+  también x86/x86_64. APK de 75 a 40 MB; el dex, de 19 a 7,4 MB.
+  `proguard-rules.pro` conserva la serialización de Java: expo-notifications
+  guarda cada aviso programado así (`NotificationContent` con
+  `writeObject`/`readObject` privados), y sin la regla R8 los quitaba y ningún
+  aviso (descanso, recordatorios, peso) llegaba a programarse; también
+  conserva los nombres, para que se lean los avisos ya guardados.
+- **Copias sociales por cuenta** (`lib/socialCache.ts`). Cada copia, en disco
+  y en memoria, es de la cuenta que la cargó: lo que trae Comunidad depende de
+  quién mira (a quién sigue, sus "me gusta", su feed). La sesión
+  (`apply` en `lib/cloud/auth.ts`) fija el dueño con `setSocialCacheOwner`
+  ANTES de avisar a las pantallas, y al cambiar vacía las cachés de módulo
+  registradas (`registerSocialMemoryCache`: tablón, listas de seguir, perfiles
+  ajenos). `readSocialCache` ignora lo de otra cuenta y lo de antes de este
+  cambio (sin dueño); sin cuenta resuelta (arranque con el token caducado,
+  que supabase-js no resuelve hasta renovarlo, o sin red, que lo da por null)
+  lee las de la sesión guardada (`storedSessionUserId`, nuevo
+  `lib/cloud/storedSession.ts` junto a `hasStoredSession`), y al resolverse a
+  esa misma cuenta no vacía la memoria;
+  `writeSocialCache` recibe la cuenta para la que se cargó y no guarda si ya
+  mira otra (`isSocialCacheOwner`), con lo que una carga que termina tras
+  cerrar sesión tampoco se pinta. Antes la limpieza solo era la de disco al
+  cerrar sesión (`clearSocialCache`), que va por detrás del cambio, y las
+  copias en memoria sobrevivían hasta cerrar la app.
+- **Tabla `community_seen`** (`supabase/social-schema.sql`): lo último que cada
+  persona vio de su Comunidad (seguidores y "me gusta" por rutina, jsonb con
+  tope de 8 KB), una fila por cuenta, RLS de dueño y en cascada con la cuenta.
+  Fuera del sync, como `comment_reads`. `hooks/useCommunityNews.ts` mide los
+  avisos contra ella (`getCommunitySeen` / `saveCommunitySeen`); en el móvil
+  (`gymbro_social_seen_<uid>`, la clave de antes) solo espera lo que no se ha
+  podido subir y lo de versiones anteriores, se funde con la nube al leer
+  quedándose con lo más visto (`mergeSeenCounts`) y se borra al subir. Qué
+  subir lo decide `planSeenRefresh` (lib/communityNews.ts, con tests): sin poder
+  leer la nube no se avisa esa vez ni se escribe nada (subir a ciegas haría
+  volver avisos que otro móvil ya atendió, y lo pendiente, que suele ser solo
+  lo atendido, no sirve para medir), y leída solo se escribe si cambia algo.
+  Atender un aviso marca SOLO ese dato (seguidores, o los "me gusta" de esa
+  rutina): se guarda en el móvil al momento y luego se sube; leer, calcular y
+  escribir van en cola (`serialSeen`), y un refresco que leyó antes de atender
+  pinta igualmente sin lo atendido (`dismissed`). **SQL ya ejecutado en Supabase**
+  (2026-11-07, verificado con curl: sin sesión la lectura da `[]` y la
+  escritura, 42501 por la RLS).
+- **Sesión guardada al arrancar sin red** (`lib/cloud/auth.ts`). Con el token
+  caducado y sin red, supabase-js da la sesión por null aunque la conserve
+  guardada, y la app se pintaba como si no hubiera cuenta. Ahora, ante una
+  sesión null, `onAuthChange` lee la guardada (`readStoredSession`, en
+  `lib/cloud/storedSession.ts` junto a `hasStoredSession`) y la expone con
+  `restoring: true`: la app la trata como sesión sin red. supabase-js reintenta
+  renovar el token cada 30 s (y al volver a primer plano se le empuja con
+  `getSession`); al conseguirlo avisa con la buena, y si el servidor la rechaza
+  la borra él. Mientras `restoring`, `useCloudSync` no sincroniza (sin token
+  pediría como anónimo y la RLS lo rechazaría hasta descartar cambios del
+  outbox); lo hecho espera en el outbox y sube al renovarse. Tampoco miden los
+  avisos de Comunidad ni el de borrado de cuenta, que vuelven a correr al
+  renovarse, igual que el perfil (`useReloadProfileOnSessionRestore`, en la
+  raíz). Datos y nube lo dice y "Sincronizar ahora" no sale.
+- **Nunca como anónimo con una cuenta en el móvil** (`accountSafeFetch` en
+  `lib/supabase.ts`, con tests). Con el token caducado y sin poder renovarlo
+  (también con la app abierta: tras un fallo, supabase-js espera un minuto
+  antes de reintentar), supabase-js no da error: pide con la clave pública. La
+  RLS responde vacío o rechaza: el outbox sumaba intentos hasta descartar
+  cambios, un borrado (update a 0 filas) se daba por subido y la lápida se
+  perdía, y Comunidad guardaba lo vacío como copia de la cuenta. Ahora, con
+  sesión guardada, esa petición (datos, storage y funciones; Auth no) se corta
+  como "Network request failed", que el outbox ya trata como falta de red sin
+  contar intentos.
 - **Tabla `comment_reads`** (`supabase/social-schema.sql`): hasta dónde ha leído
   cada persona cada hilo, con RLS de dueño. Va fuera del sync: solo sirve con red,
   igual que los comentarios. Sin ella la app sigue funcionando, pero los
@@ -491,6 +566,16 @@
   registro lleva `keyboardShouldPersistTaps="handled"`: antes el primer toque
   solo cerraba el teclado. Y "Siguiente" en el teclado del peso salta a las
   reps.
+- **"Cerrar sesión" cierra siempre en este móvil.** Sin red y con el token
+  caducado, supabase-js intenta renovarlo, falla y devuelve el error sin
+  borrar la sesión guardada (`scope: 'local'` pasa por el mismo sitio): el
+  popup terminaba y se seguía dentro. `signOut` (`lib/cloud/auth.ts`) mira el
+  error y, si la sesión sigue guardada, la borra con `_removeSession` (privado
+  en los tipos; es lo que hace `signOut` cuando funciona, SIGNED_OUT
+  incluido; un test comprueba que auth-js lo sigue teniendo). Entonces solo
+  sale este móvil: los demás siguen dentro hasta cerrar desde ellos. Si ni así
+  se puede, el popup lo dice y se queda abierto en vez de cerrarse como si
+  hubiera salido. También lo usa pedir el borrado de la cuenta.
 
 ## Version 0.8.7 - 2026-10-15
 

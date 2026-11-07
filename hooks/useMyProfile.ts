@@ -1,4 +1,4 @@
-import { useEffect, useReducer } from 'react';
+import { useEffect, useReducer, useRef } from 'react';
 import { unstable_batchedUpdates } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { setStoredPublishedActivity } from '@lib/appSettings';
@@ -212,6 +212,28 @@ export function useForgetSignedOutAccount(): void {
       cancelled = true;
     };
   }, [userId, loading]);
+}
+
+/**
+ * Al renovarse una sesión que esperaba a la red (`restoring`), vuelve a pedir el
+ * perfil a la nube: la cuenta es la misma, así que nada más lo pediría, y hasta
+ * entonces se pintaba la copia local (con un XP que otro móvil puede haber
+ * dejado atrás). Una sola vez, en la raíz.
+ */
+export function useReloadProfileOnSessionRestore(): void {
+  const { user, restoring } = useSession();
+  const userId = user?.id ?? null;
+  const wasRestoring = useRef(false);
+
+  useEffect(() => {
+    if (restoring) {
+      wasRestoring.current = true;
+      return;
+    }
+    if (!wasRestoring.current) return;
+    wasRestoring.current = false;
+    if (userId) void loadMyProfile(userId, true);
+  }, [restoring, userId]);
 }
 
 export function useMyProfile(): { profile: Profile | null; loading: boolean } {

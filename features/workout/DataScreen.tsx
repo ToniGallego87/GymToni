@@ -114,7 +114,7 @@ export function DataScreen({
 }: DataScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
-  const { session, user, loading: sessionLoading } = useSession();
+  const { session, user, loading: sessionLoading, restoring } = useSession();
 
   const [showImportModal, setShowImportModal] = useState(false);
   const [showClearModal, setShowClearModal] = useState(false);
@@ -370,6 +370,19 @@ export function DataScreen({
   const doSync = useCallback(
     async (announce: boolean) => {
       if (!user) return;
+      // Sesión guardada esperando a la red: sin token, el sync iría como
+      // anónimo (ver useCloudSync). Sube sola al renovarse.
+      if (restoring) {
+        if (announce) {
+          notify(
+            t(
+              'La sesión aún no se ha renovado. Se sincronizará sola en cuanto lo haga.'
+            ),
+            'error'
+          );
+        }
+        return;
+      }
       setBusyAction('sync');
       try {
         const { pulled } = await syncNow(user.id);
@@ -382,7 +395,7 @@ export function DataScreen({
         setBusyAction(null);
       }
     },
-    [user, refreshFromDb]
+    [user, restoring, refreshFromDb]
   );
 
   // Al abrir la pantalla con sesión: cargar la última sync y sincronizar en
@@ -795,9 +808,13 @@ export function DataScreen({
             <>
               <Text style={styles.email}>{user.email}</Text>
               <Text style={styles.actionSubtitle}>
-                {t(
-                  'Tus cambios se sincronizan solos con la nube y con tus otros dispositivos.'
-                )}
+                {restoring
+                  ? t(
+                      'No se ha podido renovar la sesión (sin conexión o la nube no responde). Sigue abierta y se renovará sola; lo que hagas mientras tanto se subirá entonces.'
+                    )
+                  : t(
+                      'Tus cambios se sincronizan solos con la nube y con tus otros dispositivos.'
+                    )}
               </Text>
               <Text style={styles.metaLine}>
                 {busyAction === 'sync'

@@ -290,6 +290,39 @@ create policy "update own comment reads" on public.comment_reads
     )
   );
 
+-- ─────────────────────────── community_seen ───────────────────────────
+-- Lo último que cada persona vio de su Comunidad: cuántos seguidores tenía y
+-- cuántos "me gusta" cada una de sus rutinas públicas. Contra eso se calculan
+-- los avisos (hooks/useCommunityNews.ts). En la nube y no en el móvil: así
+-- sobrevive a cerrar sesión (que limpia el móvil) y un aviso atendido en un
+-- dispositivo no vuelve a salir en otro. Solo lo ve y lo toca su dueño, y cae
+-- en cascada con la cuenta. Fuera del sync: solo sirve con red, como los avisos.
+create table if not exists public.community_seen (
+  user_id       uuid primary key references auth.users(id) on delete cascade,
+  followers     integer not null default 0 check (followers >= 0),
+  -- {routineId: likes}. Como mucho 50 rutinas públicas por persona: 8 KB sobran.
+  routine_likes jsonb not null default '{}'::jsonb check (
+    jsonb_typeof(routine_likes) = 'object'
+    and pg_column_size(routine_likes) <= 8192
+  ),
+  updated_at    bigint not null default 0
+);
+
+alter table public.community_seen enable row level security;
+
+drop policy if exists "read own community seen" on public.community_seen;
+create policy "read own community seen" on public.community_seen
+  for select using (user_id = auth.uid());
+
+drop policy if exists "insert own community seen" on public.community_seen;
+create policy "insert own community seen" on public.community_seen
+  for insert with check (user_id = auth.uid());
+
+drop policy if exists "update own community seen" on public.community_seen;
+create policy "update own community seen" on public.community_seen
+  for update using (user_id = auth.uid())
+  with check (user_id = auth.uid());
+
 -- ─────────────────────────── reports ───────────────────────────
 -- Moderación mínima: cualquiera con sesión puede reportar una rutina pública,
 -- un perfil o un comentario. Los partes se revisan desde el panel de Supabase

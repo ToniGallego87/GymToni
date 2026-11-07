@@ -36,7 +36,12 @@ import {
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
 import { useSession } from '@lib/cloud/auth';
-import { readSocialCache, writeSocialCache } from '@lib/socialCache';
+import {
+  isSocialCacheOwner,
+  readSocialCache,
+  registerSocialMemoryCache,
+  writeSocialCache,
+} from '@lib/socialCache';
 import {
   getPopularRoutines,
   getFollowingFeed,
@@ -130,12 +135,26 @@ interface StoredBoard {
   avatars: [string, ProfileLite][];
 }
 
-function storeBoard(tab: Tab, board: NonNullable<(typeof boardCache)[Tab]>) {
+// El tablón es de quien lo mira ("me gusta", feed de Siguiendo): con otra
+// cuenta se vacía (lib/socialCache.ts).
+registerSocialMemoryCache(() => {
+  boardCache.popular = undefined;
+  boardCache.following = undefined;
+});
+
+/** Guarda el tablón cargado para `viewerId`, si sigue siendo quien mira. */
+function storeBoard(
+  tab: Tab,
+  board: NonNullable<(typeof boardCache)[Tab]>,
+  viewerId: string | null
+) {
+  if (!isSocialCacheOwner(viewerId)) return;
   boardCache[tab] = board;
-  writeSocialCache<StoredBoard>(`board_${tab}`, {
-    items: board.items,
-    avatars: [...board.avatars.entries()],
-  });
+  writeSocialCache<StoredBoard>(
+    `board_${tab}`,
+    { items: board.items, avatars: [...board.avatars.entries()] },
+    viewerId
+  );
 }
 
 /** Siembra `boardCache` desde el disco. Devuelve lo sembrado, o null. */
@@ -227,6 +246,10 @@ export function CommunityScreen({
   // guarda en la caché de módulo para el próximo montaje.
   const load = useCallback(
     async (background: boolean) => {
+      // Cuenta para la que se carga: si cambia a mitad, lo que llegue era de la
+      // anterior y no se pinta (la carga de la nueva ya va por su cuenta).
+      const viewerId = user?.id ?? null;
+      const stale = () => !isSocialCacheOwner(viewerId);
       if (!background) {
         setLoading(true);
         setError(null);
@@ -250,6 +273,7 @@ export function CommunityScreen({
             liked_by_me: likeInfo.get(r.id)?.liked ?? false,
           }));
         }
+        if (stale()) return;
         // Pinta las rutinas ya (sin esperar a las fotos): el tablón aparece en
         // cuanto llega la lista y los avatares entran un instante después.
         // En un refresco en segundo plano se conservan los metadatos que ya
@@ -280,8 +304,9 @@ export function CommunityScreen({
         }
         if (rows.length && !background) setLoadingMeta(true);
         const avs = await getProfilesByIds(rows.map((r) => r.owner_id));
+        if (stale()) return;
         setAvatars(avs);
-        storeBoard(tab, { items: rows, avatars: avs });
+        storeBoard(tab, { items: rows, avatars: avs }, viewerId);
         // Series y comentarios de cada rutina (distintivo de intensidad y
         // recuento del hilo): van después de pintar, y si fallan el tablón se
         // queda sin esos dos datos pero entero.
@@ -292,6 +317,7 @@ export function CommunityScreen({
             getCommentCounts(ids).catch(() => new Map<string, number>()),
             getSaveCounts(ids).catch(() => new Map<string, number>()),
           ]);
+          if (stale()) return;
           const withMeta = rows.map((r) => ({
             ...r,
             total_sets: totals.get(r.id)?.sets,
@@ -300,7 +326,7 @@ export function CommunityScreen({
             saves: saveCounts.get(r.id),
           }));
           setItems(withMeta);
-          storeBoard(tab, { items: withMeta, avatars: avs });
+          storeBoard(tab, { items: withMeta, avatars: avs }, viewerId);
         } catch {
           // Sin totales: las tarjetas se quedan sin distintivo.
         }
@@ -321,11 +347,18 @@ export function CommunityScreen({
   // (runAfterInteractions), para que la vista se abra ya y la red no bloquee la
   // navegación (antes parecía "congelado" al pulsar la pestaña).
   useEffect(() => {
+    let cached = boardCache[tab];
+    // Sin copia (otra pestaña sin cargar aún, o cambio de cuenta, que vacía la
+    // caché) no se deja en pantalla lo anterior: era de otra pestaña o de otra
+    // cuenta. Aunque la pestaña no esté a la vista: el pager la tiene montada.
+    if (!cached) {
+      setItems([]);
+      setAvatars(new Map());
+    }
     if (!active) return;
     let alive = true;
     // La copia de disco se lee en el acto si en memoria no hay nada: es lo que
     // hace que tras cerrar la app el tablón no vuelva a empezar por la rueda.
-    let cached = boardCache[tab];
     if (cached) {
       setItems(cached.items);
       setAvatars(cached.avatars);
@@ -412,6 +445,8 @@ export function CommunityScreen({
   // Los contadores guardados, para pintar la tarjeta ya hecha mientras se
   // confirman con la nube.
   useEffect(() => {
+    // Otra cuenta (o ninguna): los de la anterior no valen ni de marcador.
+    setSocialCounts(null);
     if (!user) return;
     let alive = true;
     readSocialCache<{ followers: number; following: number }>(
@@ -437,7 +472,11 @@ export function CommunityScreen({
         ]);
         if (!alive) return;
         setSocialCounts({ followers, following });
-        writeSocialCache(`counts_${user.id}`, { followers, following });
+        writeSocialCache(
+          `counts_${user.id}`,
+          { followers, following },
+          user.id
+        );
 
         await refreshCommunityNews(user.id);
       } catch {

@@ -52,7 +52,12 @@ import {
   PublicRoutineSummary,
 } from '@lib/cloud/social';
 import { getActivity, getActivityCounts } from '@lib/cloud/activity';
-import { readSocialCache, writeSocialCache } from '@lib/socialCache';
+import {
+  isSocialCacheOwner,
+  readSocialCache,
+  registerSocialMemoryCache,
+  writeSocialCache,
+} from '@lib/socialCache';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { levelForXp } from '@lib/level';
 import { ActivityItem, ActivityCounts } from '@lib/activity';
@@ -93,8 +98,20 @@ const profileCache = new Map<
 
 type CachedProfile = NonNullable<ReturnType<typeof profileCache.get>>;
 
-/** Guarda en la caché lo que acaba de llegar, sin pisar lo que no viene. */
-function cacheMerge(userId: string, patch: Partial<CachedProfile>): void {
+// Lleva datos de quien mira (si le sigues, tus "me gusta"): con otra cuenta se
+// vacía (lib/socialCache.ts).
+registerSocialMemoryCache(() => profileCache.clear());
+
+/**
+ * Guarda en la caché lo que acaba de llegar para `viewerId` (la cuenta que
+ * miraba al pedirlo), sin pisar lo que no viene. Si ya mira otra, nada.
+ */
+function cacheMerge(
+  userId: string,
+  patch: Partial<CachedProfile>,
+  viewerId: string | null
+): void {
+  if (!isSocialCacheOwner(viewerId)) return;
   profileCache.set(userId, {
     profile: null,
     routines: [],
@@ -107,7 +124,7 @@ function cacheMerge(userId: string, patch: Partial<CachedProfile>): void {
     ...patch,
   });
   const entry = profileCache.get(userId);
-  if (entry) writeSocialCache(`profile_${userId}`, entry);
+  if (entry) writeSocialCache(`profile_${userId}`, entry, viewerId);
 }
 
 /**
@@ -225,6 +242,10 @@ export function UserProfileScreen({
   const notifySignIn = (message: string) =>
     setToast({ message, type: 'error', action: 'sign-in' });
 
+  // Cuenta que mira. Lo que llega después de cambiarla era de la anterior: ni
+  // se pinta ni se guarda (lib/socialCache.ts).
+  const viewerId = user?.id ?? null;
+
   const load = useCallback(async () => {
     // Con datos ya en pantalla (de la caché) el refresco es silencioso: poner
     // `loading` otra vez devolvería los esqueletos sobre datos buenos. Si en
@@ -252,16 +273,21 @@ export function UserProfileScreen({
           ? isFollowing(user.id, userId)
           : Promise.resolve(false),
       ]);
+      if (!isSocialCacheOwner(viewerId)) return;
       setProfile(prof);
       setRoutines(routs);
       setFollowers(follc);
       if (foll !== null) setFollowing(foll);
-      cacheMerge(userId, {
-        profile: prof,
-        routines: routs,
-        followers: follc,
-        ...(foll !== null ? { following: foll } : {}),
-      });
+      cacheMerge(
+        userId,
+        {
+          profile: prof,
+          routines: routs,
+          followers: follc,
+          ...(foll !== null ? { following: foll } : {}),
+        },
+        viewerId
+      );
       // Series y comentarios de cada rutina (intensidad y recuento del hilo) y
       // sus likes: lo mismo que enseña el tablón, para que la rutina se vea
       // igual por las dos puertas. Van DESPUÉS de pintar y, si fallan, las
@@ -280,6 +306,7 @@ export function UserProfileScreen({
           ),
           getSaveCounts(ids).catch(() => new Map<string, number>()),
         ]);
+        if (!isSocialCacheOwner(viewerId)) return;
         const withMeta = routs.map((r) => ({
           ...r,
           total_sets: totals.get(r.id)?.sets,
@@ -290,15 +317,16 @@ export function UserProfileScreen({
           liked_by_me: !!likes.get(r.id)?.liked,
         }));
         setRoutines(withMeta);
-        cacheMerge(userId, { routines: withMeta });
+        cacheMerge(userId, { routines: withMeta }, viewerId);
         setLoadingMeta(false);
       }
     } catch (e) {
       notify((e as Error).message, 'error');
     } finally {
       setLoading(false);
+      setLoadingMeta(false);
     }
-  }, [userId, user?.id, sessionLoading]);
+  }, [userId, viewerId, sessionLoading]);
 
   // La actividad va por su cuenta: es la sección de abajo y no debe retrasar la
   // cabecera ni las rutinas. Si la tabla no existe todavía (SQL sin ejecutar) o
@@ -320,10 +348,15 @@ export function UserProfileScreen({
         getActivity(userId),
         getActivityCounts(userId),
       ]);
+      if (!isSocialCacheOwner(viewerId)) return;
       setActivity(items);
       setActivityMore(hasMore);
       setActivityCounts(counts);
-      cacheMerge(userId, { activity: items, activityMore: hasMore, counts });
+      cacheMerge(
+        userId,
+        { activity: items, activityMore: hasMore, counts },
+        viewerId
+      );
     } catch {
       setActivity([]);
       setActivityMore(false);
@@ -331,16 +364,17 @@ export function UserProfileScreen({
     } finally {
       setLoadingActivity(false);
     }
-  }, [userId]);
+  }, [userId, viewerId]);
 
   const loadMoreActivity = async () => {
     try {
       const { items, hasMore } = await getActivity(userId, {
         offset: activity.length,
       });
+      if (!isSocialCacheOwner(viewerId)) return;
       setActivity((prev) => {
         const next = [...prev, ...items];
-        cacheMerge(userId, { activity: next, activityMore: hasMore });
+        cacheMerge(userId, { activity: next, activityMore: hasMore }, viewerId);
         return next;
       });
       setActivityMore(hasMore);

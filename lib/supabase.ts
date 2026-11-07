@@ -14,6 +14,41 @@ import { SUPABASE_URL, SUPABASE_ANON_KEY } from './supabaseConfig';
 // primera pantalla, cuando el sync de fondo o la pantalla de cuenta lo piden.
 let client: SupabaseClient | null = null;
 
+/**
+ * Nunca como anónimo con una cuenta en el móvil. Con el token caducado y sin
+ * poder renovarlo (sin red, el servidor de Auth caído, o el minuto que
+ * supabase-js espera tras un fallo antes de reintentar), supabase-js no da
+ * error: manda la petición con la clave pública en vez del token. La RLS la
+ * trata como de alguien sin cuenta y responde sin error pero vacío (0
+ * seguidores, ninguna lectura) o la rechaza: el outbox sumaba intentos hasta
+ * descartar cambios, un borrado salía "bien" sin tocar nada, y Comunidad
+ * guardaba lo vacío como copia de la cuenta. Así que, si hay sesión guardada,
+ * esa petición se corta como si no hubiera red, que es lo que todo el código
+ * ya sabe llevar (reintentar luego). Auth va aparte: siempre usa la clave.
+ */
+export async function accountSafeFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const url =
+    typeof input === 'string'
+      ? input
+      : input instanceof URL
+      ? input.href
+      : input.url;
+  if (!url.includes('/auth/v1/')) {
+    const auth = new Headers(init?.headers).get('Authorization');
+    if (!auth || auth === `Bearer ${SUPABASE_ANON_KEY}`) {
+      const { hasStoredSession } =
+        require('./cloud/storedSession') as typeof import('./cloud/storedSession');
+      if (await hasStoredSession()) {
+        throw new TypeError('Network request failed');
+      }
+    }
+  }
+  return fetch(input, init);
+}
+
 function getClient(): SupabaseClient {
   if (!client) {
     // Parchea `URL` global: lo necesita supabase-js y solo hace falta con él.
@@ -29,6 +64,7 @@ function getClient(): SupabaseClient {
         persistSession: true,
         detectSessionInUrl: false,
       },
+      global: { fetch: accountSafeFetch },
     });
   }
   return client;
