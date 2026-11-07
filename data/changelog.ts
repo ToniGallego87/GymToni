@@ -9,6 +9,28 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.8.8',
+    items: [
+      'Apuntar series es más rápido: el peso y las repeticiones ya vienen rellenos con lo que te toca, los botones − y + son más grandes y el móvil vibra al apuntar o borrar una serie.',
+      'Al terminar un ejercicio ves cuánto has mejorado respecto a la última vez, y tus récords aparecen en una tarjeta bien visible.',
+      'Las comparaciones son más justas: cada día de tu rutina se compara solo con la última vez que hiciste ese mismo día.',
+      'Con el objetivo cumplido puedes apuntar una serie extra. Se ve aparte y no cuenta para tus comparaciones.',
+      'Al elegir la sesión ves tu semana con el icono de cada día, igual que en Inicio. Y en el historial, el día que te toca sale el primero y lo empiezas con un toque.',
+      'Ahora puedes añadir un día a una rutina ya creada, y su icono cambia solo al ponerle nombre. La ficha de la rutina es más clara, con botones para enviarla y para hacerla pública o privada.',
+      'Comunidad es más clara: ves quién ha creado cada rutina y cuántos días tiene, las novedades de tus rutinas en una sola tarjeta y un punto dorado en la pestaña cuando hay algo nuevo.',
+      'Los comentarios que aún no has leído salen en amarillo y cada aviso te lleva directo a lo que anuncia. Si cambias una rutina que has publicado, el cambio se cuenta solo en sus comentarios.',
+      'Tu Actividad es ahora un diario por meses, con tus entrenos, récords, logros y retos. Tocar un entreno abre esa sesión.',
+      'Progreso es más fácil de usar: menos filtros, una lista más limpia y cada ejercicio te dice cuánto has mejorado desde que empezaste.',
+      'Subir de nivel cuesta menos: con la nueva escala de puntos, todos subís unos cuantos niveles de golpe. Y los logros de 500 sesiones pasan a 365.',
+      'Si olvidas tu contraseña, te enviamos un código al correo para poner una nueva. Con la sesión iniciada también puedes cambiarla, y cerrar sesión desde tu Perfil.',
+      'Ahora puedes eliminar tu cuenta desde Datos y nube. Tienes 30 días para echarte atrás, y tus rutinas publicadas siguen disponibles para los demás sin tu nombre.',
+      'GymBro ocupa menos de la mitad que antes y pide menos permisos.',
+      'Si abres la app sin conexión, sigues dentro de tu cuenta y todo se sincroniza al volver la red.',
+      'Arreglos varios: "Subir copia" a la nube vuelve a funcionar, el aviso de "Descanso finalizado" ya no se queda en las notificaciones, mantener pulsado − o + vuelve a avanzar, la ruleta ya no cambia de ejercicio con un roce y tu nivel ya no baja al cambiar de móvil.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.7',
     items: [
       'Entrenar es más cómodo: tus ejercicios pasan por una ruleta con un marco dorado en el centro. El que queda dentro es el que apuntas, se ve su imagen en movimiento y, al terminarlo, la ruleta pasa sola al siguiente.',

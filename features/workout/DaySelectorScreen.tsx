@@ -16,6 +16,7 @@ import {
   useGlassTopBarHeight,
   GradientFill,
   StretchScrollView,
+  WeekDaysRow,
 } from '@components';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
@@ -23,6 +24,7 @@ import { currentWeekDayState } from '@lib/weeks';
 import { isCardioOnlyLog } from '@lib/cardio';
 import { getToday, logDateKey, weekdayDayMonth } from '@lib/utils';
 import { exerciseCountText } from '@lib/routines';
+import { dayLogProgress } from '@lib/openWorkout';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText } from '@lib/textStyles';
 import { t } from '@lib/i18n';
@@ -66,11 +68,21 @@ export function DaySelectorScreen({
     : state.logs.find(
         (log) => !isCardioOnlyLog(log) && logDateKey(log) === getToday()
       );
+  const todayDay = todayStrengthLog
+    ? days.find((d) => d.id === todayStrengthLog.dayId)
+    : undefined;
   const todayDayName = todayStrengthLog
-    ? getDisplayDayName(
-        days.find((d) => d.id === todayStrengthLog.dayId)?.name || ''
-      )
+    ? getDisplayDayName(todayDay?.name || '')
     : '';
+  // Hoy a medias en esta rutina y contado en la semana en curso (no si se movió
+  // a la anterior): en la fila de la semana su día se va llenando, como en
+  // Inicio.
+  const todayProgress =
+    todayStrengthLog &&
+    todayDay &&
+    logByDayId[todayDay.id]?.id === todayStrengthLog.id
+      ? dayLogProgress(todayStrengthLog, todayDay)
+      : null;
   // Día ya hecho que se ha tocado: abre un menú con lo que se puede hacer con
   // él (verlo, o repetirlo empezando semana nueva) en vez de adivinarlo.
   const [doneDay, setDoneDay] = useState<WorkoutDay | null>(null);
@@ -136,7 +148,7 @@ export function DaySelectorScreen({
             Su acción, al lado: empezar la siguiente sin esperar a terminarla. */}
         {days.length > 0 && !forDate && (
           <View style={styles.weekHeader}>
-            <View style={styles.weekHeaderText}>
+            <View style={styles.weekHeaderTop}>
               <View style={styles.weekTitleRow}>
                 <Text style={styles.weekTitle}>
                   {`${t('Semana')} ${weekNumber}`.toUpperCase()}
@@ -148,38 +160,47 @@ export function DaySelectorScreen({
                   })}
                 </Text>
               </View>
-              <View style={styles.weekBar}>
-                {days.map((day) => (
-                  <View
-                    key={day.id}
-                    style={[
-                      styles.weekBarSegment,
-                      trained.has(day.id) && styles.weekBarSegmentDone,
-                    ]}
+              {canStartNewWeek && (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.newWeekButton,
+                    pressed && styles.dayCardPressed,
+                  ]}
+                  onPress={() => setConfirmNewWeek(true)}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('Empezar semana nueva')}
+                >
+                  <MaterialCommunityIcons
+                    name="restart"
+                    size={16}
+                    color={theme.colors.primary}
                   />
-                ))}
-              </View>
+                  <Text style={styles.newWeekButtonText}>
+                    {t('Nueva semana')}
+                  </Text>
+                </Pressable>
+              )}
             </View>
-            {canStartNewWeek && (
-              <Pressable
-                style={({ pressed }) => [
-                  styles.newWeekButton,
-                  pressed && styles.dayCardPressed,
-                ]}
-                onPress={() => setConfirmNewWeek(true)}
-                accessibilityRole="button"
-                accessibilityLabel={t('Empezar semana nueva')}
-              >
-                <MaterialCommunityIcons
-                  name="restart"
-                  size={16}
-                  color={theme.colors.primary}
-                />
-                <Text style={styles.newWeekButtonText}>
-                  {t('Nueva semana')}
-                </Text>
-              </Pressable>
-            )}
+            {/* Los días dibujados como en la cabecera de la semana de Inicio:
+                un toque antes se vio esta misma fila, y así se reconoce sin
+                volver a leerla. A todo el ancho, debajo, para que quepan
+                siete junto al botón. El dorado (el que toca) solo sin entreno
+                hoy, como en Inicio. */}
+            <WeekDaysRow
+              style={styles.weekDays}
+              days={days}
+              doneDayIds={trained}
+              nextDayId={todayStrengthLog ? undefined : nextDay?.id}
+              inProgress={
+                todayDay && todayProgress != null && todayProgress < 1
+                  ? { dayId: todayDay.id, progress: todayProgress }
+                  : undefined
+              }
+              accessibilityLabel={t('{n} de {total} días', {
+                n: trained.size,
+                total: days.length,
+              })}
+            />
           </View>
         )}
 
@@ -452,12 +473,10 @@ const makeStyles = () =>
     dayNameDone: {
       color: theme.colors.textSecondary,
     },
-    // Cabecera de la semana en curso: número, días hechos, barra por día y,
-    // a la derecha, "Nueva semana".
+    // Cabecera de la semana en curso: arriba el número, los días hechos y, a la
+    // derecha, "Nueva semana"; debajo, a todo el ancho, la fila de los días
+    // (WeekDaysRow).
     weekHeader: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
       marginBottom: 10,
       paddingVertical: 14,
       paddingLeft: 16,
@@ -467,11 +486,14 @@ const makeStyles = () =>
       borderColor: theme.colors.border,
       backgroundColor: theme.colors.backgroundElevated,
     },
-    weekHeaderText: {
-      flex: 1,
-      minWidth: 0,
+    weekHeaderTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
     },
     weekTitleRow: {
+      flex: 1,
+      minWidth: 0,
       flexDirection: 'row',
       alignItems: 'baseline',
       gap: 8,
@@ -485,19 +507,8 @@ const makeStyles = () =>
       fontSize: 13,
       color: theme.colors.textSecondary,
     },
-    weekBar: {
-      flexDirection: 'row',
-      gap: 4,
-      marginTop: 8,
-    },
-    weekBarSegment: {
-      flex: 1,
-      height: 6,
-      borderRadius: 3,
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    weekBarSegmentDone: {
-      backgroundColor: theme.colors.success,
+    weekDays: {
+      marginTop: 10,
     },
     newWeekButton: {
       flexDirection: 'row',

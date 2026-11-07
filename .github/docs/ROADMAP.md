@@ -31,6 +31,7 @@ requisito previo de anuncios, suscripción e iOS.
       falta.
       **Archivos:** `features/workout/HomeScreen.tsx:1153` (`weekDaysRow`),
       `features/workout/DaySelectorScreen.tsx:151` (`weekBar`).
+      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** bajo.
 - [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
       duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
@@ -103,6 +104,7 @@ requisito previo de anuncios, suscripción e iOS.
       aviso ya ocupa el sitio del botón.
       **Archivos:** `features/workout/RoutineDetailScreen.tsx:586`
       (`canDragDays`) y `:935` (el aviso).
+      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** bajo.
 - [ ] **Cardio: retirar el texto `raw_input` cuando todos los móviles lo
       entiendan** — desde la 0.8.5 el cardio se guarda también en
@@ -424,6 +426,8 @@ primero porque sin ellas no se publica.
       (`readCachedProfile`, la copia que se pinta primero) y `:223`
       (`useReloadProfileOnSessionRestore`), `supabase/schema.sql:26-31`
       (columnas `level` / `xp`, donde iría el trigger).
+      **Estado (2026-11-07):** hecho en código con la marca en el store
+      (`fromCloud` en `useMyProfile`), sin SQL; falta probarlo en el móvil.
       **Esfuerzo:** bajo.
 - [ ] **"Cerrar sesión" sin red y con el token caducado** — supabase-js, sin
       red y con el token caducado, devuelve el error sin borrar la sesión
@@ -468,6 +472,7 @@ primero porque sin ellas no se publica.
       (`renderDayBlock`, edición de días) y `:565` (`handleMoveDayTo`, el
       renumerado ya existe), `features/workout/NewRoutineScreen.tsx:301`
       (`handleAddDay`), `lib/exerciseForm.ts`.
+      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** medio.
 - [ ] **De un ejercicio de la ficha de rutina a su evolución** — en el Detalle
       de una sesión cada ejercicio lleva a su gráfica y sus récords ("Ver

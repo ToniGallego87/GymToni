@@ -210,13 +210,26 @@ export function useRecordAccountLevel(enabled: boolean): void {
   // Con sesión, subir el nivel a la nube cuando cambie. Si la nube tiene más
   // puntos (otro dispositivo), no se pisa. Con los mismos puntos pero otro nivel
   // (cambió la curva de niveles) también se sube, para corregir el público.
+  // Solo comparando con el perfil que ha dado la nube en esta sesión: la copia
+  // local (arranque, o sesión que esperaba a la red) puede ir por detrás de otro
+  // móvil, y subir contra ella bajaba el nivel público.
   const { user } = useSession();
-  const { profile } = useMyProfile();
+  const { profile, fromCloud } = useMyProfile();
   const pushedXp = useRef<string | null>(null);
+  const profileRetryKey = useRef<string | null>(null);
   useEffect(() => {
     if (!enabled || !user) return;
-    const remoteXp = profile?.xp ?? 0;
     const pushKey = `${level.xp}:${level.level}`;
+    if (!fromCloud) {
+      // Arrancó sin red: el perfil se vuelve a pedir en cada cambio de nivel
+      // (una vez por nivel). Al llegar de la nube, este efecto sube lo que falte.
+      if (profileRetryKey.current !== pushKey) {
+        profileRetryKey.current = pushKey;
+        void loadMyProfile(user.id);
+      }
+      return;
+    }
+    const remoteXp = profile?.xp ?? 0;
     const stale =
       level.xp > remoteXp ||
       (level.xp === remoteXp && profile?.level !== level.level);
@@ -228,7 +241,7 @@ export function useRecordAccountLevel(enabled: boolean): void {
         // Sin red: se reintenta en el próximo cambio de nivel.
         pushedXp.current = null;
       });
-  }, [enabled, user, profile?.xp, level]);
+  }, [enabled, user, fromCloud, profile?.xp, level]);
 
   // Publicar la Actividad (insignias, retos y días entrenados) para que la vean
   // en tu perfil. Se hace aquí por lo mismo que el nivel: este es el único sitio

@@ -28,9 +28,20 @@ type MyProfileState = {
   userId: string | null;
   profile: Profile | null;
   loading: boolean;
+  // ¿Ha contestado la nube por este usuario en esta sesión de la app? Hasta
+  // entonces `profile` puede ser la copia local, que otro móvil puede haber
+  // dejado atrás: quien sube datos comparándolos con él (el nivel) espera.
+  fromCloud: boolean;
 };
 
-let state: MyProfileState = { userId: null, profile: null, loading: false };
+const EMPTY: MyProfileState = {
+  userId: null,
+  profile: null,
+  loading: false,
+  fromCloud: false,
+};
+
+let state: MyProfileState = EMPTY;
 const listeners = new Set<() => void>();
 
 // Solo avisa si algo cambia, y a todos en UN pase de render: los avisos llegan
@@ -40,7 +51,8 @@ function setState(next: MyProfileState): void {
   if (
     next.userId === state.userId &&
     next.profile === state.profile &&
-    next.loading === state.loading
+    next.loading === state.loading &&
+    next.fromCloud === state.fromCloud
   ) {
     return;
   }
@@ -84,10 +96,15 @@ export async function loadMyProfile(
   force = false
 ): Promise<void> {
   if (!userId) {
-    setState({ userId: null, profile: null, loading: false });
+    setState(EMPTY);
     return;
   }
-  if (!force && state.userId === userId && state.profile) return;
+  // Lo que hay solo vale si ya lo dio la nube: con la copia local (arranque sin
+  // red) cada petición vuelve a intentarlo, y así el perfil se pone al día en
+  // cuanto hay red y alguien lo pide (una pantalla que lo pinta, o el nivel).
+  if (!force && state.userId === userId && state.profile && state.fromCloud) {
+    return;
+  }
   if (!force && inFlight?.userId === userId) return inFlight.promise;
   const promise = fetchMyProfile(userId);
   inFlight = { userId, promise };
@@ -99,15 +116,17 @@ export async function loadMyProfile(
 }
 
 async function fetchMyProfile(userId: string): Promise<void> {
-  const known = state.userId === userId ? state.profile : null;
-  setState({ userId, profile: known, loading: true });
+  const same = state.userId === userId;
+  const known = same ? state.profile : null;
+  const fromCloud = same && state.fromCloud;
+  setState({ userId, profile: known, loading: true, fromCloud });
 
   // Arranque en frío: el store de módulo nace vacío, así que la copia local es
   // lo único que hay hasta que conteste la nube.
   if (!known) {
     const cached = await readCachedProfile(userId);
     if (cached && state.userId === userId && !state.profile) {
-      setState({ userId, profile: cached, loading: true });
+      setState({ userId, profile: cached, loading: true, fromCloud });
     }
   }
 
@@ -126,13 +145,14 @@ async function fetchMyProfile(userId: string): Promise<void> {
       userId,
       profile: changed ? fresh : state.profile,
       loading: false,
+      fromCloud: true,
     });
     migrateAvatarOnce(userId, fresh?.avatar_url);
   } catch {
     // Sin red: se queda la copia local (o lo que hubiera en memoria). Antes
     // aquí se ponía `null` y Perfil pasaba a decir "Sin perfil".
     if (state.userId !== userId) return;
-    setState({ userId, profile: state.profile, loading: false });
+    setState({ ...state, loading: false });
   }
 }
 
@@ -163,7 +183,7 @@ function migrateAvatarOnce(
  */
 async function forgetAccountOnDevice(userId: string): Promise<void> {
   if (state.userId === userId) {
-    setState({ userId: null, profile: null, loading: false });
+    setState(EMPTY);
   }
   await AsyncStorage.removeItem(cacheKey(userId)).catch(() => {});
   await clearSocialCache().catch(() => {});
@@ -236,7 +256,11 @@ export function useReloadProfileOnSessionRestore(): void {
   }, [restoring, userId]);
 }
 
-export function useMyProfile(): { profile: Profile | null; loading: boolean } {
+export function useMyProfile(): {
+  profile: Profile | null;
+  loading: boolean;
+  fromCloud: boolean;
+} {
   const { user } = useSession();
   const [, rerender] = useReducer((n: number) => n + 1, 0);
 
@@ -254,6 +278,7 @@ export function useMyProfile(): { profile: Profile | null; loading: boolean } {
   return {
     profile: mine ? state.profile : null,
     loading: mine ? state.loading : !!user,
+    fromCloud: mine && state.fromCloud,
   };
 }
 

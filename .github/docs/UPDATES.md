@@ -1,6 +1,6 @@
 # UPDATES
 
-## Sin publicar
+## Version 0.8.8 - 2026-11-07
 
 ### Arquitectura
 
@@ -89,8 +89,8 @@
   `formatSeriesString` como inverso de `parseSeriesString`; no un "+" delante,
   que ya es la suma de cargas combinadas. Viaja a la nube como columna
   opcional (`OPTIONAL_COLUMNS` + `keepLocal`): sin ella el sync no se para y la
-  marca se queda en local. **SQL pendiente en Supabase** (comprobado con curl
-  el 2026-10-16: 42703, la columna no existe):
+  marca se queda en local. **SQL ya ejecutado en Supabase** (2026-10-20;
+  verificado con curl el 2026-11-07):
   `ALTER TABLE public.log_sets ADD COLUMN IF NOT EXISTS is_extra integer;`
 - **Hito `record` en `activity`.** `ActivityItem.kind` suma `'record'` (con
   `detail` = la marca y `exerciseKey`, solo en local). En la nube la marca va
@@ -98,8 +98,8 @@
   `publishActivity` sube los récords en un upsert aparte y con su propio cupo:
   si la base aún tiene el CHECK viejo de `kind`, se rechazan solos sin frenar
   al resto y se reintentan después. `getActivityCounts` cuenta también
-  `records`. **SQL pendiente en Supabase** (rehace el CHECK, ya en
-  `supabase/social-schema.sql`):
+  `records`. **SQL ya ejecutado en Supabase** (2026-10-20, con el blindaje de
+  abajo; rehace el CHECK, ya en `supabase/social-schema.sql`):
   `ALTER TABLE public.activity DROP CONSTRAINT IF EXISTS activity_kind_check;`
   `ALTER TABLE public.activity ADD CONSTRAINT activity_kind_check CHECK (kind IN ('badge','challenge','day','record'));`
 - **Blindaje de la RLS social** (análisis de salida a producción, 2026-10-20).
@@ -293,6 +293,18 @@
   levantó. Se ve aparte: burbuja de contorno discontinuo con "+" en el
   registro, y en el Detalle va detrás de las del plan, con "+" y sin flecha de
   comparación.
+- **Añadir un día a una rutina ya creada** (`RoutineDetailScreen`). En
+  edición, al pie de los días, "Añadir día" (la píldora de Nueva rutina, con
+  el tope de 7). El día nace al final, abierto y con el popup de su primer
+  ejercicio; vive en `pendingDay` y no entra en la rutina hasta que ese
+  ejercicio tiene nombre (`commitDay` lo añade con `renumberDays`), porque un
+  día no puede quedarse vacío. Cerrar el popup sin nombre lo descarta. Sale
+  como "Día N" con el icono genérico; el lápiz de su cabecera los cambia. Si la
+  rutina es pública, el comentario de cambios ya cuenta "Día añadido".
+- **En "Editar día" el icono sigue al nombre** mientras no se elija otro, como
+  en Nueva rutina (`detectGymIcon`): renombrar "Día 5" a "Pierna" pone el de
+  pierna. Un icono distinto del que daría el nombre cuenta como elegido y se
+  respeta, y si el nombre nuevo no dice ninguno se queda el que había.
 
 ### Cambios
 
@@ -487,6 +499,23 @@
   mejora", como ya hacía el aviso. Lo que a un decimal se leería "0,0 %"
   también (`MIN_SHOWN_IMPROVEMENT_PERCENT`).
 - **"Primera vez:" pasa a "Sin datos previos:"** en el panel del ejercicio.
+- **"Plegar para ordenar"** en la edición de una rutina: el aviso "Pliega
+  todos los días para ordenarlos arrastrando" pasa a ser un botón que los
+  pliega de una vez y saca las asas. Va junto a "Añadir día".
+- **La semana en curso se dibuja igual en Inicio y en Elige la sesión**: la
+  fila de iconos de Inicio (verde lo hecho, aro dorado el que toca, anillo que
+  se llena el de hoy a medias) sale a `components/WeekDaysRow.tsx` y sustituye
+  a la barra de segmentos sin iconos de `DaySelectorScreen`, que no decía qué
+  día faltaba. Allí va a todo el ancho, bajo el título y "Nueva semana", para
+  que quepan siete. El progreso de un log sobre su día (`dayLogProgress`, con
+  tests) pasa de Inicio a `lib/openWorkout.ts` y `isStrengthLogComplete` lo usa:
+  una sola regla, la del registro. Inicio contaba como hecho un ejercicio con
+  series extra o sin objetivo y no recortaba el objetivo en descarga, así que
+  un día de descarga completo seguía "a medias"; y `isStrengthLogComplete`
+  contaba las extra.
+- **Versión.** `app.json`, `package.json` y `build.gradle` pasan a 0.8.8;
+  `versionCode` 34 → 35; entrada nueva en `data/changelog.ts` para el popup
+  de novedades.
 
 ### Correcciones
 
@@ -576,6 +605,15 @@
   sale este móvil: los demás siguen dentro hasta cerrar desde ellos. Si ni así
   se puede, el popup lo dice y se queda abierto en vez de cerrarse como si
   hubiera salido. También lo usa pedir el borrado de la cuenta.
+- **El nivel público ya no retrocede al abrir el móvil que va por detrás**
+  (`hooks/useAccountLevel.ts`). La subida de nivel y XP al perfil comparaba
+  con `profile.xp` de la copia local del perfil: al arrancar, o al renovarse
+  una sesión que esperaba a la red, podía subir un XP menor que el que otro
+  móvil ya había dejado en la nube. Ahora espera a que la nube haya contestado
+  en esta sesión (`fromCloud` en el store de `hooks/useMyProfile.ts`, que se
+  pone a false al cambiar de cuenta). Sin red al arrancar, `loadMyProfile` ya
+  no da por bueno el perfil de la copia: cualquier pantalla que lo pida vuelve
+  a probar, y el nivel lo pide de nuevo en cada cambio.
 
 ## Version 0.8.7 - 2026-10-15
 

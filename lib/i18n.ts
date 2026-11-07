@@ -1202,8 +1202,7 @@ register({
   'Nombre del ejercicio': 'Exercise name',
   'Menos series': 'Fewer sets',
   'Más series': 'More sets',
-  'Pliega todos los días para ordenarlos arrastrando':
-    'Collapse every day to reorder them by dragging',
+  'Plegar para ordenar': 'Collapse to reorder',
   'Series de la rutina': 'Routine sets',
   'Series planificadas en toda la semana, sumando todos los días y ejercicios. Es lo que decide la intensidad de la rutina.':
     'Sets planned across the whole week, adding up every day and exercise. It is what decides the routine intensity.',

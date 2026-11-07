@@ -15,12 +15,7 @@ import { useWorkout } from '@hooks/useWorkout';
 import { useDeferredReady } from '@hooks/useDeferredReady';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useOnTabLeave } from '@hooks/useTabFocus';
-import {
-  WorkoutDay,
-  WorkoutRoutine,
-  WorkoutLog,
-  ExerciseLog,
-} from '../../types';
+import { WorkoutDay, WorkoutRoutine, WorkoutLog } from '../../types';
 import { getDisplayDayName, theme } from '@lib/theme';
 import { dayNameText, weekTitleText } from '@lib/textStyles';
 import { localizeDecimals, t } from '@lib/i18n';
@@ -64,7 +59,6 @@ import {
   HeroCard,
   ChallengesStrip,
   StatsStrip,
-  ProgressRing,
   HeroVariant,
   GradientFill,
   HistoryCard,
@@ -82,7 +76,9 @@ import {
   SegmentedOption,
   StretchScrollView,
   LoadMoreButton,
+  WeekDaysRow,
 } from '../../components';
+import { dayLogProgress } from '@lib/openWorkout';
 
 interface HomeScreenProps {
   onSelectDay: (day: WorkoutDay) => void;
@@ -189,9 +185,6 @@ function buildProgressChart(points: WeekProgressPoint[]): {
 // Semanas que se muestran de inicio y cuántas añade "Cargar más" (misma
 // paginación que Cardio, para no montar todo el histórico en rutinas largas).
 const WEEKS_PAGE = 5;
-// Disco de cada día en la fila de la semana en curso.
-const WEEK_DAY_DOT_SIZE = 26;
-
 export function HomeScreen({
   onSelectDay,
   onSelectLog,
@@ -313,23 +306,10 @@ export function HomeScreen({
   // Alimenta el estado del día y el anillo que se va llenando en la semana.
   const todayExerciseProgress = useMemo((): number | null => {
     if (!todayLog) return null;
-
-    const todayDay = findDayInRoutines(state.routines, todayLog.dayId);
-    if (!todayDay || todayDay.exercises.length === 0) return 1;
-
-    // Un ejercicio está completo cuando alcanza su número de series objetivo
-    // (mismo criterio que `isTargetCompleted` en WorkoutLogScreen), no con que
-    // tenga solo una serie metida: si falta una serie del objetivo, el
-    // entrenamiento sigue en progreso.
-    const filled = todayDay.exercises.filter((ex) => {
-      const exLog = todayLog.exercises.find(
-        (e: ExerciseLog) => e.exerciseId === ex.id
-      );
-      const setsCount = exLog?.parsedSets?.length ?? 0;
-      const targetSets = ex.targetSets && ex.targetSets > 0 ? ex.targetSets : 1;
-      return setsCount >= targetSets;
-    }).length;
-    return filled / todayDay.exercises.length;
+    return dayLogProgress(
+      todayLog,
+      findDayInRoutines(state.routines, todayLog.dayId)
+    );
   }, [todayLog, state.routines]);
 
   const todayWorkoutStatus: 'none' | 'in-progress' | 'completed' =
@@ -1171,85 +1151,47 @@ export function HomeScreen({
                         {/* Semana en curso: los días de la rutina dibujados, no
                             "2 de 4 días". Encendido en verde lo hecho, con aro
                             dorado el que toca y apagado lo que falta: responde
-                            "¿qué me queda?" sin abrir nada. Con más de seis
+                            "¿qué me queda?" sin abrir nada. La misma fila que
+                            la cabecera de Elige la sesión. Con más de seis
                             días no caben junto al título y vuelve el texto. */}
                         {isCurrentWeek &&
                         activeDays.length > 0 &&
                         activeDays.length <= 6 ? (
-                          <View
+                          <WeekDaysRow
                             style={styles.weekDaysRow}
-                            accessible
+                            days={activeDays}
+                            doneDayIds={
+                              new Set(weekLogs.map((l: WorkoutLog) => l.dayId))
+                            }
+                            // El aro dorado marca el día que TOCA INSERTAR.
+                            // Mientras hoy esté a medias o ya completado,
+                            // seguimos "dentro" de ese día: nadie se lleva el
+                            // dorado hasta que hoy vuelva a estar sin empezar.
+                            nextDayId={
+                              todayWorkoutStatus === 'none'
+                                ? suggestedDay?.id
+                                : undefined
+                            }
+                            // El día de HOY a medias no se enciende entero: se
+                            // va llenando con los ejercicios completados. Solo
+                            // se cierra al completarlos (o al pasar el día).
+                            inProgress={
+                              todayWorkoutStatus === 'in-progress' &&
+                              todayLog &&
+                              weekLogs.find(
+                                (l: WorkoutLog) => l.dayId === todayLog.dayId
+                              )?.id === todayLog.id
+                                ? {
+                                    dayId: todayLog.dayId,
+                                    progress: todayExerciseProgress ?? 0,
+                                  }
+                                : undefined
+                            }
                             accessibilityLabel={t('{n} de {total} días', {
                               n: weekLogs.length,
                               total: activeDays.length,
                             })}
-                          >
-                            {activeDays.map((day: WorkoutDay) => {
-                              const dayLog = weekLogs.find(
-                                (l: WorkoutLog) => l.dayId === day.id
-                              );
-                              // El día de HOY a medias no se enciende entero:
-                              // un anillo verde se va llenando con los
-                              // ejercicios completados. Solo se cierra al
-                              // completarlos (o al pasar el día, cuando ya no
-                              // es el log de hoy).
-                              const dayInProgress =
-                                !!dayLog &&
-                                dayLog.id === todayLog?.id &&
-                                todayWorkoutStatus === 'in-progress';
-                              const dayDone = !!dayLog && !dayInProgress;
-                              // El aro dorado marca el día que TOCA INSERTAR.
-                              // Mientras hoy esté a medias o ya completado,
-                              // seguimos "dentro" de ese día: nadie se lleva
-                              // el dorado hasta que hoy vuelva a estar sin
-                              // empezar (es decir, hasta que toque de verdad).
-                              const dayNext =
-                                !dayLog &&
-                                day.id === suggestedDay?.id &&
-                                todayWorkoutStatus === 'none';
-                              if (dayInProgress) {
-                                return (
-                                  <ProgressRing
-                                    key={day.id}
-                                    progress={todayExerciseProgress ?? 0}
-                                    size={WEEK_DAY_DOT_SIZE}
-                                    strokeWidth={2}
-                                    color={theme.colors.success}
-                                  >
-                                    <DayAccentIcon
-                                      emoji={day.emoji}
-                                      name={day.name}
-                                      size={15}
-                                      color={theme.colors.text}
-                                    />
-                                  </ProgressRing>
-                                );
-                              }
-                              return (
-                                <View
-                                  key={day.id}
-                                  style={[
-                                    styles.weekDayDot,
-                                    dayDone && styles.weekDayDotDone,
-                                    dayNext && styles.weekDayDotNext,
-                                  ]}
-                                >
-                                  <DayAccentIcon
-                                    emoji={day.emoji}
-                                    name={day.name}
-                                    size={15}
-                                    color={
-                                      dayDone
-                                        ? theme.colors.success
-                                        : dayNext
-                                        ? theme.colors.primary
-                                        : theme.colors.textSecondary
-                                    }
-                                  />
-                                </View>
-                              );
-                            })}
-                          </View>
+                          />
                         ) : isCurrentWeek && activeDays.length > 0 ? (
                           <Text style={styles.weekHeaderMeta}>
                             {t('{n} de {total} días', {
@@ -1875,29 +1817,7 @@ const makeStyles = () =>
     },
     // Los días de la semana en curso, uno por disco pequeño.
     weekDaysRow: {
-      flexDirection: 'row',
-      gap: 4,
       marginRight: 2,
-    },
-    // Pendiente: aro y fondo suaves pero legibles (con `border` a secas y el
-    // icono en `textMuted` casi no se distinguía del fondo de la tarjeta).
-    weekDayDot: {
-      width: WEEK_DAY_DOT_SIZE,
-      height: WEEK_DAY_DOT_SIZE,
-      borderRadius: WEEK_DAY_DOT_SIZE / 2,
-      alignItems: 'center',
-      justifyContent: 'center',
-      borderWidth: 1.5,
-      borderColor: theme.colors.textMuted + '99',
-      backgroundColor: theme.colors.surfaceAlt,
-    },
-    weekDayDotDone: {
-      borderColor: theme.colors.success,
-      backgroundColor: theme.colors.success + '22',
-    },
-    weekDayDotNext: {
-      borderColor: theme.colors.primaryLine,
-      borderWidth: 2,
     },
     weekHeaderMeta: {
       fontSize: 14,

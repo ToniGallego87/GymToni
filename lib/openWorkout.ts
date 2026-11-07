@@ -57,14 +57,34 @@ export function isStrengthLogComplete(
     day = routine.days.find((d) => d.id === log.dayId);
     if (day) break;
   }
-  if (!day) return true;
-  return day.exercises.every((ex) => {
+  return dayLogProgress(log, day) >= 1;
+}
+
+/**
+ * Fracción (0..1) de los ejercicios de un día que el log ya ha completado, con
+ * el criterio del registro (`effectiveTargetSets` / `planSetCount` en
+ * WorkoutLogScreen): en descarga el objetivo baja una serie (nunca de una), las
+ * series extra no cuentan (van por encima del objetivo) y los ejercicios sin
+ * objetivo no se miden. Sin día o sin nada que medir, 1. Llena el anillo del
+ * día de hoy en la fila de la semana (Inicio y Elige la sesión).
+ */
+export function dayLogProgress(
+  log: WorkoutLog,
+  day: WorkoutDay | undefined
+): number {
+  if (!day) return 1;
+  let measured = 0;
+  let done = 0;
+  for (const ex of day.exercises) {
     const base = ex.targetSets ?? 0;
-    if (base <= 0) return true;
+    if (base <= 0) continue;
     const target = log.isDeload ? Math.max(1, base - 1) : base;
     const exLog = log.exercises.find((e) => e.exerciseId === ex.id);
-    return (exLog?.parsedSets?.length ?? 0) >= target;
-  });
+    const planSets = (exLog?.parsedSets ?? []).filter((set) => !set.extra);
+    measured += 1;
+    if (planSets.length >= target) done += 1;
+  }
+  return measured === 0 ? 1 : done / measured;
 }
 
 // Caché de una entrada: el hook de nivel está montado en varios sitios a la vez

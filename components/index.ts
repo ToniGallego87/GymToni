@@ -27,6 +27,7 @@ export { SplashFade } from './SplashFade';
 export { BadgeMedal } from './BadgeMedal';
 export type { BarChartPoint } from './BarChart';
 export { DayAccentIcon } from './DayAccentIcon';
+export { WeekDaysRow } from './WeekDaysRow';
 export {
   GymIcon,
   GYM_ICON_NAMES,

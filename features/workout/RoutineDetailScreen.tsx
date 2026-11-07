@@ -45,6 +45,7 @@ import {
   DAY_TITLE_MAX_LENGTH,
   ExerciseForm,
   exerciseFormFromExercise,
+  MAX_ROUTINE_DAYS,
   ROUTINE_DESCRIPTION_MAX_LENGTH,
   ROUTINE_NAME_MAX_LENGTH,
 } from '@lib/exerciseForm';
@@ -53,6 +54,8 @@ import {
   buildRoutineShareText,
 } from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
+import { generateId } from '@lib/utils';
+import { detectGymIcon } from '@lib/gymIcons';
 import {
   countRoutineSets,
   duplicateRoutine,
@@ -135,6 +138,10 @@ export function RoutineDetailScreen({
   const [dayToEditId, setDayToEditId] = useState<string | null>(null);
   const [dayNameInput, setDayNameInput] = useState('');
   const [dayIconDraft, setDayIconDraft] = useState<GymIconName | null>(null);
+  // ¿El icono lo eligió la persona? Si no, sigue al nombre que se teclea, como
+  // en Nueva rutina: un día nuevo ("Día 5", icono genérico) que se renombra a
+  // "Pierna" coge el de pierna sin tener que buscarlo.
+  const [dayIconChosen, setDayIconChosen] = useState(false);
   // Filas editables por día mientras dura la edición. NO son un formulario con
   // "Guardar": son el borrador de la fila que está abierta. En cuanto se cierra
   // (✓), se mueve, se quita una o se sale de edición, el día se guarda solo.
@@ -146,6 +153,11 @@ export function RoutineDetailScreen({
   // cuadrícula hasta "Listo" (antes aparecía debajo, vacío, mientras se
   // rellenaba). Cerrarlo sin nombre lo descarta.
   const [draftExerciseId, setDraftExerciseId] = useState<string | null>(null);
+  // Día recién añadido con "Añadir día": se pinta al final, abierto y con el
+  // popup de su primer ejercicio, pero no entra en la rutina hasta que ese
+  // ejercicio tiene nombre (un día no puede quedarse sin ninguno). Cerrar el
+  // popup sin nombre lo descarta.
+  const [pendingDay, setPendingDay] = useState<WorkoutDay | null>(null);
 
   // Días desplegados. La ficha nace PLEGADA entera: de un vistazo se ve qué días
   // tiene la rutina y cuántos ejercicios cada uno, en vez de un rollo de 30
@@ -242,10 +254,25 @@ export function RoutineDetailScreen({
   // las que no tienen nombre, así que una fila recién añadida no se guarda
   // hasta que se llama de alguna forma; un día no puede quedarse sin ninguna.
   const commitDay = (dayId: string, rows: ExerciseForm[]) => {
-    const day = currentRoutine.days.find((d) => d.id === dayId);
-    if (!day) return;
     const exercises = buildWorkoutExercises(rows);
     if (!exercises.length) return;
+    // El día nuevo entra en la rutina con su primer ejercicio, al final.
+    if (pendingDay?.id === dayId) {
+      dispatch({
+        type: 'UPDATE_ROUTINE',
+        payload: {
+          ...currentRoutine,
+          days: renumberDays([
+            ...currentRoutine.days,
+            { ...pendingDay, exercises },
+          ]),
+        },
+      });
+      setPendingDay(null);
+      return;
+    }
+    const day = currentRoutine.days.find((d) => d.id === dayId);
+    if (!day) return;
     dispatch({
       type: 'UPDATE_DAY',
       payload: {
@@ -316,12 +343,13 @@ export function RoutineDetailScreen({
       announceChanges(routineWithDrafts());
       setDrafts({});
       setEditingExerciseId(null);
+      setPendingDay(null);
     } else {
       editStartRef.current = currentRoutine;
     }
     // Entrar en edición respeta los días abiertos: lo habitual es cambiar un
     // ejercicio del día que estabas mirando. Ordenar días sigue pidiendo
-    // plegarlos (lo dice `dragHint`).
+    // plegarlos (el botón "Plegar para ordenar" lo hace de una vez).
     setIsEditing(!isEditing);
   };
 
@@ -499,10 +527,20 @@ export function RoutineDetailScreen({
   const handleOpenDayModal = (dayId: string) => {
     const day = currentRoutine.days.find((d) => d.id === dayId);
     if (!day) return;
-    setDayNameInput(getDisplayDayName(day.name));
-    setDayIconDraft(resolveDayIcon(day.emoji, day.name));
+    const title = getDisplayDayName(day.name);
+    const icon = resolveDayIcon(day.emoji, day.name);
+    setDayNameInput(title);
+    setDayIconDraft(icon);
+    // Un icono distinto del que daría su nombre se eligió a mano: se respeta.
+    setDayIconChosen(icon !== (detectGymIcon(title) ?? 'fullbody'));
     setDayToEditId(dayId);
   };
+
+  // El icono que marca "Editar día" y el que se guarda. Sin elegir, el del
+  // nombre tecleado; si el nombre no dice ninguno, se queda el que tenía.
+  const dayIconShown = dayIconChosen
+    ? dayIconDraft
+    : detectGymIcon(dayNameInput) ?? dayIconDraft;
 
   const handleSaveDay = () => {
     const day = currentRoutine.days.find((d) => d.id === dayToEditId);
@@ -520,7 +558,7 @@ export function RoutineDetailScreen({
           name: title
             ? `${t('Día')} ${day.dayNumber} - ${title}`
             : `${t('Día')} ${day.dayNumber}`,
-          emoji: dayIconDraft ?? day.emoji,
+          emoji: dayIconShown ?? day.emoji,
         },
       },
     });
@@ -553,6 +591,43 @@ export function RoutineDetailScreen({
     updateDayRows(day, (rows) => [...rows, exercise], false);
     setDraftExerciseId(exercise.id);
     setEditingExerciseId(exercise.id);
+  };
+
+  // Añade un día al final, como en Nueva rutina, pero ya abierto y con el popup
+  // de su primer ejercicio: un día vacío no se puede guardar. Sale sin título
+  // ("Día N") y con el icono genérico; el lápiz de su cabecera los cambia (y el
+  // icono sigue al nombre mientras no se elija otro).
+  const handleAddDay = () => {
+    if (!canAddDay) return;
+    const number = currentRoutine.days.length + 1;
+    const day: WorkoutDay = {
+      id: generateId(),
+      dayNumber: number,
+      name: `${t('Día')} ${number}`,
+      emoji: 'fullbody',
+      exercises: [],
+    };
+    const exercise = createEmptyExercise();
+    setPendingDay(day);
+    setDrafts((previous) => ({ ...previous, [day.id]: [exercise] }));
+    setExpandedDayIds((previous) => new Set(previous).add(day.id));
+    setDraftExerciseId(exercise.id);
+    setEditingExerciseId(exercise.id);
+  };
+
+  // El popup del primer ejercicio se cerró sin nombre: el día no llega a existir.
+  const discardPendingDay = (dayId: string) => {
+    setPendingDay(null);
+    setDrafts((previous) => {
+      const next = { ...previous };
+      delete next[dayId];
+      return next;
+    });
+    setExpandedDayIds((previous) => {
+      const next = new Set(previous);
+      next.delete(dayId);
+      return next;
+    });
   };
 
   // Recuento que se pinta con el día plegado. En edición manda el borrador (lo
@@ -626,11 +701,26 @@ export function RoutineDetailScreen({
   const dayToDeleteHasLogs =
     !!dayToDeleteId && state.logs.some((log) => log.dayId === dayToDeleteId);
 
-  const allDaysCollapsed = currentRoutine.days.every(
+  // Los días que se pintan: los de la rutina y, al final, el que se está
+  // añadiendo. Cuenta para el arrastre: nace abierto, así que lo desactiva.
+  const shownDays = pendingDay
+    ? [...currentRoutine.days, pendingDay]
+    : currentRoutine.days;
+  const allDaysCollapsed = shownDays.every(
     (day) => !expandedDayIds.has(day.id)
   );
   const canDragDays =
     isEditing && canEdit && allDaysCollapsed && currentRoutine.days.length > 1;
+  // Ordenar arrastrando pide los días plegados (con alguno abierto las alturas
+  // bailan): en vez de decirlo y que se plieguen a mano uno a uno, un botón lo
+  // hace de una vez y saca las asas.
+  const canCollapseToSort =
+    isEditing && canEdit && !allDaysCollapsed && currentRoutine.days.length > 1;
+  // Tope de 7 días, como en Nueva rutina; y uno nuevo a la vez.
+  const atMaxDays = currentRoutine.days.length >= MAX_ROUTINE_DAYS;
+  const canAddDay = !atMaxDays && !pendingDay;
+
+  const collapseAllDays = () => setExpandedDayIds(new Set());
 
   const handleDeleteDay = () => {
     if (!dayToDeleteId || currentRoutine.days.length <= 1) {
@@ -782,7 +872,8 @@ export function RoutineDetailScreen({
                   }
                   onDone={() => {
                     if (!editing.name.trim()) {
-                      removeExercise(day, editing.id);
+                      if (pendingDay?.id === day.id) discardPendingDay(day.id);
+                      else removeExercise(day, editing.id);
                     } else {
                       commitDay(day.id, dayRows(day));
                     }
@@ -1031,12 +1122,61 @@ export function RoutineDetailScreen({
             />
           </View>
         ) : (
-          currentRoutine.days.map((day) => renderDayBlock(day))
+          shownDays.map((day) => renderDayBlock(day))
         )}
-        {isEditing && !allDaysCollapsed && currentRoutine.days.length > 1 && (
-          <Text style={styles.dragHint}>
-            {t('Pliega todos los días para ordenarlos arrastrando')}
-          </Text>
+        {/* Lo que se hace con la lista de días, al pie como en Nueva rutina:
+            plegarlos para ordenarlos (solo si hay alguno abierto) y añadir
+            uno. */}
+        {isEditing && canEdit && (
+          <View style={styles.dayActions}>
+            {canCollapseToSort && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.dayActionChip,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={collapseAllDays}
+                accessibilityRole="button"
+              >
+                <MaterialCommunityIcons
+                  name="arrow-collapse-vertical"
+                  size={16}
+                  color={theme.colors.primary}
+                />
+                <Text style={styles.dayActionText} numberOfLines={1}>
+                  {t('Plegar para ordenar')}
+                </Text>
+              </Pressable>
+            )}
+            <Pressable
+              style={({ pressed }) => [
+                styles.dayActionChip,
+                !canAddDay && styles.dayActionChipDisabled,
+                pressed && styles.buttonPressed,
+              ]}
+              onPress={handleAddDay}
+              disabled={!canAddDay}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: !canAddDay }}
+            >
+              <MaterialCommunityIcons
+                name="plus-thick"
+                size={16}
+                color={
+                  canAddDay ? theme.colors.primary : theme.colors.textSecondary
+                }
+              />
+              <Text
+                style={[
+                  styles.dayActionText,
+                  !canAddDay && styles.dayActionTextDisabled,
+                ]}
+                numberOfLines={1}
+              >
+                {atMaxDays ? t('Máximo 7 días') : t('Añadir día')}
+              </Text>
+            </Pressable>
+          </View>
         )}
 
         {/* El descanso entre series ya no es de la rutina: es un ajuste de la
@@ -1155,8 +1295,11 @@ export function RoutineDetailScreen({
         <Text style={styles.fieldLabel}>{t('Icono:')}</Text>
         <GymIconGrid
           style={styles.iconGrid}
-          activeIcon={dayIconDraft}
-          onSelect={(icon) => setDayIconDraft(icon)}
+          activeIcon={dayIconShown}
+          onSelect={(icon) => {
+            setDayIconDraft(icon);
+            setDayIconChosen(true);
+          }}
         />
       </AppModal>
 
@@ -1534,13 +1677,38 @@ const makeStyles = () =>
       marginLeft: -theme.spacing.md,
       marginVertical: -theme.spacing.md,
     },
-    dragHint: {
-      fontSize: 13,
-      lineHeight: 18,
-      color: theme.colors.textSecondary,
-      textAlign: 'center',
-      marginTop: -4,
+    // Botones al pie de la lista de días: la misma píldora que "Añadir día"
+    // en Nueva rutina.
+    dayActions: {
+      flexDirection: 'row',
+      gap: 10,
       marginBottom: 12,
+    },
+    dayActionChip: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 6,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderRadius: theme.borderRadius.pill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryLine,
+      backgroundColor: theme.colors.surface,
+    },
+    dayActionChipDisabled: {
+      borderColor: theme.colors.border,
+      opacity: 0.5,
+    },
+    dayActionText: {
+      fontSize: 14,
+      fontWeight: '800',
+      color: theme.colors.primary,
+      lineHeight: 18,
+    },
+    dayActionTextDisabled: {
+      color: theme.colors.textSecondary,
     },
     // Quitar el día: rotulado y al pie del bloque, lejos de las flechas. Borrar
     // un día se lleva por delante su historial, así que no puede estar pegado a
