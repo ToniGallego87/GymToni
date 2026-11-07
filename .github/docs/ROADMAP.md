@@ -406,6 +406,25 @@ primero porque sin ellas no se publica.
       (sesión de más de una hora → modo avión → cerrar y abrir la app: debe
       seguir la cuenta; quitar el modo avión: a los ~30 s sincroniza sola).
       **Esfuerzo:** medio.
+- [ ] **El nivel no debe bajar el XP de la nube** — el efecto que sube nivel
+      y XP al perfil público compara contra `profile.xp` de la copia local del
+      perfil. Al arrancar con esa copia, o al renovarse una sesión que esperaba
+      a la red (el perfil se recarga a la vez, no antes), puede subir un XP
+      menor que el que otro móvil ya dejó en la nube, y la nube no se queda con
+      el mayor: el nivel público retrocede hasta que el sync baja los entrenos
+      del otro móvil y se recalcula. Dos arreglos posibles: no subir hasta que
+      el perfil se haya leído de la nube en esta sesión (una marca en el store
+      de `useMyProfile`; solo código), o un trigger en `profiles` que guarde
+      `greatest(old.xp, new.xp)` con su nivel (más robusto, pero exige
+      ejecutar SQL). Detectado en la 3.ª revisión de código del 2026-11-07.
+      **Por qué:** quien entrena en dos móviles no debería ver su nivel
+      público bajar (ni que lo vean otros) por abrir el móvil que va por detrás.
+      **Archivos:** `hooks/useAccountLevel.ts:213-232` (subida del nivel,
+      compara con `profile?.xp`), `hooks/useMyProfile.ts:57`
+      (`readCachedProfile`, la copia que se pinta primero) y `:223`
+      (`useReloadProfileOnSessionRestore`), `supabase/schema.sql:26-31`
+      (columnas `level` / `xp`, donde iría el trigger).
+      **Esfuerzo:** bajo.
 - [ ] **"Cerrar sesión" sin red y con el token caducado** — supabase-js, sin
       red y con el token caducado, devuelve el error sin borrar la sesión
       guardada: el popup terminaba y se seguía dentro. Ahora, si la sesión
