@@ -120,7 +120,6 @@ import {
 import {
   exerciseLogKey,
   getRecordSetIndexes,
-  pickBestExerciseLog,
   weightStepFromHistory,
 } from '@lib/exerciseProgress';
 import {
@@ -290,6 +289,12 @@ export function WorkoutLogScreen({
   const [sessionCreatedAt] = useState(
     () => existingLog?.createdAt ?? Date.now()
   );
+  // Inicio REAL de la sesión (el `createdAt` que se guarda y del que parte la
+  // duración): la primera serie, no el momento de abrir la pantalla (abrirla y
+  // tardar en empezar inflaba los minutos). Arranca en `sessionCreatedAt` y
+  // `handleAddSet` lo mueve a "ahora" al meter la primera serie del día. En un
+  // ref: el autoguardado de esa misma serie tiene que verlo en el mismo tick.
+  const sessionStartRef = useRef(sessionCreatedAt);
   // ¿El log de la sesión ya está creado? En un ref (síncrono), no en `state`:
   // dos guardados seguidos sin re-render en medio verían el mismo estado y
   // crearían dos logs.
@@ -850,7 +855,21 @@ export function WorkoutLogScreen({
       [exerciseId]: [...(exerciseSets[exerciseId] || []), set],
     };
     // Corregir un entreno de otro día no es entrenar: su hora no se toca.
-    if (!isEditingPastLog) exerciseStampRef.current[exerciseId] = Date.now();
+    if (!isEditingPastLog) {
+      const now = Date.now();
+      // Primera serie de la sesión: el cronómetro arranca aquí. Salvo que ya
+      // sea otro día (abierta a las 23:55, primera serie a las 00:05): la fecha
+      // del log es la de apertura, y su hora (`createdAt`, con la que se agrupa
+      // por semanas y se ordena) caería en el día siguiente. Entonces se queda
+      // la hora de apertura, como antes.
+      const isFirstSet = Object.values(exerciseSets).every(
+        (sets) => !sets?.length
+      );
+      if (isFirstSet && getToday() === originalDate) {
+        sessionStartRef.current = now;
+      }
+      exerciseStampRef.current[exerciseId] = now;
+    }
     setExerciseSets(updated);
     autoSaveWorkout(updated);
     // Al cerrar el objetivo se pasa al siguiente; una serie extra (por encima
@@ -1102,13 +1121,22 @@ export function WorkoutLogScreen({
     return previous?.logDayId === selectedDay.id ? previous : null;
   };
 
-  // Lo hecho en otra rutina u otro día se recuerda por la mejor sesión, no por
-  // la última: es lo que hay que igualar en un plan que se estrena. Un adicional
-  // no entra: su referencia es la última vez, venga de donde venga.
-  const getBestReferenceLog = (exerciseId: string) =>
-    isExtraExerciseId(exerciseId) || getComparableExerciseLog(exerciseId)
-      ? null
-      : pickBestExerciseLog(getPreviousExerciseRuns(exerciseId));
+  // De dónde viene la referencia que se enseña cuando NO es de este día: el
+  // nombre del día si es de esta misma rutina, o "Rutina · Día" si es de otra
+  // (la que se borró queda como "otra rutina"). Null si es de este día.
+  const getReferenceSource = (
+    reference: { logId: string; logDayId: string } | null
+  ): string | null => {
+    if (!reference || reference.logDayId === selectedDay.id) return null;
+    const refLog = state.logs.find((l) => l.id === reference.logId);
+    const day = findDayInRoutines(state.routines, reference.logDayId);
+    const dayName = day ? getDisplayDayName(day.name) : '';
+    if (refLog?.routineId === getRoutineIdForDay()) return dayName || null;
+    const routineName = state.routines.find((r) => r.id === refLog?.routineId)
+      ?.name;
+    if (!routineName) return t('otra rutina');
+    return dayName ? `${routineName} · ${dayName}` : routineName;
+  };
 
   // ¿Tiene el log algún peso real (>0)? Las series a peso corporal (weight -1)
   // o vacías no sirven para calcular el peso de descarga.
@@ -1218,7 +1246,7 @@ export function WorkoutLogScreen({
         // Vaciar la nota es borrarla: no se guarda una cadena vacía.
         notes: exerciseNotes[ex.id]?.trim() || undefined,
         // Hora de su última serie; sin series, la del inicio de la sesión.
-        timestamp: exerciseStampRef.current[ex.id] ?? sessionCreatedAt,
+        timestamp: exerciseStampRef.current[ex.id] ?? sessionStartRef.current,
       };
     });
 
@@ -1235,8 +1263,8 @@ export function WorkoutLogScreen({
     // la hora del log y se cambia solo el día; si la fecha no cambia, intacto.
     const createdAt =
       selectedDate === originalDate
-        ? sessionCreatedAt
-        : combineDateWithTime(selectedDate, sessionCreatedAt);
+        ? sessionStartRef.current
+        : combineDateWithTime(selectedDate, sessionStartRef.current);
 
     return {
       id: sessionLogId,
@@ -1366,7 +1394,7 @@ export function WorkoutLogScreen({
   const sessionMinutes = cardioOnly
     ? 0
     : sessionDurationMinutes(
-        sessionCreatedAt,
+        sessionStartRef.current,
         Object.values(exerciseStampRef.current)
       );
   const sessionDuration =
@@ -1925,7 +1953,7 @@ export function WorkoutLogScreen({
                           inputDraftsRef.current[exercise.id] = next;
                         }}
                         previousLog={previousLogForField}
-                        bestLog={getBestReferenceLog(exercise.id)}
+                        referenceSource={getReferenceSource(previousLog)}
                         suggestTargetReps={
                           !comparableLog && !isExtraExerciseId(exercise.id)
                         }

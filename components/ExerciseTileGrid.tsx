@@ -10,9 +10,11 @@ import {
   AppState,
   Image,
   Pressable,
+  StyleProp,
   StyleSheet,
   Text,
   View,
+  ViewStyle,
 } from 'react-native';
 import Animated, {
   interpolate,
@@ -161,6 +163,18 @@ interface ExerciseTileGridProps {
   editing?: ExerciseTileEditing;
   /** Si llega, cada casilla se elige con un toque (ver `ExerciseTileSelection`). */
   selection?: ExerciseTileSelection;
+  /**
+   * Solo en lectura: abre la evolución de un ejercicio (Progreso por
+   * ejercicio). Nombre y pie de la casilla pasan a enlace, con el icono de la
+   * gráfica, si `hasEvolution` dice que ya hay historial con el que dibujarla.
+   */
+  evolution?: ExerciseTileEvolution;
+}
+
+/** Acceso desde cada casilla a la evolución de su ejercicio. */
+export interface ExerciseTileEvolution {
+  hasEvolution: (exercise: ExerciseTile) => boolean;
+  onOpen: (exercise: ExerciseTile) => void;
 }
 
 /**
@@ -183,12 +197,17 @@ interface ExerciseTileGridProps {
  * cada una se elige con un toque: la elegida lleva borde de oro, el play de su
  * GIF y el pie dice las series hechas de su objetivo. El panel para meterlas lo
  * pinta el registro bajo la tira.
+ *
+ * En lectura, con `evolution`, el nombre y el pie de cada ejercicio ya
+ * entrenado llevan a su gráfica y sus récords (el GIF sigue reproduciéndose
+ * con su propio toque).
  */
 export function ExerciseTileGrid({
   exercises,
   accent,
   editing,
   selection,
+  evolution,
 }: ExerciseTileGridProps) {
   const [toRemove, setToRemove] = useState<ExerciseTile | null>(null);
 
@@ -256,24 +275,51 @@ export function ExerciseTileGrid({
     <View style={styles.grid}>
       {rows.map((row, rowIndex) => (
         <View key={rowIndex} style={styles.row}>
-          {row.map((exercise) => (
-            <View key={exercise.id} style={[styles.tile, styles.tileFlex]}>
-              <TileName name={exercise.name} />
-              {exercise.catalogId ? (
-                <View style={styles.gifWrap}>
-                  <ExerciseGifButton
+          {row.map((exercise) => {
+            const openEvolution =
+              evolution && evolution.hasEvolution(exercise)
+                ? () => evolution.onOpen(exercise)
+                : undefined;
+            return (
+              <View key={exercise.id} style={[styles.tile, styles.tileFlex]}>
+                {openEvolution ? (
+                  <EvolutionLink name={exercise.name} onPress={openEvolution}>
+                    <TileName name={exercise.name} link />
+                  </EvolutionLink>
+                ) : (
+                  <TileName name={exercise.name} />
+                )}
+                {exercise.catalogId ? (
+                  <View style={styles.gifWrap}>
+                    <ExerciseGifButton
+                      name={exercise.name}
+                      catalogId={exercise.catalogId}
+                      fitMode="contain"
+                      style={styles.gif}
+                    />
+                  </View>
+                ) : (
+                  <GifPlaceholder accent={accent} />
+                )}
+                {openEvolution ? (
+                  <EvolutionLink
                     name={exercise.name}
-                    catalogId={exercise.catalogId}
-                    fitMode="contain"
-                    style={styles.gif}
-                  />
-                </View>
-              ) : (
-                <GifPlaceholder accent={accent} />
-              )}
-              <TileSets exercise={exercise} />
-            </View>
-          ))}
+                    onPress={openEvolution}
+                    style={styles.setsLink}
+                  >
+                    <TileSets exercise={exercise} />
+                    <MaterialCommunityIcons
+                      name="chart-line"
+                      size={13}
+                      color={theme.colors.primary}
+                    />
+                  </EvolutionLink>
+                ) : (
+                  <TileSets exercise={exercise} />
+                )}
+              </View>
+            );
+          })}
           {/* Huecos vacíos en la última fila para que las casillas que sí hay
               no se estiren y midan lo mismo que las demás. */}
           {row.length < columns &&
@@ -293,11 +339,14 @@ function TileName({
   name,
   lines = NAME_LINES,
   compact,
+  link,
 }: {
   name: string;
   lines?: number;
   /** Casilla del registro: letra algo mayor (la casilla también lo es). */
   compact?: boolean;
+  /** Lleva a la evolución del ejercicio: en el color de los enlaces. */
+  link?: boolean;
 }) {
   const trimmed = name.trim();
   const lineHeight = compact ? COMPACT_NAME_LINE_HEIGHT : NAME_LINE_HEIGHT;
@@ -306,7 +355,11 @@ function TileName({
     <View style={[styles.nameBox, { height }]}>
       <FitText
         key={trimmed}
-        style={[styles.name, !trimmed && styles.nameEmpty]}
+        style={[
+          styles.name,
+          !trimmed && styles.nameEmpty,
+          link && styles.nameLink,
+        ]}
         maxHeight={height}
         fontSize={compact ? COMPACT_NAME_FONT_SIZE : NAME_FONT_SIZE}
         lineHeight={lineHeight}
@@ -314,6 +367,38 @@ function TileName({
         {trimmed || t('Sin nombre')}
       </FitText>
     </View>
+  );
+}
+
+// Nombre o pie de una casilla que llevan a la evolución del ejercicio: el
+// mismo acceso que "Ver evolución" en el Detalle de una sesión.
+function EvolutionLink({
+  name,
+  onPress,
+  style,
+  children,
+}: {
+  name: string;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  return (
+    <Pressable
+      style={({ pressed }) => [
+        styles.evolutionLink,
+        style,
+        pressed && styles.evolutionLinkPressed,
+      ]}
+      onPress={onPress}
+      hitSlop={4}
+      accessibilityRole="button"
+      accessibilityLabel={t('Ver evolución de {name}', {
+        name: name.trim() || t('Sin nombre'),
+      })}
+    >
+      {children}
+    </Pressable>
   );
 }
 
@@ -1194,6 +1279,21 @@ const makeStyles = () =>
     nameCompact: {
       fontSize: COMPACT_NAME_FONT_SIZE,
       lineHeight: COMPACT_NAME_LINE_HEIGHT,
+    },
+    nameLink: {
+      color: theme.colors.primary,
+    },
+    evolutionLink: {
+      alignSelf: 'stretch',
+    },
+    evolutionLinkPressed: {
+      opacity: 0.7,
+    },
+    setsLink: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 3,
     },
     nameEmpty: {
       color: theme.colors.textSecondary,

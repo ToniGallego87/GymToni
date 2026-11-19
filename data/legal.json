@@ -1,0 +1,382 @@
+{
+  "version": "2026-11-16",
+  "contact": "tonigallego87@gmail.com",
+  "docs": {
+    "privacy": {
+      "es": {
+        "title": "Política de privacidad",
+        "updated": "Última actualización: 16 de noviembre de 2026",
+        "summary": "Sin cuenta, todo se queda en tu móvil. Con cuenta, guardamos en la nube tu email, tus rutinas y entrenos (también el peso corporal, si lo apuntas) para hacer copia y sincronizar, y lo que tú decides publicar en Comunidad. No hay publicidad ni analítica, y no vendemos ni cedemos tus datos.",
+        "sections": [
+          {
+            "h": "1. Quién es el responsable",
+            "p": [
+              "GymBro es una aplicación desarrollada de forma independiente. El responsable del tratamiento es su desarrollador, al que puedes escribir a {contact}."
+            ]
+          },
+          {
+            "h": "2. Sin cuenta",
+            "p": [
+              "La app funciona entera sin cuenta. Tus rutinas, entrenos, cardio, peso corporal y ajustes se guardan solo en tu dispositivo, y no se envían a ningún servidor.",
+              "Las copias que exportas a un archivo y los avisos de descanso (notificaciones locales) también se quedan en tu dispositivo o donde tú decidas guardarlos."
+            ]
+          },
+          {
+            "h": "3. Qué guardamos si creas una cuenta",
+            "li": [
+              "Cuenta: tu email, tu contraseña (cifrada; nunca se guarda en claro) y la fecha en que aceptaste estos textos.",
+              "Tus datos de entrenamiento: rutinas, entrenos (series, pesos, repeticiones y notas), cardio, peso corporal y los ajustes que se sincronizan.",
+              "Perfil público (opcional): nombre, biografía, foto, nivel y puntos.",
+              "Comunidad: las rutinas que publicas, tus comentarios y \"me gusta\", a quién sigues, las rutinas que te guardas, la actividad que eliges compartir, y tus reportes y bloqueos."
+            ]
+          },
+          {
+            "h": "4. Para qué y con qué base",
+            "li": [
+              "Para darte el servicio que pides al crear la cuenta: copia en la nube, usar tus datos en varios dispositivos y la Comunidad.",
+              "Tus entrenos y tu peso corporal pueden considerarse datos de salud. Los tratamos solo con tu consentimiento explícito, que das al crear la cuenta y puedes retirar en cualquier momento eliminándola.",
+              "Para moderar la Comunidad (revisar reportes y hacer cumplir los Términos de uso), por interés legítimo en mantenerla segura."
+            ]
+          },
+          {
+            "h": "5. Dónde se guardan",
+            "p": [
+              "En Supabase, el proveedor de base de datos y autenticación de la app, que actúa como encargado del tratamiento sobre servidores de Amazon Web Services. Si los datos salen del Espacio Económico Europeo, la transferencia se ampara en las cláusulas contractuales tipo de la Comisión Europea incluidas en su acuerdo de tratamiento de datos.",
+              "Las imágenes de los ejercicios se descargan de una red de distribución de contenidos (jsDelivr), que, como cualquier servidor web, recibe la dirección IP del dispositivo que las pide."
+            ]
+          },
+          {
+            "h": "6. Quién lo ve",
+            "p": [
+              "Tu email, tus entrenos, tu peso corporal y tus reportes y bloqueos solo los ves tú. Ven los demás tu perfil (si lo haces público), las rutinas que publicas, tus comentarios y la actividad que decidas compartir.",
+              "No hay publicidad, analítica ni rastreo, y no vendemos ni cedemos tus datos a nadie."
+            ]
+          },
+          {
+            "h": "7. Cuánto tiempo y cómo se borran",
+            "p": [
+              "Mientras tengas la cuenta. Puedes eliminarla en Datos y nube → Eliminar la cuenta. Durante 30 días puedes recuperarla iniciando sesión; pasado ese plazo se borra todo lo privado de la nube."
+            ],
+            "li": [
+              "Las rutinas que habías publicado y tus comentarios no desaparecen: se quedan anónimos, como \"Cuenta eliminada\".",
+              "Las rutinas que otras personas ya se habían guardado siguen en sus dispositivos.",
+              "Los reportes que otras personas hicieron sobre tu contenido se conservan para la moderación.",
+              "Las copias de seguridad del proveedor guardan los datos unos días más hasta que se renuevan.",
+              "Los datos de tu dispositivo no se tocan: son tuyos, y se borran desinstalando la app o desde sus opciones."
+            ]
+          },
+          {
+            "h": "8. Tus derechos",
+            "p": [
+              "Puedes pedir el acceso, la rectificación, la supresión y la portabilidad de tus datos (la app ya te deja exportarlos a un archivo), oponerte o limitar su tratamiento y retirar tu consentimiento, escribiendo a {contact}. Si no quedas conforme, puedes reclamar ante la Agencia Española de Protección de Datos (aepd.es)."
+            ]
+          },
+          {
+            "h": "9. Menores",
+            "p": [
+              "Para crear una cuenta hay que tener al menos 14 años. Sin cuenta, la app no recoge ningún dato."
+            ]
+          },
+          {
+            "h": "10. Seguridad",
+            "p": [
+              "Las conexiones van cifradas y cada cuenta solo puede leer y escribir lo suyo (o lo que otros han hecho público). Ningún sistema es infalible: si detectamos una brecha que afecte a tus datos, te lo diremos."
+            ]
+          },
+          {
+            "h": "11. Permisos del dispositivo",
+            "li": [
+              "Notificaciones, alarmas exactas, vibración y mantener la pantalla encendida: para los avisos del descanso entre series.",
+              "Fotos (solo la que eliges): para la foto de perfil.",
+              "Internet: para la cuenta, la Comunidad y las imágenes de los ejercicios."
+            ]
+          },
+          {
+            "h": "12. Cambios",
+            "p": [
+              "Si esta política cambia, lo verás en la app antes de que el cambio se aplique, con la nueva fecha arriba."
+            ]
+          },
+          {
+            "h": "13. Contacto",
+            "p": ["Para cualquier duda sobre tus datos, escribe a {contact}."]
+          }
+        ]
+      },
+      "en": {
+        "title": "Privacy policy",
+        "updated": "Last updated: November 16, 2026",
+        "summary": "Without an account, everything stays on your phone. With an account, we store your email, your routines and workouts (including body weight, if you log it) in the cloud to back them up and sync them, plus whatever you choose to publish in Community. There are no ads or analytics, and we never sell or share your data.",
+        "sections": [
+          {
+            "h": "1. Who is responsible",
+            "p": [
+              "GymBro is an independently developed app. The data controller is its developer, whom you can reach at {contact}."
+            ]
+          },
+          {
+            "h": "2. Without an account",
+            "p": [
+              "The whole app works without an account. Your routines, workouts, cardio, body weight and settings are stored only on your device and are not sent to any server.",
+              "Backups you export to a file and rest reminders (local notifications) also stay on your device or wherever you choose to save them."
+            ]
+          },
+          {
+            "h": "3. What we store if you create an account",
+            "li": [
+              "Account: your email, your password (encrypted; never stored in plain text) and the date you accepted these documents.",
+              "Your training data: routines, workouts (sets, weights, reps and notes), cardio, body weight and the settings that sync.",
+              "Public profile (optional): name, bio, photo, level and points.",
+              "Community: the routines you publish, your comments and likes, who you follow, the routines you save, the activity you choose to share, and your reports and blocks."
+            ]
+          },
+          {
+            "h": "4. Why and on what basis",
+            "li": [
+              "To provide the service you ask for when you create the account: cloud backup, using your data on several devices, and Community.",
+              "Your workouts and body weight may count as health data. We only process them with your explicit consent, which you give when you create the account and can withdraw at any time by deleting it.",
+              "To moderate Community (reviewing reports and enforcing the Terms of use), based on our legitimate interest in keeping it safe."
+            ]
+          },
+          {
+            "h": "5. Where it is stored",
+            "p": [
+              "In Supabase, the app's database and authentication provider, acting as data processor on Amazon Web Services servers. If data leaves the European Economic Area, the transfer is covered by the European Commission's standard contractual clauses included in its data processing agreement.",
+              "Exercise images are downloaded from a content delivery network (jsDelivr), which, like any web server, receives the IP address of the device requesting them."
+            ]
+          },
+          {
+            "h": "6. Who can see it",
+            "p": [
+              "Only you can see your email, workouts, body weight, reports and blocks. Others can see your profile (if you make it public), the routines you publish, your comments and the activity you choose to share.",
+              "There are no ads, analytics or tracking, and we never sell or share your data."
+            ]
+          },
+          {
+            "h": "7. How long and how it is deleted",
+            "p": [
+              "For as long as you have the account. You can delete it in Data & cloud → Delete account. For 30 days you can recover it by signing in; after that, everything private is erased from the cloud."
+            ],
+            "li": [
+              "Routines you had published and your comments are not removed: they stay anonymous, as \"Deleted account\".",
+              "Routines that other people had already saved stay on their devices.",
+              "Reports other people made about your content are kept for moderation.",
+              "The provider's backups keep the data for a few more days until they roll over.",
+              "Data on your device is not touched: it is yours, and it is removed by uninstalling the app or from its settings."
+            ]
+          },
+          {
+            "h": "8. Your rights",
+            "p": [
+              "You can request access, correction, erasure and portability of your data (the app already lets you export it to a file), object to or restrict its processing, and withdraw your consent, by writing to {contact}. If you are not satisfied, you can complain to the Spanish Data Protection Agency (aepd.es) or your local authority."
+            ]
+          },
+          {
+            "h": "9. Minors",
+            "p": [
+              "You must be at least 14 to create an account. Without an account, the app collects no data."
+            ]
+          },
+          {
+            "h": "10. Security",
+            "p": [
+              "Connections are encrypted and each account can only read and write its own data (or what others have made public). No system is infallible: if we detect a breach affecting your data, we will tell you."
+            ]
+          },
+          {
+            "h": "11. Device permissions",
+            "li": [
+              "Notifications, exact alarms, vibration and keeping the screen on: for rest reminders between sets.",
+              "Photos (only the one you pick): for your profile photo.",
+              "Internet: for the account, Community and exercise images."
+            ]
+          },
+          {
+            "h": "12. Changes",
+            "p": [
+              "If this policy changes, you will see it in the app before the change applies, with the new date at the top."
+            ]
+          },
+          {
+            "h": "13. Contact",
+            "p": ["For any question about your data, write to {contact}."]
+          }
+        ]
+      }
+    },
+    "terms": {
+      "es": {
+        "title": "Términos de uso",
+        "updated": "Última actualización: 16 de noviembre de 2026",
+        "summary": "Usa GymBro con respeto: lo que publicas es tuyo y responsabilidad tuya, en Comunidad no cabe el contenido ofensivo, y puedes reportar y bloquear a quien no lo cumpla. GymBro no sustituye el consejo de un profesional de la salud.",
+        "sections": [
+          {
+            "h": "1. Aceptación",
+            "p": [
+              "Al crear una cuenta aceptas estos términos y la Política de privacidad. Sin cuenta puedes usar la app para registrar tus entrenos; la Comunidad y la copia en la nube requieren cuenta."
+            ]
+          },
+          {
+            "h": "2. El servicio",
+            "p": [
+              "GymBro se ofrece tal cual y gratis, sin garantía de que esté siempre disponible ni libre de errores. Te recomendamos guardar copias de tus datos (la app te deja exportarlos)."
+            ]
+          },
+          {
+            "h": "3. Tu cuenta",
+            "p": [
+              "Hay que tener al menos 14 años. Eres responsable de lo que se haga con tu cuenta y de guardar tu contraseña. Una cuenta es de una sola persona."
+            ]
+          },
+          {
+            "h": "4. Lo que publicas",
+            "p": [
+              "Eres responsable de las rutinas, comentarios, nombre, biografía y foto que publicas, y conservas los derechos que tengas sobre ellos. Al publicarlos nos das permiso, gratuito y no exclusivo, para mostrarlos en la app a otras personas mientras sigan publicados, y para mantener anónimas, como \"Cuenta eliminada\", tus rutinas públicas y tus comentarios si eliminas la cuenta."
+            ]
+          },
+          {
+            "h": "5. Lo que no se permite",
+            "p": [
+              "En GymBro no hay sitio para el contenido ofensivo ni para quien abusa de otras personas. No se permite publicar:"
+            ],
+            "li": [
+              "Odio, acoso, amenazas o insultos hacia personas o grupos.",
+              "Contenido sexual, violento o desagradable.",
+              "Spam, publicidad o enlaces engañosos.",
+              "Suplantar a otra persona o publicar datos personales de terceros.",
+              "Consejos peligrosos para la salud, como el uso de sustancias dopantes.",
+              "Nada ilegal ni que infrinja derechos de otros (por ejemplo, de autor)."
+            ]
+          },
+          {
+            "h": "6. Reportar, bloquear y moderar",
+            "p": [
+              "Puedes reportar cualquier rutina, perfil o comentario, y bloquear a cualquier persona desde su perfil: dejarás de ver lo que publica y no podrá seguirte ni comentar tus rutinas. Revisamos los reportes lo antes posible y podemos retirar contenido y suspender o cerrar las cuentas que incumplan estos términos, sin previo aviso en los casos graves."
+            ]
+          },
+          {
+            "h": "7. Tu salud",
+            "p": [
+              "GymBro sirve para registrar tus entrenos y no es consejo médico ni de entrenamiento. Las rutinas de la Comunidad las publican otras personas. Entrena bajo tu responsabilidad y consulta a un profesional antes de empezar o cambiar un programa, sobre todo si tienes alguna lesión o problema de salud."
+            ]
+          },
+          {
+            "h": "8. Responsabilidad",
+            "p": [
+              "En la medida en que la ley lo permita, no respondemos de daños derivados del uso de la app, de la pérdida de datos ni del contenido que publican otras personas. Nada de esto limita los derechos que te da la ley como consumidor."
+            ]
+          },
+          {
+            "h": "9. Baja",
+            "p": [
+              "Puedes eliminar tu cuenta cuando quieras desde Datos y nube. Nosotros podemos cerrarla si incumples estos términos."
+            ]
+          },
+          {
+            "h": "10. Cambios",
+            "p": [
+              "Si cambiamos estos términos, lo verás en la app antes de que se apliquen. Si no estás de acuerdo, puedes eliminar la cuenta."
+            ]
+          },
+          {
+            "h": "11. Ley aplicable",
+            "p": [
+              "Se rigen por la ley española. Si eres consumidor, puedes acudir a los tribunales de tu domicilio."
+            ]
+          },
+          {
+            "h": "12. Contacto",
+            "p": [
+              "Para cualquier duda o para avisarnos de un abuso, escribe a {contact}."
+            ]
+          }
+        ]
+      },
+      "en": {
+        "title": "Terms of use",
+        "updated": "Last updated: November 16, 2026",
+        "summary": "Use GymBro respectfully: what you publish is yours and your responsibility, offensive content has no place in Community, and you can report and block anyone who breaks the rules. GymBro is no substitute for advice from a health professional.",
+        "sections": [
+          {
+            "h": "1. Acceptance",
+            "p": [
+              "By creating an account you accept these terms and the Privacy policy. Without an account you can use the app to log your workouts; Community and cloud backup require an account."
+            ]
+          },
+          {
+            "h": "2. The service",
+            "p": [
+              "GymBro is provided as is and free of charge, with no guarantee that it will always be available or error-free. We recommend keeping backups of your data (the app lets you export it)."
+            ]
+          },
+          {
+            "h": "3. Your account",
+            "p": [
+              "You must be at least 14. You are responsible for what is done with your account and for keeping your password safe. An account belongs to a single person."
+            ]
+          },
+          {
+            "h": "4. What you publish",
+            "p": [
+              "You are responsible for the routines, comments, name, bio and photo you publish, and you keep whatever rights you have over them. By publishing them you give us free, non-exclusive permission to show them in the app to other people while they remain published, and to keep your public routines and comments anonymous, as \"Deleted account\", if you delete your account."
+            ]
+          },
+          {
+            "h": "5. What is not allowed",
+            "p": [
+              "There is no place in GymBro for offensive content or for people who abuse others. You may not publish:"
+            ],
+            "li": [
+              "Hate, harassment, threats or insults towards people or groups.",
+              "Sexual, violent or disturbing content.",
+              "Spam, advertising or misleading links.",
+              "Impersonation of another person, or other people's personal data.",
+              "Advice that is dangerous to health, such as using performance-enhancing drugs.",
+              "Anything illegal or that infringes others' rights (for example, copyright)."
+            ]
+          },
+          {
+            "h": "6. Reporting, blocking and moderation",
+            "p": [
+              "You can report any routine, profile or comment, and block anyone from their profile: you will stop seeing what they publish and they will not be able to follow you or comment on your routines. We review reports as soon as possible and may remove content and suspend or close accounts that break these terms, without notice in serious cases."
+            ]
+          },
+          {
+            "h": "7. Your health",
+            "p": [
+              "GymBro is for logging your workouts and is not medical or training advice. Community routines are published by other people. Train at your own risk and consult a professional before starting or changing a program, especially if you have an injury or health condition."
+            ]
+          },
+          {
+            "h": "8. Liability",
+            "p": [
+              "To the extent permitted by law, we are not liable for damages arising from use of the app, loss of data or content published by other people. None of this limits your statutory rights as a consumer."
+            ]
+          },
+          {
+            "h": "9. Closing your account",
+            "p": [
+              "You can delete your account at any time from Data & cloud. We may close it if you break these terms."
+            ]
+          },
+          {
+            "h": "10. Changes",
+            "p": [
+              "If we change these terms, you will see it in the app before they apply. If you do not agree, you can delete your account."
+            ]
+          },
+          {
+            "h": "11. Governing law",
+            "p": [
+              "These terms are governed by Spanish law. If you are a consumer, you may go to the courts of your place of residence."
+            ]
+          },
+          {
+            "h": "12. Contact",
+            "p": ["For any question, or to report abuse, write to {contact}."]
+          }
+        ]
+      }
+    }
+  }
+}

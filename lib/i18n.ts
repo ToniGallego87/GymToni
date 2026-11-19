@@ -228,6 +228,7 @@ register({
   'Entrenamiento completado': 'Workout completed',
   'Empezar entrenamiento': 'Start workout',
   'Sin mejora': 'No improvement',
+  'Tu punto de partida': 'Your starting point',
   'de mejora': 'improvement',
   'frente a la vez anterior': 'vs. last time',
   'Borrar nota': 'Delete note',
@@ -950,6 +951,7 @@ register({
   'Modo oscuro': 'Dark mode',
   'Ver ejercicio': 'View exercise',
   'Ver evolución': 'View progress',
+  'Ver evolución de {name}': 'View progress of {name}',
   'Ver hitos': 'View milestones',
   'Ver GIF': 'View GIF',
   'Todos los ejercicios': 'All exercises',
@@ -1133,7 +1135,8 @@ register({
   'Empezar una nueva semana con este día': 'Start a new week with this day',
   'La semana {week} se cierra con {n} de {total} días.':
     'Week {week} closes with {n} of {total} days.',
-  'La semana {week} empieza con {day}.': 'Week {week} starts with {day}.',
+  'Luego eliges con qué día empieza la semana {week}.':
+    'Then pick which day starts week {week}.',
   '¿Empezar semana nueva?': 'Start a new week?',
   'Empezar semana nueva': 'Start new week',
   'Hoy ya entrenaste {day}. Un entreno por día':
@@ -1316,7 +1319,10 @@ register({
 
 // Primera semana de una rutina: lo que se recuerda de otra y la tarjeta de Inicio.
 register({
-  Mejor: 'Best',
+  'De {source}': 'From {source}',
+  'Ver en la comunidad': 'View in community',
+  '+{n} pts': '+{n} pts',
+  'otra rutina': 'another routine',
   'La próxima semana verás tu progreso': 'Your progress shows next week',
   'Tu rutina': 'Your routine',
   'Tienes avisos': 'You have notifications',
@@ -1344,4 +1350,56 @@ register({
 // Póster de la semana: lo que no cabe en la columna de retos o logros.
 register({
   'y {n} más': 'and {n} more',
+});
+
+// Bloquear usuarios (perfil ajeno).
+register({
+  'Crea una cuenta para bloquear': 'Create an account to block',
+  'Has bloqueado a {name}': 'You blocked {name}',
+  'Has desbloqueado a {name}': 'You unblocked {name}',
+  'Has bloqueado esta cuenta: no ves sus rutinas, comentarios ni actividad, y no puede seguirte ni comentar tus rutinas.':
+    "You blocked this account: you don't see their routines, comments or activity, and they can't follow you or comment on your routines.",
+  Desbloquear: 'Unblock',
+  'Bloquear a {name}': 'Block {name}',
+  '¿Bloquear a {name}?': 'Block {name}?',
+  'No verás sus rutinas, comentarios ni actividad, y se borran sus comentarios en tus rutinas. Dejaréis de seguiros, y no podrá seguirte ni comentar tus rutinas. No se le avisa, y puedes desbloquearlo desde aquí.':
+    "You won't see their routines, comments or activity, and their comments on your routines are deleted. You'll stop following each other, and they won't be able to follow you or comment on your routines. They aren't notified, and you can unblock them from here.",
+  Bloquear: 'Block',
+  'Cuentas bloqueadas': 'Blocked accounts',
+  'Nadie bloqueado': 'Nobody blocked',
+  '1 cuenta': '1 account',
+  '{n} cuentas': '{n} accounts',
+  'No ves sus rutinas, comentarios ni actividad, y no pueden seguirte ni comentar tus rutinas. No se les avisa al bloquearlas ni al desbloquearlas.':
+    "You don't see their routines, comments or activity, and they can't follow you or comment on your routines. They aren't notified when you block or unblock them.",
+  'No has bloqueado a nadie. Se bloquea desde el perfil de cada persona.':
+    "You haven't blocked anyone. You can block someone from their profile.",
+  'No se ha podido seguir a esta cuenta': "Couldn't follow this account",
+  'No se ha podido publicar el comentario': "Couldn't post the comment",
+});
+
+// Política de privacidad y Términos de uso (Configuración y crear cuenta).
+register({
+  'Política de privacidad': 'Privacy policy',
+  'Qué se guarda, dónde y cómo borrarlo':
+    'What is stored, where, and how to delete it',
+  'Términos de uso': 'Terms of use',
+  'Normas de la Comunidad': 'Community rules',
+  'Acepta los términos para crear la cuenta':
+    'Accept the terms to create the account',
+  'Tengo {age} años o más y acepto los': 'I am {age} or older and accept the',
+  Aceptar: 'Accept',
+  'Términos y privacidad': 'Terms and privacy',
+  'Marca las dos casillas para seguir con tu cuenta.':
+    'Tick both boxes to keep using your account.',
+  'No se ha podido guardar. Comprueba la conexión.':
+    "Couldn't save. Check your connection.",
+  'Hemos actualizado los Términos de uso y la Política de privacidad. Léelos y acéptalos para seguir usando tu cuenta en la nube.':
+    'We have updated the Terms of use and the Privacy policy. Read and accept them to keep using your cloud account.',
+  'Tu cuenta es anterior a los Términos de uso y la Política de privacidad. Léelos y acéptalos para seguir usando tu cuenta en la nube.':
+    'Your account predates the Terms of use and the Privacy policy. Read and accept them to keep using your cloud account.',
+  'y la': 'and the',
+  'Consiento que mis entrenos y mi peso corporal, que pueden ser datos de salud, se guarden en la nube con mi cuenta.':
+    'I consent to my workouts and body weight, which may be health data, being stored in the cloud with my account.',
+  'Hace falta tu consentimiento para guardar tus entrenos en la nube':
+    'Your consent is needed to store your workouts in the cloud',
 });

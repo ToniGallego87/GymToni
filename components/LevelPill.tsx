@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -34,16 +34,20 @@ interface LevelPillProps {
 export function LevelPill({ level, compact, onPress }: LevelPillProps) {
   const label = t('Nivel {n}', { n: level });
   const pulse = useRef(new Animated.Value(0)).current;
+  // Vuelo de los puntos ganados hacia la píldora: 0 → aparecen a su izquierda,
+  // 1 → dentro de ella, fundidos. Las chispas van con su propio valor (salen
+  // escalonadas) para que no se muevan como un bloque.
+  const flight = useRef(new Animated.Value(0)).current;
+  const sparks = useRef(SPARKS.map(() => new Animated.Value(0))).current;
+  const [flyingXp, setFlyingXp] = useState<number | null>(null);
 
   // Solo la de la barra superior late: es la que mira quien acaba de cerrar el
   // popup. Las del perfil se quedan quietas.
   useEffect(() => {
     if (!compact) return;
-    return subscribeLevelPulse(() => {
+    return subscribeLevelPulse((xp) => {
       pulse.setValue(0);
-      Animated.sequence([
-        // Un respiro: que el popup termine de irse antes del latido.
-        Animated.delay(220),
+      const beat = Animated.sequence([
         Animated.timing(pulse, {
           toValue: 1,
           duration: 280,
@@ -56,9 +60,46 @@ export function LevelPill({ level, compact, onPress }: LevelPillProps) {
           easing: Easing.out(Easing.quad),
           useNativeDriver: true,
         }),
-      ]).start();
+      ]);
+      // Sin puntos (subida de nivel): solo el latido.
+      if (!xp) {
+        // Un respiro: que el popup termine de irse antes del latido.
+        Animated.sequence([Animated.delay(220), beat]).start();
+        return;
+      }
+      // Con puntos: "+N pts" aparece junto a la píldora, vuela hacia ella
+      // encogiendo con sus chispas y, al llegar, la píldora late: se ve que
+      // los puntos han entrado en el nivel.
+      setFlyingXp(xp);
+      flight.setValue(0);
+      sparks.forEach((spark) => spark.setValue(0));
+      Animated.sequence([
+        Animated.delay(220),
+        Animated.parallel([
+          Animated.timing(flight, {
+            toValue: 1,
+            duration: FLIGHT_MS,
+            easing: Easing.inOut(Easing.cubic),
+            useNativeDriver: true,
+          }),
+          Animated.stagger(
+            60,
+            sparks.map((spark) =>
+              Animated.timing(spark, {
+                toValue: 1,
+                duration: FLIGHT_MS - 120,
+                easing: Easing.in(Easing.cubic),
+                useNativeDriver: true,
+              })
+            )
+          ),
+        ]),
+        beat,
+      ]).start(({ finished }) => {
+        if (finished) setFlyingXp(null);
+      });
     });
-  }, [compact, pulse]);
+  }, [compact, pulse, flight, sparks]);
 
   const scale = pulse.interpolate({
     inputRange: [0, 1],
@@ -93,26 +134,103 @@ export function LevelPill({ level, compact, onPress }: LevelPillProps) {
     </>
   );
 
+  // Los puntos en vuelo: hermanos de la píldora (no hijos), así no los recorta
+  // su `overflow` ni los agranda su latido. Centrados en ella y desplazados
+  // por transform: llegar a 0 es estar dentro.
+  const flyingPoints =
+    compact && flyingXp != null ? (
+      <View pointerEvents="none" style={styles.flightLayer}>
+        {SPARKS.map(([dx, dy], i) => (
+          <Animated.View
+            key={i}
+            style={[
+              styles.spark,
+              {
+                opacity: sparks[i].interpolate({
+                  inputRange: [0, 0.15, 0.8, 1],
+                  outputRange: [0, 1, 1, 0],
+                }),
+                transform: [
+                  {
+                    translateX: sparks[i].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [dx, 0],
+                    }),
+                  },
+                  {
+                    translateY: sparks[i].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [dy, 0],
+                    }),
+                  },
+                  {
+                    scale: sparks[i].interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 0.4],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
+        ))}
+        <Animated.View
+          style={[
+            styles.flyingChip,
+            {
+              opacity: flight.interpolate({
+                inputRange: [0, 0.12, 0.8, 1],
+                outputRange: [0, 1, 1, 0],
+              }),
+              transform: [
+                {
+                  // Aparece a la izquierda, se queda un instante para leerse y
+                  // entra en la píldora.
+                  translateX: flight.interpolate({
+                    inputRange: [0, 0.4, 1],
+                    outputRange: [-FLY_FROM_X, -FLY_FROM_X + 6, 0],
+                  }),
+                },
+                {
+                  scale: flight.interpolate({
+                    inputRange: [0, 0.15, 0.4, 1],
+                    outputRange: [0.5, 1.12, 1, 0.25],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Text style={styles.flyingChipText}>
+            {t('+{n} pts', { n: flyingXp })}
+          </Text>
+        </Animated.View>
+      </View>
+    ) : null;
+
   if (onPress) {
     return (
-      <Animated.View style={compact ? { transform: [{ scale }] } : null}>
-        <Pressable
-          style={({ pressed }) => [
-            styles.pill,
-            compact && styles.pillCompact,
-            pressed && styles.pressed,
-          ]}
-          onPress={onPress}
-          hitSlop={8}
-          accessibilityRole="button"
-          accessibilityLabel={`${label}. ${t('Logros')}`}
-        >
-          {body}
-        </Pressable>
-      </Animated.View>
+      <View>
+        <Animated.View style={compact ? { transform: [{ scale }] } : null}>
+          <Pressable
+            style={({ pressed }) => [
+              styles.pill,
+              compact && styles.pillCompact,
+              pressed && styles.pressed,
+            ]}
+            onPress={onPress}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={`${label}. ${t('Logros')}`}
+          >
+            {body}
+          </Pressable>
+        </Animated.View>
+        {flyingPoints}
+      </View>
     );
   }
-  return (
+  const staticPill = (
     <View
       style={[styles.pill, compact && styles.pillCompact]}
       accessibilityLabel={label}
@@ -120,7 +238,31 @@ export function LevelPill({ level, compact, onPress }: LevelPillProps) {
       {body}
     </View>
   );
+  return flyingPoints ? (
+    <View>
+      {staticPill}
+      {flyingPoints}
+    </View>
+  ) : (
+    staticPill
+  );
 }
+
+/** Duración del vuelo de los puntos hasta la píldora (antes del latido). */
+const FLIGHT_MS = 900;
+/** Desde cuánto a la izquierda de la píldora salen los puntos. La barra
+ * recorta lo que se salga de ella, así que el vuelo es en horizontal. */
+const FLY_FROM_X = 84;
+/** Chispas que acompañan a los puntos: desde dónde salen respecto al centro
+ * de la píldora (x, y). Poco recorrido vertical: la barra es baja. */
+const SPARKS: [number, number][] = [
+  [-58, -14],
+  [-96, 10],
+  [-40, 15],
+  [-120, -8],
+  [-74, 4],
+  [-26, -16],
+];
 
 const makeStyles = () =>
   StyleSheet.create({
@@ -152,6 +294,38 @@ const makeStyles = () =>
     flash: {
       ...StyleSheet.absoluteFillObject,
       backgroundColor: '#ffffff',
+    },
+    // Capa de los puntos en vuelo, del tamaño de la píldora y centrada en
+    // ella: cada pieza parte de su centro y se desplaza por transform.
+    flightLayer: {
+      ...StyleSheet.absoluteFillObject,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    // Misma piel que la píldora (oro y tinta oscura): al encoger dentro de
+    // ella se confunde con ella, que es la idea de "fundirse".
+    flyingChip: {
+      position: 'absolute',
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: theme.borderRadius.pill,
+      backgroundColor: theme.colors.primaryFill,
+      borderWidth: 1,
+      borderColor: theme.colors.primaryFillDark,
+      ...theme.shadow.soft,
+    },
+    flyingChipText: {
+      fontSize: 13,
+      fontWeight: '900',
+      color: theme.colors.onGold,
+      letterSpacing: 0.3,
+    },
+    spark: {
+      position: 'absolute',
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      backgroundColor: theme.colors.primaryFill,
     },
     textCompact: {
       fontSize: 15,

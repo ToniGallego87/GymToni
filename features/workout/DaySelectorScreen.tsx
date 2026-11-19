@@ -55,9 +55,20 @@ export function DaySelectorScreen({
   // dice lo que la app ya sabe —cuáles llevas hechos y cuál toca ahora—, en vez
   // de que el usuario lo recuerde. Misma fuente que la hero de Inicio.
   const weekState = currentWeekDayState(routine, state.logs);
-  const { weekNumber, logByDayId } = weekState;
-  const trained = forDate ? new Set<string>() : weekState.trained;
-  const nextDay = forDate ? undefined : weekState.nextDay;
+  // "Nueva semana" confirmada: la pantalla no salta a ningún día, se queda con
+  // la semana siguiente en blanco para elegir con cuál se abre. Solo es un
+  // estado de la vista; la semana nueva se graba con el primer entreno
+  // (`startsNewWeek`). Salir sin elegir la deja como estaba.
+  const [newWeekPending, setNewWeekPending] = useState(false);
+  const weekNumber = weekState.weekNumber + (newWeekPending ? 1 : 0);
+  const logByDayId = newWeekPending ? {} : weekState.logByDayId;
+  const trained =
+    forDate || newWeekPending ? new Set<string>() : weekState.trained;
+  const nextDay = forDate
+    ? undefined
+    : newWeekPending
+    ? days[0]
+    : weekState.nextDay;
   // Un entrenamiento por día: si hoy ya hay uno, el resto de días no se pueden
   // arrancar (el Calendario pinta una celda por fecha y el segundo quedaría
   // escondido; ver `takenStrengthDates`). El día ya entrenado sí se toca: abre
@@ -94,9 +105,15 @@ export function DaySelectorScreen({
   // sola) y sin entreno hoy (un entreno por día).
   const canStartNewWeek =
     trained.size > 0 && !todayStrengthLog && days.length > 0;
+  // Siempre de la semana real en curso (no de la pendiente): el modal aún se
+  // está cerrando cuando la vista pasa a la semana nueva.
   const weekClosesMessage = t(
     'La semana {week} se cierra con {n} de {total} días.',
-    { week: weekNumber, n: trained.size, total: days.length }
+    {
+      week: weekState.weekNumber,
+      n: weekState.trained.size,
+      total: days.length,
+    }
   );
   const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { bottom: floatingBackBottom, scrollBottomPadding } =
@@ -230,7 +247,14 @@ export function DaySelectorScreen({
                 blockedByToday && styles.dayCardBlocked,
                 pressed && styles.dayCardPressed,
               ]}
-              onPress={() => (opensMenu ? setDoneDay(day) : onSelectDay(day))}
+              onPress={() =>
+                opensMenu
+                  ? setDoneDay(day)
+                  : onSelectDay(
+                      day,
+                      newWeekPending ? { startsNewWeek: true } : undefined
+                    )
+              }
               accessibilityRole="button"
               accessibilityLabel={`${t('Día')} ${
                 day.dayNumber
@@ -324,18 +348,15 @@ export function DaySelectorScreen({
         icon="restart"
         title={t('¿Empezar semana nueva?')}
         message={`${weekClosesMessage} ${t(
-          'La semana {week} empieza con {day}.',
-          {
-            week: weekNumber + 1,
-            day: days[0] ? getDisplayDayName(days[0].name) : '',
-          }
+          'Luego eliges con qué día empieza la semana {week}.',
+          { week: weekState.weekNumber + 1 }
         )}`}
         confirmLabel={t('Empezar semana nueva')}
         confirmVariant="primary"
         onCancel={() => setConfirmNewWeek(false)}
         onConfirm={() => {
           setConfirmNewWeek(false);
-          if (days[0]) onSelectDay(days[0], { startsNewWeek: true });
+          setNewWeekPending(true);
         }}
       />
 

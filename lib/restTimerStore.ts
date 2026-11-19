@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import { AppState, Platform, Vibration } from 'react-native';
+import { AppState, Platform } from 'react-native';
+import { haptics, REST_TIMER_VIBRATION } from './haptics';
 import { setPipAutoEnter } from './pipTimer';
 import { theme } from './theme';
 import { t } from './i18n';
@@ -28,9 +29,6 @@ const Notifications: typeof import('expo-notifications') | null =
 // da igual cuánto tiempo estuviera el JS congelado en segundo plano.
 
 export const REST_TIMER_CHANNEL_ID = 'rest-timer-v5';
-
-/** Patrón de vibración del final del descanso (igual que el del canal). */
-export const REST_TIMER_VIBRATION = [0, 300, 150, 300, 150, 300];
 
 export interface RestTimerSnapshot {
   /** Momento (Date.now) en el que arrancó: con `endAt` da el total, para la
@@ -279,7 +277,7 @@ function armExpiry(endAt: number): void {
     () => {
       expiry = null;
       notificationId = null;
-      Vibration.vibrate(REST_TIMER_VIBRATION);
+      haptics.restDone();
       publish(null);
       setPipAutoEnter(false);
     },

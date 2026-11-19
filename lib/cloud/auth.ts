@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { AppState, unstable_batchedUpdates } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../supabase';
+import { legalAcceptanceMetadata } from '../legalConsent';
 import { setSocialCacheOwner } from '../socialCache';
 import { t } from '../i18n';
 import { hasStoredSession, readStoredSession } from './storedSession';
@@ -137,8 +138,30 @@ export function useSession(): {
   return { session, user: session?.user ?? null, loading, restoring };
 }
 
-export function signUp(email: string, password: string) {
-  return supabase.auth.signUp({ email: email.trim(), password });
+/**
+ * Crea la cuenta. `termsVersion` es la versión de los Términos y la Política
+ * de privacidad que se han aceptado (data/legal.ts): queda en los metadatos de
+ * la cuenta con la edad mínima declarada y el consentimiento de los datos de
+ * salud (lib/legalConsent.ts).
+ */
+export function signUp(email: string, password: string, termsVersion: string) {
+  return supabase.auth.signUp({
+    email: email.trim(),
+    password,
+    options: { data: { ...legalAcceptanceMetadata(termsVersion) } },
+  });
+}
+
+/**
+ * Acepta (otra vez) los textos legales con la sesión abierta: cuentas
+ * anteriores a ellos o que aceptaron otra versión. Al guardarse, supabase-js
+ * avisa del usuario nuevo y `LegalConsentPrompt` desaparece solo.
+ */
+export async function acceptLegalTexts(termsVersion: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({
+    data: { ...legalAcceptanceMetadata(termsVersion) },
+  });
+  if (error) throw new Error(error.message);
 }
 
 export function signIn(email: string, password: string) {

@@ -136,6 +136,11 @@ export const StretchScrollView = forwardRef<
         ref={scrollRef}
         contentContainerStyle={styles.grow}
         scrollEventThrottle={16}
+        // iOS: con el teclado abierto, el contenido gana su alto por debajo y
+        // la casilla con el foco sube a la vista (en Android lo hace
+        // `adjustResize`, y la prop no existe). Sin esto el teclado tapaba el
+        // login, los comentarios, el peso y las casillas del registro.
+        automaticallyAdjustKeyboardInsets
         onLayout={(e: LayoutChangeEvent) => {
           containerHeight.value = e.nativeEvent.layout.height;
           onLayout?.(e);

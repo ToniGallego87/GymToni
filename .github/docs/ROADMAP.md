@@ -48,6 +48,10 @@ requisito previo de anuncios, suscripción e iOS.
       (login), `features/workout/PublicRoutineScreen.tsx:860` (comentarios),
       `features/workout/WorkoutLogScreen.tsx:1722`,
       `features/workout/BodyWeightScreen.tsx`.
+      **Estado (2026-11-16):** hecho en código. Toques en `lib/haptics.ts`
+      (Android sigue con `Vibration` y sus ms; iOS con `expo-haptics`); teclado
+      con `automaticallyAdjustKeyboardInsets` en `StretchScrollView` y las listas,
+      y `KeyboardAvoidingView` en `AppModal`. Falta probarlo en un iPhone.
       **Esfuerzo:** medio.
 - [ ] **[iOS] Cristal de las barras y descanso flotante** — `glass-blur` y
       `pip-timer` son módulos solo Android: en iOS las barras caen a un fondo
@@ -62,6 +66,9 @@ requisito previo de anuncios, suscripción e iOS.
       **Archivos:** `components/GlassBlur.tsx:41`, `lib/pipTimer.ts:30`,
       `modules/glass-blur/expo-module.config.json`,
       `modules/pip-timer/expo-module.config.json`, `components/PipRestTimer.tsx`.
+      **Estado (2026-11-16):** cristal hecho en código (`BlurView` de expo-blur
+      solo en iOS, en `GlassBlur`); falta probarlo en un iPhone. La Live Activity
+      del descanso sigue pendiente.
       **Esfuerzo:** bajo (cristal) / alto (Live Activity).
 
 ## Funcionalidades a simplificar
@@ -211,6 +218,28 @@ primero porque sin ellas no se publica.
       **Archivos:** `privacy-policy.html`, `features/workout/SettingsScreen.tsx:266`
       (bloque de enlaces), `features/workout/DataScreen.tsx:145`
       (`handleAuth`, donde iría el consentimiento).
+      **Estado (2026-11-16):** texto nuevo en `data/legal.json` (fuente única: la
+      app y `privacy-policy.html` / `terms.html` vía `scripts/build-legal-html.js`),
+      pantalla en la app desde Configuración y consentimiento al crear cuenta
+      (queda en los metadatos de la cuenta). Falta (todo de Toni):
+      - **Revisar el texto** de `data/legal.json` y volver a generar los
+        `.html` (`node scripts/build-legal-html.js`) si cambia algo. En
+        concreto: el responsable figura como "su desarrollador", sin nombre
+        (el RGPD pide identificarlo); la edad mínima para crear cuenta es 14
+        años (la del consentimiento digital en España); la región de Supabase
+        no se dice (mirarla en el panel y concretarla); y "revisamos los
+        reportes lo antes posible" es un compromiso que hay que cumplir (Apple
+        pide atenderlos a tiempo).
+      - **Publicar `privacy-policy.html` y `terms.html` en una URL** (GitHub
+        Pages del repo o el dominio propio de "Supabase y dominio listos para
+        producción") y poner la de la política en Play y en la App Store.
+      - **Rellenar Data Safety** y la declaración de apps de salud en Play
+        según el texto.
+      En código ya (2026-11-19): edad mínima en el alta, aviso para aceptar
+      la versión vigente (`LegalConsentPrompt`: cuentas anteriores y cada
+      cambio de `LEGAL_VERSION`) y constancia en el servidor con su hora
+      (`legal_acceptances`, sección "Aceptación de los textos legales" de
+      `supabase/schema.sql`, ejecutado el 2026-11-19).
       **Esfuerzo:** bajo.
 - [ ] **[Lanzamiento] Bloquear usuarios y términos de uso** — Play (contenido
       generado por usuarios) y Apple (1.2) piden reportar, **bloquear** y
@@ -223,6 +252,12 @@ primero porque sin ellas no se publica.
       **Archivos:** `features/workout/UserProfileScreen.tsx:387` (reportar
       perfil), `lib/moderation.ts`, `components/ReportModal.tsx`,
       `supabase/social-schema.sql` (follows y lecturas públicas).
+      **Estado (2026-11-16):** hecho en código (perfil ajeno → "Bloquear",
+      `hooks/useBlockedUsers.ts`, términos aceptados al crear cuenta). SQL de
+      la sección "Bloqueos" de `supabase/social-schema.sql` ejecutado
+      (2026-11-16; la segunda pasada de `drop_follows_on_block`, que borra los
+      comentarios del bloqueado en tus rutinas, el 2026-11-19). Falta probarlo
+      en el móvil.
       **Esfuerzo:** medio.
 - [ ] **[Lanzamiento] Licencia de los GIFs de ejercicios** — los GIFs vienen
       de un repo de GitHub de un tercero vía jsDelivr (`@main`) y la
@@ -488,6 +523,7 @@ primero porque sin ellas no se publica.
       la comparte con la rutina pública), `features/workout/DetailScreen.tsx:565`
       (el acceso que ya existe), `app/App.tsx:208` (la pantalla
       `exercise-progress`, que hoy solo sabe volver al Detalle o a Perfil).
+      **Estado (2026-11-16):** hecho en código; falta probarlo en el móvil.
       **Esfuerzo:** medio.
 
 ## Descartado por restricciones del proyecto

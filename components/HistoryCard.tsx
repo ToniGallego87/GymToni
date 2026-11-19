@@ -8,6 +8,9 @@ import { GradientFill } from './GradientFill';
 interface HistoryCardProps {
   /** Aro dorado + degradado del día de hoy (mismo tratamiento en Inicio y Cardio). */
   isToday?: boolean;
+  /** Hoy ya completado: aro y tinte en verde (hecho) en vez del dorado de
+   * "por hacer / a medias". Solo tiene efecto junto a `isToday`. */
+  isCompleted?: boolean;
   onPress?: () => void;
   accessibilityLabel?: string;
   children: ReactNode;
@@ -22,21 +25,28 @@ interface HistoryCardProps {
  */
 export function HistoryCard({
   isToday,
+  isCompleted,
   onPress,
   accessibilityLabel,
   children,
 }: HistoryCardProps) {
+  const todayDone = !!isToday && !!isCompleted;
   return (
     <Pressable
       style={({ pressed }: { pressed: boolean }) => [
         styles.card,
         isToday && styles.cardToday,
+        todayDone && styles.cardTodayDone,
         pressed && styles.cardPressed,
       ]}
       onPress={onPress}
       accessibilityLabel={accessibilityLabel}
     >
-      {isToday && <GradientFill accent={theme.colors.primaryLine} />}
+      {isToday && (
+        <GradientFill
+          accent={todayDone ? theme.colors.success : theme.colors.primaryLine}
+        />
+      )}
       {children}
     </Pressable>
   );
@@ -126,6 +136,9 @@ const makeStyles = () =>
     cardToday: {
       borderColor: theme.colors.primaryLine,
       borderWidth: 2.5,
+    },
+    cardTodayDone: {
+      borderColor: theme.colors.success,
     },
     cardPressed: {
       opacity: 0.8,

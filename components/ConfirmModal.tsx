@@ -1,11 +1,11 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
-import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
+import { CheckRow } from './CheckRow';
 
 interface ConfirmModalProps {
   visible: boolean;
@@ -81,18 +81,13 @@ export function ConfirmModal({
     >
       {children}
       {!!checkLabel && (
-        <Pressable style={styles.checkRow} onPress={onToggleCheck}>
-          <View style={[styles.checkbox, checked && styles.checkboxChecked]}>
-            {checked && (
-              <MaterialCommunityIcons
-                name="check-bold"
-                size={14}
-                color={theme.colors.onGold}
-              />
-            )}
-          </View>
-          <Text style={styles.checkLabel}>{checkLabel}</Text>
-        </Pressable>
+        <CheckRow
+          checked={checked}
+          onToggle={() => onToggleCheck?.()}
+          style={styles.checkRow}
+        >
+          {checkLabel}
+        </CheckRow>
       )}
     </AppModal>
   );
@@ -101,30 +96,7 @@ export function ConfirmModal({
 const makeStyles = () =>
   StyleSheet.create({
     checkRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
       marginTop: 16,
-    },
-    checkbox: {
-      width: 22,
-      height: 22,
-      borderRadius: 6,
-      borderWidth: 2,
-      borderColor: theme.colors.primaryLine,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: 'transparent',
-    },
-    checkboxChecked: {
-      backgroundColor: theme.colors.primaryFill,
-    },
-    checkLabel: {
-      flex: 1,
-      fontSize: 14,
-      fontWeight: '700',
-      color: theme.colors.text,
-      lineHeight: 19,
     },
     buttonRow: {
       flexDirection: 'row',

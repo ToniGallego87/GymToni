@@ -204,6 +204,8 @@ export function ExercisePickerModal({
         </Text>
 
         <FlatList
+          // iOS: el final de los resultados queda alcanzable con el teclado.
+          automaticallyAdjustKeyboardInsets
           data={results}
           renderItem={renderItem}
           keyExtractor={(item) => item.id}

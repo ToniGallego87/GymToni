@@ -35,10 +35,14 @@ import {
 import { formatRestTime } from '@lib/utils';
 import { useSession } from '@lib/cloud/auth';
 import { getLastSync } from '@lib/cloud/sync';
+import type { LegalDocId } from '@data/legal';
+import { useBlockedUsers } from '@hooks/useBlockedUsers';
+import { LegalModal } from './LegalScreen';
 
 interface SettingsScreenProps {
   onBack: () => void;
   onOpenData?: () => void;
+  onOpenBlockedUsers?: () => void;
 }
 
 /**
@@ -49,9 +53,16 @@ interface SettingsScreenProps {
  * cambiar algo", después "dónde están mis datos", y por último "qué ha cambiado",
  * que es lectura y no ajuste.
  */
-export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
+export function SettingsScreen({
+  onBack,
+  onOpenData,
+  onOpenBlockedUsers,
+}: SettingsScreenProps) {
   const insets = useSafeAreaInsets();
   const [showWhatsNew, setShowWhatsNew] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocId | null>(null);
+  // Solo hay fila de "Cuentas bloqueadas" si hay alguna: vacía no lleva a nada.
+  const blockedUsers = useBlockedUsers();
   const [remindersOn, setRemindersOn] = useState(getWorkoutRemindersEnabled);
   // Encender pide el permiso de notificaciones; si se deniega, el ajuste
   // vuelve a apagado en vez de prometer avisos que no van a llegar.
@@ -275,6 +286,78 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
             />
           </Pressable>
         )}
+
+        {blockedUsers.size > 0 && onOpenBlockedUsers && (
+          <Pressable
+            style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
+            onPress={onOpenBlockedUsers}
+            accessibilityRole="button"
+          >
+            <View style={styles.linkIconWrap}>
+              <MaterialCommunityIcons
+                name="account-cancel-outline"
+                size={20}
+                color={theme.colors.text}
+              />
+            </View>
+            <View style={styles.linkTextWrap}>
+              <Text style={styles.linkLabel}>{t('Cuentas bloqueadas')}</Text>
+              <Text style={styles.linkHint}>
+                {blockedUsers.size === 1
+                  ? t('1 cuenta')
+                  : t('{n} cuentas', { n: blockedUsers.size })}
+              </Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={22}
+              color={theme.colors.textSecondary}
+            />
+          </Pressable>
+        )}
+
+        {/* Lo legal, al pie: se consulta poco, pero tiene que estar a mano
+            (lo piden las tiendas, y es lo que se acepta al crear la cuenta). */}
+        {(
+          [
+            {
+              doc: 'privacy',
+              icon: 'shield-account-outline',
+              label: t('Política de privacidad'),
+              hint: t('Qué se guarda, dónde y cómo borrarlo'),
+            },
+            {
+              doc: 'terms',
+              icon: 'file-document-outline',
+              label: t('Términos de uso'),
+              hint: t('Normas de la Comunidad'),
+            },
+          ] as const
+        ).map((row) => (
+          <Pressable
+            key={row.doc}
+            style={({ pressed }) => [styles.linkRow, pressed && styles.pressed]}
+            onPress={() => setLegalDoc(row.doc)}
+            accessibilityRole="button"
+          >
+            <View style={styles.linkIconWrap}>
+              <MaterialCommunityIcons
+                name={row.icon}
+                size={20}
+                color={theme.colors.text}
+              />
+            </View>
+            <View style={styles.linkTextWrap}>
+              <Text style={styles.linkLabel}>{row.label}</Text>
+              <Text style={styles.linkHint}>{row.hint}</Text>
+            </View>
+            <MaterialCommunityIcons
+              name="chevron-right"
+              size={22}
+              color={theme.colors.textSecondary}
+            />
+          </Pressable>
+        ))}
       </StretchScrollView>
 
       {/* El subtítulo lleva la versión instalada: antes era un eslogan arriba
@@ -290,6 +373,8 @@ export function SettingsScreen({ onBack, onOpenData }: SettingsScreenProps) {
       />
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
+
+      <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />
 
       <WhatsNewModal
         visible={showWhatsNew}

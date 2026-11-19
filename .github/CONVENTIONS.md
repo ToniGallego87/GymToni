@@ -183,10 +183,16 @@ Las dependencias van solo hacia abajo: `app/` → `features/workout/` →
   - Nube: `@supabase/supabase-js` y `react-native-url-polyfill` (lo exige
     supabase-js).
 
-  Añadir otra requiere justificarla en UPDATES.md. `expo-blur` se retiró: su
-  `BlurView` redibujaba la pantalla entera por instancia y por frame; el cristal
-  esmerilado de las barras lo hace `modules/glass-blur` (propio) con UNA captura
-  compartida.
+  - Solo iOS: `expo-haptics` (iOS ignora las duraciones de `Vibration`;
+    `lib/haptics.ts`) y `expo-blur` (cristal de las barras con el desenfoque
+    nativo; `components/GlassBlur.tsx`). En Android no entran en el binario
+    (`expo.autolinking.android.exclude` en `package.json`) y se cargan con
+    `require` solo en iOS: importarlos arriba lanzaría en Android.
+
+  Añadir otra requiere justificarla en UPDATES.md. En Android, `expo-blur` no
+  se usa: su `BlurView` redibujaba la pantalla entera por instancia y por
+  frame; el cristal esmerilado de las barras lo hace `modules/glass-blur`
+  (propio) con UNA captura compartida.
 
 - No sobre-abstracciones (si solo se usa una vez, no crear helper)
 - Backend/cuentas/sync/social **ya NO están prohibidos**: son el epic de Supabase,

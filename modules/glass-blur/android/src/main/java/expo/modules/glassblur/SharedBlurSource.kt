@@ -67,6 +67,7 @@ object SharedBlurSource {
   }
 
   fun detach(view: GlassBlurView) {
+    val leavingRoot = view.rootView === root
     views.remove(view)
     if (views.isEmpty()) {
       detachRoot()
@@ -74,6 +75,18 @@ object SharedBlurSource {
       blurred?.recycle(); blurred = null
       canvas = null
       pixels = IntArray(0); temp = IntArray(0)
+      return
+    }
+    // Se cierra la ventana de la raíz (un Modal con barras de cristal, que en
+    // Android es otra ventana) y quedan barras en la de debajo: hay que volver
+    // a su raíz. Si no, el preDraw seguía colgado de la ventana muerta y esas
+    // barras pintaban para siempre la última captura del modal.
+    if (leavingRoot && views.none { it.rootView === root }) {
+      val next = views.lastOrNull { it.isAttachedToWindow } ?: return
+      detachRoot()
+      stale = true
+      attach(next)
+      for (v in views) v.invalidate()
     }
   }
 

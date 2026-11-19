@@ -54,9 +54,12 @@ import {
   buildRoutineShareText,
 } from '@lib/routineShare';
 import { useWorkout } from '@hooks/useWorkout';
+import { useExerciseKeyResolver } from '@hooks/useExerciseKeyResolver';
+import { exerciseKeysWithEvolution } from '@lib/exerciseProgress';
 import { generateId } from '@lib/utils';
 import { detectGymIcon } from '@lib/gymIcons';
 import {
+  communitySourceOf,
   countRoutineSets,
   duplicateRoutine,
   exerciseCountText,
@@ -108,11 +111,22 @@ interface RoutineDetailScreenProps {
   onOpenAccount?: () => void;
   // Perfil del autor de una rutina traída de la comunidad.
   onOpenProfile?: (userId: string, name: string) => void;
+  // Ficha pública de una rutina enlazada (su id público y su dueño): ver sus
+  // comentarios y cambios en Comunidad.
+  onOpenPublicRoutine?: (
+    routineId: string,
+    name: string,
+    authorName: string | undefined,
+    ownerId: string
+  ) => void;
   // La rutina se ha borrado desde su ⋮: la pantalla no puede seguir abierta.
   onDeleted?: () => void;
   // Día que nace desplegado: se llega desde la ficha de un ejercicio (Progreso)
   // y lo que se quiere ver es ESE ejercicio, no una lista de días plegados.
   initialExpandedDayId?: string;
+  // Evolución de un ejercicio (Progreso por ejercicio) desde su casilla; el día
+  // es al que volver, desplegado.
+  onOpenExerciseProgress?: (exerciseKey: string, dayId: string) => void;
 }
 
 export function RoutineDetailScreen({
@@ -121,11 +135,19 @@ export function RoutineDetailScreen({
   onForked,
   onOpenAccount,
   onOpenProfile,
+  onOpenPublicRoutine,
   onDeleted,
   initialExpandedDayId,
+  onOpenExerciseProgress,
 }: RoutineDetailScreenProps) {
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
+  // Ejercicios con gráfica: solo esas casillas enlazan a su evolución.
+  const resolveExerciseKey = useExerciseKeyResolver();
+  const evolutionKeys = useMemo(
+    () => exerciseKeysWithEvolution(state.logs, resolveExerciseKey),
+    [state.logs, resolveExerciseKey]
+  );
   // Modo lectura por defecto: la pantalla es de CONSULTA. El andamiaje de
   // edición (reordenar, borrar, cambiar icono, editar ejercicios) solo aparece
   // al pulsar "Editar" en la barra. Nada se esconde tras gestos: entrar en
@@ -212,6 +234,10 @@ export function RoutineDetailScreen({
   // y se entrena, pero no se edita ni se republica. Para cambiarla se saca una
   // copia propia (que sí guarda de dónde vino).
   const isLinked = isLinkedRoutine(currentRoutine);
+  // Su ficha pública (id y dueño), para el enlace a Comunidad de una enlazada.
+  const linkedSource = isLinked
+    ? communitySourceOf(currentRoutine, user?.id ?? '')
+    : undefined;
   const totalSets = useMemo(
     () => countRoutineSets(currentRoutine),
     [currentRoutine]
@@ -909,8 +935,25 @@ export function RoutineDetailScreen({
         ) : (
           <Animated.View entering={fadeIn}>
             {/* Casillas con el GIF grande, como las opciones del perfil;
-                  el mismo dibujo que en una rutina de la comunidad. */}
-            <ExerciseTileGrid exercises={day.exercises} accent={accent} />
+                  el mismo dibujo que en una rutina de la comunidad. Nombre y
+                  pie de un ejercicio ya entrenado llevan a su evolución. */}
+            <ExerciseTileGrid
+              exercises={day.exercises}
+              accent={accent}
+              evolution={
+                onOpenExerciseProgress
+                  ? {
+                      hasEvolution: (exercise) =>
+                        evolutionKeys.has(resolveExerciseKey(exercise)),
+                      onOpen: (exercise) =>
+                        onOpenExerciseProgress(
+                          resolveExerciseKey(exercise),
+                          day.id
+                        ),
+                    }
+                  : undefined
+              }
+            />
           </Animated.View>
         )}
 
@@ -1033,7 +1076,9 @@ export function RoutineDetailScreen({
 
           {/* Enviarla (QR o texto) y su visibilidad. El candado dice el estado
               con palabras: cerrado = "Privada", abierto y en oro = "Pública";
-              tocarlo la cambia. Una rutina ajena no se republica: no es tuya. */}
+              tocarlo la cambia. Una rutina ajena no se republica: no es tuya;
+              en su hueco va el enlace a su ficha en Comunidad (comentarios y
+              cambios del autor). */}
           <View style={styles.infoActions}>
             <Pressable
               style={({ pressed }) => [
@@ -1051,6 +1096,41 @@ export function RoutineDetailScreen({
               />
               <Text style={styles.infoActionText}>{t('Enviar')}</Text>
             </Pressable>
+            {isLinked && linkedSource && onOpenPublicRoutine && (
+              <Pressable
+                style={({ pressed }) => [
+                  styles.infoAction,
+                  pressed && styles.buttonPressed,
+                ]}
+                onPress={() =>
+                  onOpenPublicRoutine(
+                    linkedSource.id,
+                    currentRoutine.name,
+                    currentRoutine.sourceAuthor,
+                    linkedSource.ownerId
+                  )
+                }
+                accessibilityRole="link"
+                accessibilityLabel={t('Ver en la comunidad')}
+              >
+                <MaterialCommunityIcons
+                  name="account-group"
+                  size={18}
+                  color={theme.colors.text}
+                />
+                {/* Media fila no da para "Ver en la comunidad": el rótulo
+                    corto y la flecha dicen que lleva allí. */}
+                <Text style={styles.infoActionText} numberOfLines={1}>
+                  {t('Comunidad')}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-right"
+                  size={18}
+                  color={theme.colors.textSecondary}
+                  style={styles.infoActionChevron}
+                />
+              </Pressable>
+            )}
             {!isLinked && (
               <Pressable
                 style={({ pressed }) => [
@@ -1613,6 +1693,10 @@ const makeStyles = () =>
     },
     infoActionTextOn: {
       color: theme.colors.onGold,
+    },
+    // La flecha de un enlace va pegada a su rótulo (el `gap` la separaba).
+    infoActionChevron: {
+      marginLeft: -6,
     },
     // Nombre (+ lápiz en edición a la derecha), alineados arriba para que,
     // con un nombre a dos líneas, el lápiz acompañe a la primera.

@@ -1,5 +1,133 @@
 # UPDATES
 
+## Sin publicar
+
+### Arquitectura
+
+- **`expo-haptics` y `expo-blur`, solo para iOS.** En Android no entran en el
+  binario (`expo.autolinking.android.exclude` en `package.json`) y se cargan
+  con `require` solo en iOS (`lib/haptics.ts`, `components/GlassBlur.tsx`).
+- **SQL nuevo: "Aceptación de los textos legales" en `supabase/schema.sql`**
+  (tabla `legal_acceptances` y trigger en `auth.users`): cada aceptación queda
+  en el servidor con su hora, sin escritura desde el cliente. Ejecutado en
+  Supabase (2026-11-19).
+- **Textos legales en `data/legal.json`**, fuente única: la app los pinta
+  (`LegalScreen` / `LegalModal`, `data/legal.ts`) y
+  `node scripts/build-legal-html.js` genera `privacy-policy.html` y
+  `terms.html` para las tiendas.
+- **SQL nuevo: sección "Bloqueos" de `supabase/social-schema.sql`** (tabla
+  `blocks`, `blocked_by()`, trigger que corta los seguimientos y borra los
+  comentarios del bloqueado en tus rutinas, y políticas de seguir, comentarios
+  y actividad). Ejecutado en Supabase (2026-11-16; la segunda pasada de
+  `drop_follows_on_block`, que borra los comentarios, el 2026-11-19).
+
+### Nuevas funcionalidades
+
+- **Avisos de comentarios también en la rutina ajena que tienes enlazada y
+  activa**, no solo en las tuyas publicadas (las copias y las enlazadas que no
+  usas no avisan ni resaltan: `followsRoutineComments`, fuente única del aviso
+  y del amarillo del hilo). Salen en
+  la tarjeta "Novedades" de Comunidad con "De {autor}" y abren la ficha de su
+  dueño en los comentarios nuevos. Solo comentarios (los "me gusta" son del
+  dueño) y desde que la enlazaste, como mucho la última semana (no se sabe
+  desde cuándo es la activa: una enlazada hace meses y activada hoy anunciaba
+  meses de comentarios). Activar o enlazar una vuelve a medir al momento.
+  Lectura y
+  marca en una sola consulta junto a las tuyas; `savedRoutineSources` y
+  `communitySourceOf` (fuente única con el recuento de guardados) en `lib/`,
+  con tests. `readCommentThread` recibe el punto de partida (`since`) en vez de
+  `isOwner`, así el hilo resalta lo mismo que contó el aviso. Sin SQL: la RLS
+  de `comment_reads` ya admitía cualquier rutina pública.
+- **"Comunidad" en la ficha de una rutina enlazada.** En el hueco donde el
+  dueño tiene "Pública/Privada" sale un enlace a su ficha pública (comentarios
+  y cambios del autor); al volver se regresa a la ficha. El `back` de
+  `public-routine` pasa a ser cualquier `Screen`.
+- **Los puntos ganados entran volando en la píldora de nivel.** Al cerrar el
+  popup de un reto o logro, un "+N pts" con chispas sale junto a la píldora de
+  la barra, vuela hacia ella encogiendo y se funde; al llegar, el latido de
+  siempre. `requestLevelPulse(xp?)` lleva los puntos; la subida de nivel (sin
+  puntos) solo late.
+- **De un ejercicio de la ficha de rutina a su evolución.** En lectura, el
+  nombre y el pie (series x reps, con el icono de la gráfica) de cada casilla
+  ya entrenada llevan a Progreso por ejercicio; "Volver" regresa a la ficha con
+  ese día abierto. Solo enlazan los que tienen gráfica
+  (`exerciseKeysWithEvolution` en `lib/exerciseProgress.ts`, con test). Prop
+  `evolution` de `ExerciseTileGrid`.
+- **Bloquear usuarios** desde su perfil ("Bloquear a {nombre}", junto a
+  reportar, con confirmación). Dejas de ver sus rutinas (tablón y búsqueda),
+  comentarios y actividad, y se borran sus comentarios en tus rutinas; os
+  dejáis de seguir y no puede seguirte ni comentar tus rutinas. En su perfil
+  sale "Desbloquear". Store `hooks/useBlockedUsers.ts` (nube + copia por
+  cuenta en `socialCache`).
+- **Cuentas bloqueadas** en Configuración (la fila sale solo si hay alguna):
+  la lista con "Desbloquear" en cada una, y cada nombre abre su perfil. Antes
+  solo se desbloqueaba desde el perfil, al que costaba llegar porque sus rutinas
+  ya no salen en el tablón (`BlockedUsersScreen`). Un perfil privado sale como
+  "Perfil privado" y se desbloquea igual.
+- **Política de privacidad y Términos de uso** reescritos (la política decía
+  que no se recogía ningún dato) y legibles en la app desde Configuración.
+  Crear cuenta pide aceptarlos (con la edad mínima, 14 años) y, en otra
+  casilla, el consentimiento para guardar entrenos y peso (datos de salud); la
+  versión aceptada, la edad y las fechas quedan en los metadatos de la cuenta
+  (`lib/legalConsent.ts`, con tests).
+- **Aviso para aceptar los textos legales** (`LegalConsentPrompt`, en la raíz).
+  Sale a las cuentas con sesión que no aceptaron la versión vigente: las
+  creadas antes de los textos y todas cuando cambie `LEGAL_VERSION` (la
+  política promete avisar antes de aplicar un cambio). Las mismas dos casillas
+  que el alta (`LegalAcceptanceChecks`), con los textos legibles sin salir;
+  "Ahora no" lo aparca hasta el próximo arranque. Cede ante el aviso de
+  borrado de cuenta.
+
+### Cambios
+
+- **La hero de Inicio ya no dice "Sin mejora" la primera vez con un día.**
+  Sin sesión anterior del mismo día con la que comparar, el entreno completado
+  dice "Tu punto de partida"; en descarga, "Semana de descarga". "Sin mejora"
+  queda solo para cuando hay referencia y no se ha superado.
+- **"Nueva semana" en "Elige la sesión" ya no arranca el Día 1.** Tras
+  confirmar, la pantalla se queda con la semana siguiente en blanco (0 de N
+  días) y el día que se toque la abre (`startsNewWeek`). Es estado de la vista:
+  salir sin elegir deja la semana como estaba. El aviso de confirmación ya no
+  promete "empieza con el Día 1".
+- **El día de hoy completado se marca en verde en el historial** (aro y tinte),
+  no en el dorado de "por hacer / a medias". `HistoryCard` gana `isCompleted`.
+- **"Anterior" es siempre la última vez, y dice de dónde viene.** Lo hecho en
+  otra rutina u otro día ya no se recuerda por la mejor sesión ("Mejor") sino
+  por la última, como lo de este día. Si no es de este día, debajo sale
+  "De {rutina · día}" (o solo el día si es de esta rutina), para que no se lea
+  como la vez anterior de este día. Fuera `pickBestExerciseLog`.
+- **iPhone: vibración, teclado y cristal.** Los toques del registro y el fin
+  del descanso pasan por `lib/haptics.ts` (Android igual que antes; iOS con
+  el motor háptico). En iOS el teclado ya no tapa lo que se escribe
+  (`automaticallyAdjustKeyboardInsets` en `StretchScrollView` y las listas,
+  `KeyboardAvoidingView` en `AppModal`) y las barras llevan el desenfoque
+  nativo. Sin iPhone para probarlo.
+
+### Correcciones
+
+- **El filtro por día de "Progreso / semana" ya no deja la gráfica plegada y
+  sin salida.** Un día que aún no tiene con qué compararse (no se hizo en la
+  semana 1 y sigue sin hacerse, o solo se ha hecho una vez) ya no se ofrece:
+  elegirlo dejaba la gráfica sin barras, la tarjeta se plegaba con el filtro
+  dentro y no se podía volver. Nueva `progressChartWeeks` (`lib/weeks.ts`, con
+  tests): con filtro, la base es la primera semana que entrenó ese día, así que
+  un día que debutó tarde ya no pinta un 0 % falso comparándose consigo mismo.
+  Si el día elegido pierde sus barras después (se borra su único entreno
+  posterior), el filtro vuelve solo a "Semana completa". Las opciones solo se
+  calculan con la gráfica abierta.
+- **El peso y las reps sugeridos cuadran con "Anterior".** De otra rutina u
+  otro día, la línea enseñaba la mejor sesión y la sugerencia salía de la
+  última: no tenían nada que ver. Ahora las dos son la última vez y la
+  sugerencia es su primera serie hecha; de otra rutina, sus reps solo si caben
+  en el rango de ahora (si no, el tope del rango). En descarga, igual que antes.
+- **La duración del entreno cuenta desde la primera serie**, no desde que se
+  abre la pantalla: abrirla y tardar en empezar inflaba los minutos. Si la
+  primera serie cae ya en otro día (pasada la medianoche), se queda la hora de
+  apertura: la del log tiene que ser de su fecha.
+- **Los días sin entrenar de una semana cerrada caen en su sitio.** La lista
+  va de más reciente a más antiguo y el hueco se insertaba como si fuera
+  ascendente: los últimos días de la rutina acababan siempre al fondo.
+
 ## Version 0.8.8 - 2026-11-07
 
 ### Arquitectura

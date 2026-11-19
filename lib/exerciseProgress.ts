@@ -210,6 +210,24 @@ export function listExercises(
   return [...byKey.values()].sort((a, b) => b.lastTimestamp - a.lastTimestamp);
 }
 
+/**
+ * Claves de los ejercicios que ya tienen evolución: los que lista "Progreso por
+ * ejercicio" (alguna serie válida fuera de las semanas de descarga, que quedan
+ * fuera de la gráfica). La ficha de una rutina solo enlaza a la evolución de
+ * estos: con los demás se abriría una gráfica vacía.
+ */
+export function exerciseKeysWithEvolution(
+  logs: WorkoutLog[],
+  resolve: ExerciseKeyResolver = exerciseKeyOf
+): Set<string> {
+  return new Set(
+    listExercises(
+      logs.filter((log) => !log.isDeload),
+      resolve
+    ).map((exercise) => exercise.key)
+  );
+}
+
 /** Criterios de orden de la lista de ejercicios. */
 export type ExerciseSort = 'recent' | 'name' | 'sessions' | 'best';
 
@@ -271,33 +289,6 @@ export function getRecordSetIndexes(
     bestWeight = Math.max(bestWeight, set.weight);
   });
   return new Set(lastRecord === -1 ? [] : [lastRecord]);
-}
-
-/**
- * La mejor sesión de entre las dadas: la de la mejor serie y, a igualdad, la de
- * mejor total. No el total a secas: son sesiones de otros planes y ganaría la
- * que tuviera más series, no la de más fuerza. A igualdad de todo, la primera.
- * Sin ninguna serie válida, null.
- */
-export function pickBestExerciseLog<T extends ExerciseLog>(
-  logs: T[]
-): T | null {
-  let best: T | null = null;
-  let bestSet = 0;
-  let bestTotal = 0;
-  for (const log of logs) {
-    const sets = log.parsedSets?.length
-      ? log.parsedSets
-      : parseSeriesString(log.rawInput || '');
-    const topSet = Math.max(0, ...sets.map(getSetPerformanceScore));
-    const total = getTotalSetsStrengthScore(sets);
-    if (topSet > bestSet || (topSet === bestSet && total > bestTotal)) {
-      best = log;
-      bestSet = topSet;
-      bestTotal = total;
-    }
-  }
-  return best;
 }
 
 /**

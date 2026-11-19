@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Avatar,
   Button,
+  ConfirmModal,
   FloatingBackButton,
   FLOATING_BACK_BUTTON_HEIGHT,
   getFloatingBackButtonMetrics,
@@ -24,6 +25,7 @@ import {
   StretchScrollView,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
+import { setUserBlocked, useBlockedUsers } from '@hooks/useBlockedUsers';
 import { theme } from '@lib/theme';
 import { subscribeTheme } from '@lib/themeStore';
 import { t } from '@lib/i18n';
@@ -221,6 +223,13 @@ export function UserProfileScreen({
   const [savingId, setSavingId] = useState<string | null>(null);
   // Reportar el perfil: null = cerrado, 'open' = preguntando, 'busy' = enviando.
   const [reporting, setReporting] = useState<'open' | 'busy' | null>(null);
+  // Bloquear: null = nada; 'confirm' = preguntando; 'blocking' / 'unblocking' =
+  // enviando. Separados: con un solo 'busy', al desbloquear el popup de
+  // confirmar asomaba un instante (el store cambia antes de cerrar el estado).
+  const [blocking, setBlocking] = useState<
+    'confirm' | 'blocking' | 'unblocking' | null
+  >(null);
+  const blockedUsers = useBlockedUsers();
   const [toast, setToast] = useState<{
     message: string;
     type: 'success' | 'error';
@@ -413,6 +422,45 @@ export function UserProfileScreen({
   };
 
   const displayName = profile?.display_name || name;
+  // Bloqueado: no se enseñan sus rutinas ni su actividad (esta la filtra ya la
+  // RLS) y en vez de "Seguir" sale "Desbloquear".
+  const isBlocked = !isSelf && blockedUsers.has(userId);
+
+  const handleBlock = async () => {
+    if (!user) {
+      setBlocking(null);
+      notifySignIn(t('Crea una cuenta para bloquear'));
+      return;
+    }
+    setBlocking('blocking');
+    try {
+      await setUserBlocked(user.id, userId, true);
+      // El servidor corta el seguimiento en los dos sentidos.
+      if (following) setFollowers((n) => (n == null ? n : Math.max(0, n - 1)));
+      setFollowing(false);
+      notify(t('Has bloqueado a {name}', { name: displayName }), 'success');
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setBlocking(null);
+    }
+  };
+
+  const handleUnblock = async () => {
+    if (!user) return;
+    setBlocking('unblocking');
+    try {
+      await setUserBlocked(user.id, userId, false);
+      notify(t('Has desbloqueado a {name}', { name: displayName }), 'success');
+      // Lo cargado mientras estaba bloqueado venía sin su actividad (RLS).
+      void load();
+      void loadActivity();
+    } catch (e) {
+      notify((e as Error).message, 'error');
+    } finally {
+      setBlocking(null);
+    }
+  };
 
   const handleReport = async (reason: string) => {
     if (!user) {
@@ -589,6 +637,22 @@ export function UserProfileScreen({
                 variant="secondary"
               />
             )
+          ) : isBlocked ? (
+            <>
+              <Text style={styles.muted}>
+                {t(
+                  'Has bloqueado esta cuenta: no ves sus rutinas, comentarios ni actividad, y no puede seguirte ni comentar tus rutinas.'
+                )}
+              </Text>
+              <Button
+                title={
+                  blocking === 'unblocking' ? t('Guardando…') : t('Desbloquear')
+                }
+                onPress={handleUnblock}
+                variant="secondary"
+                disabled={blocking === 'unblocking'}
+              />
+            </>
           ) : following == null ? (
             // Hueco del alto del botón mientras no se sabe si ya le sigues: un
             // "Seguir" en oro que en realidad haría unfollow es peor que esperar.
@@ -613,7 +677,7 @@ export function UserProfileScreen({
             cuantas rutinas la actividad quedaba a un scroll largo y no se
             encontraba. El conmutador solo aparece si hay las dos cosas: con una
             sola, dos pestañas para un destino serían ruido. */}
-        {hasActivity && (
+        {hasActivity && !isBlocked && (
           <SegmentedFilter
             options={[
               {
@@ -635,7 +699,7 @@ export function UserProfileScreen({
           />
         )}
 
-        {showRoutines && (
+        {showRoutines && !isBlocked && (
           <>
             {/* La misma cabecera de sección que los historiales de Inicio y
                 Cardio, con el recuento en su rótulo derecho. */}
@@ -687,7 +751,7 @@ export function UserProfileScreen({
             tiene apagado o aún no ha publicado), la RLS devuelve vacío y no hay
             ni pestaña ni sección: un "no hay nada" no se podría distinguir de
             "no lo comparte". */}
-        {hasActivity && section === 'activity' && (
+        {hasActivity && section === 'activity' && !isBlocked && (
           <View style={styles.activitySection}>
             <SectionLegend
               title={hasActivity ? undefined : t('Actividad')}
@@ -739,7 +803,42 @@ export function UserProfileScreen({
             <Text style={styles.reportText}>{t('Reportar este perfil')}</Text>
           </Pressable>
         )}
+        {/* Bloquear: junto a reportar, con el mismo peso. Reportar avisa a
+            quien modera; bloquear corta el contacto ya, sin esperar a nadie. */}
+        {!isSelf && !isBlocked && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.reportRow,
+              pressed && styles.cardPressed,
+            ]}
+            onPress={() => setBlocking('confirm')}
+            accessibilityRole="button"
+            accessibilityLabel={t('Bloquear a {name}', { name: displayName })}
+          >
+            <MaterialCommunityIcons
+              name="account-cancel-outline"
+              size={16}
+              color={theme.colors.textMuted}
+            />
+            <Text style={styles.reportText}>
+              {t('Bloquear a {name}', { name: displayName })}
+            </Text>
+          </Pressable>
+        )}
       </StretchScrollView>
+
+      <ConfirmModal
+        visible={blocking === 'confirm' || blocking === 'blocking'}
+        icon="account-cancel-outline"
+        title={t('¿Bloquear a {name}?', { name: displayName })}
+        message={t(
+          'No verás sus rutinas, comentarios ni actividad, y se borran sus comentarios en tus rutinas. Dejaréis de seguiros, y no podrá seguirte ni comentar tus rutinas. No se le avisa, y puedes desbloquearlo desde aquí.'
+        )}
+        confirmLabel={t('Bloquear')}
+        busy={blocking === 'blocking'}
+        onConfirm={handleBlock}
+        onCancel={() => setBlocking(null)}
+      />
 
       <ReportModal
         visible={reporting !== null}

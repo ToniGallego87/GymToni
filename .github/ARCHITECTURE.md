@@ -123,8 +123,9 @@ hooks/                  → useWorkout (consumer del context), useCloudSync (syn
                           (retos y nivel; useRecordAccountLevel, solo en la raíz,
                           los apunta), useAvatarPicker (cambiar la foto),
                           useExerciseKeyResolver (identidad de ejercicio sobre
-                          todo el historial, construida una vez y compartida) y
-                          useTabFocus (¿es esta la pestaña elegida?)
+                          todo el historial, construida una vez y compartida),
+                          useBlockedUsers (cuentas bloqueadas, store con copia
+                          por cuenta) y useTabFocus (¿es esta la pestaña elegida?)
 lib/                    → Lógica compartida
   ├── normalize.ts      → Fuente única: syncActiveRoutine, ensureParsedSets, normalizeAppData
   ├── storage.ts        → Persistencia (load/save/clear): SQLite en nativo, JSON en web
@@ -142,6 +143,8 @@ lib/                    → Lógica compartida
   ├── supabaseConfig.ts → URL y anon key (pública; la protege la RLS)
   ├── socialCache.ts    → Copia en disco de lo último de cada pantalla social (se
   │                       pinta sin esperar a la red)
+  ├── haptics.ts        → Toques del vibrador por plataforma (Vibration en
+  │                       Android, expo-haptics en iOS)
   ├── i18n.ts           → Idioma en caliente: t(), dateLocale, decimalSeparator y
   │                       el formato de pintado de números (localizeDecimals, fmtNum)
   ├── fileIO.ts         → Importar/exportar archivos JSON (platform-aware)
@@ -219,6 +222,8 @@ lib/                    → Lógica compartida
 lib/__tests__/          → Tests Jest de la lógica pura (npm test)
 types/                  → Definiciones TypeScript centralizadas
 data/                   → Seed data (rutinas iniciales + logs demo) y changelog.ts
+                          y legal.json/legal.ts (Política y Términos: fuente
+                          única de la app y de los .html de las tiendas)
                           (novedades por versión para el popup WhatsNewModal)
 modules/                → Módulos nativos locales (Kotlin/Swift, autolinked por Expo)
   ├── video-encoder/    → Codifica los fotogramas del vídeo de logros a MP4
@@ -434,6 +439,12 @@ auth.uid()` en lectura y en `with check`).
   enseñan, pero no dan nada con valor.
 - **Contenido de terceros** solo como texto; reportar oculta en local
   (`lib/moderation.ts`) y deja el parte en `reports`.
+- **Bloquear** (`blocks`, sección "Bloqueos" de `social-schema.sql`): cada
+  quien ve solo sus bloqueos; `blocked_by()` (`security definer`) solo
+  responde "¿me ha bloqueado X?". La RLS oculta al que bloquea los comentarios
+  y la Actividad del bloqueado e impide a este seguirle y comentar sus rutinas;
+  un trigger corta los seguimientos y borra sus comentarios en las rutinas de
+  quien bloquea. Sus rutinas las filtra la app (`hooks/useBlockedUsers.ts`).
 - **Edge Functions** (`supabase/functions/`, Deno, desplegadas a mano desde el
   panel): las ÚNICAS piezas con `service_role`, para lo que la RLS no puede
   hacer. Hoy solo `purge-deleted-accounts`, que lanza una tarea diaria con

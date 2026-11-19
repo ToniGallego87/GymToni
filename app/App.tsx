@@ -45,6 +45,8 @@ import {
   ActivityScreen,
   BodyWeightScreen,
   SettingsScreen,
+  BlockedUsersScreen,
+  LegalConsentPrompt,
   RoutineDetailScreen,
   RoutineSelectorScreen,
   WeekAchievementScreen,
@@ -183,6 +185,8 @@ type Screen =
   // rutina: se vuelve a donde se abrió (sin `back`, a Configuración).
   | { type: 'data'; back?: Screen }
   | { type: 'settings' }
+  // Cuentas bloqueadas: cuelga de Configuración y vuelve a ella.
+  | { type: 'blocked-users' }
   // Estas tres cuelgan de Perfil, pero no solo se abren desde ahí: Peso
   // corporal también desde Cardio y Logros desde la píldora de nivel de la
   // barra superior, que está en TODAS las pantallas. `back` es la vista desde
@@ -217,10 +221,9 @@ type Screen =
       ownerId?: string;
       // Se viene del aviso de comentarios nuevos: abre en ellos.
       focusNewComments?: boolean;
-      // Vista desde la que se abrió, para volver a ella y no siempre al tablón.
-      back:
-        | { type: 'community' }
-        | { type: 'user-profile'; userId: string; name: string };
+      // Vista desde la que se abrió, para volver a ella y no siempre al tablón
+      // (también la ficha de una rutina enlazada, con su "Ver en la comunidad").
+      back: Screen;
     }
   | {
       type: 'exercise-progress';
@@ -242,7 +245,8 @@ type Screen =
         // La vuelta de ese Detalle (si se abrió desde la Actividad).
         back?: Screen;
       };
-      // Otra pantalla a la que volver (la Actividad, desde un récord).
+      // Otra pantalla a la que volver (la Actividad, desde un récord; la ficha
+      // de una rutina, desde la casilla de un ejercicio).
       back?: Screen;
     }
   | {
@@ -335,6 +339,10 @@ function AppContent({ onReady }: { onReady: () => void }) {
   // registra al cambiar de pantalla y su cierre no ve los logs posteriores.
   const logsRef = React.useRef(state.logs);
   logsRef.current = state.logs;
+  // Igual con las rutinas: la ficha a la que se vuelve pudo borrarse mientras
+  // tanto (p. ej. "Quitar de mis rutinas" desde su ficha en Comunidad).
+  const routinesRef = React.useRef(state.routines);
+  routinesRef.current = state.routines;
   // OJO al añadir hooks aquí: lo que haga repintar a AppContent repinta la app
   // ENTERA (las cinco pestañas montadas y la subpantalla abierta). La sesión, el
   // perfil, el sync y el nivel de la cuenta viven por eso en componentes hoja
@@ -769,6 +777,15 @@ function AppContent({ onReady }: { onReady: () => void }) {
       else backFromDetail(back.origin);
       return;
     }
+    if (back.type === 'routine-details') {
+      // Ya no está entre tus rutinas: la ficha guardada es una copia muerta
+      // (se podía activar, entrenar o editar algo que ya no existe). Se sigue
+      // hacia donde habría vuelto ella.
+      const live = routinesRef.current.find((r) => r.id === back.routine.id);
+      if (live) setScreen({ ...back, routine: live });
+      else backFromRoutineDetails(back);
+      return;
+    }
     if (back.type === 'workout-log') {
       // Mismo problema con el registro (se sale de él a Logros o a la ficha de
       // la rutina a mitad de entreno): las series metidas desde que se abrió
@@ -896,6 +913,9 @@ function AppContent({ onReady }: { onReady: () => void }) {
             case 'settings':
               goProfile();
               return true;
+            case 'blocked-users':
+              setScreen({ type: 'settings' });
+              return true;
             case 'body-weight':
             case 'achievements':
             case 'activity':
@@ -909,7 +929,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
               // `return true` (no `break`): devolver undefined equivale a "nadie
               // ha gestionado el gesto" y Android ejecutaba además su acción por
               // defecto, cerrando la app tras navegar hacia atrás.
-              setScreen(screen.back);
+              goBackTo(screen.back);
               return true;
             case 'user-profile':
               // Al perfil ajeno se llega desde el tablón, pero también desde
@@ -1480,6 +1500,8 @@ function AppContent({ onReady }: { onReady: () => void }) {
       <AccountLevelRecorder />
       <View ref={themeCaptureRef} style={styles.container} collapsable={false}>
         <AccountDeletionPrompt />
+        {/* Cuentas que no aceptaron la versión vigente de los textos legales. */}
+        <LegalConsentPrompt />
         <WhatsNewModal
           visible={whatsNewEntry !== null}
           entry={whatsNewEntry}
@@ -1492,10 +1514,15 @@ function AppContent({ onReady }: { onReady: () => void }) {
           <AwardModal
             award={awards[0] ?? null}
             onClose={() => {
+              const closed = awards[0];
               shiftAward();
               // Latido de la píldora de nivel de la barra: que se vea dónde
-              // han ido a parar los puntos del premio que se acaba de cerrar.
-              requestLevelPulse();
+              // han ido a parar los puntos del premio que se acaba de cerrar
+              // (los de un reto o logro entran en ella como "+N pts"; la
+              // subida de nivel no da puntos, solo late).
+              requestLevelPulse(
+                closed && closed.kind !== 'level' ? closed.xp : undefined
+              );
             }}
           />
         )}
@@ -1699,6 +1726,15 @@ function AppContent({ onReady }: { onReady: () => void }) {
             onOpenData={() =>
               setScreen({ type: 'data', back: { type: 'settings' } })
             }
+            onOpenBlockedUsers={() => setScreen({ type: 'blocked-users' })}
+          />
+        )}
+
+        {screen.type === 'blocked-users' && (
+          <BlockedUsersScreen
+            onBack={() => setScreen({ type: 'settings' })}
+            // Del perfil se vuelve a esta lista.
+            onOpenProfile={(userId, name) => openProfile(userId, name, screen)}
           />
         )}
 
@@ -1758,7 +1794,9 @@ function AppContent({ onReady }: { onReady: () => void }) {
             authorName={screen.authorName}
             ownerId={screen.ownerId}
             focusNewComments={screen.focusNewComments}
-            onBack={() => setScreen(screen.back)}
+            // Por `goBackTo`: la ficha de la rutina enlazada de la que se vino
+            // puede haberse quitado desde aquí.
+            onBack={() => goBackTo(screen.back)}
             onOpenProfile={(userId, name) => openProfile(userId, name, screen)}
             onOpenAccount={() => setScreen({ type: 'data', back: screen })}
           />
@@ -1821,6 +1859,15 @@ function AppContent({ onReady }: { onReady: () => void }) {
             routine={screen.routine}
             initialExpandedDayId={screen.expandDayId}
             onBack={() => backFromRoutineDetails(screen)}
+            // Evolución de un ejercicio desde su casilla. Se vuelve a esta ficha
+            // con el día del ejercicio desplegado (`expandDayId`).
+            onOpenExerciseProgress={(exerciseKey, dayId) =>
+              setScreen({
+                type: 'exercise-progress',
+                initialExerciseKey: exerciseKey,
+                back: { ...screen, expandDayId: dayId },
+              })
+            }
             // Al copiar una rutina ajena se abre la copia: es la que ya se puede
             // tocar, y dejar al usuario en la de solo lectura sería un callejón.
             onForked={(copy) =>
@@ -1837,6 +1884,17 @@ function AppContent({ onReady }: { onReady: () => void }) {
             // La marca "de {autor}" de la ficha lleva a su perfil, y de ahí se
             // vuelve a esta misma ficha (tal cual: con su propio camino de vuelta).
             onOpenProfile={(userId, name) => openProfile(userId, name, screen)}
+            // Enlazada: su ficha en Comunidad, y de ahí se vuelve a esta ficha.
+            onOpenPublicRoutine={(routineId, name, authorName, ownerId) =>
+              setScreen({
+                type: 'public-routine',
+                routineId,
+                name,
+                authorName,
+                ownerId,
+                back: screen,
+              })
+            }
           />
         )}
 
@@ -1897,7 +1955,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
 function CloudSync({ enabled }: { enabled: boolean }) {
   const { dispatch, state } = useWorkout();
   useCloudSync(dispatch, state.routines, enabled);
-  useCommunityNewsRefresh(enabled);
+  useCommunityNewsRefresh(enabled, state.routines);
   useForgetSignedOutAccount();
   useReloadProfileOnSessionRestore();
   return null;

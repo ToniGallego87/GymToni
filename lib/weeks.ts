@@ -883,6 +883,25 @@ export function buildWeekProgress(
 }
 
 /**
+ * Semanas de `buildWeekProgress` que la gráfica dibuja como barra: las
+ * posteriores a la base (la primera semana con dato) que no sean de descarga
+ * ni estén sin dato. Con filtro por día la base es la primera semana que
+ * entrenó ESE día: un día que debutó en la semana 2 se compararía consigo
+ * mismo y pintaba un 0% falso.
+ */
+export function progressChartWeeks(
+  points: WeekProgressPoint[]
+): WeekProgressPoint[] {
+  const baseIndex = points.findIndex(
+    (point) => !point.isDeload && !point.isMissing
+  );
+  if (baseIndex < 0) return [];
+  return points
+    .slice(baseIndex + 1)
+    .filter((point) => !point.isDeload && !point.isMissing);
+}
+
+/**
  * Fechas (YYYY-MM-DD) que YA tienen un entreno de fuerza, ignorando el log que
  * se esté editando. Es la regla "un entrenamiento por día": el Calendario pinta
  * UNA celda por fecha, así que un segundo entreno ese día quedaría escondido, y

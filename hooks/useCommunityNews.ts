@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { AppState, InteractionManager } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useSession } from '@lib/cloud/auth';
@@ -20,7 +20,9 @@ import {
   mergeSeenCounts,
   NO_COMMUNITY_NEWS,
   planSeenRefresh,
+  savedRoutineSources,
 } from '@lib/communityNews';
+import type { WorkoutRoutine } from '../types';
 
 // Avisos pendientes de Comunidad, en un store de módulo (mismo patrón que
 // `useMyProfile`): los pintan la pantalla de Comunidad y el punto de su pestaña,
@@ -35,6 +37,9 @@ let current: CommunityCounts = { followers: 0, routineLikes: {} };
 // Lo atendido en esta sesión de la app. Un refresco que leyó lo visto ANTES de
 // atender un aviso (la lectura va por red) lo volvería a pintar; con esto no.
 let dismissed: CommunityCounts | null = null;
+// Las rutinas del móvil (las pasa `useCommunityNewsRefresh`): de ahí salen las
+// ajenas agregadas, cuyos comentarios también avisan.
+let localRoutines: WorkoutRoutine[] = [];
 const listeners = new Set<() => void>();
 
 function setNews(next: CommunityNews): void {
@@ -123,25 +128,26 @@ export async function refreshCommunityNews(userId: string): Promise<void> {
     getFollowerCount(userId),
     getPublicRoutineIds(userId),
   ]);
+  // Las ajenas que tienes agregadas: solo sus comentarios (ver lib/communityNews).
+  const saved = savedRoutineSources(localRoutines, userId);
+  const sinceById = new Map(saved.map((source) => [source.id, source.since]));
+  // Tuyas y agregadas en UNA consulta de lecturas y otra de comentarios.
+  const threadIds = Array.from(new Set([...mine, ...sinceById.keys()]));
   const routineLikes: Record<string, number> = {};
-  let newComments = new Map<string, number>();
-  if (mine.length) {
-    const [likeInfo, unread] = await Promise.all([
-      getLikeInfo(mine, userId),
-      // Sin esto los comentarios no avisan, pero el resto sí.
-      getCommentReads(userId, mine)
-        .then((reads) =>
-          getNewCommentCounts(
-            mine,
-            userId,
-            (id) => reads.get(id) ?? COMMENT_READS_EPOCH
-          )
+  const [likeInfo, newComments] = await Promise.all([
+    mine.length ? getLikeInfo(mine, userId) : Promise.resolve(null),
+    // Sin esto los comentarios no avisan, pero el resto sí.
+    getCommentReads(userId, threadIds)
+      .then((reads) =>
+        getNewCommentCounts(
+          threadIds,
+          userId,
+          (id) => reads.get(id) ?? sinceById.get(id) ?? COMMENT_READS_EPOCH
         )
-        .catch(() => new Map<string, number>()),
-    ]);
-    newComments = unread;
-    for (const id of mine) routineLikes[id] = likeInfo.get(id)?.likes ?? 0;
-  }
+      )
+      .catch(() => new Map<string, number>()),
+  ]);
+  for (const id of mine) routineLikes[id] = likeInfo?.get(id)?.likes ?? 0;
 
   const measured = { followers, routineLikes };
   await serialSeen(async () => {
@@ -158,7 +164,7 @@ export async function refreshCommunityNews(userId: string): Promise<void> {
       mergeSeenCounts(seen, dismissed) ?? seen,
       measured
     );
-    setNews(buildCommunityNews(measured, shown, newComments));
+    setNews(buildCommunityNews(measured, shown, newComments, saved));
   });
 }
 
@@ -200,6 +206,9 @@ export function dismissRoutineNews(userId: string, routineId: string): void {
     ...news,
     routines: news.routines.filter((routine) => routine.id !== routineId),
   });
+  // Agregada (no tuya): solo avisa de comentarios, y esos los deja leídos el
+  // hilo. No hay "me gusta" que dar por vistos.
+  if (!(routineId in current.routineLikes)) return;
   const patch = {
     followers: 0,
     routineLikes: { [routineId]: current.routineLikes[routineId] ?? 0 },
@@ -217,12 +226,32 @@ export function useCommunityNews(): CommunityNews {
   );
 }
 
-/** Mantiene los avisos al día mientras la app está abierta. */
-export function useCommunityNewsRefresh(enabled: boolean): void {
+/**
+ * Mantiene los avisos al día mientras la app está abierta. `routines`: las del
+ * móvil, para saber qué rutinas ajenas tienes agregadas.
+ */
+export function useCommunityNewsRefresh(
+  enabled: boolean,
+  routines: WorkoutRoutine[]
+): void {
   const { user, restoring } = useSession();
   // Con la sesión guardada esperando a renovarse no se mide (la nube no
   // respondería como esta cuenta), y al renovarse se vuelve a medir.
   const userId = restoring ? null : user?.id ?? null;
+  // En un efecto (escribir estado de módulo al pintar es un efecto secundario),
+  // y antes que el que mide: la primera medida ya las ve.
+  useEffect(() => {
+    localRoutines = routines;
+  }, [routines]);
+  // Qué ajenas avisan (enlazadas y activas). Si cambia —activar o enlazar una,
+  // o las rutinas que llegan después de la primera medida— se vuelve a medir:
+  // si no, el aviso esperaba a la próxima vuelta a la app.
+  const followedKey = userId
+    ? savedRoutineSources(routines, userId)
+        .map((source) => source.id)
+        .join(',')
+    : '';
+  const measuredFollowedKey = useRef(followedKey);
 
   useEffect(() => {
     ownerId = userId;
@@ -242,4 +271,11 @@ export function useCommunityNewsRefresh(enabled: boolean): void {
       subscription.remove();
     };
   }, [userId, enabled]);
+
+  useEffect(() => {
+    if (measuredFollowedKey.current === followedKey) return;
+    measuredFollowedKey.current = followedKey;
+    if (!userId || !enabled) return;
+    void refreshCommunityNews(userId).catch(() => {});
+  }, [followedKey, userId, enabled]);
 }

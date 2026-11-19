@@ -57,6 +57,7 @@ import {
 import { useSession } from '@lib/cloud/auth';
 import { readSocialCache, writeSocialCache } from '@lib/socialCache';
 import { useMyProfile } from '@hooks/useMyProfile';
+import { useBlockedUsers } from '@hooks/useBlockedUsers';
 import {
   addRoutineComment,
   getCommentReads,
@@ -79,7 +80,12 @@ import {
   RoutineComment,
 } from '@lib/cloud/social';
 import { hideId, loadHiddenIds } from '@lib/moderation';
-import { readCommentThread } from '@lib/communityNews';
+import {
+  COMMENT_READS_EPOCH,
+  commentsSince,
+  followsRoutineComments,
+  readCommentThread,
+} from '@lib/communityNews';
 
 // Mismos tiempos que la ficha de una rutina propia: el pliegue de un día se ve
 // igual venga de donde venga.
@@ -135,6 +141,7 @@ export function PublicRoutineScreen({
   const insets = useSafeAreaInsets();
   const { state, dispatch } = useWorkout();
   const { user } = useSession();
+  const blockedUsers = useBlockedUsers();
   const { profile: myProfile } = useMyProfile();
 
   const [routine, setRoutine] = useState<WorkoutRoutine | null>(null);
@@ -369,16 +376,36 @@ export function PublicRoutineScreen({
 
   // Qué sale en amarillo y hasta dónde queda leído. Sin resaltar no pasa nada:
   // que falle no puede dejar el hilo sin pintar.
+  // Cuándo la enlazaste, si la tienes enlazada y activa (las únicas ajenas
+  // cuyos comentarios avisan): avisan desde ahí y el hilo resalta lo mismo.
+  // Una copia o una enlazada sin usar no resaltan nada, igual que no avisan.
+  // En ref para no rehacer la carga del hilo cada vez que cambian las rutinas.
+  const savedAtRef = useRef<number | undefined>(undefined);
+  // Entre TODAS las que salen de esta pública: con la enlazada y además una
+  // copia suya, `findSavedRoutine` daba la primera, y si era la copia el hilo
+  // no resaltaba nada aunque el aviso (que las mira todas) sí contara.
+  const followedRoutine = state.routines.find(
+    (routine) =>
+      followsRoutineComments(routine) &&
+      findSavedRoutine([routine], routineId) === routine
+  );
+  savedAtRef.current = followedRoutine?.createdAt;
   const noteCommentsRead = useCallback(
     async (rows: RoutineComment[]) => {
       if (!user) return;
       try {
         const reads = await getCommentReads(user.id, [routineId]);
+        const since =
+          user.id === ownerId
+            ? COMMENT_READS_EPOCH
+            : savedAtRef.current !== undefined
+            ? commentsSince(savedAtRef.current, Date.now())
+            : undefined;
         const { fresh, readAt } = readCommentThread(
           rows,
           user.id,
           reads.get(routineId),
-          user.id === ownerId,
+          since,
           Date.now()
         );
         setNewCommentIds(new Set(fresh.map((c) => c.id)));
@@ -520,9 +547,11 @@ export function PublicRoutineScreen({
     });
 
   // Los comentarios que reportaste desaparecen de tu hilo sin esperar a que
-  // nadie revise el parte.
+  // nadie revise el parte; los de quien has bloqueado ya no llegan (RLS), y
+  // aquí se quitan también los que ya estaban cargados al bloquearlo.
   const visibleComments = comments.filter(
-    (comment) => !hiddenIds.has(comment.id)
+    (comment) =>
+      !hiddenIds.has(comment.id) && !blockedUsers.has(comment.user_id)
   );
 
   // Abrir en los comentarios nuevos: al primero sin leer o, si ya no queda

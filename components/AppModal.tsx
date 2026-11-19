@@ -1,6 +1,14 @@
 import { subscribeTheme } from '@lib/themeStore';
 import React, { ReactNode } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { theme } from '@lib/theme';
 
@@ -71,55 +79,68 @@ export function AppModal({
       animationType="fade"
       onRequestClose={onRequestClose}
     >
-      <Pressable
-        style={styles.overlay}
-        onPress={onOverlayPress}
-        // Sin `onOverlayPress` el overlay no debe capturar toques (los modales
-        // normales solo se cierran con botones): se desactiva el press.
-        disabled={!onOverlayPress}
+      {/* iOS: la tarjeta sube por encima del teclado (nombre de un día, un
+          ejercicio, un reporte…). En Android ya lo hace `adjustResize`. */}
+      <KeyboardAvoidingView
+        style={styles.keyboard}
+        behavior="padding"
+        enabled={Platform.OS === 'ios'}
       >
-        {/* Solo cuando el overlay cierra al tocar fuera, la tarjeta consume el
+        <Pressable
+          style={styles.overlay}
+          onPress={onOverlayPress}
+          // Sin `onOverlayPress` el overlay no debe capturar toques (los modales
+          // normales solo se cierran con botones): se desactiva el press.
+          disabled={!onOverlayPress}
+        >
+          {/* Solo cuando el overlay cierra al tocar fuera, la tarjeta consume el
             toque para que pulsar dentro no dispare ese cierre. Si no, es una
             `View` normal: un `Pressable` aquí le robaría el gesto de arrastre a
             un `ScrollView` del cuerpo (rompía el scroll del popup de novedades). */}
-        <CardWrapper
-          style={styles.card}
-          {...(onOverlayPress ? { onPress: () => {} } : {})}
-        >
-          {header ?? (
-            <View
-              style={[styles.titleRow, centered && styles.titleRowCentered]}
-            >
-              {!!icon && (
-                <MaterialCommunityIcons
-                  name={icon}
-                  size={18}
-                  color={theme.colors.text}
-                />
-              )}
-              <Text style={[styles.title, centered && styles.titleCentered]}>
-                {title}
+          <CardWrapper
+            style={styles.card}
+            {...(onOverlayPress ? { onPress: () => {} } : {})}
+          >
+            {header ?? (
+              <View
+                style={[styles.titleRow, centered && styles.titleRowCentered]}
+              >
+                {!!icon && (
+                  <MaterialCommunityIcons
+                    name={icon}
+                    size={18}
+                    color={theme.colors.text}
+                  />
+                )}
+                <Text style={[styles.title, centered && styles.titleCentered]}>
+                  {title}
+                </Text>
+              </View>
+            )}
+
+            {!!message && (
+              <Text
+                style={[styles.message, centered && styles.messageCentered]}
+              >
+                {message}
               </Text>
-            </View>
-          )}
+            )}
 
-          {!!message && (
-            <Text style={[styles.message, centered && styles.messageCentered]}>
-              {message}
-            </Text>
-          )}
+            {children}
 
-          {children}
-
-          {!!footer && <View style={styles.footer}>{footer}</View>}
-        </CardWrapper>
-      </Pressable>
+            {!!footer && <View style={styles.footer}>{footer}</View>}
+          </CardWrapper>
+        </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
 
 const makeStyles = () =>
   StyleSheet.create({
+    keyboard: {
+      flex: 1,
+    },
     overlay: {
       flex: 1,
       backgroundColor: theme.colors.overlay,

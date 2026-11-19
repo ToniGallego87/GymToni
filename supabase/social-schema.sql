@@ -135,6 +135,7 @@ create index if not exists idx_exercises_day
 -- Follows: cada quien gestiona SOLO sus propias aristas (follower_id = yo);
 -- puede leer las que le implican (a quién sigo / quién me sigue).
 -- A la cuenta reservada "Cuenta eliminada" no se la sigue (ver "Borrado de cuenta").
+-- (Vigente: la de "Bloqueos", al final, que añade el bloqueo.)
 drop policy if exists "manage own follows" on public.follows;
 create policy "manage own follows" on public.follows
   for all using (follower_id = auth.uid())
@@ -231,6 +232,7 @@ create index if not exists idx_comments_routine
 
 alter table public.routine_comments enable row level security;
 
+-- (Vigente: la de "Bloqueos", al final, que añade el bloqueo.)
 drop policy if exists "read public comments" on public.routine_comments;
 create policy "read public comments" on public.routine_comments
   for select using (
@@ -239,6 +241,7 @@ create policy "read public comments" on public.routine_comments
     )
   );
 
+-- (Vigente: la de "Bloqueos", al final, que añade el bloqueo.)
 drop policy if exists "insert own comments" on public.routine_comments;
 create policy "insert own comments" on public.routine_comments
   for insert with check (
@@ -415,6 +418,7 @@ drop policy if exists "delete own activity" on public.activity;
 create policy "delete own activity" on public.activity
   for delete using (user_id = auth.uid());
 
+-- (Vigente: la de "Bloqueos", al final, que añade el bloqueo.)
 drop policy if exists "read visible activity" on public.activity;
 create policy "read visible activity" on public.activity
   for select using (
@@ -766,3 +770,143 @@ $$;
 revoke execute on function public.anonymize_account(uuid)
   from public, anon, authenticated;
 grant execute on function public.anonymize_account(uuid) to service_role;
+
+-- ─────────────────────────── Bloqueos (2026-11-16) ───────────────────────────
+-- Bloquear a alguien desde su perfil (lo piden Play y Apple para el contenido
+-- de usuarios, junto a reportar). Quien bloquea deja de ver los comentarios y
+-- la actividad del bloqueado (aquí, en la RLS) y sus rutinas (en la app, que
+-- ya filtraba lo reportado: una rutina enlazada sigue siendo tuya). Al
+-- bloqueado se le deja de seguir y él deja de seguirte, no puede volver a
+-- seguirte ni comentar tus rutinas, y sus comentarios en tus rutinas se
+-- borran. No se le avisa.
+--
+-- Esta sección vuelve a crear políticas definidas más arriba (seguir,
+-- comentarios y actividad) con la condición del bloqueo: las de aquí son las
+-- vigentes. Se puede ejecutar sola, y el archivo entero sigue siendo idempotente.
+create table if not exists public.blocks (
+  blocker_id uuid not null references auth.users(id) on delete cascade,
+  blocked_id uuid not null references auth.users(id) on delete cascade,
+  created_at bigint not null default 0,
+  primary key (blocker_id, blocked_id),
+  constraint blocks_not_self check (blocker_id <> blocked_id)
+);
+create index if not exists idx_blocks_blocked on public.blocks(blocked_id);
+
+alter table public.blocks enable row level security;
+
+-- Cada quien ve y gestiona SOLO sus bloqueos: el bloqueado no sabe quién le ha
+-- bloqueado (salvo por lo que deja de poder hacer).
+drop policy if exists "read own blocks" on public.blocks;
+create policy "read own blocks" on public.blocks
+  for select using (blocker_id = auth.uid());
+
+drop policy if exists "insert own blocks" on public.blocks;
+create policy "insert own blocks" on public.blocks
+  for insert with check (blocker_id = auth.uid());
+
+drop policy if exists "delete own blocks" on public.blocks;
+create policy "delete own blocks" on public.blocks
+  for delete using (blocker_id = auth.uid());
+
+-- ¿Me ha bloqueado `other`? Con `security definer`, porque esa fila es del otro
+-- y la RLS no me la deja leer. Solo responde por la cuenta que pregunta.
+create or replace function public.blocked_by(other uuid)
+returns boolean language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from public.blocks
+    where blocker_id = other and blocked_id = auth.uid()
+  );
+$$;
+revoke execute on function public.blocked_by(uuid) from public, anon;
+grant execute on function public.blocked_by(uuid) to authenticated;
+
+-- Al bloquear se cortan los seguimientos en los dos sentidos y se borran los
+-- comentarios del bloqueado en TUS rutinas (2026-11-16, segunda pasada): la
+-- lectura te los oculta solo a ti, así que el resto los seguía viendo y tú ya
+-- no podías borrarlos (el DELETE pasa también por la SELECT). Como dueño ya
+-- podías borrarlos uno a uno ("delete own or owned comments"); esto lo hace de
+-- una vez. Con `security definer`: son filas del bloqueado.
+create or replace function public.drop_follows_on_block()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  delete from public.follows
+    where (follower_id = new.blocker_id and following_id = new.blocked_id)
+       or (follower_id = new.blocked_id and following_id = new.blocker_id);
+  delete from public.routine_comments c
+    using public.routines r
+    where c.routine_id = r.id
+      and r.user_id = new.blocker_id
+      and c.user_id = new.blocked_id;
+  return new;
+end;
+$$;
+revoke execute on function public.drop_follows_on_block() from public, anon, authenticated;
+
+drop trigger if exists drop_follows_on_block on public.blocks;
+create trigger drop_follows_on_block
+  after insert on public.blocks
+  for each row execute function public.drop_follows_on_block();
+
+-- Seguir: además, no a quien te ha bloqueado.
+drop policy if exists "manage own follows" on public.follows;
+create policy "manage own follows" on public.follows
+  for all using (follower_id = auth.uid())
+  with check (
+    follower_id = auth.uid()
+    and following_id <> 'd31e7ed0-0000-4000-8000-000000000000'::uuid
+    and not public.blocked_by(following_id)
+  );
+
+-- Comentarios: los de quien has bloqueado no se leen (ni cuentan en los avisos
+-- ni en el número del tablón)...
+drop policy if exists "read public comments" on public.routine_comments;
+create policy "read public comments" on public.routine_comments
+  for select using (
+    (
+      user_id = auth.uid() or routine_id in (
+        select id from public.routines where is_public = true and deleted = false
+      )
+    )
+    and not exists (
+      select 1 from public.blocks b
+      where b.blocker_id = auth.uid() and b.blocked_id = routine_comments.user_id
+    )
+  );
+
+-- ...y quien te ha bloqueado no comenta tus rutinas.
+drop policy if exists "insert own comments" on public.routine_comments;
+create policy "insert own comments" on public.routine_comments
+  for insert with check (
+    user_id = auth.uid()
+    and routine_id in (
+      select id from public.routines where is_public = true and deleted = false
+    )
+    and not public.blocked_by(
+      (select r.user_id from public.routines r where r.id = routine_id)
+    )
+  );
+
+-- Actividad: la de quien has bloqueado no se lee.
+drop policy if exists "read visible activity" on public.activity;
+create policy "read visible activity" on public.activity
+  for select using (
+    user_id = auth.uid()
+    or (
+      exists (
+        select 1 from public.profiles p
+        where p.id = activity.user_id
+          and p.share_activity = true
+          and (
+            p.is_public = true
+            or exists (
+              select 1 from public.follows f
+              where f.follower_id = p.id and f.following_id = auth.uid()
+            )
+          )
+      )
+      and not exists (
+        select 1 from public.blocks b
+        where b.blocker_id = auth.uid() and b.blocked_id = activity.user_id
+      )
+    )
+  );

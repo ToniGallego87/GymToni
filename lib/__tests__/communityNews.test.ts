@@ -1,13 +1,16 @@
+import type { WorkoutRoutine } from '../../types';
 import {
   buildCommunityNews,
   capSeenCounts,
   COMMENT_READS_EPOCH,
   hasCommunityNews,
+  LINKED_COMMENTS_WINDOW_MS,
   mergeSeenCounts,
   planSeenRefresh,
   NO_COMMUNITY_NEWS,
   pickNewComments,
   readCommentThread,
+  savedRoutineSources,
   sameSeenCounts,
 } from '../communityNews';
 
@@ -34,6 +37,27 @@ describe('buildCommunityNews', () => {
       new Map()
     );
     expect(news.routines).toEqual([{ id: 'nueva', likes: 2, comments: 0 }]);
+  });
+
+  it('las rutinas agregadas avisan solo de comentarios', () => {
+    const source = { ownerId: 'ana', author: 'Ana', since: 0 };
+    const news = buildCommunityNews(
+      { followers: 0, routineLikes: { mia: 0 } },
+      { followers: 0, routineLikes: { mia: 0 } },
+      new Map([['ajena', 3]]),
+      [
+        { ...source, id: 'ajena', name: 'Full body' },
+        { ...source, id: 'callada', name: 'Pierna' },
+      ]
+    );
+    expect(news.routines).toEqual([
+      {
+        id: 'ajena',
+        likes: 0,
+        comments: 3,
+        saved: { ownerId: 'ana', author: 'Ana', name: 'Full body' },
+      },
+    ]);
   });
 });
 
@@ -90,7 +114,7 @@ describe('readCommentThread', () => {
         [before, after, mine],
         'yo',
         COMMENT_READS_EPOCH,
-        false,
+        undefined,
         now
       )
     ).toEqual({ fresh: [after], readAt: after.created_at });
@@ -98,24 +122,112 @@ describe('readCommentThread', () => {
 
   it('con todo leído no toca la marca', () => {
     expect(
-      readCommentThread([after], 'yo', after.created_at, true, now)
+      readCommentThread(
+        [after],
+        'yo',
+        after.created_at,
+        COMMENT_READS_EPOCH,
+        now
+      )
     ).toEqual({ fresh: [], readAt: null });
   });
 
   it('tu rutina sin marca: lo nuevo desde el inicio de la cuenta', () => {
     expect(
-      readCommentThread([before, after], 'yo', undefined, true, now)
+      readCommentThread(
+        [before, after],
+        'yo',
+        undefined,
+        COMMENT_READS_EPOCH,
+        now
+      )
     ).toEqual({ fresh: [after], readAt: after.created_at });
   });
 
-  it('rutina ajena por primera vez: nada es nuevo, pero queda marcada', () => {
+  it('rutina agregada sin marca: lo nuevo desde que la agregaste', () => {
+    const later = { user_id: 'otra', created_at: COMMENT_READS_EPOCH + 50 };
     expect(
-      readCommentThread([before, after], 'yo', undefined, false, now)
+      readCommentThread(
+        [after, later],
+        'yo',
+        undefined,
+        COMMENT_READS_EPOCH + 30,
+        now
+      )
+    ).toEqual({ fresh: [later], readAt: later.created_at });
+  });
+
+  it('rutina ajena que no tienes, por primera vez: nada es nuevo, pero queda marcada', () => {
+    expect(
+      readCommentThread([before, after], 'yo', undefined, undefined, now)
     ).toEqual({ fresh: [], readAt: after.created_at });
-    expect(readCommentThread([], 'yo', undefined, false, now)).toEqual({
+    expect(readCommentThread([], 'yo', undefined, undefined, now)).toEqual({
       fresh: [],
       readAt: now,
     });
+  });
+});
+
+describe('savedRoutineSources', () => {
+  const routine = (over: Partial<WorkoutRoutine>): WorkoutRoutine =>
+    ({ id: 'x', name: 'R', days: [], createdAt: 0, ...over }) as WorkoutRoutine;
+
+  it('solo la enlazada ajena y activa; ni copias, ni enlazadas sin usar, ni las tuyas', () => {
+    const added = COMMENT_READS_EPOCH + 1000;
+    const sources = savedRoutineSources(
+      [
+        routine({
+          id: 'pub1',
+          linkedOwnerId: 'ana',
+          sourceAuthor: 'Ana',
+          createdAt: added,
+          isActive: true,
+        }),
+        // Enlazada, pero no es la que se entrena.
+        routine({ id: 'pub3', linkedOwnerId: 'eva', isActive: false }),
+        // Copia activa: ya no sigue al autor.
+        routine({
+          id: 'copia',
+          sourceRoutineId: 'pub2',
+          sourceOwnerId: 'luis',
+          isActive: true,
+        }),
+        routine({ id: 'mia', isActive: true }),
+      ],
+      'yo',
+      added + 1000
+    );
+    expect(sources).toEqual([
+      { id: 'pub1', ownerId: 'ana', author: 'Ana', name: 'R', since: added },
+    ]);
+  });
+
+  it('una enlazada antigua de antes de la cuenta cuenta desde su inicio', () => {
+    expect(
+      savedRoutineSources(
+        [routine({ id: 'pub1', linkedOwnerId: 'ana', isActive: true })],
+        'yo',
+        COMMENT_READS_EPOCH + 1000
+      )[0].since
+    ).toBe(COMMENT_READS_EPOCH);
+  });
+
+  it('una enlazada hace meses y activada ahora no anuncia más de una semana', () => {
+    const now = COMMENT_READS_EPOCH + 90 * 24 * 60 * 60 * 1000;
+    expect(
+      savedRoutineSources(
+        [
+          routine({
+            id: 'pub1',
+            linkedOwnerId: 'ana',
+            createdAt: COMMENT_READS_EPOCH + 1000,
+            isActive: true,
+          }),
+        ],
+        'yo',
+        now
+      )[0].since
+    ).toBe(now - LINKED_COMMENTS_WINDOW_MS);
   });
 });
 

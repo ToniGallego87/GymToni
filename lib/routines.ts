@@ -228,6 +228,23 @@ export function isLinkedRoutine(routine: WorkoutRoutine): boolean {
 }
 
 /**
+ * De qué rutina pública AJENA salió una tuya (enlazada o copiada), con su
+ * dueño. undefined si es tuya de origen o la publicaste tú. Fuente única: la
+ * usan el recuento de guardados y los avisos de comentarios.
+ */
+export function communitySourceOf(
+  routine: WorkoutRoutine,
+  userId: string
+): { id: string; ownerId: string } | undefined {
+  const ownerId = routine.linkedOwnerId ?? routine.sourceOwnerId;
+  // Las enlazadas antiguas pueden no llevar `sourceRoutineId`: su id ES el de
+  // la pública.
+  const id =
+    routine.sourceRoutineId ?? (routine.linkedOwnerId ? routine.id : undefined);
+  return id && ownerId && ownerId !== userId ? { id, ownerId } : undefined;
+}
+
+/**
  * ¿Está ya en tus rutinas esta rutina pública? Cubre las dos formas de tenerla:
  * enlazada (mismo id) o copiada de ella (`sourceRoutineId`).
  */

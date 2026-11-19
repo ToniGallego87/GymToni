@@ -6,6 +6,7 @@ import { generateId } from '../utils';
 import {
   isLinkedRoutine,
   anonymizeLinkedRoutine,
+  communitySourceOf,
   linkPublicRoutine,
   refreshLinkedRoutine,
 } from '../routines';
@@ -319,6 +320,10 @@ export async function followUser(
   });
   // FK rota: esa cuenta ya no existe (se ha borrado).
   if (error?.code === '23503') throw new Error(t('Esta cuenta ya no existe'));
+  // RLS: esa cuenta te ha bloqueado. Sin decirlo: el bloqueo no se avisa.
+  if (error?.code === '42501') {
+    throw new Error(t('No se ha podido seguir a esta cuenta'));
+  }
   if (error) throw new Error(`follows: ${error.message}`);
 }
 
@@ -690,11 +695,8 @@ export async function recordOwnedRoutineSaves(
 ): Promise<void> {
   const ids = new Set<string>();
   for (const r of routines) {
-    const owner = r.linkedOwnerId ?? r.sourceOwnerId;
-    // Las enlazadas antiguas pueden no llevar `sourceRoutineId`: su id ES el
-    // de la pública.
-    const source = r.sourceRoutineId ?? (r.linkedOwnerId ? r.id : undefined);
-    if (source && owner && owner !== userId) ids.add(source);
+    const source = communitySourceOf(r, userId);
+    if (source) ids.add(source.id);
   }
   for (const id of ids) {
     const key = `${userId}:${id}`;
@@ -985,6 +987,10 @@ export async function addRoutineComment(
     })
     .select('id, routine_id, user_id, body, created_at')
     .single();
+  // RLS: la rutina ya no es pública o su dueño te ha bloqueado (sin decirlo).
+  if (error?.code === '42501') {
+    throw new Error(t('No se ha podido publicar el comentario'));
+  }
   if (error) throw new Error(`routine_comments: ${error.message}`);
   return toComment(data as Record<string, unknown>);
 }
@@ -1128,6 +1134,55 @@ export async function getNewCommentCounts(
     if (Number(at) > readAt(id)) counts.set(id, (counts.get(id) ?? 0) + 1);
   }
   return counts;
+}
+
+// ─────────────────────────── Bloquear ───────────────────────────
+//
+// Quien bloquea deja de ver los comentarios y la actividad del bloqueado (lo
+// filtra la RLS) y sus rutinas (las pantallas, con hooks/useBlockedUsers.ts). El
+// bloqueado deja de seguirle y ya no puede seguirle ni comentar sus rutinas.
+// Ver "Bloqueos" en supabase/social-schema.sql.
+
+/** Ids de las cuentas que ha bloqueado `userId`. */
+export async function getBlockedIds(userId: string): Promise<string[]> {
+  const { data, error } = await supabase
+    .from('blocks')
+    .select('blocked_id')
+    .eq('blocker_id', userId);
+  if (error) throw new Error(`blocks: ${error.message}`);
+  return (data ?? []).map((r) => (r as { blocked_id: string }).blocked_id);
+}
+
+export async function blockUser(
+  blockerId: string,
+  targetId: string
+): Promise<void> {
+  // Ya bloqueado (desde otro móvil): sin nada que hacer. ON CONFLICT DO
+  // NOTHING, porque `blocks` no tiene política UPDATE y un upsert normal
+  // fallaría por RLS.
+  const { error } = await supabase.from('blocks').upsert(
+    {
+      blocker_id: blockerId,
+      blocked_id: targetId,
+      created_at: Date.now(),
+    },
+    { onConflict: 'blocker_id,blocked_id', ignoreDuplicates: true }
+  );
+  // FK rota: esa cuenta ya no existe (se ha borrado).
+  if (error?.code === '23503') throw new Error(t('Esta cuenta ya no existe'));
+  if (error) throw new Error(`blocks: ${error.message}`);
+}
+
+export async function unblockUser(
+  blockerId: string,
+  targetId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from('blocks')
+    .delete()
+    .eq('blocker_id', blockerId)
+    .eq('blocked_id', targetId);
+  if (error) throw new Error(`blocks: ${error.message}`);
 }
 
 // ─────────────────────── Reportar contenido (moderación) ───────────────────────

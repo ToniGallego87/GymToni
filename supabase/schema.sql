@@ -270,3 +270,65 @@ alter table public.app_releases enable row level security;
 
 create policy "read releases" on public.app_releases
   for select using (true);
+
+-- ─────────────── Aceptación de los textos legales (2026-11-19) ───────────────
+-- Constancia en el SERVIDOR de cada aceptación de los Términos, la Política
+-- (con la edad mínima) y el consentimiento de los datos de salud. La app los
+-- guarda en los metadatos de la cuenta (lib/legalConsent.ts) al crearla y al
+-- volver a aceptar; pero esos metadatos los reescribe el propio usuario y la
+-- fecha es la de su móvil. Aquí cada cambio de versión deja una fila con la
+-- hora del servidor, que nadie puede tocar desde el cliente (no hay políticas
+-- de escritura: solo escribe el trigger). Cae en cascada con la cuenta.
+create table if not exists public.legal_acceptances (
+  id             bigint generated always as identity primary key,
+  user_id        uuid not null references auth.users(id) on delete cascade,
+  terms_version  text not null,
+  health_consent boolean not null default false,
+  min_age        integer,
+  accepted_at    timestamptz not null default now()
+);
+create index if not exists idx_legal_acceptances_user
+  on public.legal_acceptances(user_id, accepted_at desc);
+
+alter table public.legal_acceptances enable row level security;
+
+drop policy if exists "read own legal acceptances" on public.legal_acceptances;
+create policy "read own legal acceptances" on public.legal_acceptances
+  for select using (user_id = auth.uid());
+
+-- Al crear la cuenta o cambiar sus metadatos: si trae una versión aceptada
+-- nueva (o el consentimiento de salud cambia), una fila. Nunca falla por datos
+-- raros (la edad que no sea un número se guarda vacía): un error aquí
+-- bloquearía crear cuentas.
+create or replace function public.record_legal_acceptance()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare
+  meta jsonb := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  old_meta jsonb := case when tg_op = 'UPDATE'
+    then coalesce(old.raw_user_meta_data, '{}'::jsonb) else '{}'::jsonb end;
+  accepted_version text := meta ->> 'terms_version';
+begin
+  if accepted_version is null then return new; end if;
+  if tg_op = 'UPDATE'
+     and accepted_version is not distinct from (old_meta ->> 'terms_version')
+     and (meta ->> 'health_consent_at') is not distinct from (old_meta ->> 'health_consent_at')
+  then
+    return new;
+  end if;
+  insert into public.legal_acceptances (user_id, terms_version, health_consent, min_age)
+  values (
+    new.id,
+    left(accepted_version, 40),
+    (meta ->> 'health_consent_at') is not null,
+    case when (meta ->> 'min_age') ~ '^[0-9]{1,3}$'
+      then (meta ->> 'min_age')::integer end
+  );
+  return new;
+end;
+$$;
+revoke execute on function public.record_legal_acceptance() from public, anon, authenticated;
+
+drop trigger if exists record_legal_acceptance on auth.users;
+create trigger record_legal_acceptance
+  after insert or update of raw_user_meta_data on auth.users
+  for each row execute function public.record_legal_acceptance();

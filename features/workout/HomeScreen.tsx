@@ -30,6 +30,7 @@ import {
 import { animateLayout } from '@lib/layoutAnimation';
 import {
   buildWeekProgress,
+  progressChartWeeks,
   computeStreak,
   currentWeekDayState,
   getWeekImprovement,
@@ -112,7 +113,8 @@ function buildProgressChart(points: WeekProgressPoint[]): {
   bars: BarChartPoint[];
   domain: { min: number; max: number };
 } {
-  // Semana 1 es siempre la base (mejora 0), no se muestra.
+  // La base (semana 1, o la primera que entrenó el día filtrado) no se
+  // muestra: mejora 0 por definición (`progressChartWeeks`).
   //
   // Fuera también lo que no mide progreso: las semanas de DESCARGA (bajan la
   // intensidad a propósito; antes heredaban el % de la carga anterior y
@@ -122,9 +124,7 @@ function buildProgressChart(points: WeekProgressPoint[]): {
   //
   // Una semana INCOMPLETA sí se queda: entrenó lo que la serie mide y cada día
   // compara contra su propia base, así que es comparable con el resto.
-  const weeks = points
-    .slice(1)
-    .filter((point) => !point.isDeload && !point.isMissing);
+  const weeks = progressChartWeeks(points);
 
   const values = weeks.map((point) => point.improvement);
   const minValue = Math.min(...values, 0);
@@ -420,9 +420,12 @@ export function HomeScreen({
   /**
    * Las tarjetas del cuerpo de una semana: sus entrenos y, si la semana ya está
    * cerrada sin completarse (`skipMissing` false), también los días de la
-   * rutina que no se hicieron. Cada hueco se cuela antes del primer día
-   * entrenado con un número mayor que el suyo (y al final si no hay ninguno),
-   * así que queda donde le tocaba sin reordenar lo que sí se hizo.
+   * rutina que no se hicieron. La lista va del más reciente al más antiguo
+   * (`weekLogs` llega así), así que cada hueco se cuela antes del primer día
+   * con un número MENOR que el suyo (y al final si no hay ninguno): queda
+   * donde le tocaba sin reordenar lo que sí se hizo. Antes se buscaba uno
+   * mayor, como si la lista fuera ascendente, y los huecos de los últimos
+   * días de la rutina caían siempre al fondo, debajo del primero.
    */
   const buildWeekEntries = (
     weekLogs: WorkoutLog[],
@@ -433,10 +436,10 @@ export function HomeScreen({
       const day = getDay(log.dayId);
       return day ? [{ key: log.id, day, log }] : [];
     });
-    // Mismo hueco que le tocaría por número de día.
+    // Mismo hueco que le tocaría por número de día (orden descendente).
     const insertByDayNumber = (entry: WeekEntry) => {
       const at = entries.findIndex(
-        (e) => (e.day.dayNumber ?? 0) > (entry.day.dayNumber ?? 0)
+        (e) => (e.day.dayNumber ?? 0) < (entry.day.dayNumber ?? 0)
       );
       if (at < 0) entries.push(entry);
       else entries.splice(at, 0, entry);
@@ -614,7 +617,8 @@ export function HomeScreen({
   // El gráfico muestra todas las semanas entrenadas tal cual: la última semana en
   // curso (incompleta) se muestra resaltada como "actual" desde buildWeekProgress,
   // y no se añaden semanas fantasma. No hay nada que recortar aquí.
-  const filteredWeeklyProgress = useMemo(
+  // Progreso del día filtrado (una pasada, solo con filtro).
+  const selectedDayProgress = useMemo(
     () =>
       chartDayFilter
         ? buildWeekProgress(
@@ -623,29 +627,64 @@ export function HomeScreen({
             activeDays,
             chartDayFilter
           )
-        : weeklyProgress,
-    [
-      chartDayFilter,
-      weeklyProgress,
-      completionStateLogs,
-      displayedRoutineId,
-      activeDays,
-    ]
+        : null,
+    [chartDayFilter, completionStateLogs, displayedRoutineId, activeDays]
   );
+  // El filtro solo vale mientras su día tenga barras. Si las pierde (se borra
+  // o se mueve su único entreno posterior a la base, o el día sale de la
+  // rutina) cae solo a "Semana completa": si no, la gráfica se quedaba sin
+  // barras, la tarjeta se plegaba con el filtro dentro y no había vuelta.
+  const effectiveDayFilter =
+    selectedDayProgress && progressChartWeeks(selectedDayProgress).length > 0
+      ? chartDayFilter
+      : undefined;
+  const filteredWeeklyProgress =
+    effectiveDayFilter && selectedDayProgress
+      ? selectedDayProgress
+      : weeklyProgress;
 
   // Opciones del filtro de la gráfica: la semana completa (por defecto) o cada
   // día de la rutina. Los días se identifican por su silueta (el nombre real,
   // "Pecho y tríceps", no cabe en el chip): el texto solo sale en el activo.
+  // Solo los días con alguna barra que dibujar (una semana posterior a su base
+  // que lo entrenara). Un día que aún no tiene con qué compararse —p. ej. no se
+  // hizo la semana 1 y se entrena por primera vez en la 2— dejaba la gráfica
+  // sin barras: la tarjeta se plegaba con el filtro dentro y no había vuelta.
+  // Mirarlo cuesta una pasada por el historial por día, así que solo se hace
+  // con la gráfica abierta (el filtro solo se ve ahí); el día elegido reutiliza
+  // la suya.
   const dayFilterOptions: SegmentedOption<string | undefined>[] = useMemo(
     () => [
       { id: undefined, label: t('Semana completa'), icon: 'calendar-week' },
-      ...activeDays.map((day: WorkoutDay, index: number) => ({
-        id: day.id as string | undefined,
-        label: getDisplayDayName(day.name) || `${t('Día')} ${index + 1}`,
-        gymIcon: resolveDayIcon(day.emoji, day.name),
-      })),
+      ...(showWeeklyProgressChart ? activeDays : [])
+        .map((day: WorkoutDay, index: number) => ({ day, index }))
+        .filter(
+          ({ day }) =>
+            progressChartWeeks(
+              day.id === chartDayFilter && selectedDayProgress
+                ? selectedDayProgress
+                : buildWeekProgress(
+                    completionStateLogs,
+                    displayedRoutineId,
+                    activeDays,
+                    day.id
+                  )
+            ).length > 0
+        )
+        .map(({ day, index }) => ({
+          id: day.id as string | undefined,
+          label: getDisplayDayName(day.name) || `${t('Día')} ${index + 1}`,
+          gymIcon: resolveDayIcon(day.emoji, day.name),
+        })),
     ],
-    [activeDays]
+    [
+      showWeeklyProgressChart,
+      activeDays,
+      chartDayFilter,
+      selectedDayProgress,
+      completionStateLogs,
+      displayedRoutineId,
+    ]
   );
 
   const progressChart = useMemo(
@@ -738,11 +777,18 @@ export function HomeScreen({
     }
     if (todayWorkoutStatus === 'completed') {
       // El resultado de hoy: el % frente a la vez anterior (el mismo dato que
-      // su tarjeta del historial), o "Sin mejora" si no hay con qué comparar
-      // o no se ha mejorado. En descarga no se compara. Es la recompensa del
-      // momento y dice qué hay detrás del toque (abre el registro de hoy).
+      // su tarjeta del historial), o "Sin mejora" si no se ha mejorado. La
+      // primera vez con este día no hay con qué comparar: "Sin mejora" ahí
+      // castigaba un entreno que solo marca la referencia. En descarga no se
+      // compara. Es la recompensa del momento y dice qué hay detrás del toque
+      // (abre el registro de hoy).
+      const isDeload = !!todayLog?.isDeload;
+      const isFirstTime =
+        !!todayLog && !isDeload && !getPreviousFilledLogForSameDay(todayLog);
       const improvement =
-        todayLog && !todayLog.isDeload ? getLogImprovement(todayLog) : null;
+        todayLog && !isDeload && !isFirstTime
+          ? getLogImprovement(todayLog)
+          : null;
       const improved = !!improvement?.isImproved;
       return {
         variant: 'completed',
@@ -752,6 +798,10 @@ export function HomeScreen({
           ? t('{n} % de mejora', {
               n: localizeDecimals(improvement!.percent.toFixed(1)),
             })
+          : isDeload
+          ? t('Semana de descarga')
+          : isFirstTime
+          ? t('Tu punto de partida')
           : t('Sin mejora'),
         subtitleIcon: improved ? 'arrow-up-bold' : undefined,
       };
@@ -1041,7 +1091,7 @@ export function HomeScreen({
                   }}
                   options={dayFilterOptions}
                   labelMode="below"
-                  value={chartDayFilter}
+                  value={effectiveDayFilter}
                   onChange={(id) => {
                     animateLayout();
                     setChartDayFilter(id);
@@ -1465,6 +1515,7 @@ export function HomeScreen({
                           <View key={key}>
                             <HistoryCard
                               isToday={isToday}
+                              isCompleted={todayWorkoutStatus === 'completed'}
                               onPress={() => {
                                 if (isToday) {
                                   // Hoy: toque directo continúa/edita el registro

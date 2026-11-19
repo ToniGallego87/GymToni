@@ -64,6 +64,7 @@ import {
   ProfileLite,
 } from '@lib/cloud/social';
 import { hasProfileFilled, useMyProfile } from '@hooks/useMyProfile';
+import { useBlockedUsers } from '@hooks/useBlockedUsers';
 import { loadHiddenIds } from '@lib/moderation';
 import { RoutineNews } from '@lib/communityNews';
 import {
@@ -185,6 +186,9 @@ export function CommunityScreen({
   const { state, dispatch } = useWorkout();
   const { user } = useSession();
   const { profile: myProfile } = useMyProfile();
+  // Rutinas de quien has bloqueado: fuera del tablón y de la búsqueda, como las
+  // de un perfil reportado.
+  const blockedUsers = useBlockedUsers();
   // Tus contadores (para tu tarjeta) y lo que ha pasado desde la última visita.
   // Se siembran con la copia del último arranque (lib/socialCache.ts): nacían en
   // 0 y se leían como el dato, así que tu tarjeta decía "0 seguidores" y un
@@ -572,7 +576,10 @@ export function CommunityScreen({
 
   const showingSearch = query.trim().length > 0;
   const visibleRoutineResults = routineResults.filter(
-    (r) => !hiddenIds.has(r.id) && !hiddenIds.has(r.owner_id)
+    (r) =>
+      !hiddenIds.has(r.id) &&
+      !hiddenIds.has(r.owner_id) &&
+      !blockedUsers.has(r.owner_id)
   );
   // Buscador plegado por defecto: se despliega con su lupa (junto al filtro de
   // intensidad) y se cierra vaciando lo tecleado.
@@ -610,21 +617,28 @@ export function CommunityScreen({
     }
     return parts.join(' · ');
   };
+  // Las rutinas ajenas que tienes agregadas también avisan de sus comentarios:
+  // se abren como de su dueño, con su autor debajo del nombre.
   const newsItems = news.routines.map((routine) => {
     const name =
-      state.routines.find((r) => r.id === routine.id)?.name ?? t('Tu rutina');
+      routine.saved?.name ??
+      state.routines.find((r) => r.id === routine.id)?.name ??
+      t('Tu rutina');
+    const detail = routineNewsLabel(routine);
     return {
       key: routine.id,
       name,
-      detail: routineNewsLabel(routine),
+      detail: routine.saved?.author
+        ? `${t('De {name}', { name: routine.saved.author })} · ${detail}`
+        : detail,
       onPress: () => {
         if (!user) return;
         dismissRoutineNews(user.id, routine.id);
         onOpenRoutine?.(
           routine.id,
           name,
-          myName,
-          user.id,
+          routine.saved ? routine.saved.author : myName,
+          routine.saved ? routine.saved.ownerId : user.id,
           routine.comments > 0
         );
       },
@@ -1133,7 +1147,12 @@ export function CommunityScreen({
           (r) =>
             r.total_sets == null || routineIntensity(r.total_sets) === intensity
         )
-  ).filter((r) => !hiddenIds.has(r.id) && !hiddenIds.has(r.owner_id));
+  ).filter(
+    (r) =>
+      !hiddenIds.has(r.id) &&
+      !hiddenIds.has(r.owner_id) &&
+      !blockedUsers.has(r.owner_id)
+  );
 
   // Subtítulo de la barra: un dato vivo, como el resto de pantallas
   // principales (antes, el eslogan "Rutinas y gente que entrena"). Siempre hay
@@ -1161,6 +1180,8 @@ export function CommunityScreen({
           lista, lejos de lo que está cambiando. */}
       <FlatList
         style={styles.scroll}
+        // iOS: el final de la lista queda alcanzable con el teclado del buscador.
+        automaticallyAdjustKeyboardInsets
         data={visibleItems}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => renderRoutineCard(item)}

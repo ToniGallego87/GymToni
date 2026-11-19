@@ -17,6 +17,9 @@ import {
   StretchScrollView,
 } from '@components';
 import { View, Text, StyleSheet, TextInput, Platform } from 'react-native';
+import { LEGAL_VERSION, LegalDocId } from '@data/legal';
+import { LegalModal } from './LegalScreen';
+import { LegalAcceptanceChecks } from './LegalConsent';
 import { StatusBar } from 'expo-status-bar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useWorkout } from '@hooks/useWorkout';
@@ -135,6 +138,14 @@ export function DataScreen({
   const [lastBackupAt, setLastBackupAt] = useState(() => getLastAutoBackupAt());
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [email, setEmail] = useState('');
+  // Crear cuenta pide aceptar Términos y Política (con el consentimiento para
+  // guardar entrenos y peso, que pueden ser datos de salud). Se leen sin salir
+  // de aquí (`LegalModal`), así no se pierde lo ya escrito.
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  // Aparte, porque el RGPD pide que el consentimiento para datos de salud se
+  // distinga de aceptar los textos (art. 7.2).
+  const [acceptedHealth, setAcceptedHealth] = useState(false);
+  const [legalDoc, setLegalDoc] = useState<LegalDocId | null>(null);
   const [password, setPassword] = useState('');
   // Código por correo en curso. Mientras no sea null, el bloque de cuenta
   // muestra el del código en vez del login: del registro, o de recuperar la
@@ -195,11 +206,22 @@ export function DataScreen({
       notify(t('Escribe email y contraseña'), 'error');
       return;
     }
+    if (mode === 'signup' && !acceptedTerms) {
+      notify(t('Acepta los términos para crear la cuenta'), 'error');
+      return;
+    }
+    if (mode === 'signup' && !acceptedHealth) {
+      notify(
+        t('Hace falta tu consentimiento para guardar tus entrenos en la nube'),
+        'error'
+      );
+      return;
+    }
     setBusyAction(mode);
     try {
       const { data, error } =
         mode === 'signup'
-          ? await signUp(email, password)
+          ? await signUp(email, password, LEGAL_VERSION)
           : await signIn(email, password);
       if (error) {
         notify(authErrorMessage(error), 'error');
@@ -886,6 +908,14 @@ export function DataScreen({
                 disabled={busy}
                 size="large"
               />
+              {/* Solo cuentan para "Crear cuenta": van justo encima de él. */}
+              <LegalAcceptanceChecks
+                acceptedTerms={acceptedTerms}
+                onToggleTerms={() => setAcceptedTerms((v) => !v)}
+                acceptedHealth={acceptedHealth}
+                onToggleHealth={() => setAcceptedHealth((v) => !v)}
+                onOpenDoc={setLegalDoc}
+              />
               <Button
                 title={
                   busyAction === 'signup' ? t('Creando…') : t('Crear cuenta')
@@ -1317,6 +1347,7 @@ export function DataScreen({
           onDismiss={() => setToast(null)}
         />
       )}
+      <LegalModal doc={legalDoc} onClose={() => setLegalDoc(null)} />
     </View>
   );
 }

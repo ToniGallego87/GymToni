@@ -1,5 +1,6 @@
 import {
   buildWeekProgress,
+  progressChartWeeks,
   computeStreak,
   getWeekImprovement,
   groupLogsIntoWeekBlocks,
@@ -726,5 +727,51 @@ describe('caducidad de la semana a los 7 días', () => {
     ];
     // "b" encabezaría la semana de "c"/"d", y "d" queda a 7 días de "b".
     expect(planWeekMove(logs, 'b', 'next', dayNumberOf)).toBeNull();
+  });
+});
+
+describe('progressChartWeeks', () => {
+  const days = makeDays(2);
+
+  it('sin filtro deja fuera la semana 1 (base)', () => {
+    const logs = [
+      makeScoredLog('a', 1, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('b', 2, 1, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('c', 1, 7, [{ weight: 110, reps: 10 }]),
+    ];
+    const weeks = progressChartWeeks(buildWeekProgress(logs, 'r1', days));
+    expect(weeks.map((point) => point.week)).toEqual([2]);
+  });
+
+  it('un día aún sin entrenar no dibuja ninguna barra', () => {
+    // Semana 1 sin el día 2 y semana 2 en curso, tampoco con él.
+    const logs = [
+      makeScoredLog('a', 1, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('c', 1, 7, [{ weight: 110, reps: 10 }]),
+    ];
+    expect(
+      progressChartWeeks(buildWeekProgress(logs, 'r1', days, 'd2'))
+    ).toEqual([]);
+  });
+
+  it('un día que debutó tarde toma esa semana como base, no como barra', () => {
+    const logs = [
+      makeScoredLog('a', 1, 0, [{ weight: 100, reps: 10 }]),
+      makeScoredLog('c', 1, 7, [{ weight: 110, reps: 10 }]),
+      makeScoredLog('d', 2, 8, [{ weight: 100, reps: 10 }]),
+    ];
+    expect(
+      progressChartWeeks(buildWeekProgress(logs, 'r1', days, 'd2'))
+    ).toEqual([]);
+
+    // A la semana siguiente ya hay con qué compararlo.
+    const withThird = [
+      ...logs,
+      makeScoredLog('e', 2, 15, [{ weight: 110, reps: 10 }]),
+    ];
+    const weeks = progressChartWeeks(
+      buildWeekProgress(withThird, 'r1', days, 'd2')
+    );
+    expect(weeks.map((point) => point.week)).toEqual([3]);
   });
 });

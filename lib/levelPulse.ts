@@ -3,9 +3,10 @@
 // subida de nivel) y la escucha <LevelPill/>, que es quien sabe animarse.
 //
 // Va aparte (como `themeTransition`) para que quien dispara no dependa del
-// componente ni al revés: aquí solo viaja la petición.
+// componente ni al revés: aquí solo viaja la petición (y, si el premio daba
+// puntos, cuántos: la píldora los enseña entrando en ella, "+10 pts").
 
-type Listener = () => void;
+type Listener = (xp?: number) => void;
 
 // Solo hay una píldora visible (la de la barra de la pantalla en curso), pero
 // puede haber varias montadas mientras se cambia de pantalla: se avisa a todas.
@@ -18,7 +19,10 @@ export function subscribeLevelPulse(listener: Listener): () => void {
   };
 }
 
-/** Anima la píldora de nivel: acaba de sumar puntos. */
-export function requestLevelPulse(): void {
-  for (const listener of Array.from(listeners)) listener();
+/**
+ * Anima la píldora de nivel: acaba de sumar puntos. Con `xp`, antes del
+ * latido vuelan hacia ella esos puntos ("+10 pts") y se funden con ella.
+ */
+export function requestLevelPulse(xp?: number): void {
+  for (const listener of Array.from(listeners)) listener(xp);
 }

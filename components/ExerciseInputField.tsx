@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Pressable,
   Keyboard,
-  Vibration,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -27,6 +26,7 @@ import {
   parseSeriesString,
 } from '@lib/parsers';
 import { getImprovementColor } from '@lib/utils';
+import { haptics } from '@lib/haptics';
 import { GradientFill } from './GradientFill';
 import { TrendDelta } from './TrendDelta';
 import { AnchorMenu, AnchorMenuItem } from './AnchorMenu';
@@ -41,15 +41,6 @@ const fadeOut = FadeOut.duration(140);
 // pasa un poco antes de asentarse): se nota de reojo, un fundido no.
 const bubblePop = ZoomIn.duration(260).easing(Easing.out(Easing.back(2.2)));
 
-// Toque del vibrador al apuntar una serie: corto, de confirmación, nada que
-// ver con el aviso largo del fin del descanso.
-const ADD_SET_VIBRATION_MS = 18;
-// Al borrar una serie, DOS toques cortos ("tac-tac", [espera, vibra, espera,
-// vibra] en ms): se distingue sin mirar del toque único de añadir.
-const REMOVE_SET_VIBRATION = [0, 22, 90, 22];
-// Cada paso de − / + (también al mantener pulsado): un roce apenas
-// perceptible, como el "clic" de una rueda con muescas.
-const STEP_VIBRATION_MS = 6;
 // Ritmo fijo de la repetición al mantener pulsado − / + (~8 pasos por
 // segundo): rápido para recorrer, pero se sigue con la vista y con el dedo.
 const HOLD_REPEAT_MS = 120;
@@ -106,13 +97,17 @@ interface ExerciseInputFieldProps {
   // de la sesión); borrarla es vaciarla.
   onNotesChange: (text: string) => void;
   notes?: string;
+  // La última vez que se hizo este ejercicio (de este día o, si aquí no hay,
+  // de otra rutina u otro día): es lo que enseña "Anterior" y su primera
+  // serie es la sugerencia. Enseñar una sesión y proponer desde otra
+  // confundía (antes, de otra rutina, se enseñaba la MEJOR).
   previousLog?: ExerciseLog | null;
-  // La mejor sesión de otra rutina u otro día: si llega, es lo que se recuerda
-  // ("Mejor") en lugar de `previousLog`, que sigue dando el peso sugerido (se
-  // arranca de lo último que se hizo, no de un máximo de hace meses).
-  bestLog?: ExerciseLog | null;
-  // `previousLog` no es de este día (otra rutina, otro día): se ve de
-  // referencia, pero las reps sugeridas son el tope del objetivo de ahora.
+  // De dónde viene la referencia cuando NO es de este mismo día ("Rutina
+  // vieja · Piernas", o solo el día si es de esta rutina). Sin él se leía como
+  // la vez anterior de este día.
+  referenceSource?: string | null;
+  // La referencia no es de este día (otra rutina, otro día): sus reps se
+  // sugieren solo si caben en el rango de ahora; si no, el tope del rango.
   suggestTargetReps?: boolean;
   improvement?: { isImproved: boolean; percent: number } | null;
   accent?: string;
@@ -158,7 +153,7 @@ export function ExerciseInputField({
   onNotesChange,
   notes,
   previousLog,
-  bestLog,
+  referenceSource,
   suggestTargetReps = false,
   improvement,
   accent = theme.colors.primary,
@@ -376,27 +371,25 @@ export function ExerciseInputField({
   // marcarla como terminada.
   const cardAccent = isMaxSetsReached ? theme.colors.success : accent;
 
-  // Peso de la primera serie de la semana anterior (null si no hay historial).
-  const previousFirstWeight = (): number | null => {
-    if (previousLog?.parsedSets?.length) {
-      const w = previousLog.parsedSets[0].weight;
-      return w === -1 ? null : w;
-    }
-    if (
-      previousLog?.rawInput &&
-      previousLog.rawInput.trim() &&
-      previousLog.rawInput !== '-'
-    ) {
-      const parsed = parseSeriesString(previousLog.rawInput);
-      if (parsed.length > 0) return parsed[0].weight;
-    }
-    return null;
-  };
+  // Series de la sesión anterior (`previousLog`): la que enseña "Anterior" y
+  // de la que sale la sugerencia. En descarga esa línea no se ve y es la última
+  // con carga real (ya elegida así por el registro). Sin series parseadas, las
+  // del texto; "-" es vacío.
+  const previousSets: ParsedSet[] = previousLog?.parsedSets?.length
+    ? previousLog.parsedSets
+    : previousLog?.rawInput?.trim() && previousLog.rawInput !== '-'
+    ? parseSeriesString(previousLog.rawInput)
+    : [];
+
+  // Primera serie hecha de esa sesión (las saltadas, "—", no cuentan); null
+  // sin historial.
+  const suggestionFirstSet = (): ParsedSet | null =>
+    previousSets.find((s) => s.weight !== -1 && s.reps !== -1) ?? null;
 
   const getWeightPlaceholder = () => {
     if (addedSets.length > 0)
       return String(addedSets[addedSets.length - 1].weight);
-    const prev = previousFirstWeight();
+    const prev = suggestionFirstSet()?.weight ?? null;
     // En descarga se sugiere ~75% del peso previo, redondeado a cuarto de kilo.
     if (deload && prev != null && prev > 0) {
       return String(roundToQuarter(prev * DELOAD_WEIGHT_FACTOR));
@@ -413,6 +406,13 @@ export function ExerciseInputField({
     return String(Math.max(...nums.map(Number)));
   };
 
+  // ¿Caben esas reps en el rango objetivo de ahora? Sin rango, sí.
+  const fitsTargetReps = (reps: number) => {
+    const nums = target?.reps?.match(/\d+/g)?.map(Number);
+    if (!nums?.length) return true;
+    return reps >= Math.min(...nums) && reps <= Math.max(...nums);
+  };
+
   // Rango objetivo para el rótulo de la casilla ("REPETICIONES · 8-10").
   const targetReps = target?.reps?.trim() || null;
 
@@ -420,17 +420,12 @@ export function ExerciseInputField({
     if (addedSets.length > 0)
       return String(addedSets[addedSets.length - 1].reps);
     const targetMaxRep = getTargetMaxRep();
+    const first = suggestionFirstSet();
+    // De otra rutina u otro día, sus reps solo si encajan en el plan de ahora
+    // (un 5×5 de otra rutina no sirve para un 10-12): si no, el tope del rango.
+    if (first && (!suggestTargetReps || fitsTargetReps(first.reps)))
+      return String(first.reps);
     if (suggestTargetReps && targetMaxRep) return targetMaxRep;
-    if (previousLog?.parsedSets?.length)
-      return String(previousLog.parsedSets[0].reps);
-    if (
-      previousLog?.rawInput &&
-      previousLog.rawInput.trim() &&
-      previousLog.rawInput !== '-'
-    ) {
-      const parsed = parseSeriesString(previousLog.rawInput);
-      if (parsed.length > 0) return String(parsed[0].reps);
-    }
     // Sin historial: sugerir el tope del rango objetivo del ejercicio. Sin
     // rango tampoco, nada: la casilla queda vacía y pide el dato.
     return targetMaxRep ?? '';
@@ -472,7 +467,7 @@ export function ExerciseInputField({
     // puntúe en la mejora.
     onAddSet(isMaxSetsReached ? { ...pending.set, extra: true } : pending.set);
     // Confirmación que se nota sin mirar: un toque corto del vibrador.
-    Vibration.vibrate(ADD_SET_VIBRATION_MS);
+    haptics.addSet();
     // Las casillas vuelven a lo sugerido, que ahora es la serie recién metida.
     setWeightValue(null);
     setRepsValue(null);
@@ -481,13 +476,11 @@ export function ExerciseInputField({
     Keyboard.dismiss();
   };
 
-  // La sesión que se recuerda en la línea de contexto.
-  const referenceLog = bestLog ?? previousLog;
-
+  // La línea de contexto: las series de la sesión anterior o, si su texto no
+  // se deja leer como series, el texto tal cual.
   const getReferenceSetsSummary = () => {
-    if (!referenceLog) return '';
-    if (referenceLog.parsedSets?.length) {
-      return referenceLog.parsedSets
+    if (previousSets.length) {
+      return previousSets
         .map((s) =>
           s.weight === -1 || s.reps === -1
             ? '—'
@@ -495,11 +488,8 @@ export function ExerciseInputField({
         )
         .join(' · ');
     }
-    if (referenceLog.rawInput?.trim() && referenceLog.rawInput !== '-') {
-      const parsed = parseSeriesString(referenceLog.rawInput);
-      if (parsed.length > 0)
-        return parsed.map((s) => `${s.weight}×${s.reps}`).join(' · ');
-      return referenceLog.rawInput;
+    if (previousLog?.rawInput?.trim() && previousLog.rawInput !== '-') {
+      return previousLog.rawInput;
     }
     return '';
   };
@@ -606,7 +596,7 @@ export function ExerciseInputField({
                   pressed && styles.buttonPressed,
                 ]}
                 onPress={() => {
-                  Vibration.vibrate(REMOVE_SET_VIBRATION);
+                  haptics.removeSet();
                   onRemoveSet(idx);
                 }}
                 hitSlop={10}
@@ -711,13 +701,11 @@ export function ExerciseInputField({
       ) : referenceSummary ? (
         <View style={styles.contextItem}>
           <MaterialCommunityIcons
-            name={bestLog ? 'trophy-outline' : 'history'}
+            name="history"
             size={15}
             color={theme.colors.textSecondary}
           />
-          <Text style={styles.contextLabel}>
-            {bestLog ? t('Mejor') : t('Anterior')}
-          </Text>
+          <Text style={styles.contextLabel}>{t('Anterior')}</Text>
           <Text style={styles.contextValue} numberOfLines={1}>
             {referenceSummary}
           </Text>
@@ -736,8 +724,22 @@ export function ExerciseInputField({
           </Text>
         </View>
       )}
-      {!deload && referenceLog?.notes ? (
-        <Text style={styles.previousNoteText}>"{referenceLog.notes}"</Text>
+      {/* Referencia de otra rutina u otro día: se dice de cuál, para que no
+          se lea como la vez anterior de este día. */}
+      {!deload && referenceSummary && referenceSource ? (
+        <View style={styles.referenceSource}>
+          <MaterialCommunityIcons
+            name="swap-horizontal"
+            size={13}
+            color={theme.colors.textMuted}
+          />
+          <Text style={styles.referenceSourceText} numberOfLines={1}>
+            {t('De {source}', { source: referenceSource })}
+          </Text>
+        </View>
+      ) : null}
+      {!deload && previousLog?.notes ? (
+        <Text style={styles.previousNoteText}>"{previousLog.notes}"</Text>
       ) : null}
     </Animated.View>
   );
@@ -1152,7 +1154,7 @@ function StepButton({
 }) {
   // Cada paso lleva su roce del vibrador, también los que repite el mantener.
   const step = () => {
-    Vibration.vibrate(STEP_VIBRATION_MS);
+    haptics.step();
     onStep();
   };
   return (
@@ -1343,6 +1345,19 @@ const makeStyles = () =>
       fontSize: 13,
       fontWeight: '700',
       color: theme.colors.textSecondary,
+    },
+    // Origen de la referencia: bajo el dato, alineado con el rótulo.
+    referenceSource: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 4,
+      paddingLeft: 21,
+    },
+    referenceSourceText: {
+      flex: 1,
+      fontSize: 12,
+      fontWeight: '600',
+      color: theme.colors.textMuted,
     },
     previousNoteText: {
       fontSize: 12,

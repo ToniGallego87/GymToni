@@ -91,6 +91,7 @@ export { ProgressRing } from './ProgressRing';
 export { Button } from './Button';
 export { AppModal } from './AppModal';
 export { ConfirmModal } from './ConfirmModal';
+export { CheckRow } from './CheckRow';
 export { SignOutConfirmModal } from './SignOutConfirmModal';
 export { RestTimerModal } from './RestTimerModal';
 export { ReportModal } from './ReportModal';
