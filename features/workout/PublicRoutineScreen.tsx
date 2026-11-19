@@ -40,6 +40,7 @@ import {
   StatBubble,
   StretchScrollView,
   Toast,
+  FitText,
 } from '@components';
 import { useWorkout } from '@hooks/useWorkout';
 import { WorkoutRoutine } from '../../types';
@@ -797,10 +798,16 @@ export function PublicRoutineScreen({
                           <Text style={styles.dayEyebrow}>
                             {t('Día')} {day.dayNumber}
                           </Text>
-                          <Text style={styles.dayName} numberOfLines={2}>
+                          <FitText
+                            key={day.name}
+                            style={styles.dayName}
+                            maxLines={2}
+                            minFontSize={12}
+                            layoutKey={expanded}
+                          >
                             {getDisplayDayName(day.name) ||
                               `${t('Día')} ${day.dayNumber}`}
-                          </Text>
+                          </FitText>
                         </View>
                       </View>
 

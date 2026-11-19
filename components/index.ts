@@ -41,6 +41,7 @@ export { GymIconGrid } from './GymIconGrid';
 export { GradientCtaButton } from './GradientCtaButton';
 export { ExerciseResultDisplay } from './ExerciseResultDisplay';
 export { ExerciseInputField } from './ExerciseInputField';
+export { FitText } from './FitText';
 export type {
   ExerciseInputDraft,
   InvalidAddReason,

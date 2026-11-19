@@ -16,6 +16,7 @@ import {
   GradientFill,
   StretchScrollView,
   TopBarActionButton,
+  FitText,
 } from '@components';
 import {
   dateAssignmentConflict,
@@ -734,9 +735,13 @@ export function DetailScreen({
           isCardioOnlyLog(log) ? undefined : (
             <View style={styles.topBarTitleRow}>
               <DayAccentIcon emoji={day.emoji} name={day.name} size={24} />
-              <Text style={styles.topBarTitleText}>
+              <FitText
+                key={day.name}
+                style={styles.topBarTitleText}
+                minFontSize={12}
+              >
                 {getDisplayDayName(day.name)}
-              </Text>
+              </FitText>
             </View>
           )
         }

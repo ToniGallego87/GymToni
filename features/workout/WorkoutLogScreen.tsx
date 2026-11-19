@@ -50,6 +50,7 @@ import {
   useGlassTopBarHeight,
   Toast,
   StretchScrollView,
+  FitText,
 } from '../../components';
 import { GlassBlur } from '../../components/GlassBlur';
 import {
@@ -2156,9 +2157,13 @@ export function WorkoutLogScreen({
                 size={24}
               />
             )}
-            <Text style={styles.topBarTitleText}>
+            <FitText
+              key={cardioOnly ? 'cardio' : selectedDay.name}
+              style={styles.topBarTitleText}
+              minFontSize={12}
+            >
               {cardioOnly ? t('Cardio') : getDisplayDayName(selectedDay.name)}
-            </Text>
+            </FitText>
           </View>
         }
         subtitle={[

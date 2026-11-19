@@ -23,6 +23,7 @@ import {
 } from '@lib/cardio';
 import { AppModal } from './AppModal';
 import { Button } from './Button';
+import { FitText } from './FitText';
 import {
   MENU_TILE_GAP,
   MENU_TILE_INSET,
@@ -386,9 +387,13 @@ export function CardioInputField({
                   size={34}
                   color={theme.colors.text}
                 />
-                <Text style={styles.tileLabel} numberOfLines={2}>
+                <FitText
+                  key={option.label}
+                  style={styles.tileLabel}
+                  maxLines={2}
+                >
                   {option.label}
-                </Text>
+                </FitText>
               </Pressable>
             ))}
           </View>

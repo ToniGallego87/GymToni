@@ -25,6 +25,7 @@ import {
   MENU_TILE_INSET,
   MENU_TILE_PADDING,
   StretchScrollView,
+  FitText,
 } from '@components';
 import { useAccountLevel } from '@hooks/useAccountLevel';
 import { useWorkout } from '@hooks/useWorkout';
@@ -120,6 +121,13 @@ export function ProfileScreen({
   // Sin cuenta no hay perfil público: el formulario se abriría para nada (el
   // "Guardar" sale desactivado). La tarjeta lo dice aquí y lleva a la cuenta.
   const hasAccount = !!user;
+  const identityTitle = profileUnknown
+    ? t('Cargando…')
+    : isProfileFilled
+    ? profile?.display_name ?? ''
+    : hasAccount
+    ? t('Sin perfil')
+    : t('Sin cuenta');
 
   const { topBarHeight, onTopBarLayout } = useGlassTopBarHeight(insets.top);
   const { scrollBottomPadding } = getFloatingPrimaryNavMetrics(insets.bottom);
@@ -355,15 +363,14 @@ export function ProfileScreen({
               )}
             </View>
             <View style={styles.identityTextWrap}>
-              <Text style={styles.identityName} numberOfLines={2}>
-                {profileUnknown
-                  ? t('Cargando…')
-                  : isProfileFilled
-                  ? profile?.display_name
-                  : hasAccount
-                  ? t('Sin perfil')
-                  : t('Sin cuenta')}
-              </Text>
+              <FitText
+                key={identityTitle}
+                style={styles.identityName}
+                maxLines={2}
+                minFontSize={12}
+              >
+                {identityTitle}
+              </FitText>
               {/* Pulsable como la de la barra: el nivel lleva a Logros. */}
               <LevelPill level={level.level} onPress={onOpenAchievements} />
               {!profileUnknown && (

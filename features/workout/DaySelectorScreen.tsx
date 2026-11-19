@@ -17,6 +17,7 @@ import {
   GradientFill,
   StretchScrollView,
   WeekDaysRow,
+  FitText,
 } from '@components';
 import { WorkoutDay, WorkoutLog, WorkoutRoutine } from '../../types';
 import { useWorkout } from '@hooks/useWorkout';
@@ -305,9 +306,13 @@ export function DaySelectorScreen({
                     </>
                   )}
                 </View>
-                <Text style={[styles.dayName, isDone && styles.dayNameDone]}>
+                <FitText
+                  key={day.name}
+                  style={[styles.dayName, isDone && styles.dayNameDone]}
+                  minFontSize={12}
+                >
                   {getDisplayDayName(day.name)}
-                </Text>
+                </FitText>
                 {/* Mismo recuento (y mismo singular) que la ficha de la rutina:
                     el rótulo vive en lib/routines.ts. El de hoy dice que se
                     sigue; el de otro día lleva el chevron de su menú. */}

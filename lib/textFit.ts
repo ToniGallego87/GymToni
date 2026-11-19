@@ -1,6 +1,6 @@
 /**
  * Búsqueda del mayor cuerpo de letra con el que un texto cabe en su caja (ver
- * `FitText`). Solo el sistema sabe cómo parte las líneas, así que no se calcula:
+ * `FitText`) sin partir ninguna palabra a media línea. Solo el sistema sabe cómo parte las líneas, así que no se calcula:
  * se prueba un tamaño, se mide lo que ocupa y se sigue por bisección (unas cuatro
  * medidas de 13 a 7).
  *
@@ -39,6 +39,27 @@ function nextProbe(low: number, high: number, min: number): TextFit {
  * reabre la búsqueda hacia abajo (la caja puede cambiar de ancho al maquetarse):
  * que sobre algo de hueco se nota poco, que se salga de la caja no.
  */
+// Fin de línea que no parte palabra: espacio (o salto) o un guion/barra puestos
+// por quien escribió el texto.
+const BREAK_AFTER = /[\s\-‐–—/]$/;
+const BREAK_BEFORE = /^\s/;
+
+/**
+ * Si el sistema ha tenido que partir una palabra entre dos líneas porque no
+ * cabía entera ("Complementario" / "s"). Recibe el texto de cada línea tal
+ * como lo da `onTextLayout`.
+ */
+export function breaksWord(lines: readonly string[]): boolean {
+  for (let i = 0; i < lines.length - 1; i += 1) {
+    const current = lines[i];
+    const next = lines[i + 1];
+    if (!current || !next) continue;
+    if (BREAK_AFTER.test(current) || BREAK_BEFORE.test(next)) continue;
+    return true;
+  }
+  return false;
+}
+
 export function stepTextFit(state: TextFit, fits: boolean): TextFit {
   const { size, min } = state;
   if (state.done) {

@@ -105,6 +105,12 @@
 
 ### Correcciones
 
+- **Los títulos ya no parten palabras a media línea** ("Complementario" /
+  "s"): si una palabra no cabe, la letra baja lo justo. `FitText` detecta el
+  corte en las líneas de `onTextLayout` (`breaksWord` en `lib/textFit.ts`,
+  con tests) y admite `maxLines` y `layoutKey`. Aplicado a nombres de día
+  (ficha de rutina propia y pública, selector, topbar de registro y detalle),
+  nombre de perfil, rutina pública, logros y casillas de cardio.
 - **El filtro por día de "Progreso / semana" ya no deja la gráfica plegada y
   sin salida.** Un día que aún no tiene con qué compararse (no se hizo en la
   semana 1 y sigue sin hacerse, o solo se ha hecho una vez) ya no se ofrece:

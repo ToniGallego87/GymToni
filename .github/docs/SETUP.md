@@ -125,7 +125,7 @@ GymToni/
 │   ├── OptionToggle.tsx / ValueStepper.tsx ← Ajustes en el sitio: segmentado de opciones y ‹ valor › a saltos
 │   ├── LoadMoreButton.tsx    ← Paginación de los historiales e "Cargar más (+10)" del catálogo de ejercicios
 │   ├── HistoryCard.tsx       ← Tarjeta de un día del historial (icono, título, fecha y dato a la derecha), compartida por Inicio y Cardio; `HistoryCardHeader` para los días de varias disciplinas
-│   ├── FitText.tsx           ← Texto que baja de letra hasta caber entero en su caja (nombres de las casillas de ejercicio)
+│   ├── FitText.tsx           ← Texto que baja de letra lo justo para caber sin cortarse ni partir palabras (nombres de día, de ejercicio, de rutina…)
 │   ├── ExerciseInputField.tsx← Registro serie a serie (60x8 → ➕)
 │   ├── ExerciseFormRow.tsx   ← Popup de edición de un ejercicio (crear rutina y editar día)
 │   ├── CardioInputField.tsx  ← Registro de cardio por disciplina

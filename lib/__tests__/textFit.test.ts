@@ -1,4 +1,4 @@
-import { startTextFit, stepTextFit, TextFit } from '../textFit';
+import { breaksWord, startTextFit, stepTextFit, TextFit } from '../textFit';
 
 // Repite medidas hasta decidir: cabe lo que no pase de `limit`.
 function settle(base: number, min: number, limit: number) {
@@ -43,5 +43,19 @@ describe('textFit', () => {
   it('en el mínimo una medida que no cabe no reabre nada', () => {
     const atMin: TextFit = { size: 7, low: 7, high: 7.5, min: 7, done: true };
     expect(stepTextFit(atMin, false)).toBe(atMin);
+  });
+});
+
+describe('breaksWord', () => {
+  it('detecta una palabra partida entre dos líneas', () => {
+    expect(breaksWord(['Complementario', 's'])).toBe(true);
+  });
+
+  it('no salta con cortes en espacio, guion o salto de línea', () => {
+    expect(breaksWord(['Pecho y ', 'tríceps'])).toBe(false);
+    expect(breaksWord(['Pecho y', ' tríceps'])).toBe(false);
+    expect(breaksWord(['Push-', 'pull'])).toBe(false);
+    expect(breaksWord(['Pierna\n', 'Glúteo'])).toBe(false);
+    expect(breaksWord(['Complementarios'])).toBe(false);
   });
 });

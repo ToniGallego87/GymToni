@@ -21,7 +21,7 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Mejoras visuales y de UX
 
-- [ ] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
+- [x] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
       una fila con el icono de cada día (verde hecho, aro dorado el que toca,
       anillo que se llena el de hoy) y Elige la sesión, un toque después, como
       una barra de segmentos sin iconos. Sacar la fila de Inicio a un
@@ -31,7 +31,7 @@ requisito previo de anuncios, suscripción e iOS.
       falta.
       **Archivos:** `features/workout/HomeScreen.tsx:1153` (`weekDaysRow`),
       `features/workout/DaySelectorScreen.tsx:151` (`weekBar`).
-      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil.
+      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
       **Esfuerzo:** bajo.
 - [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
       duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
@@ -73,7 +73,7 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Funcionalidades a simplificar
 
-- [ ] **[Lanzamiento] Quitar permisos sobrantes y adelgazar la APK** — fuera
+- [x] **[Lanzamiento] Quitar permisos sobrantes y adelgazar la APK** — fuera
       `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW`, `READ/WRITE_EXTERNAL_STORAGE` y
       `CAMERA` (estos dos últimos con `tools:node="remove"`, los meten
       dependencias); R8 + `shrinkResources` en release y solo las ABIs de
@@ -87,8 +87,9 @@ requisito previo de anuncios, suscripción e iOS.
       `android/app/build.gradle` (`abiFilters` en release),
       `android/gradle.properties` (R8 y `shrinkResources`).
       **Estado (2026-11-07):** hecho en código; APK de 75 a 40 MB, instalada en
-      el móvil 1 y arranca sin errores. **Falta probar en el móvil**, donde R8
-      podría romper algo:
+      el móvil 1 y arranca sin errores. Probado en el móvil (2026-11-19): todo
+      lo de abajo funciona salvo "Cerrar sesión" en modo avión, que se prueba
+      con su propia ficha:
       - Descanso con la app minimizada: que suene el aviso al terminar (R8
         quitaba la serialización de los avisos; arreglado en
         `proguard-rules.pro`, falta confirmarlo).
@@ -100,7 +101,7 @@ requisito previo de anuncios, suscripción e iOS.
       - Cerrar sesión en modo avión: que salga de verdad (ver "Cerrar sesión"
         sin red y con el token caducado).
       **Esfuerzo:** bajo.
-- [ ] **Ordenar los días de una rutina sin plegarlos uno a uno** — en la
+- [x] **Ordenar los días de una rutina sin plegarlos uno a uno** — en la
       edición de una ficha, los días solo se arrastran con todos plegados, y
       con alguno abierto aparece el aviso "Pliega todos los días para
       ordenarlos arrastrando": hay que ir plegándolos a mano. Que ese aviso sea
@@ -111,7 +112,7 @@ requisito previo de anuncios, suscripción e iOS.
       aviso ya ocupa el sitio del botón.
       **Archivos:** `features/workout/RoutineDetailScreen.tsx:586`
       (`canDragDays`) y `:935` (el aviso).
-      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil.
+      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
       **Esfuerzo:** bajo.
 - [ ] **Cardio: retirar el texto `raw_input` cuando todos los móviles lo
       entiendan** — desde la 0.8.5 el cardio se guarda también en
@@ -493,7 +494,7 @@ primero porque sin ellas no se publica.
       (cerrar sesión y entrar con otra cuenta sin cerrar la app; abrir
       Comunidad sin red).
       **Esfuerzo:** bajo.
-- [ ] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
+- [x] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
       rutina deja renombrar, cambiar el icono, reordenar y quitar días, y
       editar sus ejercicios, pero no añadir uno nuevo: Nueva rutina sí tiene
       "Añadir día". Para pasar de 4 a 5 días hoy hay que crear otra rutina y
@@ -507,9 +508,9 @@ primero porque sin ellas no se publica.
       (`renderDayBlock`, edición de días) y `:565` (`handleMoveDayTo`, el
       renumerado ya existe), `features/workout/NewRoutineScreen.tsx:301`
       (`handleAddDay`), `lib/exerciseForm.ts`.
-      **Estado (2026-11-07):** hecho en código; falta probarlo en el móvil.
+      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
       **Esfuerzo:** medio.
-- [ ] **De un ejercicio de la ficha de rutina a su evolución** — en el Detalle
+- [x] **De un ejercicio de la ficha de rutina a su evolución** — en el Detalle
       de una sesión cada ejercicio lleva a su gráfica y sus récords ("Ver
       evolución"), y desde esa gráfica se llega a la ficha de la rutina; pero
       al revés no: en la ficha, las casillas de los ejercicios solo reproducen
@@ -523,7 +524,7 @@ primero porque sin ellas no se publica.
       la comparte con la rutina pública), `features/workout/DetailScreen.tsx:565`
       (el acceso que ya existe), `app/App.tsx:208` (la pantalla
       `exercise-progress`, que hoy solo sabe volver al Detalle o a Perfil).
-      **Estado (2026-11-16):** hecho en código; falta probarlo en el móvil.
+      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
       **Esfuerzo:** medio.
 
 ## Descartado por restricciones del proyecto

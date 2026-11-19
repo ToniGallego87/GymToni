@@ -16,6 +16,7 @@ import {
   BadgeMedal,
   GradientFill,
   StretchScrollView,
+  FitText,
 } from '@components';
 import { Badge, BADGE_CATEGORY_ORDER, badgeCategoryLabel } from '@lib/badges';
 import { useAccountLevel } from '@hooks/useAccountLevel';
@@ -262,15 +263,16 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
                         }
                         size={MEDAL_SIZE}
                       />
-                      <Text
+                      <FitText
+                        key={badge.name}
                         style={[
                           styles.medalName,
                           !badge.unlocked && styles.medalNameLocked,
                         ]}
-                        numberOfLines={2}
+                        maxLines={2}
                       >
                         {badge.name}
-                      </Text>
+                      </FitText>
                       <Text
                         style={[
                           styles.medalMeta,

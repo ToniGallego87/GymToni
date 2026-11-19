@@ -12,6 +12,7 @@ import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
 import { routineIntensity } from '@lib/routines';
 import { Avatar } from './Avatar';
+import { FitText } from './FitText';
 import { GradientFill } from './GradientFill';
 import {
   RoutineIntensityPill,
@@ -127,9 +128,14 @@ export function PublicRoutineCard({
           </Pressable>
         )}
         <View style={styles.titleWrap}>
-          <Text style={styles.routineName} numberOfLines={2}>
+          <FitText
+            key={item.name}
+            style={styles.routineName}
+            maxLines={2}
+            minFontSize={12}
+          >
             {item.name}
-          </Text>
+          </FitText>
           {!!author && (
             <Pressable
               style={({ pressed }) => [
