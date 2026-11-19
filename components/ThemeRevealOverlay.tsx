@@ -62,10 +62,10 @@ interface RevealState extends ThemeRevealRequest {
 
 interface ThemeRevealOverlayProps {
   /** La vista a capturar: toda la app menos este overlay. */
-  captureTarget: React.RefObject<View>;
+  captureTarget: React.RefObject<View | null>;
 }
 
-async function snapshot(target: React.RefObject<View>): Promise<string | null> {
+async function snapshot(target: React.RefObject<View | null>): Promise<string | null> {
   if (!target.current) return null;
   try {
     return await captureRef(target, {

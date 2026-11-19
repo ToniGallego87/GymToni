@@ -1,6 +1,6 @@
 # GymBro
 
-App de registro de entrenamientos de gimnasio (React Native + Expo SDK 51, expo-router).
+App de registro de entrenamientos de gimnasio (React Native 0.81 + Expo SDK 54, arquitectura antigua, expo-router).
 MVP móvil. Prioridad absoluta: **velocidad de uso > simplicidad > arquitectura clara > mantenibilidad**.
 
 Para detalles técnicos consulta:

@@ -100,7 +100,7 @@ const fadeIn = FadeIn.duration(180);
 // Sombreado del "peldaño" del pliegue al pie de la tarjeta (mismos cortes que en
 // ExerciseInputField): intenso en el borde inferior y desvanecido hacia el
 // centro, para que la barra se lea como un escalón tallado y no como un botón.
-const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
+const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1] as const;
 
 interface RoutineDetailScreenProps {
   routine: WorkoutRoutine;

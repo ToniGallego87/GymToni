@@ -247,7 +247,7 @@ export async function migrateLegacyAvatar(
   if (!isLegacyAvatarUrl(userId, avatarUrl)) return null;
 
   const FileSystem =
-    require('expo-file-system') as typeof import('expo-file-system');
+    require('expo-file-system/legacy') as typeof import('expo-file-system/legacy');
   const dir = FileSystem.cacheDirectory;
   if (!dir) return null;
   const tmp = `${dir}avatar-migration-${Date.now()}.jpg`;

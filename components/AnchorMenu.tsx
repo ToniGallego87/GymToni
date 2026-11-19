@@ -25,7 +25,7 @@ interface AnchorMenuProps {
   visible: boolean;
   onClose: () => void;
   /** El botón (⋯) al que se ancla el menú; se mide en coordenadas de ventana. */
-  anchorRef: React.RefObject<View>;
+  anchorRef: React.RefObject<View | null>;
   items: AnchorMenuItem[];
 }
 

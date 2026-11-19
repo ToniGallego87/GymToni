@@ -4,7 +4,7 @@
 
 | Capa          | Tecnología                                                                               |
 | ------------- | ---------------------------------------------------------------------------------------- |
-| Framework     | React Native + Expo (SDK 51)                                                             |
+| Framework     | React Native 0.81 + Expo (SDK 54), arquitectura antigua (`newArchEnabled=false`)        |
 | Lenguaje      | TypeScript strict                                                                        |
 | Estado global | Context API + useReducer (dominio); stores de módulo con `useSyncExternalStore` (resto)  |
 | Persistencia  | SQLite local (`expo-sqlite`) en nativo; JSON/localStorage en web                         |
@@ -373,7 +373,7 @@ parseCardioString('Cinta: 22.5mins, 11.5kmh')
 - **Escrituras granulares** (`lib/persistence.ts`): el wrapper de `dispatch` traduce cada acción a su escritura mínima (upsert/borrado de una rutina, día o log; cambio de rutina activa), serializadas en una cola. `UPDATE_ROUTINE`/`UPDATE_DAY` hacen upsert preservando la identidad de rutina y días para no romper (`SET NULL`) las referencias del historial. `saveAppDataToDb` (reemplazo completo en transacción) se reserva para importación, migración legacy y seed inicial.
 - Migración legacy: al arrancar, si la BD está vacía y hay JSON del formato anterior en AsyncStorage, se importa y se borran las claves antiguas. En primer arranque sin datos se siembra con los datos de fábrica.
 - Vaciar datos deja la BD vacía **e inicializada** (marca `initialized`): las rutinas de fábrica no reaparecen al reiniciar.
-- **Web**: JSON en localStorage (expo-sqlite no soporta web en SDK 51), guardado completo con debounce; mismo `storage.ts`/`persistence.ts`, rama por plataforma.
+- **Web**: JSON en localStorage (se mantiene así tras subir a SDK 54), guardado completo con debounce; mismo `storage.ts`/`persistence.ts`, rama por plataforma.
 - Importar/exportar: `lib/fileIO.ts` (plataforma web via DOM, nativa via DocumentPicker + Sharing)
 
 ## Nube (Supabase)

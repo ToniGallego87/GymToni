@@ -2,7 +2,7 @@
 description: Auditoría completa de GymToni — propuestas de UI/UX, simplificación y nuevas funcionalidades, más limpieza de código muerto y revisión de la documentación.
 ---
 
-Haz una revisión completa de **GymToni** (React Native + Expo SDK 51, repo en `GymToni/`).
+Haz una revisión completa de **GymToni** (React Native + Expo SDK 54, repo en `GymToni/`).
 Trabaja siempre dentro de `GymToni/`. La revisión tiene dos mitades muy distintas y **no debes
 mezclarlas**: primero una parte de análisis que **no toca código**, después una parte de limpieza
 que sí edita. Argumento adicional del usuario (puede estar vacío, y entonces revisas todo): $ARGUMENTS

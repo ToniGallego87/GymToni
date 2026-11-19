@@ -4,6 +4,15 @@
 
 ### Arquitectura
 
+- **Expo SDK 54 (RN 0.81.5, React 19.1), aún con la arquitectura antigua**
+  (`newArchEnabled=false`; Reanimated se queda en 3.19 porque la 4 exige la
+  nueva). Las `.so` de la release pasan a páginas de 16 KB, que Play exige.
+  `android/` regenerado con la plantilla de SDK 54 (Gradle 8.14, NDK 27) y
+  portado lo propio: firma, ABIs, R8, permisos, PiP y splash negro con el
+  titular (ahora por la API de splash de Android 12). Fuera el puente casero
+  del atrás predictivo (RN 0.81 ya lo trae) y los parches de `expo` y
+  `react-native-screens`; el de `react-native-view-shot` rehecho para 4.0.3.
+  `expo-file-system` se usa por `expo-file-system/legacy`.
 - **`expo-haptics` y `expo-blur`, solo para iOS.** En Android no entran en el
   binario (`expo.autolinking.android.exclude` en `package.json`) y se cargan
   con `require` solo en iOS (`lib/haptics.ts`, `components/GlassBlur.tsx`).

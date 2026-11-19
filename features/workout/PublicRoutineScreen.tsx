@@ -98,7 +98,7 @@ const fadeOut = FadeOut.duration(140);
 
 // Sombreado del "peldaño" del pliegue al pie de la tarjeta (mismos cortes que en
 // RoutineDetailScreen y ExerciseInputField).
-const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1];
+const STEP_SHADE_STOPS = [0, 0.35, 0.72, 1] as const;
 
 interface PublicRoutineScreenProps {
   routineId: string;

@@ -4,7 +4,7 @@ App móvil para registrar entrenamientos de gimnasio de forma rápida y eficient
 
 ## Stack
 
-React Native + Expo (SDK 51) · TypeScript · Context API + useReducer · SQLite local (`expo-sqlite`) en nativo / localStorage en web
+React Native + Expo (SDK 54) · TypeScript · Context API + useReducer · SQLite local (`expo-sqlite`) en nativo / localStorage en web
 
 ## Inicio rápido
 

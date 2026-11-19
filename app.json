@@ -6,7 +6,9 @@
     "version": "0.8.8",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "splash": {
       "image": "./assets/title.png",
       "resizeMode": "contain",
@@ -25,7 +27,7 @@
       }
     },
     "androidStatusBar": {
-      "backgroundColor": "transparent",
+      "backgroundColor": "#00000000",
       "barStyle": "light-content",
       "translucent": true
     },
@@ -52,6 +54,7 @@
       "eas": {
         "projectId": "66ab349f-bf74-4fa9-b4af-263fc087d9b5"
       }
-    }
+    },
+    "newArchEnabled": false
   }
 }

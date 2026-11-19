@@ -141,7 +141,7 @@ requisito previo de anuncios, suscripción e iOS.
 Candidatas (compatibles con las restricciones). Las **[Lanzamiento]** van
 primero porque sin ellas no se publica.
 
-- [ ] **[Lanzamiento] Subir a Expo SDK 54 (páginas de 16 KB, requisito de
+- [x] **[Lanzamiento] Subir a Expo SDK 54 (páginas de 16 KB, requisito de
       iOS)** — las 49 `.so` de arm64 de la release están alineadas a 4 KB
       (comprobado 2026-10-20 en `app-release.apk`); Play exige 16 KB a apps
       con target ≥ 35 desde nov-2025. Lo trae RN ≥ 0.77. SDK 54 es el último
@@ -154,6 +154,13 @@ primero porque sin ellas no se publica.
       `android/gradle.properties` (`newArchEnabled`), `android/build.gradle:7-11`,
       `patches/`, `.github/docs/backend-design.md` §14 (lo aprendido en el
       intento anterior).
+      **Estado (2026-11-19):** hecho en código en la rama `sdk-54` (Expo 54,
+      RN 0.81.5, React 19.1, Reanimated 3.19 por la arquitectura antigua;
+      `android/` regenerado y lo propio portado; queda un solo parche, el de
+      view-shot). La release compila y sus `.so` están a 16 KB (`zipalign -P 16`).
+      Probado en el móvil (2026-11-19): toques y gestos, atrás del sistema,
+      splash, barras, cristal, descanso en PiP y su aviso, foto de perfil y
+      compartir imagen, todo correcto.
       **Esfuerzo:** alto.
 - [ ] **[Lanzamiento] Borrar la cuenta: plazo de gracia y rutinas anónimas** —
       obligatorio en Play y App Store para apps con cuentas. Al
