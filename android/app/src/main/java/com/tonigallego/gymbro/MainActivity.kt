@@ -3,9 +3,12 @@ import expo.modules.splashscreen.SplashScreenManager
 
 import android.app.PictureInPictureParams
 import android.content.res.Configuration
+import android.content.res.Resources
+import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import java.io.File
 import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
@@ -35,14 +38,50 @@ class MainActivity : ReactActivity() {
     // se retiene hasta que JS esté listo: en cuanto la Activity pinta se ve su
     // fondo, el titular a tamaño completo, y SplashFade hace la salida.
     SplashScreenManager.hide()
+    // Splash del color con el que va a arrancar la app: en modo claro, blanco
+    // con el titular de día (AppTheme.Light). Va después de registerOnActivity,
+    // que pone AppTheme (postSplashScreenTheme) y lo pisaría.
+    val light = startsInLightMode()
+    if (light) setTheme(R.style.AppTheme_Light)
+    rememberSplashTheme(light)
     super.onCreate(null)
     // RN (enableEdgeToEdge, en super.onCreate) pinta los iconos de las barras
-    // según el tema del SISTEMA: con el móvil en claro salían oscuros sobre el
-    // splash negro hasta que JS ponía los suyos (App.tsx, según el tema de la
-    // app). Mientras tanto, claros, que es lo que pide el splash.
+    // según el tema del SISTEMA: con el móvil en claro y la app en oscuro salían
+    // oscuros sobre el splash negro hasta que JS ponía los suyos (App.tsx, según
+    // el tema de la app). Mientras tanto, los que pide el splash.
     WindowCompat.getInsetsController(window, window.decorView).apply {
-      isAppearanceLightStatusBars = false
-      isAppearanceLightNavigationBars = false
+      isAppearanceLightStatusBars = light
+      isAppearanceLightNavigationBars = light
+    }
+  }
+
+  /**
+   * ¿La app va a arrancar en modo claro? Es el tema guardado por JS
+   * (lib/appSettings.ts: clave `themeMode` de la tabla `settings` en
+   * gymbro-settings.db, la base de expo-sqlite). Ante cualquier duda, oscuro,
+   * que es el valor por defecto de la app.
+   */
+  private fun startsInLightMode(): Boolean = runCatching {
+    val file = File(File(filesDir, "SQLite"), "gymbro-settings.db")
+    if (!file.exists()) return false
+    SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+      db.rawQuery("SELECT value FROM settings WHERE key = ?", arrayOf("themeMode")).use {
+        it.moveToFirst() && it.getString(0) == "light"
+      }
+    }
+  }.getOrDefault(false)
+
+  /**
+   * El splash del SISTEMA se pinta antes de que exista la app, así que no puede
+   * leer el tema: en Android 13+ se le deja dicho cuál usar en el siguiente
+   * arranque. Se repite en onStop por si el tema cambió durante la sesión.
+   */
+  private fun rememberSplashTheme(light: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
+    runCatching {
+      splashScreen.setSplashScreenTheme(
+        if (light) R.style.Theme_App_SplashScreen_Light else Resources.ID_NULL
+      )
     }
   }
 
@@ -97,6 +136,9 @@ class MainActivity : ReactActivity() {
       }
     }
     super.onStop()
+    // La app se va al fondo y puede morir: el próximo splash, con el tema de
+    // ahora (se puede haber cambiado en Configuración).
+    rememberSplashTheme(startsInLightMode())
   }
 
   // ───────────────── Ventana flotante del descanso (Picture-in-Picture) ─────────────────

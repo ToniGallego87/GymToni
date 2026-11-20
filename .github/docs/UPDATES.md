@@ -89,6 +89,12 @@
 
 ### Cambios
 
+- **Splash en blanco si la app arranca en modo claro**, con el titular de día
+  (`title-day.png`). `MainActivity` lee el tema guardado de
+  `gymbro-settings.db` antes de pintar y pone `AppTheme.Light`
+  (`drawable/splashscreen_light.xml`); en Android 13+ deja dicho al sistema
+  el splash del siguiente arranque (`setSplashScreenTheme`, también en
+  `onStop` por si cambió el tema). `SplashFade` copia el mismo fondo y logo.
 - **La hero de Inicio ya no dice "Sin mejora" la primera vez con un día.**
   Sin sesión anterior del mismo día con la que comparar, el entreno completado
   dice "Tu punto de partida"; en descarga, "Semana de descarga". "Sin mejora"

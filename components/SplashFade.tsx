@@ -1,12 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet } from 'react-native';
+import { theme } from '@lib/theme';
 
 // Copia exacta del splash nativo (android/app/src/main/res/drawable/
-// splashscreen.xml): el mismo fondo (`splashscreen_background` en colors.xml y
-// `splash.backgroundColor` en app.json) y el mismo titular centrado. Se usan los
-// valores literales y no el tema a propósito: tiene que coincidir píxel a píxel
-// con el nativo, sea cual sea el tema de la app.
-const SPLASH_BACKGROUND = '#000000';
+// splashscreen.xml, o splashscreen_light.xml si la app arranca en modo claro):
+// el mismo fondo (`splashscreen_background[_light]` en colors.xml) y el mismo
+// titular centrado. Se usan los valores literales y no los colores del tema a
+// propósito: tiene que coincidir píxel a píxel con el nativo. El modo es el
+// inicial del tema, el mismo que lee MainActivity de la base de ajustes.
+const SPLASH_BACKGROUND = { dark: '#000000', light: '#FFFFFF' } as const;
+const SPLASH_LOGO = {
+  dark: require('../assets/title.png'),
+  light: require('../assets/title-day.png'),
+} as const;
 // El logo nativo vive en drawable-xxhdpi (densidad 3x): 757 x 158 px se pintan a
 // un tercio en dp.
 const LOGO_WIDTH = 757 / 3;
@@ -29,10 +35,12 @@ export function SplashFade({
   /** El logo ya está pintado: a partir de aquí se puede dibujar la app debajo. */
   onLogoShown: () => void;
 }) {
+  // El modo con el que arrancó la app (fijo: el splash no cambia a medias).
+  const [mode] = useState(() => theme.mode);
   const opacity = useRef(new Animated.Value(1)).current;
   const [done, setDone] = useState(false);
   // Sin el logo pintado la copia es transparente (deja ver el splash de la
-  // ventana, idéntico): su fondo negro sin logo era un parpadeo.
+  // ventana, idéntico): su fondo sin logo era un parpadeo.
   const [logoShown, setLogoShown] = useState(false);
   const showLogo = () => {
     if (logoShown) return;
@@ -58,10 +66,14 @@ export function SplashFade({
   return (
     <Animated.View
       pointerEvents={ready ? 'none' : 'auto'}
-      style={[styles.overlay, logoShown && styles.opaque, { opacity }]}
+      style={[
+        styles.overlay,
+        logoShown && { backgroundColor: SPLASH_BACKGROUND[mode] },
+        { opacity },
+      ]}
     >
       <Image
-        source={require('../assets/title.png')}
+        source={SPLASH_LOGO[mode]}
         style={styles.logo}
         resizeMode="contain"
         fadeDuration={0}
@@ -78,9 +90,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  opaque: {
-    backgroundColor: SPLASH_BACKGROUND,
   },
   logo: {
     width: LOGO_WIDTH,

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Splash de la ventana en modo claro (AppTheme.Light): el mismo dibujo que
+     drawable/splashscreen.xml, en blanco y con el titular de día
+     (assets/title-day.png, 757 px en xxhdpi = 252 dp). Lo elige MainActivity
+     según el tema guardado; su copia en JS es SplashFade.tsx. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+  <item android:drawable="@color/splashscreen_background_light"/>
+  <item
+    android:drawable="@drawable/splashscreen_logo_light"
+    android:gravity="center"/>
+</layer-list>

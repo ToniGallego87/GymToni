@@ -12,6 +12,11 @@
          lo tapa entero (su raíz tiene fondo propio). -->
     <item name="android:windowBackground">@drawable/splashscreen</item>
   </style>
+  <!-- Igual que AppTheme con el splash en blanco: lo pone MainActivity cuando
+       la app va a arrancar en modo claro (tema guardado). -->
+  <style name="AppTheme.Light">
+    <item name="android:windowBackground">@drawable/splashscreen_light</item>
+  </style>
   <style name="ResetEditText" parent="@android:style/Widget.EditText">
     <item name="android:padding">0dp</item>
     <item name="android:textColorHint">#c8c8c8</item>
@@ -27,5 +32,12 @@
     <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
     <item name="postSplashScreenTheme">@style/AppTheme</item>
     <item name="android:windowSplashScreenBehavior">icon_preferred</item>
+  </style>
+  <!-- El del sistema en blanco. Android 13+ lo usa en el siguiente arranque
+       cuando MainActivity lo pide (setSplashScreenTheme) por estar la app en
+       modo claro; en Android 12 el sistema siempre pinta el de arriba. -->
+  <style name="Theme.App.SplashScreen.Light">
+    <item name="windowSplashScreenBackground">@color/splashscreen_background_light</item>
+    <item name="postSplashScreenTheme">@style/AppTheme.Light</item>
   </style>
 </resources>
