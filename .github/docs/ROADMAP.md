@@ -154,13 +154,15 @@ primero porque sin ellas no se publica.
       `android/gradle.properties` (`newArchEnabled`), `android/build.gradle:7-11`,
       `patches/`, `.github/docs/backend-design.md` §14 (lo aprendido en el
       intento anterior).
-      **Estado (2026-11-19):** hecho en código en la rama `sdk-54` (Expo 54,
+      **Estado (2026-11-20):** hecho y en `main` (Expo 54,
       RN 0.81.5, React 19.1, Reanimated 3.19 por la arquitectura antigua;
       `android/` regenerado y lo propio portado; queda un solo parche, el de
       view-shot). La release compila y sus `.so` están a 16 KB (`zipalign -P 16`).
       Probado en el móvil (2026-11-19): toques y gestos, atrás del sistema,
       splash, barras, cristal, descanso en PiP y su aviso, foto de perfil y
-      compartir imagen, todo correcto.
+      compartir imagen, todo correcto. Tras la review (2026-11-20): avisos
+      a su hora, barra de navegación según el tema, splash a 252 dp e icono
+      sin pisar el borde, probados en el móvil.
       **Esfuerzo:** alto.
 - [ ] **[Lanzamiento] Borrar la cuenta: plazo de gracia y rutinas anónimas** —
       obligatorio en Play y App Store para apps con cuentas. Al
