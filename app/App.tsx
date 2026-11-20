@@ -118,7 +118,7 @@ import { fetchLatestRelease } from '@lib/cloud/release';
 import type { AppRelease } from '@lib/cloud/release';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import { subscribePipMode } from '@lib/pipTimer';
-import { syncSplashTheme } from '@lib/splashTheme';
+import { nativeSplashMode, syncSplashTheme } from '@lib/splashTheme';
 import { getRestTimer, useRestTimer } from '@lib/restTimerStore';
 import { findDayInRoutines, getToday, logDateKey } from '@lib/utils';
 import { currentWeekDayState } from '@lib/weeks';
@@ -2030,23 +2030,6 @@ export default function App() {
   // Igual que el tema: al cambiar el idioma en caliente, re-renderiza todo el
   // árbol para que los t() inline y las fechas se repinten sin reiniciar.
   useLanguageVersion();
-  // Botones de la barra de navegación del sistema según el tema de la APP. Con
-  // edge-to-edge, React Native los pinta según el tema del SISTEMA: con el
-  // móvil en claro y la app en oscuro quedaban oscuros sobre fondo oscuro.
-  // Hasta que esto corre, MainActivity los deja claros (los pide el splash).
-  const statusBarStyle = theme.statusBarStyle;
-  useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    // Sin Activity (recreándose o cerrándose) el nativo rechaza: no importa.
-    NavigationBar.setButtonStyleAsync(statusBarStyle).catch(() => {});
-  }, [statusBarStyle]);
-  // Splash nativo del siguiente arranque y fondo de la ventana, con el tema de
-  // ahora: al arrancar (también para quien ya tenía el modo claro guardado) y
-  // en cada cambio de tema.
-  const themeMode = theme.mode;
-  useEffect(() => {
-    syncSplashTheme(themeMode);
-  }, [themeMode]);
   const [fontsLoaded] = useFonts({
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });
@@ -2063,6 +2046,30 @@ export default function App() {
   // idéntico. Antes la raíz y el fondo negro de la copia salían antes que su
   // logo (la imagen carga asíncrona) y había unos fotogramas en negro.
   const [splashLogoShown, setSplashLogoShown] = useState(false);
+  // Modo del splash nativo que se está viendo (fijo): lo copia SplashFade. No
+  // siempre es el de la app (ver nativeSplashMode).
+  const [splashMode] = useState(() => nativeSplashMode(theme.mode));
+  // Botones de la barra de navegación del sistema según el tema de la APP. Con
+  // edge-to-edge, React Native los pinta según el tema del SISTEMA: con el
+  // móvil en claro y la app en oscuro quedaban oscuros sobre fondo oscuro.
+  // Hasta que esto corre, MainActivity los pone según el splash. (Como la barra
+  // de estado, que la pone cada pantalla, siguen a la app también mientras se
+  // ve el splash: solo desentona el día en que splash y app no coinciden, el
+  // primer arranque tras la versión del espejo.)
+  const barsStyle = theme.statusBarStyle;
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    // Sin Activity (recreándose o cerrándose) el nativo rechaza: no importa.
+    NavigationBar.setButtonStyleAsync(barsStyle).catch(() => {});
+  }, [barsStyle]);
+  // Espejo nativo del tema para el splash (lib/splashTheme.ts), al arrancar y
+  // en cada cambio de tema. El fondo de la ventana, solo con la app lista:
+  // hasta entonces puede asomar (la copia de SplashFade tarda algún fotograma
+  // en ser opaca) y el cambio se vería.
+  const themeMode = theme.mode;
+  useEffect(() => {
+    syncSplashTheme(themeMode, appReady);
+  }, [appReady, themeMode]);
 
   // Sin fuentes no se pinta nada: la raíz no existe y se sigue viendo el splash
   // de la ventana (windowBackground). Luego `SplashFade` lo copia encima y no se
@@ -2079,11 +2086,7 @@ export default function App() {
       {splashLogoShown && (
         <WorkoutProvider>
           <StatusBar
-            barStyle={
-              theme.statusBarStyle === 'light'
-                ? 'light-content'
-                : 'dark-content'
-            }
+            barStyle={barsStyle === 'light' ? 'light-content' : 'dark-content'}
           />
           <View style={styles.container}>
             {/* Encogida en la ventanita, la app conserva debajo su tamaño de
@@ -2101,6 +2104,7 @@ export default function App() {
       )}
       {/* Copia del splash nativo que se desvanece sobre la app. */}
       <SplashFade
+        mode={splashMode}
         ready={appReady}
         onLogoShown={() => setSplashLogoShown(true)}
       />

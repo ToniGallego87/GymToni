@@ -13,7 +13,7 @@
     <item name="android:windowBackground">@drawable/splashscreen</item>
   </style>
   <!-- Igual que AppTheme con el splash en blanco: lo pone MainActivity cuando
-       la app va a arrancar en modo claro (tema guardado). -->
+       el espejo nativo del tema (modules/splash-theme) dice claro. -->
   <style name="AppTheme.Light">
     <item name="android:windowBackground">@drawable/splashscreen_light</item>
   </style>

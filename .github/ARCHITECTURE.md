@@ -205,8 +205,8 @@ lib/                    → Lógica compartida
   │                       registro (lo lee la ventanita flotante en la raíz)
   ├── pipTimer.ts       → Ventana flotante del descanso (módulo nativo pip-timer,
   │                       Picture-in-Picture de Android; no-op en iOS/web)
-  ├── splashTheme.ts    → Avisa al nativo (splash-theme) del tema: splash claro u
-  │                       oscuro en el siguiente arranque (no-op en iOS/web)
+  ├── splashTheme.ts    → Espejo del tema para el splash nativo (módulo
+  │                       splash-theme) y modo del splash que copia SplashFade
   ├── openWorkout.ts    → Entreno de hoy a medias que retos y logros aún no cuentan
   │                       (logsForAwards)
   ├── workoutReminder.ts→ Recordatorios de entreno (plan puro: planWorkoutReminders)
@@ -230,7 +230,8 @@ data/                   → Seed data (rutinas iniciales + logs demo) y changelo
 modules/                → Módulos nativos locales (Kotlin/Swift, autolinked por Expo)
   ├── video-encoder/    → Codifica los fotogramas del vídeo de logros a MP4
   ├── pip-timer/        → Ventana flotante del descanso (Picture-in-Picture)
-  ├── splash-theme/     → Tema del splash nativo (SharedPreferences, lo lee MainActivity)
+  ├── splash-theme/     → Espejo del tema (SharedPreferences) que lee MainActivity
+  │                       para pintar el splash del color de la app
   └── glass-blur/       → Cristal esmerilado de las barras (una captura por frame)
 ```
 

@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import android.util.Rational
 import androidx.core.view.WindowCompat
 
@@ -18,17 +19,18 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 import expo.modules.ReactActivityDelegateWrapper
 import expo.modules.piptimer.PipTimerController
 import expo.modules.splashtheme.SplashThemeController
+import expo.modules.splashtheme.SplashThemeHost
 
 // Barras del sistema: edge-to-edge lo pone React Native (edgeToEdgeEnabled en
 // gradle.properties) y el color de los iconos de la barra de estado lo decide
 // cada pantalla con <StatusBar> de expo-status-bar. Los botones de la barra de
 // navegación siguen el tema de la APP (no el del sistema): los pone App.tsx
-// con expo-navigation-bar.
+// con expo-navigation-bar. Hasta que JS los pone, los del splash (onCreate).
 //
 // Atrás del sistema: ReactActivity (RN 0.81) ya escucha el atrás predictivo de
 // targetSdk 36 por el dispatcher de AndroidX y se lo pasa a BackHandler; el
 // puente casero que hacía falta con RN 0.74 sobra.
-class MainActivity : ReactActivity() {
+class MainActivity : ReactActivity(), SplashThemeHost {
   override fun onCreate(savedInstanceState: Bundle?) {
     // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
     SplashScreenManager.registerOnActivity(this)
@@ -38,12 +40,12 @@ class MainActivity : ReactActivity() {
     // fondo, el titular a tamaño completo, y SplashFade hace la salida.
     SplashScreenManager.hide()
     // Splash del color con el que va a arrancar la app: en modo claro, blanco
-    // con el titular de día (AppTheme.Light). El modo lo deja JS al cambiar de
-    // tema (modules/splash-theme). Va después de registerOnActivity, que pone
-    // AppTheme (postSplashScreenTheme) y lo pisaría.
+    // con el titular de día (AppTheme.Light). El modo es el espejo que JS deja
+    // en modules/splash-theme (sin espejo todavía, oscuro). Va después de
+    // registerOnActivity, que pone AppTheme (postSplashScreenTheme) y lo pisaría.
     val light = SplashThemeController.isLight(this)
     if (light) setTheme(R.style.AppTheme_Light)
-    SplashThemeController.listener = splashThemeListener
+    windowLight = light
     super.onCreate(null)
     // RN (enableEdgeToEdge, en super.onCreate) pinta los iconos de las barras
     // según el tema del SISTEMA: con el móvil en claro y la app en oscuro salían
@@ -55,32 +57,40 @@ class MainActivity : ReactActivity() {
     }
   }
 
-  private val splashThemeListener: (Boolean) -> Unit = { applySplashTheme(it) }
-
-  override fun onDestroy() {
-    if (SplashThemeController.listener === splashThemeListener) {
-      SplashThemeController.listener = null
-    }
-    super.onDestroy()
-  }
+  // Modo del fondo de la ventana, para no rehacerlo si no cambia.
+  private var windowLight = false
 
   /**
-   * Lo pide JS al arrancar y al cambiar de tema (lib/splashTheme.ts):
+   * Lo pide JS (SplashThemeModule.setMode) al arrancar y en cada cambio de
+   * tema:
    * - El splash del SISTEMA se pinta antes de que exista la app, así que no
    *   puede leer el tema: en Android 13+ se le deja dicho cuál usar en el
-   *   siguiente arranque. En Android 12 o menos (y en 13+ tras instalar,
-   *   actualizar o forzar el cierre) siempre sale el negro.
+   *   siguiente arranque (Android lo olvida tras instalar, actualizar o forzar
+   *   el cierre; por eso se repite en cada arranque). En Android 12 o menos, y
+   *   en 13+ en el primer arranque tras instalar, actualizar o forzar el
+   *   cierre, sale el negro.
    * - El fondo de la ventana asoma en cualquier hueco entre capas: el del tema
-   *   de ahora, no el del arranque.
+   *   de ahora, no el del arranque. Solo con [updateWindow] (la app ya tapa la
+   *   ventana; antes el cambio se vería).
    */
-  private fun applySplashTheme(light: Boolean) {
-    window.setBackgroundDrawableResource(
-      if (light) R.drawable.splashscreen_light else R.drawable.splashscreen
-    )
+  override fun applySplashTheme(light: Boolean, updateWindow: Boolean) {
+    // Llega por runOnUiThread: la Activity puede haber muerto entre medias. Su
+    // ventana ya no importa, pero el splash del sistema sí (es de la app).
+    val windowAlive = !isFinishing && !isDestroyed
+    if (windowAlive && updateWindow && light != windowLight) {
+      runCatching {
+        window.setBackgroundDrawableResource(
+          if (light) R.drawable.splashscreen_light else R.drawable.splashscreen
+        )
+        windowLight = light
+      }.onFailure { Log.w(TAG, "No se pudo cambiar el fondo de la ventana", it) }
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-      splashScreen.setSplashScreenTheme(
-        if (light) R.style.Theme_App_SplashScreen_Light else Resources.ID_NULL
-      )
+      runCatching {
+        splashScreen.setSplashScreenTheme(
+          if (light) R.style.Theme_App_SplashScreen_Light else Resources.ID_NULL
+        )
+      }.onFailure { Log.w(TAG, "No se pudo fijar el splash del sistema", it) }
     }
   }
 
@@ -213,5 +223,9 @@ class MainActivity : ReactActivity() {
     if (!moveTaskToBack(false)) {
       super.invokeDefaultOnBackPressed()
     }
+  }
+
+  private companion object {
+    const val TAG = "MainActivity"
   }
 }

@@ -1,14 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet } from 'react-native';
-import { theme } from '@lib/theme';
+import type { ThemeMode } from '@lib/appSettings';
 
 // Copia exacta del splash nativo (android/app/src/main/res/drawable/
-// splashscreen.xml, o splashscreen_light.xml si la app arranca en modo claro):
+// splashscreen.xml, o splashscreen_light.xml si el espejo nativo del tema dice
+// claro):
 // el mismo fondo (`splashscreen_background[_light]` en colors.xml) y el mismo
 // titular centrado. Se usan los valores literales y no los colores del tema a
-// propósito: tiene que coincidir píxel a píxel con el nativo. El modo es el
-// inicial del tema, el mismo que dejó guardado para MainActivity
-// lib/splashTheme.ts.
+// propósito: tiene que coincidir píxel a píxel con el nativo. El modo (prop
+// `mode`) es el del splash nativo que se está viendo (nativeSplashMode en
+// lib/splashTheme.ts), no el de la app: normalmente coinciden, pero no en iOS
+// (fondo nativo siempre negro) ni si el espejo nativo del tema aún no estaba
+// al día. En iOS el logo nativo (app.json, "contain") no está cuadrado con
+// este tamaño: sin iPhone para probarlo.
 const SPLASH_BACKGROUND = { dark: '#000000', light: '#FFFFFF' } as const;
 const SPLASH_LOGO = {
   dark: require('../assets/title.png'),
@@ -29,15 +33,16 @@ const FADE_MS = 520;
  * hidrata y, al estar lista, se desvanece descubriéndola.
  */
 export function SplashFade({
+  mode,
   ready,
   onLogoShown,
 }: {
+  /** Modo del splash nativo que se está viendo (fijo durante el arranque). */
+  mode: ThemeMode;
   ready: boolean;
   /** El logo ya está pintado: a partir de aquí se puede dibujar la app debajo. */
   onLogoShown: () => void;
 }) {
-  // El modo con el que arrancó la app (fijo: el splash no cambia a medias).
-  const [mode] = useState(() => theme.mode);
   const opacity = useRef(new Animated.Value(1)).current;
   const [done, setDone] = useState(false);
   // Sin el logo pintado la copia es transparente (deja ver el splash de la

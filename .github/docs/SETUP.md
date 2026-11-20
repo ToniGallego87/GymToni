@@ -189,7 +189,7 @@ GymToni/
 │       └── purge-deleted-accounts/ ← Borrado definitivo de las cuentas con el plazo vencido (tarea diaria)
 ├── modules/                  ← Módulos nativos locales (autolinked por Expo)
 │   ├── pip-timer/            ← Ventana flotante del descanso (PiP de Android)
-│   ├── splash-theme/         ← Tema del splash nativo (claro u oscuro según el de la app)
+│   ├── splash-theme/         ← Espejo del tema para el splash nativo (claro u oscuro)
 │   ├── glass-blur/           ← Cristal esmerilado de las barras (UNA captura desenfocada por frame, compartida)
 │   └── video-encoder/        ← Vídeo de logros (fotogramas → MP4)
 ├── android/                  ← Proyecto nativo Android (build.gradle: versionCode)
