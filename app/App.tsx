@@ -21,7 +21,6 @@ import PagerView from 'react-native-pager-view';
 import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
-import * as SplashScreen from 'expo-splash-screen';
 import * as NavigationBar from 'expo-navigation-bar';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
@@ -420,9 +419,9 @@ function AppContent({ onReady }: { onReady: () => void }) {
   const pagerRef = React.useRef<PagerView>(null);
   // La vista que captura el cambio de tema (toda la app menos el overlay).
   const themeCaptureRef = React.useRef<View>(null);
-  // Datos hidratados desde almacenamiento. El splash nativo se mantiene hasta
-  // que esto es true, para no pintar primero los datos semilla y saltar luego
-  // a los reales (el "carga a trompicones" del arranque).
+  // Datos hidratados desde almacenamiento. El splash (la copia de SplashFade)
+  // se mantiene hasta que esto es true, para no pintar primero los datos semilla
+  // y saltar luego a los reales (el "carga a trompicones" del arranque).
   const [hydrated, setHydrated] = useState(false);
   const awards = useAwards();
   // La píldora de nivel de la barra superior (GlassTopBar, en todas las
@@ -2022,8 +2021,6 @@ function TabStateBoundary({
   );
 }
 
-SplashScreen.preventAutoHideAsync().catch(() => {});
-
 export default function App() {
   // Suscribe la RAÍZ del árbol al modo de tema: al cambiarlo (setThemeMode) todo
   // el árbol se re-renderiza y cada componente relee sus `styles` vivos (ningún
@@ -2035,10 +2032,12 @@ export default function App() {
   // Botones de la barra de navegación del sistema según el tema de la APP. Con
   // edge-to-edge, React Native los pinta según el tema del SISTEMA: con el
   // móvil en claro y la app en oscuro quedaban oscuros sobre fondo oscuro.
+  // Hasta que esto corre, MainActivity los deja claros (los pide el splash).
   const statusBarStyle = theme.statusBarStyle;
   useEffect(() => {
     if (Platform.OS !== 'android') return;
-    NavigationBar.setStyle(statusBarStyle === 'light' ? 'dark' : 'light');
+    // Sin Activity (recreándose o cerrándose) el nativo rechaza: no importa.
+    NavigationBar.setButtonStyleAsync(statusBarStyle).catch(() => {});
   }, [statusBarStyle]);
   const [fontsLoaded] = useFonts({
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
@@ -2057,9 +2056,10 @@ export default function App() {
   // logo (la imagen carga asíncrona) y había unos fotogramas en negro.
   const [splashLogoShown, setSplashLogoShown] = useState(false);
 
-  // El splash nativo se mantiene (preventAutoHide) hasta que AppContent termina
-  // de hidratar los datos; entonces `SplashFade` lo retira y se desvanece. Así no se
-  // oculta solo con las fuentes cargadas, evitando el parpadeo de datos semilla.
+  // Sin fuentes no se pinta nada: la raíz no existe y se sigue viendo el splash
+  // de la ventana (windowBackground). Luego `SplashFade` lo copia encima y no se
+  // desvanece hasta que AppContent hidrata los datos, evitando el parpadeo de
+  // datos semilla.
   if (!fontsLoaded) {
     return null;
   }
@@ -2076,8 +2076,6 @@ export default function App() {
                 ? 'light-content'
                 : 'dark-content'
             }
-            backgroundColor="transparent"
-            translucent
           />
           <View style={styles.container}>
             {/* Encogida en la ventanita, la app conserva debajo su tamaño de

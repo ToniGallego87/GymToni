@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Image, StyleSheet } from 'react-native';
-import * as SplashScreen from 'expo-splash-screen';
 
 // Copia exacta del splash nativo (android/app/src/main/res/drawable/
 // splashscreen.xml): el mismo fondo (`splashscreen_background` en colors.xml y
@@ -17,10 +16,10 @@ const LOGO_HEIGHT = 158 / 3;
 const FADE_MS = 520;
 
 /**
- * Salida suave del splash. El nativo se retiraba de golpe sobre la app (y en el
- * hueco asomaba el fondo blanco de la ventana): ahora, bajo él, se pinta esta
- * copia idéntica desde el primer render; al estar la app lista se retira el
- * nativo —el cambio no se ve— y la copia se desvanece descubriendo la app.
+ * Salida suave del splash. El splash del sistema ya se ha soltado al arrancar
+ * (MainActivity) y lo que se ve es el de la ventana (windowBackground): encima
+ * se pinta esta copia idéntica —el cambio no se ve— que tapa la app mientras
+ * hidrata y, al estar lista, se desvanece descubriéndola.
  */
 export function SplashFade({
   ready,
@@ -43,21 +42,16 @@ export function SplashFade({
 
   useEffect(() => {
     if (!ready) return;
-    let cancelled = false;
-    SplashScreen.hideAsync()
-      .catch(() => {})
-      .finally(() => {
-        if (cancelled) return;
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: FADE_MS,
-          easing: Easing.inOut(Easing.cubic),
-          useNativeDriver: true,
-        }).start(() => setDone(true));
-      });
-    return () => {
-      cancelled = true;
-    };
+    const fade = Animated.timing(opacity, {
+      toValue: 0,
+      duration: FADE_MS,
+      easing: Easing.inOut(Easing.cubic),
+      useNativeDriver: true,
+    });
+    fade.start(({ finished }) => {
+      if (finished) setDone(true);
+    });
+    return () => fade.stop();
   }, [ready, opacity]);
 
   if (done) return null;

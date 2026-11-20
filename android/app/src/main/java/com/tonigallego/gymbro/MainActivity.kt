@@ -6,6 +6,7 @@ import android.content.res.Configuration
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
+import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate
@@ -35,6 +36,14 @@ class MainActivity : ReactActivity() {
     // fondo, el titular a tamaño completo, y SplashFade hace la salida.
     SplashScreenManager.hide()
     super.onCreate(null)
+    // RN (enableEdgeToEdge, en super.onCreate) pinta los iconos de las barras
+    // según el tema del SISTEMA: con el móvil en claro salían oscuros sobre el
+    // splash negro hasta que JS ponía los suyos (App.tsx, según el tema de la
+    // app). Mientras tanto, claros, que es lo que pide el splash.
+    WindowCompat.getInsetsController(window, window.decorView).apply {
+      isAppearanceLightStatusBars = false
+      isAppearanceLightNavigationBars = false
+    }
   }
 
   override fun onResume() {
@@ -153,21 +162,18 @@ class MainActivity : ReactActivity() {
   }
 
   /**
-    * Align the back button behavior with Android S
-    * where moving root activities to background instead of finishing activities.
-    * @see <a href="https://developer.android.com/reference/android/app/Activity#onBackPressed()">onBackPressed</a>
-    */
+   * Atrás en Inicio (nadie en JS lo gestiona): la app pasa al fondo, sin
+   * cerrarse, en todas las versiones.
+   *
+   * NO llamar a super salvo que moveTaskToBack falle: el de ReactActivity
+   * (RN 0.81) apaga para siempre su callback del atrás predictivo, y como la
+   * Activity no muere, al volver a la app el atrás de cualquier pantalla ya no
+   * llegaba a BackHandler y mandaba la app al fondo. Si falla (no es la raíz de
+   * la tarea), super la cierra y el callback muere con ella.
+   */
   override fun invokeDefaultOnBackPressed() {
-      if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
-          if (!moveTaskToBack(false)) {
-              // For non-root activities, use the default implementation to finish them.
-              super.invokeDefaultOnBackPressed()
-          }
-          return
-      }
-
-      // Use the default back button implementation on Android S
-      // because it's doing more than [Activity.moveTaskToBack] in fact.
+    if (!moveTaskToBack(false)) {
       super.invokeDefaultOnBackPressed()
+    }
   }
 }
