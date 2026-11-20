@@ -151,7 +151,9 @@ async function reschedule(
           : t('¿Volvemos al gym?'),
         body: weekly
           ? t('Pulsa cuando quieras comenzar.')
-          : t('Llevas dos semanas sin entrenar. Toca para retomarlo donde lo dejaste.'),
+          : t(
+              'Llevas dos semanas sin entrenar. Toca para retomarlo donde lo dejaste.'
+            ),
         icon: 'notification_icon',
         color: theme.colors.primary,
         data: { source: WORKOUT_REMINDER_SOURCE },
