@@ -5,7 +5,9 @@
      blanco y, al retirarse, con el lienzo todavía vacío. Ahora lleva el titular
      de la marca sobre negro: lo mismo que se ve arriba en Inicio.
      El logo vive en drawable-xxhdpi (densidad 3x), así que sus 757 px de ancho
-     se pintan a unos 252 dp: centrado y sin llegar a los bordes. -->
+     se pintan a unos 252 dp, igual que la copia en JS (SplashFade.tsx).
+     Lo pinta AppTheme (windowBackground): el splash de Android 12 va sin icono
+     porque lo recortaría en un círculo de 192 dp (ver styles.xml). -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
   <item android:drawable="@color/splashscreen_background"/>
   <item

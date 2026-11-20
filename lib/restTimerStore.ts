@@ -250,10 +250,10 @@ async function scheduleNotification(
         },
       } as any,
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: new Date(Date.now() + seconds * 1000),
-        allowWhileIdle: true,
         channelId: REST_TIMER_CHANNEL_ID,
-      } as any,
+      },
     });
   } catch (error) {
     console.error('Error scheduling timer notification:', error);

@@ -18,20 +18,22 @@ import expo.modules.piptimer.PipTimerController
 
 // Barras del sistema: edge-to-edge lo pone React Native (edgeToEdgeEnabled en
 // gradle.properties) y el color de los iconos de la barra de estado lo decide
-// cada pantalla con <StatusBar> de expo-status-bar.
+// cada pantalla con <StatusBar> de expo-status-bar. Los botones de la barra de
+// navegación siguen el tema de la APP (no el del sistema): los pone App.tsx
+// con expo-navigation-bar.
 //
 // Atrás del sistema: ReactActivity (RN 0.81) ya escucha el atrás predictivo de
 // targetSdk 36 por el dispatcher de AndroidX y se lo pasa a BackHandler; el
 // puente casero que hacía falta con RN 0.74 sobra.
 class MainActivity : ReactActivity() {
   override fun onCreate(savedInstanceState: Bundle?) {
-    // Set the theme to AppTheme BEFORE onCreate to support
-    // coloring the background, status bar, and navigation bar.
-    // This is required for expo-splash-screen.
-    // setTheme(R.style.AppTheme);
     // @generated begin expo-splashscreen - expo prebuild (DO NOT MODIFY) sync-f3ff59a738c56c9a6119210cb55f0b613eb8b6af
     SplashScreenManager.registerOnActivity(this)
     // @generated end expo-splashscreen
+    // El splash del sistema (negro, sin icono: ver Theme.App.SplashScreen) no
+    // se retiene hasta que JS esté listo: en cuanto la Activity pinta se ve su
+    // fondo, el titular a tamaño completo, y SplashFade hace la salida.
+    SplashScreenManager.hide()
     super.onCreate(null)
   }
 

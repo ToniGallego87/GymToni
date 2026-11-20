@@ -114,6 +114,27 @@
 
 ### Correcciones
 
+- **Los avisos vuelven a llegar a su hora** (fin del descanso, recordatorio de
+  entreno y de peso). Con `expo-notifications` de SDK 54 un trigger
+  `{ date, channelId }` sin `type` se toma como trigger de canal y salta al
+  instante: ahora llevan `type: SchedulableTriggerInputTypes.DATE`, sin
+  `as any` ni `allowWhileIdle` (el nativo ya programa con
+  `setExactAndAllowWhileIdle`).
+- **Botones de la barra de navegación según el tema de la app**, no el del
+  sistema (con el móvil en claro y la app en oscuro no se veían):
+  `expo-navigation-bar` (`NavigationBar.setStyle`) desde `App.tsx`.
+- **Splash con el titular a tamaño completo (252 dp), sin salto ni recorte.**
+  El splash de Android 12 recorta su icono en un círculo de 192 dp: ahora va
+  negro y sin icono (`Theme.App.SplashScreen`) y `MainActivity` lo suelta en
+  cuanto la Activity pinta (`SplashScreenManager.hide()`), así que el titular
+  lo pone el `windowBackground` de `AppTheme` y `SplashFade` hace la salida,
+  como en 0.8.8. Vuelve el `splashscreen_logo.png` de 757 px en xxhdpi.
+  Fuera `expo.edgeToEdgeEnabled` (duplicado y obsoleto) y las strings de
+  `expo-splash-screen` que ya no lee nadie.
+- **Icono de la app sin pisar el borde**: la plantilla de SDK 54 regeneró el
+  foreground desde `assets/adaptive-icon.png`, con el dibujo al 61 % del
+  lienzo (justo el círculo seguro de 66 dp). Vuelven los foreground de 0.8.8
+  (52 %) y pasan a ser también la fuente en `assets/adaptive-icon.png`.
 - **Los títulos ya no parten palabras a media línea** ("Complementario" /
   "s"): si una palabra no cabe, la letra baja lo justo. `FitText` detecta el
   corte en las líneas de `onTextLayout` (`breaksWord` en `lib/textFit.ts`,

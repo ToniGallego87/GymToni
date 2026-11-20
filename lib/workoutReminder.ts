@@ -157,10 +157,10 @@ async function reschedule(
         data: { source: WORKOUT_REMINDER_SOURCE },
       } as any,
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: new Date(reminder.at),
-        allowWhileIdle: true,
         channelId: CHANNEL_ID,
-      } as any,
+      },
     });
   }
 }

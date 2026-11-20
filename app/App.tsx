@@ -22,6 +22,7 @@ import { useFonts } from 'expo-font';
 import * as Linking from 'expo-linking';
 import Constants from 'expo-constants';
 import * as SplashScreen from 'expo-splash-screen';
+import * as NavigationBar from 'expo-navigation-bar';
 // expo-notifications does not support web; load it only on native platforms
 const Notifications: typeof import('expo-notifications') | null =
   Platform.OS !== 'web' ? require('expo-notifications') : null;
@@ -2031,6 +2032,14 @@ export default function App() {
   // Igual que el tema: al cambiar el idioma en caliente, re-renderiza todo el
   // árbol para que los t() inline y las fechas se repinten sin reiniciar.
   useLanguageVersion();
+  // Botones de la barra de navegación del sistema según el tema de la APP. Con
+  // edge-to-edge, React Native los pinta según el tema del SISTEMA: con el
+  // móvil en claro y la app en oscuro quedaban oscuros sobre fondo oscuro.
+  const statusBarStyle = theme.statusBarStyle;
+  useEffect(() => {
+    if (Platform.OS !== 'android') return;
+    NavigationBar.setStyle(statusBarStyle === 'light' ? 'dark' : 'light');
+  }, [statusBarStyle]);
   const [fontsLoaded] = useFonts({
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });

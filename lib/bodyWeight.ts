@@ -190,10 +190,10 @@ export async function maybeNotifyStaleWeight(): Promise<void> {
         data: { source: STALE_WEIGHT_SOURCE },
       } as any,
       trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
         date: new Date(Date.now() + NOTIFY_DELAY_MS),
-        allowWhileIdle: true,
         channelId: REST_TIMER_CHANNEL_ID,
-      } as any,
+      },
     });
 
     await AsyncStorage.setItem(NOTIFICATION_ID_KEY, id);

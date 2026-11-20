@@ -18,10 +18,13 @@
     <item name="android:textColor">@android:color/black</item>
   </style>
   <!-- Splash del sistema (API de Android 12, la que usa expo-splash-screen):
-       negro con el titular centrado; al soltarlo pasa a AppTheme. -->
+       negro y SIN icono. Su icono se recorta en un círculo de 192 dp, donde el
+       titular solo cabe enano; por eso MainActivity lo suelta en cuanto la
+       Activity pinta y el titular lo pone AppTheme (windowBackground) a su
+       tamaño, con la copia en JS encima (components/SplashFade.tsx). -->
   <style name="Theme.App.SplashScreen" parent="Theme.SplashScreen">
     <item name="windowSplashScreenBackground">@color/splashscreen_background</item>
-    <item name="windowSplashScreenAnimatedIcon">@drawable/splashscreen_logo</item>
+    <item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>
     <item name="postSplashScreenTheme">@style/AppTheme</item>
     <item name="android:windowSplashScreenBehavior">icon_preferred</item>
   </style>
