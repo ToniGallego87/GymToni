@@ -90,11 +90,15 @@
 ### Cambios
 
 - **Splash en blanco si la app arranca en modo claro**, con el titular de día
-  (`title-day.png`). `MainActivity` lee el tema guardado de
-  `gymbro-settings.db` antes de pintar y pone `AppTheme.Light`
-  (`drawable/splashscreen_light.xml`); en Android 13+ deja dicho al sistema
-  el splash del siguiente arranque (`setSplashScreenTheme`, también en
-  `onStop` por si cambió el tema). `SplashFade` copia el mismo fondo y logo.
+  (`title-day.png`). Nuevo módulo nativo `modules/splash-theme`: JS
+  (`lib/splashTheme.ts`, desde `App.tsx`) le pasa el modo al arrancar y en
+  cada cambio de tema; lo guarda en SharedPreferences y `MainActivity`, que lo
+  lee antes de pintar, pone `AppTheme.Light` (`drawable/splashscreen_light.xml`),
+  cambia en caliente el fondo de la ventana y en Android 13+ deja dicho al
+  sistema el splash del siguiente arranque (`setSplashScreenTheme`). El nativo
+  ya no abre la base de ajustes de expo-sqlite. En Android 12 o menos, y tras
+  instalar o forzar el cierre, el splash del sistema sigue saliendo negro un
+  instante. `SplashFade` copia el mismo fondo y logo.
 - **La hero de Inicio ya no dice "Sin mejora" la primera vez con un día.**
   Sin sesión anterior del mismo día con la que comparar, el entreno completado
   dice "Tu punto de partida"; en descarga, "Semana de descarga". "Sin mejora"

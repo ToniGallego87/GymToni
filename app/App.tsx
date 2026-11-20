@@ -118,6 +118,7 @@ import { fetchLatestRelease } from '@lib/cloud/release';
 import type { AppRelease } from '@lib/cloud/release';
 import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
 import { subscribePipMode } from '@lib/pipTimer';
+import { syncSplashTheme } from '@lib/splashTheme';
 import { getRestTimer, useRestTimer } from '@lib/restTimerStore';
 import { findDayInRoutines, getToday, logDateKey } from '@lib/utils';
 import { currentWeekDayState } from '@lib/weeks';
@@ -2039,6 +2040,13 @@ export default function App() {
     // Sin Activity (recreándose o cerrándose) el nativo rechaza: no importa.
     NavigationBar.setButtonStyleAsync(statusBarStyle).catch(() => {});
   }, [statusBarStyle]);
+  // Splash nativo del siguiente arranque y fondo de la ventana, con el tema de
+  // ahora: al arrancar (también para quien ya tenía el modo claro guardado) y
+  // en cada cambio de tema.
+  const themeMode = theme.mode;
+  useEffect(() => {
+    syncSplashTheme(themeMode);
+  }, [themeMode]);
   const [fontsLoaded] = useFonts({
     Anton: require('../assets/fonts/Anton-Regular.ttf'),
   });

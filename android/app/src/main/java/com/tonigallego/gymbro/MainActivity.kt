@@ -4,11 +4,9 @@ import expo.modules.splashscreen.SplashScreenManager
 import android.app.PictureInPictureParams
 import android.content.res.Configuration
 import android.content.res.Resources
-import android.database.sqlite.SQLiteDatabase
 import android.os.Build
 import android.os.Bundle
 import android.util.Rational
-import java.io.File
 import androidx.core.view.WindowCompat
 
 import com.facebook.react.ReactActivity
@@ -19,6 +17,7 @@ import com.facebook.react.defaults.DefaultReactActivityDelegate
 
 import expo.modules.ReactActivityDelegateWrapper
 import expo.modules.piptimer.PipTimerController
+import expo.modules.splashtheme.SplashThemeController
 
 // Barras del sistema: edge-to-edge lo pone React Native (edgeToEdgeEnabled en
 // gradle.properties) y el color de los iconos de la barra de estado lo decide
@@ -39,11 +38,12 @@ class MainActivity : ReactActivity() {
     // fondo, el titular a tamaño completo, y SplashFade hace la salida.
     SplashScreenManager.hide()
     // Splash del color con el que va a arrancar la app: en modo claro, blanco
-    // con el titular de día (AppTheme.Light). Va después de registerOnActivity,
-    // que pone AppTheme (postSplashScreenTheme) y lo pisaría.
-    val light = startsInLightMode()
+    // con el titular de día (AppTheme.Light). El modo lo deja JS al cambiar de
+    // tema (modules/splash-theme). Va después de registerOnActivity, que pone
+    // AppTheme (postSplashScreenTheme) y lo pisaría.
+    val light = SplashThemeController.isLight(this)
     if (light) setTheme(R.style.AppTheme_Light)
-    rememberSplashTheme(light)
+    SplashThemeController.listener = splashThemeListener
     super.onCreate(null)
     // RN (enableEdgeToEdge, en super.onCreate) pinta los iconos de las barras
     // según el tema del SISTEMA: con el móvil en claro y la app en oscuro salían
@@ -55,30 +55,29 @@ class MainActivity : ReactActivity() {
     }
   }
 
-  /**
-   * ¿La app va a arrancar en modo claro? Es el tema guardado por JS
-   * (lib/appSettings.ts: clave `themeMode` de la tabla `settings` en
-   * gymbro-settings.db, la base de expo-sqlite). Ante cualquier duda, oscuro,
-   * que es el valor por defecto de la app.
-   */
-  private fun startsInLightMode(): Boolean = runCatching {
-    val file = File(File(filesDir, "SQLite"), "gymbro-settings.db")
-    if (!file.exists()) return false
-    SQLiteDatabase.openDatabase(file.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
-      db.rawQuery("SELECT value FROM settings WHERE key = ?", arrayOf("themeMode")).use {
-        it.moveToFirst() && it.getString(0) == "light"
-      }
+  private val splashThemeListener: (Boolean) -> Unit = { applySplashTheme(it) }
+
+  override fun onDestroy() {
+    if (SplashThemeController.listener === splashThemeListener) {
+      SplashThemeController.listener = null
     }
-  }.getOrDefault(false)
+    super.onDestroy()
+  }
 
   /**
-   * El splash del SISTEMA se pinta antes de que exista la app, así que no puede
-   * leer el tema: en Android 13+ se le deja dicho cuál usar en el siguiente
-   * arranque. Se repite en onStop por si el tema cambió durante la sesión.
+   * Lo pide JS al arrancar y al cambiar de tema (lib/splashTheme.ts):
+   * - El splash del SISTEMA se pinta antes de que exista la app, así que no
+   *   puede leer el tema: en Android 13+ se le deja dicho cuál usar en el
+   *   siguiente arranque. En Android 12 o menos (y en 13+ tras instalar,
+   *   actualizar o forzar el cierre) siempre sale el negro.
+   * - El fondo de la ventana asoma en cualquier hueco entre capas: el del tema
+   *   de ahora, no el del arranque.
    */
-  private fun rememberSplashTheme(light: Boolean) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-    runCatching {
+  private fun applySplashTheme(light: Boolean) {
+    window.setBackgroundDrawableResource(
+      if (light) R.drawable.splashscreen_light else R.drawable.splashscreen
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
       splashScreen.setSplashScreenTheme(
         if (light) R.style.Theme_App_SplashScreen_Light else Resources.ID_NULL
       )
@@ -136,9 +135,6 @@ class MainActivity : ReactActivity() {
       }
     }
     super.onStop()
-    // La app se va al fondo y puede morir: el próximo splash, con el tema de
-    // ahora (se puede haber cambiado en Configuración).
-    rememberSplashTheme(startsInLightMode())
   }
 
   // ───────────────── Ventana flotante del descanso (Picture-in-Picture) ─────────────────

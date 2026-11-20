@@ -7,7 +7,8 @@ import { theme } from '@lib/theme';
 // el mismo fondo (`splashscreen_background[_light]` en colors.xml) y el mismo
 // titular centrado. Se usan los valores literales y no los colores del tema a
 // propósito: tiene que coincidir píxel a píxel con el nativo. El modo es el
-// inicial del tema, el mismo que lee MainActivity de la base de ajustes.
+// inicial del tema, el mismo que dejó guardado para MainActivity
+// lib/splashTheme.ts.
 const SPLASH_BACKGROUND = { dark: '#000000', light: '#FFFFFF' } as const;
 const SPLASH_LOGO = {
   dark: require('../assets/title.png'),

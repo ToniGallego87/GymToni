@@ -35,7 +35,11 @@
   </style>
   <!-- El del sistema en blanco. Android 13+ lo usa en el siguiente arranque
        cuando MainActivity lo pide (setSplashScreenTheme) por estar la app en
-       modo claro; en Android 12 el sistema siempre pinta el de arriba. -->
+       modo claro. En Android 12 o menos, y en 13+ en el primer arranque tras
+       instalar, actualizar o forzar el cierre, el sistema pinta el negro de
+       arriba: en modo claro asoma un instante negro antes del blanco de la
+       ventana (AppTheme.Light). No hay forma de evitarlo: el sistema lo pinta
+       antes de que exista la app. -->
   <style name="Theme.App.SplashScreen.Light">
     <item name="windowSplashScreenBackground">@color/splashscreen_background_light</item>
     <item name="postSplashScreenTheme">@style/AppTheme.Light</item>
