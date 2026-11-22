@@ -14,6 +14,10 @@
   <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
   <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove"/>
   <uses-permission android:name="android.permission.RECORD_AUDIO" tools:node="remove"/>
+  <!-- La actividad va en vertical (screenOrientation="portrait"), y Play deduce
+       de eso que la pantalla vertical es OBLIGATORIA: deja fuera tablets,
+       Chromebooks y Android XR. Declarada opcional, se instala en todos. -->
+  <uses-feature android:name="android.hardware.screen.portrait" android:required="false"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>

@@ -165,6 +165,10 @@
 
 ### Correcciones
 
+- **Play ya no limita los dispositivos por la orientación.** La actividad en
+  vertical hacía que Play exigiera `android.hardware.screen.portrait` (fuera
+  tablets, Chromebooks y Android XR); ahora se declara `required="false"` en
+  el manifest. `versionCode` 37 (el 36 ya estaba subido a Play Console).
 - **El vídeo de la semana ya no se pierde al minimizar.** La captura espera a
   que la app vuelva y repite el fotograma cortado; la hoja de compartir espera
   a primer plano. Salir de la pantalla lo cancela sin error, los fotogramas
