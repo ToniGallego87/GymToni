@@ -467,6 +467,27 @@ export async function getUserPublicRoutines(
 }
 
 // Qué rutinas propias están publicadas (para el estado del interruptor en la UI).
+/**
+ * Nombre y dueño de una rutina pública por su id (deep link del QR del
+ * póster): lo justo para abrir su consulta. null si no existe o ya no es
+ * pública.
+ */
+export async function getPublicRoutineCard(
+  routineId: string
+): Promise<{ name: string; ownerId: string } | null> {
+  const { data, error } = await supabase
+    .from('routines')
+    .select('name, user_id')
+    .eq('id', routineId)
+    .eq('is_public', true)
+    .eq('deleted', false)
+    .maybeSingle();
+  if (error) throw new Error(`routines: ${error.message}`);
+  if (!data) return null;
+  const row = data as { name: string; user_id: string };
+  return { name: row.name, ownerId: row.user_id };
+}
+
 export async function getPublicRoutineIds(userId: string): Promise<string[]> {
   const { data, error } = await supabase
     .from('routines')

@@ -14,6 +14,43 @@ import { truncateText } from './utils';
 export const ROUTINE_IMPORT_PATH = 'import-routine';
 const SHARE_SCHEME = 'gymbro';
 
+// Deep link a una rutina PÚBLICA de la comunidad: gymbro://public-routine?id=...
+// Lo abre la página web del QR del póster (r/index.html) cuando la app está
+// instalada; la app la enseña en la consulta de rutina pública.
+export const PUBLIC_ROUTINE_PATH = 'public-routine';
+
+// Página web del QR del póster de la semana (r/index.html del repo, servida
+// por GitHub Pages). La cámara no abre gymbro://, así que el QR lleva aquí:
+// con la app, la página la abre en la rutina; sin ella, manda a Google Play.
+// Al tener dominio propio, se cambia solo esta línea.
+export const ROUTINE_WEB_BASE = 'https://tonigallego87.github.io/GymToni/r/';
+
+/**
+ * Enlace web del QR del póster. Con el id de una rutina pública abre esa
+ * rutina; sin él, la página solo invita a descargar la app.
+ */
+export function buildRoutineWebLink(publicRoutineId?: string): string {
+  return publicRoutineId
+    ? `${ROUTINE_WEB_BASE}?id=${encodeURIComponent(publicRoutineId)}`
+    : ROUTINE_WEB_BASE;
+}
+
+/** Id de la rutina de gymbro://public-routine?id=..., o null si no es eso. */
+export function parsePublicRoutineLink(url: string): string | null {
+  try {
+    const parsed = Linking.parse(url);
+    const target = parsed.hostname ?? parsed.path;
+    if (target !== PUBLIC_ROUTINE_PATH) return null;
+    const id = parsed.queryParams?.id;
+    // Ids de la app: uuid o similares; nada de texto arbitrario.
+    return typeof id === 'string' && /^[A-Za-z0-9_-]{1,64}$/.test(id)
+      ? id
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 // Forma que consume NewRoutineScreen para prerrellenar el formulario.
 export interface SharedRoutineDay {
   title: string;

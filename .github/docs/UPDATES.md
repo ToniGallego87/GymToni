@@ -32,6 +32,17 @@
 
 ### Nuevas funcionalidades
 
+- **QR en el póster de la semana para entrenar la misma rutina.** El pie del
+  póster (imagen y vídeo) lleva un QR a `https://tonigallego87.github.io/GymToni/r/?id=…`
+  (página nueva `r/index.html`, para GitHub Pages; base en
+  `ROUTINE_WEB_BASE`). Con la app instalada abre la rutina en su consulta de
+  Comunidad (deep link nuevo `gymbro://public-routine?id=…`,
+  `parsePublicRoutineLink` + `getPublicRoutineCard`); sin ella, lleva a Google
+  Play. Solo enlaza la rutina si es pública (publicada o enlazada de la
+  comunidad); si no, el QR invita a descargar la app. El QR se dibuja en el
+  propio SVG (`qrcode` + `<Path>`) para que salga en la exportación.
+- **"Compartir imagen" junto a "Compartir vídeo"** en Hitos de la semana: la
+  imagen sale al instante y antes solo se ofrecía si no había codificador.
 - **Avisos de comentarios también en la rutina ajena que tienes enlazada y
   activa**, no solo en las tuyas publicadas (las copias y las enlazadas que no
   usas no avisan ni resaltan: `followsRoutineComments`, fuente única del aviso
@@ -89,6 +100,24 @@
 
 ### Cambios
 
+- **El póster de la semana dice de qué rutina es**: el nombre va en el pie,
+  bajo "ENTRENA ESTA RUTINA" y junto al QR; el pie (QR + textos) va centrado,
+  con los textos medidos por la pantalla como el nombre de la cabecera. La
+  pantalla recibe la rutina entera (no solo el nombre) para saber también si
+  es pública.
+- **Vídeo de la semana mucho más rápido.** Se capturan 31 fotogramas clave en
+  vez de 120. En Android, el propio módulo dibuja la vista del póster a
+  memoria (`captureFrame`, en el hilo de UI) y la pasa a YUV en otro hilo
+  mientras se pinta la siguiente; `encodeCaptured` codifica desde memoria
+  (~40 MB durante la generación). Sin eso (iOS), `react-native-view-shot` a
+  JPG en ficheros temporales (antes de todo esto: `toDataURL` a PNG en base64
+  por el puente y escrito desde JS). El
+  codificador genera 3 intermedios entre cada par (`encodeKeyframes`, nuevo
+  en el módulo Android; iOS repite cada clave): funde lo que aparece por
+  opacidad y **barre por ángulo** la zona de los anillos que crecen (centros y
+  fracción de cada clave salen de `posterRings`, las mismas cuentas que el
+  póster), así que no queda rastro del arco anterior. Convierte a YUV sobre
+  arrays normales con copia por filas, y los 4 s finales no se reconvierten.
 - **Splash en blanco si la app arranca en modo claro**, con el titular de día
   (`title-day.png`, `AppTheme.Light`). El tema lo sigue mandando la base de
   ajustes; el nuevo módulo `modules/splash-theme` guarda un espejo
@@ -124,6 +153,11 @@
 
 ### Correcciones
 
+- **El vídeo de la semana ya no se pierde al minimizar.** La captura espera a
+  que la app vuelva y repite el fotograma cortado; la hoja de compartir espera
+  a primer plano. Salir de la pantalla lo cancela sin error, los fotogramas
+  se borran siempre (antes quedaban en caché tras un fallo) y el botón dice
+  "Montando vídeo…" en la codificación en vez de quedarse en 100 %.
 - **Los avisos vuelven a llegar a su hora** (fin del descanso, recordatorio de
   entreno y de peso). Con `expo-notifications` de SDK 54 un trigger
   `{ date, channelId }` sin `type` se toma como trigger de canal y salta al

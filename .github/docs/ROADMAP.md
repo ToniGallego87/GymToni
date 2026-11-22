@@ -21,18 +21,51 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Mejoras visuales y de UX
 
-- [x] **La semana en curso se dibuja de dos maneras** — Inicio la pinta como
-      una fila con el icono de cada día (verde hecho, aro dorado el que toca,
-      anillo que se llena el de hoy) y Elige la sesión, un toque después, como
-      una barra de segmentos sin iconos. Sacar la fila de Inicio a un
-      componente y usarla también en la cabecera de Elige la sesión.
-      **Por qué:** es el mismo dato en dos pantallas seguidas; con el mismo
-      dibujo se reconoce sin volver a leerlo, y la barra no dice qué día
-      falta.
-      **Archivos:** `features/workout/HomeScreen.tsx:1153` (`weekDaysRow`),
-      `features/workout/DaySelectorScreen.tsx:151` (`weekBar`).
-      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
+- [x] **Hitos de la semana: el póster dice de qué rutina es** — hoy el póster
+      pone "SEMANA 7 ¡COMPLETADA!" y "5 días entrenados", pero no el nombre de
+      la rutina: solo lo lleva el subtítulo de la barra superior, que no sale
+      en lo compartido. Añadirlo en la línea gris bajo el titular ("Push Pull
+      Legs · 5 días entrenados", recortado a una línea; sin rutina, como hoy).
+      La pantalla ya recibe `routineName`: falta pasárselo al póster.
+      **Por qué:** quien ve la story no sabe de qué es la "semana 7"; con el
+      nombre, el número cobra sentido y la rutina se convierte en lo que se
+      enseña (y en lo que se pide).
+      **Archivos:** `components/AchievementPoster.tsx:584` (titular) y `:598`
+      (línea de días), `features/workout/WeekAchievementScreen.tsx:377` (props
+      del póster; `routineName` ya llega en `:52`),
+      `features/workout/HomeScreen.tsx:607` (de dónde sale el nombre).
+      **Estado (2026-11-21):** en la línea de días no cabía: el nombre pasa
+      al pie, bajo la invitación del QR (en lugar de "Escanéalo con la
+      cámara"), y el pie se centra. Probado en el móvil (2026-11-22).
       **Esfuerzo:** bajo.
+- [x] **Hitos de la semana: el vídeo no se pierde al minimizar ni al salir** —
+      la captura va fotograma a fotograma con `requestAnimationFrame` y
+      `toDataURL`, que Android para con la app en segundo plano; cualquier fallo
+      cae en el `catch` que pone el botón a 0 % con "No se pudo generar el
+      vídeo", y se empieza de cero. Además: los fotogramas ya escritos solo se
+      borran si todo va bien (quedan en caché tras un fallo), salir con el
+      vídeo a medias deja el bucle corriendo contra un póster desmontado, y el
+      porcentaje solo mide la captura: llega a 100 % y se queda ahí, sin
+      decir nada, mientras se codifica. Propuesta: pausar al ir a segundo
+      plano y **seguir desde el último fotograma** al volver (los PNG en disco
+      sirven); cancelar al salir de la pantalla; borrar la carpeta en el
+      `finally`; y un progreso que cubra las dos fases (captura y "Montando
+      vídeo…"). Antes de tocarlo, mirar en `logcat` si al minimizar falla la
+      captura o MIUI mata la app (son arreglos distintos).
+      **Por qué:** generar el vídeo tarda, y lo natural mientras tanto es
+      cambiar de app; perder todo lo hecho por eso obliga a quedarse mirando
+      una barra.
+      **Archivos:** `features/workout/WeekAchievementScreen.tsx:276`
+      (`handleShareVideo`), `:291` (bucle de captura), `:323` (borrado solo en
+      el camino bueno), `:326` (`catch` que reinicia), `:346` (etiqueta con %).
+      **Estado (2026-11-20):** hecho en código: espera a primer plano y repite
+      el fotograma cortado (hasta 3 veces), captura con tiempo límite de 8 s,
+      cancelación al salir, borrado en el `finally` y "Montando vídeo…" al
+      codificar (sin %: el codificador no informa de su avance). No se miró
+      `logcat` antes (no había móvil): si MIUI MATA la app al minimizar, esto
+      no lo arregla. Probado en el móvil (2026-11-22): minimizar a mitad y
+      volver sigue donde iba; salir a mitad cancela sin errores.
+      **Esfuerzo:** medio.
 - [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
       duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
       "Añadir serie" serían un zumbido largo (~400 ms) en cada pulsación, y el
@@ -73,46 +106,59 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Funcionalidades a simplificar
 
-- [x] **[Lanzamiento] Quitar permisos sobrantes y adelgazar la APK** — fuera
-      `RECORD_AUDIO`, `SYSTEM_ALERT_WINDOW`, `READ/WRITE_EXTERNAL_STORAGE` y
-      `CAMERA` (estos dos últimos con `tools:node="remove"`, los meten
-      dependencias); R8 + `shrinkResources` en release y solo las ABIs de
-      móvil. Se quedan `SCHEDULE_EXACT_ALARM` (fin de descanso a su hora en
-      Android 12-13; Play no lo pide declarar) y `allowBackup` (la copia de
-      Google salva los entrenos de quien no tiene cuenta).
-      **Por qué:** cada permiso de más es una pregunta en la revisión de Play
-      y una línea más en Data Safety; una APK pequeña se instala más.
-      **Archivos:** `android/app/src/main/AndroidManifest.xml:1-19`,
-      `android/app/proguard-rules.pro` (serialización de los avisos),
-      `android/app/build.gradle` (`abiFilters` en release),
-      `android/gradle.properties` (R8 y `shrinkResources`).
-      **Estado (2026-11-07):** hecho en código; APK de 75 a 40 MB, instalada en
-      el móvil 1 y arranca sin errores. Probado en el móvil (2026-11-19): todo
-      lo de abajo funciona salvo "Cerrar sesión" en modo avión, que se prueba
-      con su propia ficha:
-      - Descanso con la app minimizada: que suene el aviso al terminar (R8
-        quitaba la serialización de los avisos; arreglado en
-        `proguard-rules.pro`, falta confirmarlo).
-      - Recordatorio de entreno y aviso de peso: que sigan saliendo.
-      - Foto de perfil: elegir una y recortarla.
-      - Compartir: el póster y el vídeo de la semana.
-      - Datos y nube: exportar e importar la copia.
-      - PiP: minimizar con un descanso en marcha.
-      - Cerrar sesión en modo avión: que salga de verdad (ver "Cerrar sesión"
-        sin red y con el token caducado).
-      **Esfuerzo:** bajo.
-- [x] **Ordenar los días de una rutina sin plegarlos uno a uno** — en la
-      edición de una ficha, los días solo se arrastran con todos plegados, y
-      con alguno abierto aparece el aviso "Pliega todos los días para
-      ordenarlos arrastrando": hay que ir plegándolos a mano. Que ese aviso sea
-      un botón ("Plegar todos para ordenar") que los pliegue de una vez y saque
-      las asas.
-      **Por qué:** la regla tiene sentido (con días abiertos las alturas
-      bailan), pero cumplirla no tiene por qué costar un toque por día; el
-      aviso ya ocupa el sitio del botón.
-      **Archivos:** `features/workout/RoutineDetailScreen.tsx:586`
-      (`canDragDays`) y `:935` (el aviso).
-      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
+- [x] **Hitos de la semana: el vídeo en segundos, no en minutos** — el coste
+      está en dos bucles en serie. En JS, 120 vueltas de: repintar el SVG
+      entero, esperar dos frames, rasterizar a 720×1280 y codificar PNG
+      (`toDataURL`), pasar el PNG en base64 por el puente y escribirlo a disco.
+      En Kotlin, decodificar cada PNG y pasar RGB→YUV píxel a píxel
+      (~920.000 `put` por fotograma) para **240** fotogramas: los 120 de la
+      pausa final repiten la conversión aunque el bitmap ya esté en caché.
+      Por orden de ganancia/esfuerzo: (1) guardar el YUV del último fotograma
+      y reutilizarlo en la pausa (la mitad del trabajo nativo desaparece);
+      (2) codificar por `Surface` (`createInputSurface` +
+      `lockHardwareCanvas().drawBitmap`): la conversión la hace la GPU y
+      desaparece el bucle por píxel; (3) medir cada fase antes y después para
+      ver si la captura en JS pasa a ser el cuello y, si lo es, capturar a
+      menor resolución intermedia o menos fotogramas en los tramos sin
+      movimiento. De paso, quitar `VIDEO_FRAME_REPEAT = 1` (un bucle que no
+      repite nada). En iOS el codificador Swift está sin probar: aplicar lo
+      mismo cuando se pruebe.
+      **Por qué:** es la espera más larga de la app y ocurre justo en el
+      momento de presumir; cuanto más corta, menos se abandona (y menos
+      ventana hay para minimizar y perderla).
+      **Archivos:** `modules/video-encoder/android/src/main/java/expo/modules/videoencoder/VideoEncoderModule.kt:121`
+      (bucle de entrada) y `:152` (`fillImageFromBitmap`),
+      `features/workout/WeekAchievementScreen.tsx:56-64` (constantes) y `:291`
+      (captura), `modules/video-encoder/ios/VideoEncoderModule.swift`.
+      **Estado (2026-11-21):** la primera pasada (1 + YUV en arrays) no bastó:
+      seguía tardando muchísimo, el cuello era la captura. Ahora se capturan
+      41 fotogramas clave en vez de 120, con `react-native-view-shot` a JPG
+      directo a fichero (sin PNG ni base64 por el puente), y el codificador
+      funde 2 intermedios entre cada par (`encodeKeyframes`). Un GIF no
+      ayudaría: codificarlo es más lento que H.264 por hardware y pesa más.
+      Probado (2026-11-21): duración "muy bien", pero los anillos dejaban
+      rastro al fundirse. Ahora 31 claves con 3 intermedios, y en ellos la
+      zona de cada anillo que crece se barre por ángulo (`sweepRing`, con la
+      geometría de `posterRings`) en vez de fundirse: probado, sin rastro.
+      Último paso (2026-11-21): en Android la captura es nativa y a memoria
+      (`captureFrame` + `encodeCaptured`; view-shot queda de respaldo para
+      iOS). Probado en el móvil (2026-11-22): el vídeo sale bien. Lo que queda
+      por debajo es esperar a que se pinte cada clave (dos frames): bajar más
+      exigiría menos claves.
+      **Esfuerzo:** medio.
+- [x] **Hitos de la semana: la imagen al instante, sin esperar al vídeo** — con
+      el codificador presente (toda APK Android actual), "Compartir resultados"
+      solo hace vídeo: la imagen PNG, que sale en un segundo, únicamente se
+      ofrece si no hay codificador. Dejar "Compartir vídeo" como botón
+      principal (igual que hoy) y debajo un secundario "Compartir imagen".
+      **Por qué:** para WhatsApp o el estado basta la imagen, y hoy quien la
+      quiere se come la espera del vídeo; el caso común no gana ni un toque.
+      **Archivos:** `features/workout/WeekAchievementScreen.tsx:338`
+      (`handleShareResults`, la bifurcación), `:214` (`handleShare`, la imagen
+      que ya existe), `:390` (botón).
+      **Estado (2026-11-20):** hecho en código ("Compartir vídeo" + secundario
+      "Compartir imagen"; sin codificador, un solo botón de imagen). Probado
+      en el móvil (2026-11-22).
       **Esfuerzo:** bajo.
 - [ ] **Cardio: retirar el texto `raw_input` cuando todos los móviles lo
       entiendan** — desde la 0.8.5 el cardio se guarda también en
@@ -141,29 +187,6 @@ requisito previo de anuncios, suscripción e iOS.
 Candidatas (compatibles con las restricciones). Las **[Lanzamiento]** van
 primero porque sin ellas no se publica.
 
-- [x] **[Lanzamiento] Subir a Expo SDK 54 (páginas de 16 KB, requisito de
-      iOS)** — las 49 `.so` de arm64 de la release están alineadas a 4 KB
-      (comprobado 2026-10-20 en `app-release.apk`); Play exige 16 KB a apps
-      con target ≥ 35 desde nov-2025. Lo trae RN ≥ 0.77. SDK 54 es el último
-      que permite seguir en arquitectura antigua (`newArchEnabled=false`), lo
-      que esquiva el bug de toques muertos del intento de agosto. También es
-      requisito para compilar iOS con Xcode 26 y para las SDK de anuncios y
-      pagos. Rehacer o retirar los tres `patches/` tras subir.
-      **Por qué:** sin esto Play rechaza el binario y no hay versión iOS.
-      **Archivos:** `package.json` (expo ~51, react-native 0.74.5),
-      `android/gradle.properties` (`newArchEnabled`), `android/build.gradle:7-11`,
-      `patches/`, `.github/docs/backend-design.md` §14 (lo aprendido en el
-      intento anterior).
-      **Estado (2026-11-20):** hecho y en `main` (Expo 54,
-      RN 0.81.5, React 19.1, Reanimated 3.19 por la arquitectura antigua;
-      `android/` regenerado y lo propio portado; queda un solo parche, el de
-      view-shot). La release compila y sus `.so` están a 16 KB (`zipalign -P 16`).
-      Probado en el móvil (2026-11-19): toques y gestos, atrás del sistema,
-      splash, barras, cristal, descanso en PiP y su aviso, foto de perfil y
-      compartir imagen, todo correcto. Tras la review (2026-11-20): avisos
-      a su hora, barra de navegación según el tema, splash a 252 dp e icono
-      sin pisar el borde, probados en el móvil.
-      **Esfuerzo:** alto.
 - [ ] **[Lanzamiento] Borrar la cuenta: plazo de gracia y rutinas anónimas** —
       obligatorio en Play y App Store para apps con cuentas. Al
       pedirlo, la cuenta se oculta y durante **30 días** se puede recuperar
@@ -316,6 +339,43 @@ primero porque sin ellas no se publica.
       **Archivos:** `app/_layout.tsx`, `app/App.tsx` (arranque),
       `android/app/build.gradle` (source maps de Hermes).
       **Esfuerzo:** bajo.
+- [ ] **Hitos de la semana: QR de la rutina que invita a instalar** — en el
+      pie del póster, junto a la marca, un QR con "Entrena esta rutina ·
+      Escanéalo con la cámara". No vale el QR que ya hay en la ficha de la
+      rutina: es `gymbro://import-routine?data=<rutina entera>`, un esquema
+      propio que la cámara de quien no tiene la app no sabe abrir (no puede
+      llevar a instalar) y que con hasta 2.900 caracteres sería ilegible a
+      tamaño de story. Hace falta un enlace web corto,
+      `https://<dominio>/r/<id>`: con la app instalada la abre en la rutina
+      (App Links: `intent-filter` con `autoVerify` + `assetlinks.json`); sin
+      ella, una página con el nombre de la rutina y el botón de Google Play.
+      El `<id>` es el de la rutina publicada en Comunidad; si no es pública,
+      el QR lleva solo a la descarga (o se ofrece publicarla al compartir).
+      QR sobre cuadro claro (`qrLight`/`qrDark`) para que se lea en el lienzo
+      oscuro; en el vídeo aparece con el pie y se queda los 4 s finales.
+      **Decisión pendiente:** si "sin marca de agua" de GymBro Pro quita
+      también el QR (propuesta: no; el QR es de la rutina, no publicidad).
+      **Depende de:** el dominio de "[Lanzamiento] Supabase y dominio listos
+      para producción" (o GitHub Pages mientras tanto).
+      **Por qué:** cada póster compartido pasa a ser una puerta de entrada:
+      quien lo ve puede probar la misma rutina y, de paso, instala la app.
+      **Archivos:** `components/AchievementPoster.tsx:677` (pie con el
+      wordmark), `lib/routineShare.ts:91` (`buildRoutineShareLink`, solo
+      `gymbro://`), `features/workout/RoutineDetailScreen.tsx:449`
+      (`QR_MAX_CHARS`), `android/app/src/main/AndroidManifest.xml:35`
+      (actividad sin `intent-filter` https), `app/App.tsx:1791`
+      (`public-routine`, destino del enlace).
+      **Estado (2026-11-20):** hecho en código con GitHub Pages
+      (`https://tonigallego87.github.io/GymToni/r/`, página `r/index.html`;
+      base en `ROUTINE_WEB_BASE` de `lib/routineShare.ts`). Sin App Links: la
+      página abre la app con un `intent://` de Android cuyo respaldo es Google
+      Play (los App Links necesitarían `assetlinks.json` en la raíz del
+      dominio, que un sitio de proyecto de Pages no tiene; con dominio propio
+      se pueden añadir). Pendiente (Toni): **activar GitHub Pages** en el repo
+      (rama `main`, carpeta raíz) y probar en el móvil escaneando un póster
+      con y sin la app instalada. Ojo: la ficha de Play debe existir para
+      que el respaldo lleve a algún sitio.
+      **Esfuerzo:** alto (web + App Links) / bajo (el QR en el póster).
 - [ ] **[Monetización] GymBro Pro (suscripción)** — suscripción con
       RevenueCat (Play y App Store a la vez): 3,99 €/mes, 24,99 €/año con 7
       días de prueba y un vitalicio (~49,99 €). Pro = sin anuncios + algo
@@ -503,38 +563,6 @@ primero porque sin ellas no se publica.
       (cerrar sesión y entrar con otra cuenta sin cerrar la app; abrir
       Comunidad sin red).
       **Esfuerzo:** bajo.
-- [x] **Añadir un día a una rutina ya creada** — en edición, la ficha de una
-      rutina deja renombrar, cambiar el icono, reordenar y quitar días, y
-      editar sus ejercicios, pero no añadir uno nuevo: Nueva rutina sí tiene
-      "Añadir día". Para pasar de 4 a 5 días hoy hay que crear otra rutina y
-      empezar su historial de cero. Llevar "Añadir día" a la edición de la
-      ficha, con el mismo modelo de formulario que Nueva rutina: un botón al
-      final de la lista de días, con la piel de "Añadir ejercicio", que crea
-      el día ya abierto y con su primer ejercicio en el popup.
-      **Por qué:** ajustar la rutina que ya entrenas es más común que estrenar
-      una; y AGENTS pide que crear y editar usen el mismo modelo.
-      **Archivos:** `features/workout/RoutineDetailScreen.tsx:605`
-      (`renderDayBlock`, edición de días) y `:565` (`handleMoveDayTo`, el
-      renumerado ya existe), `features/workout/NewRoutineScreen.tsx:301`
-      (`handleAddDay`), `lib/exerciseForm.ts`.
-      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
-      **Esfuerzo:** medio.
-- [x] **De un ejercicio de la ficha de rutina a su evolución** — en el Detalle
-      de una sesión cada ejercicio lleva a su gráfica y sus récords ("Ver
-      evolución"), y desde esa gráfica se llega a la ficha de la rutina; pero
-      al revés no: en la ficha, las casillas de los ejercicios solo reproducen
-      el GIF. Dar a cada casilla de una rutina propia el mismo acceso a
-      Progreso por ejercicio, con vuelta a la ficha.
-      **Por qué:** la ficha es donde se decide qué cambiar del plan, y para
-      eso se mira cómo va cada ejercicio; hoy hay que salir a Perfil →
-      Progreso y buscarlo.
-      **Archivos:** `features/workout/RoutineDetailScreen.tsx:776` (la
-      cuadrícula), `components/ExerciseTileGrid.tsx:236` (sin acción propia;
-      la comparte con la rutina pública), `features/workout/DetailScreen.tsx:565`
-      (el acceso que ya existe), `app/App.tsx:208` (la pantalla
-      `exercise-progress`, que hoy solo sabe volver al Detalle o a Perfil).
-      **Estado (2026-11-19):** hecho y probado en el móvil (2026-11-19).
-      **Esfuerzo:** medio.
 
 ## Descartado por restricciones del proyecto
 

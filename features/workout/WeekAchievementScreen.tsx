@@ -7,9 +7,12 @@ import {
   StyleSheet,
   Pressable,
   Platform,
+  AppState,
+  findNodeHandle,
   Animated as RNAnimated,
   Easing,
   useWindowDimensions,
+  unstable_batchedUpdates,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { Asset } from 'expo-asset';
@@ -22,6 +25,7 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import type Svg from 'react-native-svg';
+import { captureRef } from 'react-native-view-shot';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   AchievementPoster,
@@ -30,8 +34,18 @@ import {
   POSTER_WIDTH,
   POSTER_HEIGHT,
   posterUserName,
+  QR_TITLE_FONT,
+  QR_TITLE_LETTER_SPACING,
+  QR_ROUTINE_FONT,
+  posterQrTitle,
+  posterRoutineName,
+  posterHasQr,
+  posterRings,
+  DONUT_RADIUS,
+  DONUT_STROKE,
 } from '@components/AchievementPoster';
 import {
+  Button,
   FloatingBackButton,
   getFloatingBackButtonMetrics,
   GlassTopBar,
@@ -42,14 +56,27 @@ import {
 } from '../../components';
 import { WeekAchievements } from '@lib/achievements';
 import { useMyProfile } from '@hooks/useMyProfile';
+import { useSession } from '@lib/cloud/auth';
+import { getPublicRoutineIds } from '@lib/cloud/social';
 import { shareBase64Png } from '@lib/imageShare';
-import { encodeFramesToMp4, isVideoEncoderAvailable } from '@lib/videoExport';
+import { buildRoutineWebLink } from '@lib/routineShare';
+import { isLinkedRoutine } from '@lib/routines';
+import {
+  canCaptureFramesNatively,
+  captureVideoFrame,
+  discardCapturedFrames,
+  encodeCapturedToMp4,
+  encodeKeyframesToMp4,
+  isVideoEncoderAvailable,
+} from '@lib/videoExport';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
+import type { WorkoutRoutine } from '../../types';
 
 interface WeekAchievementScreenProps {
   achievements: WeekAchievements;
-  routineName?: string;
+  // Rutina de esa semana: nombre en el póster y, si es pública, QR a ella.
+  routine?: WorkoutRoutine;
   onBack: () => void;
 }
 
@@ -57,11 +84,37 @@ interface WeekAchievementScreenProps {
 const VIDEO_WIDTH = 720;
 const VIDEO_HEIGHT = 1280;
 const VIDEO_FPS = 30; // 30 fps para que la animación se vea fluida (sin trompicones).
-// Fotogramas ÚNICOS que se capturan (la animación 0→1). A 30 fps y sin repetir,
-// cada uno es un fotograma real → movimiento suave.
-const VIDEO_CAPTURE_FRAMES = 120; // 120 / 30fps = 4 s de animación.
-const VIDEO_FRAME_REPEAT = 1;
+// Fotogramas CLAVE que se capturan (la animación 0→1): capturar es lo lento.
+// Entre cada dos, el codificador genera 3 intermedios → (31 - 1) × 4 + 1 = 121
+// fotogramas = 4 s de animación a 30 fps, con un cuarto de las capturas. Los
+// intermedios funden lo que aparece (opacidad) y barren por ángulo los
+// anillos que crecen (posterRings), así que no queda rastro.
+const VIDEO_KEYFRAMES = 31;
+const VIDEO_STEPS_PER_KEYFRAME = 4;
+// Póster (1080 de ancho) → fotograma del vídeo.
+const VIDEO_SCALE = VIDEO_WIDTH / POSTER_WIDTH;
 const VIDEO_END_HOLD = 120; // 120 / 30fps = 4 s con el resultado completo → ~8 s totales.
+// Una captura que no responde (p. ej. con la app en segundo plano) se da por
+// fallida a los 8 s; si fue por minimizar, se repite al volver.
+const CAPTURE_TIMEOUT_MS = 8000;
+// Reintentos de un mismo fotograma interrumpido por ir a segundo plano.
+const MAX_FRAME_RETRIES = 3;
+
+// Salir de la pantalla a mitad del vídeo: corta el bucle sin avisar de error.
+class VideoCancelled extends Error {}
+
+// Espera a que la app vuelva a primer plano (resuelve ya si lo está).
+function waitUntilActive(): Promise<void> {
+  return new Promise((resolve) => {
+    if (AppState.currentState === 'active') return resolve();
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        sub.remove();
+        resolve();
+      }
+    });
+  });
+}
 
 // Carga un asset bundleado como data URI PNG (necesario para que las imágenes se
 // rastericen dentro del SVG al exportarlo con toDataURL, también en web).
@@ -144,9 +197,11 @@ function ShareButton({
 
 export function WeekAchievementScreen({
   achievements,
-  routineName,
+  routine,
   onBack,
 }: WeekAchievementScreenProps) {
+  const routineName = routine?.name;
+  const { user } = useSession();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
   // Quién completó la semana: el póster lleva su nombre y su foto.
@@ -155,10 +210,61 @@ export function WeekAchievementScreen({
   // pantalla): el SVG no sabe medirlo y el nivel quedaba lejos del nombre.
   const posterName = posterUserName(profile?.display_name ?? undefined);
   const [nameWidth, setNameWidth] = useState<number | undefined>(undefined);
+  // Lo mismo con los dos textos del pie con QR, para centrar el conjunto.
+  const [qrTitleWidth, setQrTitleWidth] = useState<number | undefined>(
+    undefined
+  );
+  const [qrRoutineWidth, setQrRoutineWidth] = useState<number | undefined>(
+    undefined
+  );
   const posterRef = useRef<Svg>(null);
+  // Vista que se captura para el vídeo (el póster sin el marco redondeado).
+  const videoFrameRef = useRef<View>(null);
   const [busy, setBusy] = useState(false);
-  const [videoBusy, setVideoBusy] = useState(false);
+  // Fase del vídeo: capturar los fotogramas (con %) o montarlos en el MP4.
+  const [videoPhase, setVideoPhase] = useState<'capture' | 'encode' | null>(
+    null
+  );
+  const videoBusy = videoPhase !== null;
   const [videoProgress, setVideoProgress] = useState(0);
+  // Salir de la pantalla con el vídeo a medias lo cancela (ver handleShareVideo).
+  const mountedRef = useRef(true);
+  useEffect(
+    () => () => {
+      mountedRef.current = false;
+    },
+    []
+  );
+  // Cuántas veces ha ido la app a segundo plano: si cambia durante un
+  // fotograma, ese fotograma se repite al volver en vez de abortar el vídeo.
+  const backgroundCountRef = useRef(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next !== 'active') backgroundCountRef.current += 1;
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Id PÚBLICO de la rutina, para que el QR la abra: una enlazada de la
+  // comunidad conserva el id original; una propia, solo si está publicada
+  // (se pregunta a la nube). Sin él, el QR solo invita a descargar la app.
+  const [publicRoutineId, setPublicRoutineId] = useState<string | undefined>(
+    routine && isLinkedRoutine(routine) ? routine.id : undefined
+  );
+  useEffect(() => {
+    if (!routine || isLinkedRoutine(routine) || !user) return;
+    let active = true;
+    getPublicRoutineIds(user.id)
+      .then((ids) => {
+        if (active && ids.includes(routine.id)) setPublicRoutineId(routine.id);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routine?.id, user?.id]);
+  const qrValue = buildRoutineWebLink(publicRoutineId);
   // En nativo el wordmark se pasa como módulo de asset (require → número): así
   // react-native-svg lo rasteriza dentro de toDataURL en Android. En web hace
   // falta un data URI, que se carga de forma diferida más abajo.
@@ -213,7 +319,7 @@ export function WeekAchievementScreen({
 
   const handleShare = () => {
     const node = posterRef.current;
-    if (!node || busy) return;
+    if (!node || busy || videoBusy) return;
 
     setBusy(true);
 
@@ -257,60 +363,149 @@ export function WeekAchievementScreen({
     });
   };
 
-  // Repinta el póster en un valor de animación y espera a que se confirme en pantalla.
-  const renderAtReveal = (value: number) =>
+  // Repinta el póster en un valor de animación (y el % del botón en la misma
+  // pasada: con la arquitectura antigua dos setState sueltos son dos repintados
+  // del póster entero) y espera a que se confirme en pantalla.
+  const renderAtReveal = (value: number, progress: number) =>
     new Promise<void>((resolve) => {
-      setRevealValue(value);
+      unstable_batchedUpdates(() => {
+        setRevealValue(value);
+        setVideoProgress(progress);
+      });
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
 
-  const capturePng = (w: number, h: number) =>
-    new Promise<string>((resolve, reject) => {
-      const node = posterRef.current;
-      if (!node) return reject(new Error(t('Póster no disponible')));
-      node.toDataURL((data: string) => resolve(data), { width: w, height: h });
+  // Captura el póster tal como está en pantalla como fotograma clave `index`.
+  // - Android: en nativo y a memoria (captureFrame): sin JPG, sin disco y con
+  //   la conversión a YUV en otro hilo. Devuelve null.
+  // - Si no (iOS o un binario sin recompilar): react-native-view-shot a JPG en
+  //   un fichero temporal. Devuelve su ruta.
+  const captureKeyframe = (index: number) =>
+    new Promise<string | null>((resolve, reject) => {
+      const node = videoFrameRef.current;
+      const viewTag = node ? findNodeHandle(node) : null;
+      if (!node || viewTag == null)
+        return reject(new Error(t('Póster no disponible')));
+      const timer = setTimeout(
+        () => reject(new Error('capture timeout')),
+        CAPTURE_TIMEOUT_MS
+      );
+      const capture: Promise<string | null> = canCaptureFramesNatively
+        ? captureVideoFrame(viewTag, index, VIDEO_WIDTH, VIDEO_HEIGHT).then(
+            () => null
+          )
+        : captureRef(videoFrameRef, {
+            format: 'jpg',
+            quality: 0.92,
+            result: 'tmpfile',
+            width: VIDEO_WIDTH,
+            height: VIDEO_HEIGHT,
+          });
+      capture.then(
+        (uri) => {
+          clearTimeout(timer);
+          resolve(uri);
+        },
+        (error) => {
+          clearTimeout(timer);
+          reject(error);
+        }
+      );
     });
 
-  // Captura la secuencia de la animación fotograma a fotograma, la codifica a MP4
-  // con el módulo nativo y abre la hoja de compartir.
+  // Captura los fotogramas CLAVE de la animación, los codifica a MP4 con el
+  // módulo nativo (que genera los intermedios) y abre la hoja de compartir.
+  //
+  // Minimizar no lo tira: el bucle espera a que la app vuelva y repite el
+  // fotograma que se cortó (los ya capturados valen). Salir de la pantalla lo
+  // cancela sin aviso. Lo capturado se suelta siempre.
   const handleShareVideo = async () => {
-    if (!posterRef.current || busy || videoBusy) return;
+    if (!videoFrameRef.current || busy || videoBusy) return;
 
-    setVideoBusy(true);
+    setVideoPhase('capture');
     setVideoProgress(0);
     animationRef.current?.stop();
 
-    const framesDir = `${FileSystem.cacheDirectory}gymbro-frames/`;
+    // Solo en el camino de respaldo (view-shot): las rutas de los JPG.
+    const keyPaths: string[] = [];
+    const discardPath = (path: string) =>
+      FileSystem.deleteAsync(path, { idempotent: true }).catch(() => undefined);
     try {
-      await FileSystem.makeDirectoryAsync(framesDir, {
-        intermediates: true,
-      }).catch(() => undefined);
-
-      // Capturar los fotogramas únicos de la animación (reveal 0→1).
-      const uniquePaths: string[] = [];
-      for (let f = 0; f < VIDEO_CAPTURE_FRAMES; f++) {
-        const value = f / (VIDEO_CAPTURE_FRAMES - 1);
-        await renderAtReveal(value);
-        const base64 = await capturePng(VIDEO_WIDTH, VIDEO_HEIGHT);
-        const framePath = `${framesDir}f${String(f).padStart(3, '0')}.png`;
-        await FileSystem.writeAsStringAsync(framePath, base64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        uniquePaths.push(framePath);
-        setVideoProgress((f + 1) / VIDEO_CAPTURE_FRAMES);
+      let frame = 0;
+      let retries = 0;
+      while (frame < VIDEO_KEYFRAMES) {
+        if (!mountedRef.current) throw new VideoCancelled();
+        await waitUntilActive();
+        if (!mountedRef.current) throw new VideoCancelled();
+        const backgroundsBefore = backgroundCountRef.current;
+        try {
+          await renderAtReveal(
+            frame / (VIDEO_KEYFRAMES - 1),
+            frame / VIDEO_KEYFRAMES
+          );
+          const uri = await captureKeyframe(frame);
+          // Si la app pasó por segundo plano mientras tanto, por si acaso se
+          // repite el fotograma al volver (en nativo, la repetición sustituye
+          // a esta captura por su índice).
+          if (backgroundCountRef.current !== backgroundsBefore) {
+            if (uri) void discardPath(uri);
+            continue;
+          }
+          if (uri) keyPaths.push(uri);
+          frame += 1;
+          retries = 0;
+        } catch (error) {
+          if (!mountedRef.current) throw new VideoCancelled();
+          const interrupted =
+            backgroundCountRef.current !== backgroundsBefore ||
+            AppState.currentState !== 'active';
+          retries += 1;
+          if (!interrupted || retries > MAX_FRAME_RETRIES) throw error;
+        }
       }
 
-      // Expandir: repetir cada fotograma (ralentiza) + mantener el final estático.
-      const framePaths: string[] = [];
-      uniquePaths.forEach((path) => {
-        for (let r = 0; r < VIDEO_FRAME_REPEAT; r++) framePaths.push(path);
-      });
-      const lastPath = uniquePaths[uniquePaths.length - 1];
-      for (let h = 0; h < VIDEO_END_HOLD; h++) framePaths.push(lastPath);
-
+      if (mountedRef.current) setVideoPhase('encode');
       const outputUri = `${FileSystem.cacheDirectory}gymbro-semana-${achievements.weekNumber}.mp4`;
-      await encodeFramesToMp4(framePaths, outputUri, VIDEO_FPS);
+      // Dónde está cada anillo y cuánto lleva relleno en cada clave (mismas
+      // cuentas que el póster), para barrerlos en los intermedios.
+      const withQr = posterHasQr(qrValue);
+      const ringsAt = (frameIndex: number) =>
+        posterRings(achievements, withQr, frameIndex / (VIDEO_KEYFRAMES - 1));
+      const rings = {
+        geometry: ringsAt(0).map((ring) => ({
+          cx: ring.cx * VIDEO_SCALE,
+          cy: ring.cy * VIDEO_SCALE,
+          radius: DONUT_RADIUS * VIDEO_SCALE,
+          halfStroke: (DONUT_STROKE / 2) * VIDEO_SCALE,
+        })),
+        fractions: Array.from({ length: VIDEO_KEYFRAMES }, (_, index) =>
+          ringsAt(index).map((ring) => ring.fraction)
+        ),
+      };
+      if (canCaptureFramesNatively) {
+        await encodeCapturedToMp4(
+          VIDEO_KEYFRAMES,
+          outputUri,
+          VIDEO_FPS,
+          VIDEO_STEPS_PER_KEYFRAME,
+          VIDEO_END_HOLD,
+          rings
+        );
+      } else {
+        await encodeKeyframesToMp4(
+          keyPaths,
+          outputUri,
+          VIDEO_FPS,
+          VIDEO_STEPS_PER_KEYFRAME,
+          VIDEO_END_HOLD,
+          rings
+        );
+      }
+      if (!mountedRef.current) throw new VideoCancelled();
 
+      // La hoja de compartir no se abre con la app en segundo plano.
+      await waitUntilActive();
+      if (!mountedRef.current) throw new VideoCancelled();
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
         await Sharing.shareAsync(outputUri, {
@@ -319,23 +514,26 @@ export function WeekAchievementScreen({
           UTI: 'public.mpeg-4',
         });
       }
-
-      await FileSystem.deleteAsync(framesDir, { idempotent: true }).catch(
-        () => undefined
-      );
     } catch (error) {
-      setToast({ message: t('No se pudo generar el vídeo.'), type: 'error' });
+      if (!(error instanceof VideoCancelled) && mountedRef.current) {
+        setToast({ message: t('No se pudo generar el vídeo.'), type: 'error' });
+      }
     } finally {
-      setVideoBusy(false);
-      setVideoProgress(0);
-      reveal.setValue(1);
-      setRevealValue(1);
+      if (canCaptureFramesNatively) discardCapturedFrames();
+      await Promise.all(keyPaths.map(discardPath));
+      if (mountedRef.current) {
+        setVideoPhase(null);
+        setVideoProgress(0);
+        reveal.setValue(1);
+        setRevealValue(1);
+      }
     }
   };
 
-  // Botón principal: comparte el vídeo si el codificador nativo está disponible;
-  // si no (web o binario sin recompilar), comparte la imagen PNG estática.
-  const handleShareResults = () => {
+  // Botón principal: el vídeo si el codificador nativo está (toda APK Android
+  // actual); si no (web o binario sin recompilar), la imagen. Con vídeo, la
+  // imagen va en un botón secundario: sale al instante, sin esperar al vídeo.
+  const handleShareMain = () => {
     if (isVideoEncoderAvailable) {
       void handleShareVideo();
     } else {
@@ -343,11 +541,16 @@ export function WeekAchievementScreen({
     }
   };
 
-  const shareLabel = videoBusy
-    ? t('Generando vídeo… {p}%', { p: Math.round(videoProgress * 100) })
-    : busy
-    ? t('Generando…')
-    : t('Compartir resultados');
+  const mainLabel =
+    videoPhase === 'capture'
+      ? t('Generando vídeo… {p}%', { p: Math.round(videoProgress * 100) })
+      : videoPhase === 'encode'
+      ? t('Montando vídeo…')
+      : !isVideoEncoderAvailable && busy
+      ? t('Generando…')
+      : isVideoEncoderAvailable
+      ? t('Compartir vídeo')
+      : t('Compartir imagen');
 
   return (
     <View style={styles.container}>
@@ -374,24 +577,43 @@ export function WeekAchievementScreen({
             { width: previewWidth, height: previewHeight },
           ]}
         >
-          <AchievementPoster
-            ref={posterRef}
-            achievements={achievements}
-            titleUri={titleUri}
-            userName={profile?.display_name ?? undefined}
-            avatarUri={profile?.avatar_url ?? undefined}
-            nameWidth={nameWidth}
-            reveal={revealValue}
-            width={previewWidth}
-            height={previewHeight}
-          />
+          {/* collapsable={false}: sin él Android puede aplanar esta vista y
+            captureRef no la encuentra. */}
+          <View ref={videoFrameRef} collapsable={false}>
+            <AchievementPoster
+              ref={posterRef}
+              achievements={achievements}
+              titleUri={titleUri}
+              userName={profile?.display_name ?? undefined}
+              avatarUri={profile?.avatar_url ?? undefined}
+              nameWidth={nameWidth}
+              routineName={routineName}
+              qrValue={qrValue}
+              qrOpensRoutine={!!publicRoutineId}
+              qrTitleWidth={qrTitleWidth}
+              qrRoutineWidth={qrRoutineWidth}
+              reveal={revealValue}
+              width={previewWidth}
+              height={previewHeight}
+            />
+          </View>
         </View>
 
         <ShareButton
-          onPress={handleShareResults}
+          onPress={handleShareMain}
           busy={busy || videoBusy}
-          label={shareLabel}
+          label={mainLabel}
         />
+        {isVideoEncoderAvailable && (
+          <Button
+            title={busy ? t('Generando…') : t('Compartir imagen')}
+            onPress={handleShare}
+            variant="secondary"
+            size="large"
+            disabled={busy || videoBusy}
+            style={styles.imageButton}
+          />
+        )}
       </StretchScrollView>
 
       <GlassTopBar
@@ -420,6 +642,27 @@ export function WeekAchievementScreen({
           </Text>
         </View>
       )}
+      {/* Medidores del pie con QR: la invitación (Anton) y la rutina. */}
+      <View style={styles.measureBox} pointerEvents="none">
+        <Text
+          style={styles.measureQrTitle}
+          numberOfLines={1}
+          allowFontScaling={false}
+          onLayout={(e) => setQrTitleWidth(e.nativeEvent.layout.width)}
+        >
+          {posterQrTitle(!!publicRoutineId)}
+        </Text>
+        {!!posterRoutineName(routineName) && (
+          <Text
+            style={styles.measureQrRoutine}
+            numberOfLines={1}
+            allowFontScaling={false}
+            onLayout={(e) => setQrRoutineWidth(e.nativeEvent.layout.width)}
+          >
+            {posterRoutineName(routineName)}
+          </Text>
+        )}
+      </View>
 
       <FloatingBackButton onPress={onBack} bottom={floatingBackBottom} />
 
@@ -450,6 +693,17 @@ const makeStyles = () =>
       letterSpacing: NAME_LETTER_SPACING,
       includeFontPadding: false,
     },
+    measureQrTitle: {
+      fontFamily: theme.fonts.display,
+      fontSize: QR_TITLE_FONT,
+      letterSpacing: QR_TITLE_LETTER_SPACING,
+      includeFontPadding: false,
+    },
+    measureQrRoutine: {
+      fontSize: QR_ROUTINE_FONT,
+      fontWeight: '700',
+      includeFontPadding: false,
+    },
     container: {
       flex: 1,
       backgroundColor: theme.colors.background,
@@ -466,6 +720,12 @@ const makeStyles = () =>
       borderRadius: theme.borderRadius.lg,
       overflow: 'hidden',
       ...theme.shadow.card,
+    },
+    imageButton: {
+      alignSelf: 'stretch',
+      // El hueco de 20 del contenido ya separa del póster; pegado al
+      // principal para que se lean como una pareja.
+      marginTop: -8,
     },
     shareWrapper: {
       alignSelf: 'stretch',

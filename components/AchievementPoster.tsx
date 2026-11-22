@@ -9,6 +9,7 @@ import Svg, {
   Circle,
   Line,
   G,
+  Path,
   Text as SvgText,
   TSpan,
   Image as SvgImage,
@@ -33,6 +34,48 @@ const TRACK = posterColors.track;
 const TEXT = darkColors.text;
 const MUTED = darkColors.textSecondary;
 const ON_GOLD = darkColors.onGold;
+const QR_LIGHT = darkColors.qrLight;
+const QR_DARK = darkColors.qrDark;
+
+// Generador de la matriz del QR (dependencia de react-native-qrcode-svg). El QR
+// se pinta aquí con un <Path> propio y no con el componente, que monta su
+// propio <Svg>: anidado dentro del póster no se rasteriza fiable en toDataURL.
+const QRCodeLib: {
+  create: (
+    text: string,
+    options: { errorCorrectionLevel: 'L' | 'M' | 'Q' | 'H' }
+  ) => {
+    modules: { size: number; get: (row: number, col: number) => unknown };
+  };
+} = require('qrcode');
+
+/**
+ * Trazado del QR en unidades de módulo (1 = un cuadrito), uniendo los módulos
+ * oscuros seguidos de cada fila en un solo rectángulo. Algo más alto que 1
+ * para que no asomen rayas entre filas al rasterizar escalado.
+ */
+function qrPath(value: string): { d: string; size: number } | null {
+  try {
+    const { modules } = QRCodeLib.create(value, { errorCorrectionLevel: 'M' });
+    const n = modules.size;
+    let d = '';
+    for (let row = 0; row < n; row++) {
+      let col = 0;
+      while (col < n) {
+        if (!modules.get(row, col)) {
+          col++;
+          continue;
+        }
+        const start = col;
+        while (col < n && modules.get(row, col)) col++;
+        d += `M${start} ${row}h${col - start}v1.04h${start - col}z`;
+      }
+    }
+    return { d, size: n };
+  } catch {
+    return null;
+  }
+}
 // Fondo del panel "Esta semana": el tono alto del degradado del póster, un
 // punto más claro que el lienzo de abajo.
 const PANEL_FILL = posterColors.bgTop;
@@ -107,6 +150,82 @@ const SLOT_COLORS: Record<SlotColor, string> = {
   goldSoft: GOLD_SOFT,
 };
 
+// --- Animación y geometría de los anillos ---
+// Funciones puras y exportadas: el vídeo las necesita fuera del póster para
+// decirle al codificador dónde está cada anillo y cuánto lleva relleno en cada
+// fotograma clave (barre los intermedios por ángulo en vez de fundirlos).
+
+export const DONUT_RADIUS = 110;
+export const DONUT_STROKE = 26;
+// Ventana de cada anillo dentro de la animación (reveal 0→1), en orden.
+const DONUT_WINDOWS: [number, number][] = [
+  [0.32, 0.54],
+  [0.42, 0.64],
+  [0.52, 0.74],
+  [0.62, 0.84],
+];
+
+const easeOut = (x: number) => 1 - (1 - x) * (1 - x);
+
+// Avance (0-1) de una ventana [start, end] de la animación.
+const revealSeg = (reveal: number, start: number, end: number) =>
+  reveal >= end ? 1 : reveal <= start ? 0 : (reveal - start) / (end - start);
+
+// Donut: opacidad (aparece rápido) + relleno del anillo (toda su ventana).
+const donutAnimAt = (reveal: number, [start, end]: [number, number]) => {
+  const p = revealSeg(reveal, start, end);
+  return { opacity: easeOut(Math.min(1, p / 0.4)), fill: easeOut(p) };
+};
+
+// Centros de la rejilla 2×2. Con el pie con QR la rejilla se aprieta; sin
+// panel de lo ganado, se reparte el sitio que deja.
+function donutCenters(
+  withQr: boolean,
+  hasPanel: boolean
+): { cx: number; cy: number }[] {
+  const left = 288;
+  const right = POSTER_WIDTH - 288;
+  const top = withQr ? (hasPanel ? 695 : 740) : hasPanel ? 735 : 770;
+  const bottom = withQr ? (hasPanel ? 1134 : 1225) : hasPanel ? 1210 : 1275;
+  return [
+    { cx: left, cy: top },
+    { cx: right, cy: top },
+    { cx: left, cy: bottom },
+    { cx: right, cy: bottom },
+  ];
+}
+
+/** Si el póster pintará el pie con QR para este enlace. */
+export function posterHasQr(qrValue?: string): boolean {
+  return !!qrValue && qrPath(qrValue) !== null;
+}
+
+/**
+ * Anillos del póster en un punto de la animación, en unidades del póster:
+ * centro, radio y fracción rellena (0-1). Lo que se dibuja en `Donut`.
+ */
+export function posterRings(
+  achievements: WeekAchievements,
+  withQr: boolean,
+  reveal: number
+): { cx: number; cy: number; fraction: number }[] {
+  const { slots, extras } = achievements;
+  const hasPanel =
+    (extras?.challenges?.length ?? 0) + (extras?.badges?.length ?? 0) > 0;
+  return donutCenters(withQr, hasPanel)
+    .slice(0, slots.length)
+    .map((center, index) => ({
+      ...center,
+      fraction: Math.max(
+        0,
+        Math.min(
+          1,
+          slots[index].fraction * donutAnimAt(reveal, DONUT_WINDOWS[index]).fill
+        )
+      ),
+    }));
+}
+
 interface DonutProps {
   cx: number;
   cy: number;
@@ -140,7 +259,7 @@ function Donut({
   subLabelFont = 44,
   opacity = 1,
 }: DonutProps) {
-  const strokeWidth = 26;
+  const strokeWidth = DONUT_STROKE;
   const circumference = 2 * Math.PI * radius;
   const filled = Math.max(0, Math.min(1, fraction));
 
@@ -234,6 +353,22 @@ interface AchievementPosterProps {
    * texto de la app: el SVG no sabe medir). Sin él, se estima.
    */
   nameWidth?: number;
+  /** Rutina de la semana: su nombre va en el pie, bajo la invitación del QR. */
+  routineName?: string;
+  /**
+   * Enlace del QR del pie (página web de la rutina o de descarga). Sin él, el
+   * pie es solo la marca, como antes.
+   */
+  qrValue?: string;
+  /** El QR abre la rutina (true) o solo invita a descargar la app. */
+  qrOpensRoutine?: boolean;
+  /**
+   * Anchos reales de la invitación y de la rutina del pie (los mide la
+   * pantalla, como `nameWidth`): con ellos el pie se centra. Sin ellos, se
+   * estiman.
+   */
+  qrTitleWidth?: number;
+  qrRoutineWidth?: number;
   // Progreso de la animación de aparición (0 = nada, 1 = todo visible/relleno).
   reveal?: number;
   width?: number;
@@ -263,6 +398,32 @@ const STAR_SIZE = 42;
 const STAR_GAP = 4;
 const AVATAR_GAP = 28;
 const LEVEL_GAP = 18;
+
+// Pie con QR: cuadro de 200 y, a su derecha, la invitación, la rutina y la
+// marca; el conjunto va centrado.
+const QR_BOX = 200;
+const QR_Y = 1690;
+const QR_GAP = 40;
+const QR_TEXT_MAX_W = POSTER_WIDTH - 2 * 60 - QR_BOX - QR_GAP;
+const QR_WORDMARK_H = 46;
+const QR_WORDMARK_W = Math.round(682 * (QR_WORDMARK_H / 122));
+export const QR_TITLE_FONT = 50;
+export const QR_TITLE_LETTER_SPACING = 1;
+export const QR_ROUTINE_FONT = 34;
+const BOLD_CHAR_RATIO = 0.55; // Ancho medio de un carácter en negrita (estimación).
+
+/** Invitación del pie con QR, tal como la pinta el póster (lo que se mide). */
+export const posterQrTitle = (opensRoutine: boolean): string =>
+  opensRoutine ? t('ENTRENA ESTA RUTINA') : t('ENTRENA CONMIGO');
+
+/** Nombre de la rutina del pie, recortado (lo que se mide). */
+export const posterRoutineName = (routineName?: string): string =>
+  routineName?.trim() ? clip(routineName.trim(), 30) : '';
+// Tamaño entero de módulo (cuadritos nítidos), dejando ≥ 12 de margen claro.
+const qrModule = (size: number): number =>
+  Math.max(1, Math.floor((QR_BOX - 24) / size));
+// Margen para centrar el código en el cuadro.
+const qrInset = (size: number): number => (QR_BOX - qrModule(size) * size) / 2;
 
 // Recorta un texto a `max` caracteres con puntos suspensivos.
 const clip = (text: string, max: number): string =>
@@ -362,9 +523,11 @@ function ExtrasColumn({
  *
  * De arriba abajo: QUIÉN (foto centrada y, debajo, el nombre con el nivel que
  * tenía al cerrar la semana: estrella + número), el titular con el número de
- * semana, los cuatro mejores datos de la semana en anillos, lo que se ganó en
- * ella (retos superados y logros nuevos, lib/weekExtras; solo si hubo) y la
- * marca.
+ * semana y los días entrenados, los cuatro mejores datos de la semana en
+ * anillos, lo que se ganó en ella (retos superados y logros nuevos,
+ * lib/weekExtras; solo si hubo) y el pie: la marca y, con `qrValue`, un QR
+ * para entrenar la misma rutina (o descargar la app) con el nombre de la
+ * rutina.
  */
 export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
   (
@@ -374,6 +537,11 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
       userName,
       avatarUri,
       nameWidth,
+      routineName,
+      qrValue,
+      qrOpensRoutine = false,
+      qrTitleWidth,
+      qrRoutineWidth,
       reveal = 1,
       width = POSTER_WIDTH,
       height = POSTER_HEIGHT,
@@ -382,15 +550,15 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
   ) => {
     const { daysTrained, slots, weekNumber, extras } = achievements;
 
+    // QR del pie (se calcula una vez por enlace: la animación repinta mucho).
+    const qr = React.useMemo(
+      () => (qrValue ? qrPath(qrValue) : null),
+      [qrValue]
+    );
+
     // Aparición escalonada: cada elemento tiene su ventana dentro de [0, 1].
-    const seg = (start: number, end: number) =>
-      reveal >= end
-        ? 1
-        : reveal <= start
-        ? 0
-        : (reveal - start) / (end - start);
-    const easeOut = (t: number) => 1 - (1 - t) * (1 - t);
-    const fade = (start: number, end: number) => easeOut(seg(start, end));
+    const fade = (start: number, end: number) =>
+      easeOut(revealSeg(reveal, start, end));
 
     const profileOp = fade(0, 0.1);
     const semanaOp = fade(0.08, 0.2);
@@ -398,16 +566,6 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
     const subtitleOp = fade(0.26, 0.36);
     const extrasOp = fade(0.8, 0.92);
     const footerOp = fade(0.9, 1); // Al final: da tiempo a cargar el wordmark.
-
-    // Donut: opacidad (aparece rápido) + relleno del anillo (toda su ventana).
-    const donutAnim = (start: number, end: number) => {
-      const p = seg(start, end);
-      return { opacity: easeOut(Math.min(1, p / 0.4)), fill: easeOut(p) };
-    };
-    const d1 = donutAnim(0.32, 0.54);
-    const d2 = donutAnim(0.42, 0.64);
-    const d3 = donutAnim(0.52, 0.74);
-    const d4 = donutAnim(0.62, 0.84);
 
     // --- Cabecera: quién, en una fila centrada: foto, nombre y nivel ---
     // Cada pieza va en su x calculada: encadenadas en un solo texto, el SVG
@@ -451,19 +609,36 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
     ].filter((column) => column.items.length > 0);
     const hasPanel = extraColumns.length > 0;
 
+    // --- Reparto vertical ---
+    // El pie con QR ocupa 200 de alto (1690–1890) en vez de los 64 de la
+    // marca: el titular sube 30 y la rejilla (donutCenters) y el panel se
+    // aprietan.
+    const headDy = qr ? -30 : 0;
+    // El panel se dibuja en 1558–1752 y se desplaza entero.
+    const panelDy = qr ? -98 : 0;
+
+    // --- Pie con QR: el conjunto (cuadro + textos) centrado ---
+    const qrTitle = posterQrTitle(qrOpensRoutine);
+    const qrRoutine = posterRoutineName(routineName);
+    const qrTitleW =
+      qrTitleWidth ??
+      qrTitle.length *
+        (QR_TITLE_FONT * ANTON_CHAR_RATIO + QR_TITLE_LETTER_SPACING);
+    const qrRoutineW = qrRoutine
+      ? qrRoutineWidth ?? qrRoutine.length * QR_ROUTINE_FONT * BOLD_CHAR_RATIO
+      : 0;
+    const qrTextW = Math.min(
+      QR_TEXT_MAX_W,
+      Math.max(qrTitleW, qrRoutineW, QR_WORDMARK_W)
+    );
+    const qrX = Math.round((POSTER_WIDTH - (QR_BOX + QR_GAP + qrTextW)) / 2);
+    const qrTextX = qrX + QR_BOX + QR_GAP;
+    // Con rutina, tres líneas; sin ella, invitación y marca centradas en alto.
+    const qrTitleY = QR_Y + (qrRoutine ? 62 : 86);
+    const qrWordmarkY = QR_Y + (qrRoutine ? 142 : 118);
+
     // --- Donuts (rejilla 2×2): los 4 mejores datos de la semana ---
-    // Sin panel de lo ganado, la rejilla se reparte el sitio que deja.
-    const donutRadius = 110;
-    const colLeftX = 288;
-    const colRightX = POSTER_WIDTH - 288;
-    const rowTopY = hasPanel ? 735 : 770;
-    const rowBottomY = hasPanel ? 1210 : 1275;
-    const slotLayout = [
-      { cx: colLeftX, cy: rowTopY, anim: d1 },
-      { cx: colRightX, cy: rowTopY, anim: d2 },
-      { cx: colLeftX, cy: rowBottomY, anim: d3 },
-      { cx: colRightX, cy: rowBottomY, anim: d4 },
-    ];
+    const centers = donutCenters(!!qr, hasPanel);
 
     // --- Pie: el wordmark ---
     const titleH = 64;
@@ -573,7 +748,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
         {/* Titular, con el número de semana */}
         <SvgText
           x={POSTER_WIDTH / 2}
-          y={372}
+          y={372 + headDy}
           fill="url(#goldText)"
           fontSize={172}
           fontFamily={DISPLAY_FONT}
@@ -585,7 +760,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
         </SvgText>
         <SvgText
           x={POSTER_WIDTH / 2}
-          y={498}
+          y={498 + headDy}
           fill={TEXT}
           fontSize={112}
           fontFamily={DISPLAY_FONT}
@@ -597,7 +772,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
         </SvgText>
         <SvgText
           x={POSTER_WIDTH / 2}
-          y={562}
+          y={562 + headDy}
           fill={MUTED}
           fontSize={44}
           fontWeight="700"
@@ -610,9 +785,10 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
         </SvgText>
 
         {/* Donuts (2×2): los mejores datos de la semana, mejores primero */}
-        {slotLayout.map((position, index) => {
+        {centers.map((position, index) => {
           const slot = slots[index];
           if (!slot) return null;
+          const anim = donutAnimAt(reveal, DONUT_WINDOWS[index]);
           const sub = slot.subLabel
             ? fitSubLabel(capitalizeFirst(slot.subLabel))
             : undefined;
@@ -621,8 +797,8 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
               key={slot.id}
               cx={position.cx}
               cy={position.cy}
-              radius={donutRadius}
-              fraction={slot.fraction * position.anim.fill}
+              radius={DONUT_RADIUS}
+              fraction={slot.fraction * anim.fill}
               color={SLOT_COLORS[slot.color]}
               centerMain={slot.centerMain}
               centerMainFont={Math.round(slot.centerMainFont * 0.82)}
@@ -630,7 +806,7 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
               label={slot.label}
               subLabel={sub?.text}
               subLabelFont={sub?.font}
-              opacity={position.anim.opacity}
+              opacity={anim.opacity}
             />
           );
         })}
@@ -640,7 +816,10 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
           en ~1500 con subtítulo a dos líneas— y con la marca (1810). Dentro,
           36 arriba y abajo: del alto del rótulo a la base de la cifra. */}
         {hasPanel && (
-          <G opacity={extrasOp}>
+          <G
+            opacity={extrasOp}
+            transform={panelDy ? `translate(0 ${panelDy})` : undefined}
+          >
             <Rect
               x={60}
               y={1558}
@@ -673,9 +852,63 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
           </G>
         )}
 
-        {/* Pie: la marca */}
-        <G opacity={footerOp}>
-          {titleUri ? (
+        {/* Pie con QR, centrado: cuadro claro con el código (para que se lea
+          sobre el lienzo oscuro) y a su lado la invitación, la rutina y la
+          marca. */}
+        {qr ? (
+          <G opacity={footerOp}>
+            <Rect
+              x={qrX}
+              y={QR_Y}
+              width={QR_BOX}
+              height={QR_BOX}
+              rx={24}
+              fill={QR_LIGHT}
+            />
+            <G
+              transform={`translate(${qrX + qrInset(qr.size)} ${
+                QR_Y + qrInset(qr.size)
+              }) scale(${qrModule(qr.size)})`}
+            >
+              <Path d={qr.d} fill={QR_DARK} />
+            </G>
+            <SvgText
+              x={qrTextX}
+              y={qrTitleY}
+              fill={GOLD}
+              fontSize={QR_TITLE_FONT}
+              fontFamily={DISPLAY_FONT}
+              letterSpacing={QR_TITLE_LETTER_SPACING}
+            >
+              {qrTitle}
+            </SvgText>
+            {!!qrRoutine && (
+              <SvgText
+                x={qrTextX}
+                y={QR_Y + 114}
+                fill={TEXT}
+                fontSize={QR_ROUTINE_FONT}
+                fontWeight="700"
+              >
+                {qrRoutine}
+              </SvgText>
+            )}
+            {titleUri ? (
+              <SvgImage
+                x={qrTextX}
+                y={qrWordmarkY}
+                width={QR_WORDMARK_W}
+                height={QR_WORDMARK_H}
+                href={titleUri}
+                preserveAspectRatio="xMinYMid meet"
+              />
+            ) : null}
+          </G>
+        ) : null}
+
+        {/* Pie sin QR: la marca */}
+        {!qr && titleUri ? (
+          <G opacity={footerOp}>
             <SvgImage
               x={(POSTER_WIDTH - titleW) / 2}
               y={1810}
@@ -684,8 +917,8 @@ export const AchievementPoster = forwardRef<Svg, AchievementPosterProps>(
               href={titleUri}
               preserveAspectRatio="xMidYMid meet"
             />
-          ) : null}
-        </G>
+          </G>
+        ) : null}
       </Svg>
     );
   }

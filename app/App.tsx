@@ -116,7 +116,11 @@ import {
 import { isNewerVersion, playStoreUrls } from '@lib/appUpdate';
 import { fetchLatestRelease } from '@lib/cloud/release';
 import type { AppRelease } from '@lib/cloud/release';
-import { parseRoutineShareLink, SharedRoutineDay } from '@lib/routineShare';
+import {
+  parsePublicRoutineLink,
+  parseRoutineShareLink,
+  SharedRoutineDay,
+} from '@lib/routineShare';
 import { subscribePipMode } from '@lib/pipTimer';
 import { nativeSplashMode, syncSplashTheme } from '@lib/splashTheme';
 import { getRestTimer, useRestTimer } from '@lib/restTimerStore';
@@ -133,7 +137,7 @@ import {
 } from '@hooks/useCommunityNews';
 import { hasCommunityNews } from '@lib/communityNews';
 import { startSession } from '@lib/cloud/auth';
-import { DELETED_ACCOUNT_ID } from '@lib/cloud/social';
+import { DELETED_ACCOUNT_ID, getPublicRoutineCard } from '@lib/cloud/social';
 import {
   getStoredCardioSplitDone,
   setStoredCardioSplitDone,
@@ -270,7 +274,9 @@ type Screen =
   | {
       type: 'week-achievement';
       achievements: WeekAchievements;
-      routineName?: string;
+      // Rutina de esa semana: su nombre va en el póster y, si es pública, su
+      // id en el QR.
+      routine?: WorkoutRoutine;
     };
 
 // Orden de las pestañas en la barra (índice = posición para el deslizamiento).
@@ -1149,14 +1155,34 @@ function AppContent({ onReady }: { onReady: () => void }) {
     return () => subscription.remove();
   }, [dispatch, state.activeRoutineId, state.routines]);
 
-  // Deep link de importación (QR): gymbro://import-routine?data=...
-  // Abre Nueva rutina con los días prerrellenados desde el código escaneado.
+  // Deep links:
+  // - Importación (QR de la ficha): gymbro://import-routine?data=... abre
+  //   Nueva rutina con los días prerrellenados desde el código escaneado.
+  // - Rutina pública (QR del póster, vía la página web r/):
+  //   gymbro://public-routine?id=... abre su consulta en la comunidad.
   useEffect(() => {
     const handleUrl = (url: string | null) => {
       if (!url) return;
       const shared = parseRoutineShareLink(url);
       if (shared) {
         setScreen({ type: 'new-routine', initialDays: shared.days });
+        return;
+      }
+      const publicId = parsePublicRoutineLink(url);
+      if (publicId) {
+        // Sin red o ya retirada: no se abre nada (la app arranca en Inicio).
+        getPublicRoutineCard(publicId)
+          .then((card) => {
+            if (!card) return;
+            setScreen({
+              type: 'public-routine',
+              routineId: publicId,
+              name: card.name,
+              ownerId: card.ownerId,
+              back: { type: 'home' },
+            });
+          })
+          .catch(() => {});
       }
     };
 
@@ -1320,11 +1346,11 @@ function AppContent({ onReady }: { onReady: () => void }) {
         }
         onCreateRoutine={() => setScreen({ type: 'new-routine' })}
         onOpenCommunity={() => setScreen({ type: 'community' })}
-        onShowWeekAchievement={(achievements, routineName) =>
+        onShowWeekAchievement={(achievements, routine) =>
           setScreen({
             type: 'week-achievement',
             achievements,
-            routineName,
+            routine,
           })
         }
       />
@@ -1902,7 +1928,7 @@ function AppContent({ onReady }: { onReady: () => void }) {
         {screen.type === 'week-achievement' && (
           <WeekAchievementScreen
             achievements={screen.achievements}
-            routineName={screen.routineName}
+            routine={screen.routine}
             onBack={goHome}
           />
         )}

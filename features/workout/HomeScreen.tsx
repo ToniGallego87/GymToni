@@ -94,7 +94,7 @@ interface HomeScreenProps {
   onOpenCommunity?: () => void;
   onShowWeekAchievement?: (
     achievements: WeekAchievements,
-    routineName?: string
+    routine?: WorkoutRoutine
   ) => void;
 }
 
@@ -604,7 +604,7 @@ export function HomeScreen({
   const handleShowWeekAchievementForBlock = (block: number) => {
     const achievements = buildAchievementsForBlock(block);
     if (achievements) {
-      onShowWeekAchievement?.(achievements, displayedRoutine?.name);
+      onShowWeekAchievement?.(achievements, displayedRoutine ?? undefined);
     }
   };
 

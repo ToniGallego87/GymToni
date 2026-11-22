@@ -683,7 +683,11 @@ register({
 
   // Logros / póster
   'Hitos de la semana': "This week's milestones",
-  'Compartir resultados': 'Share results',
+  'Compartir vídeo': 'Share video',
+  'Compartir imagen': 'Share image',
+  'Montando vídeo…': 'Putting the video together…',
+  'ENTRENA ESTA RUTINA': 'TRAIN THIS ROUTINE',
+  'ENTRENA CONMIGO': 'TRAIN WITH ME',
   'Generando…': 'Generating…',
   'Generando vídeo… {p}%': 'Generating video… {p}%',
   'No se pudo generar la imagen.': 'Could not generate the image.',
