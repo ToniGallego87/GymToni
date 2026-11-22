@@ -193,6 +193,8 @@ GymToni/
 │   ├── glass-blur/           ← Cristal esmerilado de las barras (UNA captura desenfocada por frame, compartida)
 │   └── video-encoder/        ← Vídeo de logros (fotogramas → MP4)
 ├── android/                  ← Proyecto nativo Android (build.gradle: versionCode)
+├── r/index.html              ← Página pública del QR del póster (GitHub Pages): abre la rutina en la app o lleva a Play.
+│                               Su URL es ROUTINE_WEB_BASE (lib/routineShare.ts): moverla rompe los QR ya compartidos
 └── assets/                   ← Iconos, wordmark, fuente Anton
 ```
 

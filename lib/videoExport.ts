@@ -20,13 +20,16 @@ type VideoEncoderNative = {
     ringFractions: number[]
   ) => Promise<string>;
   // Captura nativa de una vista a memoria (solo Android): sin JPG ni disco.
+  // `session` separa lo capturado por cada vídeo (ver startCaptureSession).
   captureFrame?: (
+    session: string,
     viewTag: number,
     index: number,
     width: number,
     height: number
   ) => Promise<number>;
   encodeCaptured?: (
+    session: string,
     keyCount: number,
     outputPath: string,
     fps: number,
@@ -35,7 +38,7 @@ type VideoEncoderNative = {
     ringGeometry: number[],
     ringFractions: number[]
   ) => Promise<string>;
-  discardCaptured?: () => void;
+  discardCaptured?: (session: string) => void;
 };
 
 /**
@@ -48,6 +51,23 @@ export interface VideoRings {
   geometry: { cx: number; cy: number; radius: number; halfStroke: number }[];
   // Por fotograma clave, la fracción rellena (0-1) de cada anillo, en orden.
   fractions: number[][];
+}
+
+// Los anillos, aplanados como los espera el módulo nativo: 4 números por anillo
+// (cx, cy, radio, medio grosor) y las fracciones clave a clave.
+function flattenRings(rings?: VideoRings): {
+  geometry: number[];
+  fractions: number[];
+} {
+  return {
+    geometry: (rings?.geometry ?? []).flatMap((r) => [
+      r.cx,
+      r.cy,
+      r.radius,
+      r.halfStroke,
+    ]),
+    fractions: (rings?.fractions ?? []).flat(),
+  };
 }
 
 let nativeModule: VideoEncoderNative | null = null;
@@ -89,19 +109,15 @@ export async function encodeKeyframesToMp4(
     );
   }
   if (nativeModule.encodeKeyframes) {
+    const flat = flattenRings(rings);
     return nativeModule.encodeKeyframes(
       keyPaths,
       outputPath,
       fps,
       steps,
       holdFrames,
-      (rings?.geometry ?? []).flatMap((r) => [
-        r.cx,
-        r.cy,
-        r.radius,
-        r.halfStroke,
-      ]),
-      (rings?.fractions ?? []).flat()
+      flat.geometry,
+      flat.fractions
     );
   }
   const frames: string[] = [];
@@ -124,11 +140,26 @@ export const canCaptureFramesNatively = !!(
   nativeModule.discardCaptured
 );
 
+let sessionCounter = 0;
+
 /**
- * Captura la vista `viewTag` a width×height como fotograma clave `index`
- * (repetir un índice lo sustituye). Requiere `canCaptureFramesNatively`.
+ * Id de las capturas de UN vídeo. Cada vídeo usa el suyo: así lo que suelta o
+ * codifica uno (p. ej. el que sigue montándose tras salir de la pantalla) no
+ * toca los fotogramas de otro que ya ha empezado. Lleva la hora para no
+ * repetirse tras recargar el JS.
+ */
+export function startCaptureSession(): string {
+  sessionCounter += 1;
+  return `${Date.now()}-${sessionCounter}`;
+}
+
+/**
+ * Captura la vista `viewTag` a width×height como fotograma clave `index` de
+ * `session` (repetir un índice lo sustituye; si la sesión ya se soltó, la
+ * captura se descarta). Requiere `canCaptureFramesNatively`.
  */
 export async function captureVideoFrame(
+  session: string,
   viewTag: number,
   index: number,
   width: number,
@@ -137,11 +168,15 @@ export async function captureVideoFrame(
   if (!nativeModule?.captureFrame) {
     throw new Error('captureFrame no disponible');
   }
-  await nativeModule.captureFrame(viewTag, index, width, height);
+  await nativeModule.captureFrame(session, viewTag, index, width, height);
 }
 
-/** Codifica las `keyCount` claves capturadas, como encodeKeyframesToMp4. */
+/**
+ * Codifica las `keyCount` claves capturadas de `session`, como
+ * encodeKeyframesToMp4, y las suelta.
+ */
 export async function encodeCapturedToMp4(
+  session: string,
   keyCount: number,
   outputPath: string,
   fps: number,
@@ -152,26 +187,26 @@ export async function encodeCapturedToMp4(
   if (!nativeModule?.encodeCaptured) {
     throw new Error('encodeCaptured no disponible');
   }
+  const flat = flattenRings(rings);
   return nativeModule.encodeCaptured(
+    session,
     keyCount,
     outputPath,
     fps,
     steps,
     holdFrames,
-    (rings?.geometry ?? []).flatMap((r) => [
-      r.cx,
-      r.cy,
-      r.radius,
-      r.halfStroke,
-    ]),
-    (rings?.fractions ?? []).flat()
+    flat.geometry,
+    flat.fractions
   );
 }
 
-/** Suelta de memoria lo capturado sin codificar (cancelado o fallido). */
-export function discardCapturedFrames(): void {
+/**
+ * Suelta de memoria lo capturado de `session` sin codificar (cancelado o
+ * fallido). Una captura de esa sesión que llegue después se descarta.
+ */
+export function discardCapturedFrames(session: string): void {
   try {
-    nativeModule?.discardCaptured?.();
+    nativeModule?.discardCaptured?.(session);
   } catch {
     // Nada que soltar.
   }

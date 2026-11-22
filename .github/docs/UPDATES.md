@@ -1,6 +1,6 @@
 # UPDATES
 
-## Sin publicar
+## Version 0.9.0 - 2026-11-22
 
 ### Arquitectura
 
@@ -38,9 +38,13 @@
   `ROUTINE_WEB_BASE`). Con la app instalada abre la rutina en su consulta de
   Comunidad (deep link nuevo `gymbro://public-routine?id=…`,
   `parsePublicRoutineLink` + `getPublicRoutineCard`); sin ella, lleva a Google
-  Play. Solo enlaza la rutina si es pública (publicada o enlazada de la
-  comunidad); si no, el QR invita a descargar la app. El QR se dibuja en el
-  propio SVG (`qrcode` + `<Path>`) para que salga en la exportación.
+  Play. Solo enlaza la rutina si la nube confirma que sigue pública (la
+  propia publicada, o la original de una enlazada o copiada:
+  `communitySourceOf`); si no, o sin red, el QR invita a descargar la app. Si
+  la respuesta del enlace llega cuando ya te has movido de pantalla, no te
+  saca de ahí. `app/+native-intent.ts` manda ya TODO deep link a la raíz
+  (antes solo `import-routine`: el nuevo daba "Unmatched Route"). El QR se dibuja en el propio SVG (`qrcode`, ahora dependencia
+  directa en `package.json`, + `<Path>`) para que salga en la exportación.
 - **"Compartir imagen" junto a "Compartir vídeo"** en Hitos de la semana: la
   imagen sale al instante y antes solo se ofrecía si no había codificador.
 - **Avisos de comentarios también en la rutina ajena que tienes enlazada y
@@ -118,6 +122,14 @@
   fracción de cada clave salen de `posterRings`, las mismas cuentas que el
   póster), así que no queda rastro del arco anterior. Convierte a YUV sobre
   arrays normales con copia por filas, y los 4 s finales no se reconvierten.
+  Se captura de un segundo póster fuera de pantalla que mide justo 720×1280
+  px (antes se estiraba la vista previa: borroso en móviles de densidad
+  baja); la vista previa se queda completa mientras tanto. Cada vídeo
+  captura en su propia sesión del módulo nativo (`startCaptureSession`): uno
+  que sigue montándose tras salir de la pantalla ya no borra los fotogramas
+  del siguiente, y una captura que llega tras el tiempo límite se descarta.
+  Cada anillo aparece (opacidad) antes de empezar a rellenarse, para que el
+  barrido no mezcle dos brillos.
 - **Splash en blanco si la app arranca en modo claro**, con el titular de día
   (`title-day.png`, `AppTheme.Light`). El tema lo sigue mandando la base de
   ajustes; el nuevo módulo `modules/splash-theme` guarda un espejo

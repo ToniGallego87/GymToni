@@ -171,10 +171,21 @@ const easeOut = (x: number) => 1 - (1 - x) * (1 - x);
 const revealSeg = (reveal: number, start: number, end: number) =>
   reveal >= end ? 1 : reveal <= start ? 0 : (reveal - start) / (end - start);
 
-// Donut: opacidad (aparece rápido) + relleno del anillo (toda su ventana).
+// Parte de la ventana de cada donut en la que aparece (opacidad); el relleno
+// empieza cuando ya es opaco. Sin solapar: el vídeo barre el relleno por ángulo
+// entre claves, y si a la vez cambiara la opacidad, la zona barrida y la
+// fundida de alrededor quedarían con brillos distintos.
+const DONUT_FADE_SHARE = 0.3;
+
+// Donut: opacidad (aparece rápido) y después el relleno del anillo.
 const donutAnimAt = (reveal: number, [start, end]: [number, number]) => {
   const p = revealSeg(reveal, start, end);
-  return { opacity: easeOut(Math.min(1, p / 0.4)), fill: easeOut(p) };
+  return {
+    opacity: easeOut(Math.min(1, p / DONUT_FADE_SHARE)),
+    fill: easeOut(
+      Math.max(0, (p - DONUT_FADE_SHARE) / (1 - DONUT_FADE_SHARE))
+    ),
+  };
 };
 
 // Centros de la rejilla 2×2. Con el pie con QR la rejilla se aprieta; sin

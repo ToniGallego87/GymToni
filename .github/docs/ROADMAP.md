@@ -21,51 +21,6 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Mejoras visuales y de UX
 
-- [x] **Hitos de la semana: el póster dice de qué rutina es** — hoy el póster
-      pone "SEMANA 7 ¡COMPLETADA!" y "5 días entrenados", pero no el nombre de
-      la rutina: solo lo lleva el subtítulo de la barra superior, que no sale
-      en lo compartido. Añadirlo en la línea gris bajo el titular ("Push Pull
-      Legs · 5 días entrenados", recortado a una línea; sin rutina, como hoy).
-      La pantalla ya recibe `routineName`: falta pasárselo al póster.
-      **Por qué:** quien ve la story no sabe de qué es la "semana 7"; con el
-      nombre, el número cobra sentido y la rutina se convierte en lo que se
-      enseña (y en lo que se pide).
-      **Archivos:** `components/AchievementPoster.tsx:584` (titular) y `:598`
-      (línea de días), `features/workout/WeekAchievementScreen.tsx:377` (props
-      del póster; `routineName` ya llega en `:52`),
-      `features/workout/HomeScreen.tsx:607` (de dónde sale el nombre).
-      **Estado (2026-11-21):** en la línea de días no cabía: el nombre pasa
-      al pie, bajo la invitación del QR (en lugar de "Escanéalo con la
-      cámara"), y el pie se centra. Probado en el móvil (2026-11-22).
-      **Esfuerzo:** bajo.
-- [x] **Hitos de la semana: el vídeo no se pierde al minimizar ni al salir** —
-      la captura va fotograma a fotograma con `requestAnimationFrame` y
-      `toDataURL`, que Android para con la app en segundo plano; cualquier fallo
-      cae en el `catch` que pone el botón a 0 % con "No se pudo generar el
-      vídeo", y se empieza de cero. Además: los fotogramas ya escritos solo se
-      borran si todo va bien (quedan en caché tras un fallo), salir con el
-      vídeo a medias deja el bucle corriendo contra un póster desmontado, y el
-      porcentaje solo mide la captura: llega a 100 % y se queda ahí, sin
-      decir nada, mientras se codifica. Propuesta: pausar al ir a segundo
-      plano y **seguir desde el último fotograma** al volver (los PNG en disco
-      sirven); cancelar al salir de la pantalla; borrar la carpeta en el
-      `finally`; y un progreso que cubra las dos fases (captura y "Montando
-      vídeo…"). Antes de tocarlo, mirar en `logcat` si al minimizar falla la
-      captura o MIUI mata la app (son arreglos distintos).
-      **Por qué:** generar el vídeo tarda, y lo natural mientras tanto es
-      cambiar de app; perder todo lo hecho por eso obliga a quedarse mirando
-      una barra.
-      **Archivos:** `features/workout/WeekAchievementScreen.tsx:276`
-      (`handleShareVideo`), `:291` (bucle de captura), `:323` (borrado solo en
-      el camino bueno), `:326` (`catch` que reinicia), `:346` (etiqueta con %).
-      **Estado (2026-11-20):** hecho en código: espera a primer plano y repite
-      el fotograma cortado (hasta 3 veces), captura con tiempo límite de 8 s,
-      cancelación al salir, borrado en el `finally` y "Montando vídeo…" al
-      codificar (sin %: el codificador no informa de su avance). No se miró
-      `logcat` antes (no había móvil): si MIUI MATA la app al minimizar, esto
-      no lo arregla. Probado en el móvil (2026-11-22): minimizar a mitad y
-      volver sigue donde iba; salir a mitad cancela sin errores.
-      **Esfuerzo:** medio.
 - [ ] **[iOS] Vibración y teclado que funcionen en iPhone** — iOS ignora la
       duración de `Vibration.vibrate`: los toques de 6 y 18 ms del − / + y de
       "Añadir serie" serían un zumbido largo (~400 ms) en cada pulsación, y el
@@ -106,60 +61,6 @@ requisito previo de anuncios, suscripción e iOS.
 
 ## Funcionalidades a simplificar
 
-- [x] **Hitos de la semana: el vídeo en segundos, no en minutos** — el coste
-      está en dos bucles en serie. En JS, 120 vueltas de: repintar el SVG
-      entero, esperar dos frames, rasterizar a 720×1280 y codificar PNG
-      (`toDataURL`), pasar el PNG en base64 por el puente y escribirlo a disco.
-      En Kotlin, decodificar cada PNG y pasar RGB→YUV píxel a píxel
-      (~920.000 `put` por fotograma) para **240** fotogramas: los 120 de la
-      pausa final repiten la conversión aunque el bitmap ya esté en caché.
-      Por orden de ganancia/esfuerzo: (1) guardar el YUV del último fotograma
-      y reutilizarlo en la pausa (la mitad del trabajo nativo desaparece);
-      (2) codificar por `Surface` (`createInputSurface` +
-      `lockHardwareCanvas().drawBitmap`): la conversión la hace la GPU y
-      desaparece el bucle por píxel; (3) medir cada fase antes y después para
-      ver si la captura en JS pasa a ser el cuello y, si lo es, capturar a
-      menor resolución intermedia o menos fotogramas en los tramos sin
-      movimiento. De paso, quitar `VIDEO_FRAME_REPEAT = 1` (un bucle que no
-      repite nada). En iOS el codificador Swift está sin probar: aplicar lo
-      mismo cuando se pruebe.
-      **Por qué:** es la espera más larga de la app y ocurre justo en el
-      momento de presumir; cuanto más corta, menos se abandona (y menos
-      ventana hay para minimizar y perderla).
-      **Archivos:** `modules/video-encoder/android/src/main/java/expo/modules/videoencoder/VideoEncoderModule.kt:121`
-      (bucle de entrada) y `:152` (`fillImageFromBitmap`),
-      `features/workout/WeekAchievementScreen.tsx:56-64` (constantes) y `:291`
-      (captura), `modules/video-encoder/ios/VideoEncoderModule.swift`.
-      **Estado (2026-11-21):** la primera pasada (1 + YUV en arrays) no bastó:
-      seguía tardando muchísimo, el cuello era la captura. Ahora se capturan
-      41 fotogramas clave en vez de 120, con `react-native-view-shot` a JPG
-      directo a fichero (sin PNG ni base64 por el puente), y el codificador
-      funde 2 intermedios entre cada par (`encodeKeyframes`). Un GIF no
-      ayudaría: codificarlo es más lento que H.264 por hardware y pesa más.
-      Probado (2026-11-21): duración "muy bien", pero los anillos dejaban
-      rastro al fundirse. Ahora 31 claves con 3 intermedios, y en ellos la
-      zona de cada anillo que crece se barre por ángulo (`sweepRing`, con la
-      geometría de `posterRings`) en vez de fundirse: probado, sin rastro.
-      Último paso (2026-11-21): en Android la captura es nativa y a memoria
-      (`captureFrame` + `encodeCaptured`; view-shot queda de respaldo para
-      iOS). Probado en el móvil (2026-11-22): el vídeo sale bien. Lo que queda
-      por debajo es esperar a que se pinte cada clave (dos frames): bajar más
-      exigiría menos claves.
-      **Esfuerzo:** medio.
-- [x] **Hitos de la semana: la imagen al instante, sin esperar al vídeo** — con
-      el codificador presente (toda APK Android actual), "Compartir resultados"
-      solo hace vídeo: la imagen PNG, que sale en un segundo, únicamente se
-      ofrece si no hay codificador. Dejar "Compartir vídeo" como botón
-      principal (igual que hoy) y debajo un secundario "Compartir imagen".
-      **Por qué:** para WhatsApp o el estado basta la imagen, y hoy quien la
-      quiere se come la espera del vídeo; el caso común no gana ni un toque.
-      **Archivos:** `features/workout/WeekAchievementScreen.tsx:338`
-      (`handleShareResults`, la bifurcación), `:214` (`handleShare`, la imagen
-      que ya existe), `:390` (botón).
-      **Estado (2026-11-20):** hecho en código ("Compartir vídeo" + secundario
-      "Compartir imagen"; sin codificador, un solo botón de imagen). Probado
-      en el móvil (2026-11-22).
-      **Esfuerzo:** bajo.
 - [ ] **Cardio: retirar el texto `raw_input` cuando todos los móviles lo
       entiendan** — desde la 0.8.5 el cardio se guarda también en
       `cardio_entries` (una fila por entrada), pero el texto sigue siendo la

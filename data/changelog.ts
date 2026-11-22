@@ -9,6 +9,23 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: '0.9.0',
+    items: [
+      'Tu imagen de semana completada lleva ahora el nombre de tu rutina y un código QR: quien lo escanee puede entrenar tu misma rutina en GymBro, o descargar la app si aún no la tiene.',
+      'El vídeo de la semana se genera muchísimo más rápido y ya no se pierde si sales de la app mientras se prepara. Y si solo quieres la imagen, ahora la compartes al instante con "Compartir imagen".',
+      'Si sigues una rutina de otra persona, te avisamos de sus comentarios nuevos en Comunidad, y desde su ficha llegas a la rutina original con un toque.',
+      'Toca un ejercicio ya entrenado en la ficha de tu rutina para ver cómo has evolucionado en él.',
+      'Los puntos que ganas con un reto o un logro vuelan hasta tu nivel en la barra de arriba.',
+      'Ahora puedes bloquear a otros usuarios desde su perfil: dejas de ver sus rutinas y comentarios, y no pueden comentar las tuyas. Las cuentas bloqueadas las ves y desbloqueas en Configuración.',
+      'La Política de privacidad y los Términos de uso están renovados y puedes leerlos desde Configuración. Te pediremos aceptarlos una vez.',
+      'Si usas la app en modo claro, la pantalla de inicio también sale en blanco.',
+      'Pequeñas mejoras del día a día: el día de hoy completado se marca en verde, la primera vez que haces un día Inicio te dice "Tu punto de partida" y "Nueva semana" te deja elegir con qué día empezar.',
+      '"Anterior" muestra siempre la última vez que hiciste el ejercicio y de qué rutina o día viene, y el peso y las repeticiones sugeridos cuadran con ella.',
+      'Arreglos varios: la duración del entreno cuenta desde la primera serie, los títulos ya no cortan palabras a mitad, el filtro por día de Progreso ya no deja la gráfica vacía y los días sin entrenar de una semana salen en su sitio.',
+      'Ajustes internos para mejorar la estabilidad y el rendimiento.',
+    ],
+  },
+  {
     version: '0.8.8',
     items: [
       'Apuntar series es más rápido: el peso y las repeticiones ya vienen rellenos con lo que te toca, los botones − y + son más grandes y el móvil vibra al apuntar o borrar una serie.',

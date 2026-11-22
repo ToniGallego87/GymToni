@@ -1,5 +1,5 @@
 import { subscribeTheme } from '@lib/themeStore';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import {
   View,
@@ -11,6 +11,7 @@ import {
   findNodeHandle,
   Animated as RNAnimated,
   Easing,
+  PixelRatio,
   useWindowDimensions,
   unstable_batchedUpdates,
 } from 'react-native';
@@ -57,10 +58,10 @@ import {
 import { WeekAchievements } from '@lib/achievements';
 import { useMyProfile } from '@hooks/useMyProfile';
 import { useSession } from '@lib/cloud/auth';
-import { getPublicRoutineIds } from '@lib/cloud/social';
+import { getPublicRoutineCard } from '@lib/cloud/social';
 import { shareBase64Png } from '@lib/imageShare';
 import { buildRoutineWebLink } from '@lib/routineShare';
-import { isLinkedRoutine } from '@lib/routines';
+import { communitySourceOf, isLinkedRoutine } from '@lib/routines';
 import {
   canCaptureFramesNatively,
   captureVideoFrame,
@@ -68,6 +69,7 @@ import {
   encodeCapturedToMp4,
   encodeKeyframesToMp4,
   isVideoEncoderAvailable,
+  startCaptureSession,
 } from '@lib/videoExport';
 import { theme } from '@lib/theme';
 import { t } from '@lib/i18n';
@@ -245,25 +247,49 @@ export function WeekAchievementScreen({
     return () => sub.remove();
   }, []);
 
-  // Id PÚBLICO de la rutina, para que el QR la abra: una enlazada de la
-  // comunidad conserva el id original; una propia, solo si está publicada
-  // (se pregunta a la nube). Sin él, el QR solo invita a descargar la app.
+  // Id PÚBLICO de la rutina, para que el QR la abra. Candidatas, por orden:
+  // la propia (si la publicaste) y la pública de la que salió (enlazada o
+  // copiada). Se confirma en la nube que siga pública: una retirada o
+  // despublicada daría un enlace muerto. Sin confirmar (sin red, o ninguna
+  // pública), el QR solo invita a descargar la app.
   const [publicRoutineId, setPublicRoutineId] = useState<string | undefined>(
-    routine && isLinkedRoutine(routine) ? routine.id : undefined
+    undefined
   );
   useEffect(() => {
-    if (!routine || isLinkedRoutine(routine) || !user) return;
+    setPublicRoutineId(undefined);
+    if (!routine) return;
+    const sourceId = user
+      ? communitySourceOf(routine, user.id)?.id
+      : routine.sourceRoutineId ??
+        (isLinkedRoutine(routine) ? routine.id : undefined);
+    const ownId = user && !isLinkedRoutine(routine) ? routine.id : undefined;
+    const candidates = [ownId, sourceId].filter(
+      (id, index, all): id is string => !!id && all.indexOf(id) === index
+    );
     let active = true;
-    getPublicRoutineIds(user.id)
-      .then((ids) => {
-        if (active && ids.includes(routine.id)) setPublicRoutineId(routine.id);
-      })
-      .catch(() => {});
+    (async () => {
+      for (const id of candidates) {
+        try {
+          if (await getPublicRoutineCard(id)) {
+            if (active) setPublicRoutineId(id);
+            return;
+          }
+        } catch {
+          return; // Sin red: sin enlace a la rutina.
+        }
+      }
+    })();
     return () => {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routine?.id, user?.id]);
+  }, [
+    routine?.id,
+    routine?.sourceRoutineId,
+    routine?.linkedOwnerId,
+    routine?.sourceOwnerId,
+    user?.id,
+  ]);
   const qrValue = buildRoutineWebLink(publicRoutineId);
   // En nativo el wordmark se pasa como módulo de asset (require → número): así
   // react-native-svg lo rasteriza dentro de toDataURL en Android. En web hace
@@ -316,6 +342,13 @@ export function WeekAchievementScreen({
 
   const previewWidth = Math.min(windowWidth - theme.spacing.md * 2, 460);
   const previewHeight = (previewWidth * POSTER_HEIGHT) / POSTER_WIDTH;
+  // El vídeo se captura de un póster aparte, fuera de pantalla, que mide
+  // justo VIDEO_WIDTH × VIDEO_HEIGHT píxeles: react-native-svg pinta a los
+  // píxeles de la vista, y estirar la vista previa (en móviles de densidad
+  // baja, ~500 px de ancho) daba un vídeo borroso y un QR difícil de leer.
+  const pixelRatio = PixelRatio.get();
+  const captureWidth = VIDEO_WIDTH / pixelRatio;
+  const captureHeight = VIDEO_HEIGHT / pixelRatio;
 
   const handleShare = () => {
     const node = posterRef.current;
@@ -375,25 +408,33 @@ export function WeekAchievementScreen({
       requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
     });
 
-  // Captura el póster tal como está en pantalla como fotograma clave `index`.
+  // Captura el póster del vídeo tal como está como fotograma clave `index`.
   // - Android: en nativo y a memoria (captureFrame): sin JPG, sin disco y con
   //   la conversión a YUV en otro hilo. Devuelve null.
   // - Si no (iOS o un binario sin recompilar): react-native-view-shot a JPG en
   //   un fichero temporal. Devuelve su ruta.
-  const captureKeyframe = (index: number) =>
+  // Si pasa el tiempo límite, lo que llegue tarde se suelta: en nativo lo
+  // descarta la sesión ya cerrada (o lo sustituye la repetición del mismo
+  // índice); el JPG tardío se borra aquí.
+  const captureKeyframe = (session: string, index: number) =>
     new Promise<string | null>((resolve, reject) => {
       const node = videoFrameRef.current;
       const viewTag = node ? findNodeHandle(node) : null;
       if (!node || viewTag == null)
         return reject(new Error(t('Póster no disponible')));
-      const timer = setTimeout(
-        () => reject(new Error('capture timeout')),
-        CAPTURE_TIMEOUT_MS
-      );
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        reject(new Error('capture timeout'));
+      }, CAPTURE_TIMEOUT_MS);
       const capture: Promise<string | null> = canCaptureFramesNatively
-        ? captureVideoFrame(viewTag, index, VIDEO_WIDTH, VIDEO_HEIGHT).then(
-            () => null
-          )
+        ? captureVideoFrame(
+            session,
+            viewTag,
+            index,
+            VIDEO_WIDTH,
+            VIDEO_HEIGHT
+          ).then(() => null)
         : captureRef(videoFrameRef, {
             format: 'jpg',
             quality: 0.92,
@@ -404,6 +445,13 @@ export function WeekAchievementScreen({
       capture.then(
         (uri) => {
           clearTimeout(timer);
+          if (timedOut) {
+            if (uri)
+              void FileSystem.deleteAsync(uri, { idempotent: true }).catch(
+                () => undefined
+              );
+            return;
+          }
           resolve(uri);
         },
         (error) => {
@@ -425,12 +473,22 @@ export function WeekAchievementScreen({
     setVideoPhase('capture');
     setVideoProgress(0);
     animationRef.current?.stop();
+    // Capturas de ESTE vídeo (otro que siga montándose no las toca).
+    const session = startCaptureSession();
 
     // Solo en el camino de respaldo (view-shot): las rutas de los JPG.
     const keyPaths: string[] = [];
     const discardPath = (path: string) =>
       FileSystem.deleteAsync(path, { idempotent: true }).catch(() => undefined);
     try {
+      // Pasada de calentamiento: el póster del vídeo no se ha pintado nunca
+      // (está fuera de pantalla) y la primera vez carga sus imágenes. La
+      // clave 0 de verdad la sustituye.
+      await waitUntilActive();
+      await renderAtReveal(0, 0);
+      const warmUp = await captureKeyframe(session, 0).catch(() => null);
+      if (warmUp) void discardPath(warmUp);
+
       let frame = 0;
       let retries = 0;
       while (frame < VIDEO_KEYFRAMES) {
@@ -443,7 +501,7 @@ export function WeekAchievementScreen({
             frame / (VIDEO_KEYFRAMES - 1),
             frame / VIDEO_KEYFRAMES
           );
-          const uri = await captureKeyframe(frame);
+          const uri = await captureKeyframe(session, frame);
           // Si la app pasó por segundo plano mientras tanto, por si acaso se
           // repite el fotograma al volver (en nativo, la repetición sustituye
           // a esta captura por su índice).
@@ -484,6 +542,7 @@ export function WeekAchievementScreen({
       };
       if (canCaptureFramesNatively) {
         await encodeCapturedToMp4(
+          session,
           VIDEO_KEYFRAMES,
           outputUri,
           VIDEO_FPS,
@@ -519,7 +578,7 @@ export function WeekAchievementScreen({
         setToast({ message: t('No se pudo generar el vídeo.'), type: 'error' });
       }
     } finally {
-      if (canCaptureFramesNatively) discardCapturedFrames();
+      if (canCaptureFramesNatively) discardCapturedFrames(session);
       await Promise.all(keyPaths.map(discardPath));
       if (mountedRef.current) {
         setVideoPhase(null);
@@ -540,6 +599,60 @@ export function WeekAchievementScreen({
       handleShare();
     }
   };
+
+  // Los dos pósters, memorizados: en cada clave del vídeo solo se repinta el
+  // que se captura (la vista previa se queda completa), y en la animación de
+  // la pantalla, solo la vista previa.
+  const previewReveal = videoBusy ? 1 : revealValue;
+  const captureReveal = videoBusy ? revealValue : 1;
+  const userName = profile?.display_name ?? undefined;
+  const avatarUri = profile?.avatar_url ?? undefined;
+  const qrOpensRoutine = !!publicRoutineId;
+  const posterDeps = [
+    achievements,
+    titleUri,
+    userName,
+    avatarUri,
+    nameWidth,
+    routineName,
+    qrValue,
+    qrOpensRoutine,
+    qrTitleWidth,
+    qrRoutineWidth,
+  ];
+  const renderPoster = (
+    reveal: number,
+    width: number,
+    height: number,
+    ref?: React.Ref<Svg>
+  ) => (
+    <AchievementPoster
+      ref={ref}
+      achievements={achievements}
+      titleUri={titleUri}
+      userName={userName}
+      avatarUri={avatarUri}
+      nameWidth={nameWidth}
+      routineName={routineName}
+      qrValue={qrValue}
+      qrOpensRoutine={qrOpensRoutine}
+      qrTitleWidth={qrTitleWidth}
+      qrRoutineWidth={qrRoutineWidth}
+      reveal={reveal}
+      width={width}
+      height={height}
+    />
+  );
+  const previewPoster = useMemo(
+    () => renderPoster(previewReveal, previewWidth, previewHeight, posterRef),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [...posterDeps, previewReveal, previewWidth, previewHeight]
+  );
+  const capturePoster = useMemo(
+    () => renderPoster(captureReveal, captureWidth, captureHeight),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [...posterDeps, captureReveal, captureWidth, captureHeight]
+  );
 
   const mainLabel =
     videoPhase === 'capture'
@@ -577,26 +690,7 @@ export function WeekAchievementScreen({
             { width: previewWidth, height: previewHeight },
           ]}
         >
-          {/* collapsable={false}: sin él Android puede aplanar esta vista y
-            captureRef no la encuentra. */}
-          <View ref={videoFrameRef} collapsable={false}>
-            <AchievementPoster
-              ref={posterRef}
-              achievements={achievements}
-              titleUri={titleUri}
-              userName={profile?.display_name ?? undefined}
-              avatarUri={profile?.avatar_url ?? undefined}
-              nameWidth={nameWidth}
-              routineName={routineName}
-              qrValue={qrValue}
-              qrOpensRoutine={!!publicRoutineId}
-              qrTitleWidth={qrTitleWidth}
-              qrRoutineWidth={qrRoutineWidth}
-              reveal={revealValue}
-              width={previewWidth}
-              height={previewHeight}
-            />
-          </View>
+          {previewPoster}
         </View>
 
         <ShareButton
@@ -628,6 +722,23 @@ export function WeekAchievementScreen({
         topInset={insets.top}
         onLayout={onTopBarLayout}
       />
+
+      {/* Póster del vídeo, fuera de pantalla y a la resolución del vídeo.
+        collapsable={false}: sin él Android puede aplanar esta vista y la
+        captura no la encuentra. Sin opacidad 0: saldría así en la captura. */}
+      {isVideoEncoderAvailable && (
+        <View
+          ref={videoFrameRef}
+          collapsable={false}
+          style={[
+            styles.captureBox,
+            { width: captureWidth, height: captureHeight },
+          ]}
+          pointerEvents="none"
+        >
+          {capturePoster}
+        </View>
+      )}
 
       {/* Medidor del nombre del póster (invisible y fuera de pantalla). */}
       {!!posterName && (
@@ -686,6 +797,11 @@ const makeStyles = () =>
       width: 4000,
       opacity: 0,
       alignItems: 'flex-start',
+    },
+    captureBox: {
+      position: 'absolute',
+      left: -5000,
+      top: 0,
     },
     measureText: {
       fontFamily: theme.fonts.display,

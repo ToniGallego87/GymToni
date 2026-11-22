@@ -1,21 +1,12 @@
 // Reescribe los deep links entrantes ANTES de que expo-router intente enrutarlos
-// por fichero. El enlace de importación de rutina
-// (gymbro://import-routine?data=...) no es una ruta de fichero: si lo dejamos
-// pasar, expo-router muestra "Unmatched Route". Lo redirigimos a la raíz (index)
-// para mantener montada la app; el listener de Linking en App.tsx recibe la URL
-// original (Linking.getInitialURL / evento 'url') y procesa los datos.
-export function redirectSystemPath({
-  path,
-}: {
+// por fichero. Ninguno de los enlaces de la app es una ruta de fichero
+// (gymbro://import-routine?data=..., gymbro://public-routine?id=..., y los que
+// vengan): si se dejan pasar, expo-router muestra "Unmatched Route". La única
+// ruta es la raíz (index), que monta la app; el listener de Linking en App.tsx
+// recibe la URL original (Linking.getInitialURL / evento 'url') y la procesa.
+export function redirectSystemPath(_: {
   path: string;
   initial: boolean;
 }): string {
-  try {
-    if (path.includes('import-routine')) {
-      return '/';
-    }
-  } catch {
-    return '/';
-  }
-  return path;
+  return '/';
 }

@@ -22,12 +22,23 @@ import java.util.concurrent.Future
 // ficheros (PNG/JPG) o se capturan aquí mismo de una vista (lo rápido: sin
 // comprimir, escribir ni volver a leer cada imagen).
 class VideoEncoderModule : Module() {
-  // Claves capturadas en memoria (captureFrame), por índice, ya en YUV o en
-  // camino: la conversión corre en un hilo aparte mientras la app pinta la
-  // siguiente. ~1,4 MB por clave a 720×1280.
-  private val captured = HashMap<Int, Future<YuvFrame>>()
-  private var capturedWidth = 0
-  private var capturedHeight = 0
+  // Claves capturadas en memoria (captureFrame) de UN vídeo, por índice, ya en
+  // YUV o en camino: la conversión corre en un hilo aparte mientras la app
+  // pinta la siguiente. ~1,4 MB por clave a 720×1280.
+  private class Session(val width: Int, val height: Int) {
+    val frames = HashMap<Int, Future<YuvFrame>>()
+  }
+
+  // Una sesión por vídeo (la elige JS): soltar o codificar uno no toca los
+  // fotogramas de otro que ya ha empezado (p. ej. salir de la pantalla con uno
+  // montándose y empezar otro al volver). Todo bajo `lock`.
+  private val lock = Any()
+  private val sessions = HashMap<String, Session>()
+  // Sesiones que se están codificando: no se sueltan al empezar otra.
+  private val encoding = HashSet<String>()
+  // Sesiones ya soltadas (las últimas): una captura que llegue tarde (p. ej.
+  // tras el tiempo límite de JS) se descarta en vez de quedarse en memoria.
+  private val closed = LinkedHashSet<String>()
   private var converter: ExecutorService? = null
   // Lienzo reutilizado para dibujar la vista (se dibuja en el hilo de UI).
   private var captureBitmap: Bitmap? = null
@@ -66,21 +77,18 @@ class VideoEncoderModule : Module() {
     }
 
     // Dibuja la vista `viewTag` a width×height y la guarda como clave `index`
-    // (en memoria; una captura repetida del mismo índice la sustituye). En el
+    // de `session` (en memoria; una captura repetida del mismo índice la
+    // sustituye; una sesión ya soltada la descarta). En el
     // hilo de UI, como react-native-view-shot con el parche de GymToni: dibujar
     // desde otro hilo mientras React Native muta el árbol daba capturas a
     // medias.
-    AsyncFunction("captureFrame") { viewTag: Int, index: Int, width: Int, height: Int ->
+    AsyncFunction("captureFrame") { session: String, viewTag: Int, index: Int, width: Int, height: Int ->
+      if (synchronized(lock) { session in closed }) return@AsyncFunction index
       val view = appContext.findView<View>(viewTag)
         ?: throw Exception("Vista no encontrada")
       if (view.width <= 0 || view.height <= 0) throw Exception("Vista sin tamaño")
       val w = width and 1.inv()
       val h = height and 1.inv()
-      if (w != capturedWidth || h != capturedHeight) {
-        clearCaptured()
-        capturedWidth = w
-        capturedHeight = h
-      }
       val bitmap = captureBitmap?.takeIf { it.width == w && it.height == h }
         ?: Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).also {
           captureBitmap?.recycle()
@@ -95,25 +103,40 @@ class VideoEncoderModule : Module() {
       val argb = IntArray(w * h)
       bitmap.getPixels(argb, 0, w, 0, 0, w, h)
       val executor = converter ?: Executors.newSingleThreadExecutor().also { converter = it }
-      synchronized(captured) {
-        captured[index] = executor.submit<YuvFrame> { argbToYuv(argb, w, h) }
+      synchronized(lock) {
+        if (session in closed) return@AsyncFunction index
+        var current = sessions[session]
+        if (current == null || current.width != w || current.height != h) {
+          // Vídeo nuevo: lo que quede de otros que no se están codificando es
+          // de vídeos abandonados (sin su discardCaptured): fuera.
+          sessions.keys.filter { it != session && it !in encoding }.forEach { closeLocked(it) }
+          current?.frames?.values?.forEach { it.cancel(false) }
+          current = Session(w, h)
+          sessions[session] = current
+        }
+        current.frames.put(index, executor.submit<YuvFrame> { argbToYuv(argb, w, h) })
+          ?.cancel(false)
       }
       index
     }.runOnQueue(Queues.MAIN)
 
-    // Codifica las claves capturadas (0..keyCount-1) como encodeKeyframes y
-    // las suelta de memoria.
-    AsyncFunction("encodeCaptured") { keyCount: Int, outputPath: String, fps: Int, steps: Int, holdFrames: Int, ringGeometry: List<Double>, ringFractions: List<Double> ->
+    // Codifica las claves capturadas de `session` (0..keyCount-1) como
+    // encodeKeyframes y las suelta de memoria.
+    AsyncFunction("encodeCaptured") { session: String, keyCount: Int, outputPath: String, fps: Int, steps: Int, holdFrames: Int, ringGeometry: List<Double>, ringFractions: List<Double> ->
       try {
+        val current = synchronized(lock) {
+          encoding.add(session)
+          sessions[session]
+        } ?: throw Exception("No hay fotogramas capturados")
         val frames = (0 until keyCount).map { k ->
-          synchronized(captured) { captured[k] }?.get()
+          synchronized(lock) { current.frames[k] }?.get()
             ?: throw Exception("Falta el fotograma $k")
         }
         val rings = parseRings(ringGeometry)
         encodeFrames(
           frames.size,
-          capturedWidth,
-          capturedHeight,
+          current.width,
+          current.height,
           { k -> frames[k] },
           stripScheme(outputPath),
           if (fps > 0) fps else 20,
@@ -123,28 +146,37 @@ class VideoEncoderModule : Module() {
           if (ringFractions.size == rings.size * frames.size) ringFractions else emptyList()
         )
       } finally {
-        clearCaptured()
+        synchronized(lock) {
+          encoding.remove(session)
+          closeLocked(session)
+        }
       }
       outputPath
     }
 
-    // Suelta lo capturado sin codificar (vídeo cancelado o fallido).
-    Function("discardCaptured") {
-      clearCaptured()
+    // Suelta lo capturado de `session` sin codificar (vídeo cancelado o
+    // fallido). Las capturas que lleguen después se descartan.
+    Function("discardCaptured") { session: String ->
+      synchronized(lock) { closeLocked(session) }
     }
 
     OnDestroy {
-      clearCaptured()
+      synchronized(lock) {
+        sessions.values.forEach { s -> s.frames.values.forEach { it.cancel(false) } }
+        sessions.clear()
+        encoding.clear()
+      }
       converter?.shutdown()
       converter = null
     }
   }
 
-  private fun clearCaptured() {
-    synchronized(captured) {
-      captured.values.forEach { it.cancel(false) }
-      captured.clear()
-    }
+  // Suelta una sesión y la recuerda como cerrada (solo las últimas: los ids
+  // no se repiten). Llamar con `lock` cogido.
+  private fun closeLocked(session: String) {
+    sessions.remove(session)?.frames?.values?.forEach { it.cancel(false) }
+    closed.add(session)
+    while (closed.size > 16) closed.remove(closed.first())
   }
 
   private class Ring(val cx: Double, val cy: Double, val radius: Double, val halfStroke: Double)

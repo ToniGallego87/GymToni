@@ -466,7 +466,6 @@ export async function getUserPublicRoutines(
   return (data ?? []) as PublicRoutineSummary[];
 }
 
-// Qué rutinas propias están publicadas (para el estado del interruptor en la UI).
 /**
  * Nombre y dueño de una rutina pública por su id (deep link del QR del
  * póster): lo justo para abrir su consulta. null si no existe o ya no es
@@ -488,6 +487,7 @@ export async function getPublicRoutineCard(
   return { name: row.name, ownerId: row.user_id };
 }
 
+// Qué rutinas propias están publicadas (para el estado del interruptor en la UI).
 export async function getPublicRoutineIds(userId: string): Promise<string[]> {
   const { data, error } = await supabase
     .from('routines')

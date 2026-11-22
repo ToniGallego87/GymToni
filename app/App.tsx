@@ -4,6 +4,7 @@ import React, {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import {
@@ -356,6 +357,10 @@ function AppContent({ onReady }: { onReady: () => void }) {
   // (`CloudSync`, `AccountLevelRecorder`, `PrimaryNav`): al llegar la sesión o el
   // perfil durante el arranque, solo repinta lo que los enseña.
   const [screen, setScreen] = useState<Screen>({ type: 'home' });
+  // Pantalla actual para lo asíncrono (deep link de rutina pública): saber si
+  // la persona se ha movido mientras se esperaba a la red.
+  const screenRef = useRef(screen);
+  screenRef.current = screen;
   // Pestañas ya montadas (ver `tabLayer`). Al arrancar solo la activa, para que
   // el primer pintado sea lo más corto posible; las demás entran luego, una a una
   // y espaciadas (`WARM_STEP_MS`), y una vez montadas se QUEDAN ocultas con
@@ -1171,16 +1176,24 @@ function AppContent({ onReady }: { onReady: () => void }) {
       const publicId = parsePublicRoutineLink(url);
       if (publicId) {
         // Sin red o ya retirada: no se abre nada (la app arranca en Inicio).
+        // Si mientras llega la respuesta la persona ya ha ido a otra pantalla
+        // (p. ej. ha empezado a entrenar), no se la saca de ahí. Se compara el
+        // tipo, no el objeto: el arranque puede volver a poner Inicio.
+        const origin = screenRef.current;
         getPublicRoutineCard(publicId)
           .then((card) => {
             if (!card) return;
-            setScreen({
-              type: 'public-routine',
-              routineId: publicId,
-              name: card.name,
-              ownerId: card.ownerId,
-              back: { type: 'home' },
-            });
+            setScreen((current) =>
+              current.type !== origin.type
+                ? current
+                : {
+                    type: 'public-routine',
+                    routineId: publicId,
+                    name: card.name,
+                    ownerId: card.ownerId,
+                    back: origin,
+                  }
+            );
           })
           .catch(() => {});
       }
